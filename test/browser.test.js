@@ -334,6 +334,142 @@ sec('プレイヤー自身の文で称号ができる');
   console.log(`    称号「${res.title}」 文の力 x${res.power.toFixed(2)} / 装甲 ${res.armor.toFixed(2)}`);
 }
 
+sec('描画で例外が出てもプレイヤーが消えない');
+{
+  // 鉱物系 (土・金・鉄) の弾はすべて同じ描画経路を通る。
+  // ここが壊れると例外で描画が止まり、プレイヤーが描画されない。
+  const res = await evalJs(`(async () => {
+    const app = window.__wordrogue;
+    const run = app.run;
+    const g = app.renderer.ctx;
+    const cv = g.canvas;
+    const dpr = cv.width / (cv.clientWidth || cv.width) || 1;
+    const before = app.renderer.drawErrorCount;
+    run.player.invuln = 99;   // 描画確認の間は死なせない
+
+    // 画面内の生存数を保ったまま、鉱物系と各種形状の弾を並べる。
+    run.enemies.length = 0;
+    const els = ['earth', 'gold', 'steel', 'fire', 'thunder', 'ice', 'poison'];
+    const shapes = ['shot', 'slash', 'orb', 'beam', 'bomb', 'shard', 'ring'];
+    let n = 0;
+    for (const el of els) {
+      for (const shape of shapes) {
+        run.bullets.push({
+          x: 60 + (n % 12) * 26, y: 70 + Math.floor(n / 12) * 24,
+          vx: 30, vy: 12, r: 7, life: 9, maxLife: 9,
+          element: el, shape, kindName: 'shot', pierce: 0, uid: n, color: '#c9a227',
+        });
+        n++;
+      }
+    }
+    // 敵と弾、両方の描画経路を通す。位置は {x, y} で渡す。
+    for (let i = 0; i < 3; i++) {
+      run.spawnEnemy('slime', { x: 300 + i * 40, y: 200 });
+    }
+    run.enemies.forEach((e) => { e.spawned = 1; });
+
+    await new Promise(r => setTimeout(r, 400));
+
+    // プレイヤー位置に絵があるか。背景色と違う pixels を数える。
+    // 描画は毎フレーム「地面 -> 壁 -> 敵 -> 弾 -> プレイヤー」の順に進むので、
+    // 途中で例外が出るとプレイヤーの手前が空のままになる。
+    const p = run.player;
+    // カメラはプレイヤーを画面中心に追うので、描画位置は中心。
+    // シェイクの分だけ数 px ずれるので、 넓い square を判决する。
+    const R = app.renderer;
+    const cx = Math.round(R.w / 2), cy = Math.round(R.h / 2);
+    const S = 44;
+    const x0 = Math.min(Math.max(cx - S, 0), cv.width - S);
+    const y0 = Math.min(Math.max(cy - S, 0), cv.height - S);
+    const sw = Math.min(S * 2, cv.width - x0);
+    const sh = Math.min(S * 2, cv.height - y0);
+    const bxo = Math.min(Math.max(x0 - 10, 0), cv.width - 1);
+    const byo = Math.min(Math.max(y0 - 10, 0), cv.height - 1);
+    const bg = g.getImageData(bxo, byo, 1, 1).data;
+    const img = g.getImageData(x0, y0, sw, sh).data;
+    let painted = 0;
+    for (let i = 0; i < img.length; i += 4) {
+      if (Math.abs(img[i] - bg[0]) + Math.abs(img[i + 1] - bg[1]) + Math.abs(img[i + 2] - bg[2]) > 24) {
+        painted++;
+      }
+    }
+    return { added: app.renderer.drawErrorCount - before, painted, total: sw * sh, alive: p.alive };
+  })()`);
+  ok(res.added === 0, `弾の描画で例外が ${res.added} 回起きた`);
+  ok(res.painted > 20, `プレイヤーが描画されていない (背景と違う ${res.painted} px)`);
+  console.log(`    鉱物系/各種形の弾を描画 -> 例外 ${res.added} / プレイヤーに着色 ${res.painted} px`);
+}
+
+sec('武器名が文面と基本名の両方で出る');
+{
+  // 直前の「不成文」テストで語を空にしてあるので、元の文に戻す。
+  const names = await evalJs(`(async () => {
+    const app = window.__wordrogue;
+    const run = app.run;
+    // 名前表示の検証を空欄で行わないため。
+    const def = run.weapons[0].def;
+    const m = await import(new URL('js/data/words.js', document.baseURI).href);
+    const wi0 = run.weapons[0];
+    wi0.slots.fill(null);
+    wi0.slots[0] = m.makeWord(def.startWord);
+    if (wi0.slots[1] !== undefined) wi0.slots[1] = m.makeWord(def.startWord2);
+    run.refreshStats();
+    return true;
+  })()`);
+  // HUD と鍛冶の描画を 1 フレーム待つ。
+  await sleep(300);
+  const view = await evalJs(`(() => {
+    const run = window.__wordrogue.run;
+    const out = { chips: [], rows: [] };
+    for (const node of document.querySelectorAll('.wchip')) {
+      out.chips.push({
+        txt: node.querySelector('.wchip-txt')?.textContent || '',
+        base: node.querySelector('.wchip-base')?.textContent || '',
+      });
+    }
+    for (const n of document.querySelectorAll('#forgeWeapons .wrow-name')) {
+      out.rows.push(n.textContent);
+    }
+    out.titles = run.weapons.map(w => w.title);
+    out.defNames = run.weapons.map(w => w.def.name);
+    return out;
+  })()`);
+  ok(view.titles.length > 0, '武器がない');
+  for (const t of view.titles) {
+    ok(t && !/undefined|null|空/.test(t), `武器名が壊れている: "${t}"`);
+    ok(t.length > 1, `武器名が文面になっていない: "${t}"`);
+  }
+  for (const t of view.defNames) {
+    ok(t && !/undefined/.test(t), `基本名が壊れている: "${t}"`);
+  }
+  for (const t of view.rows) {
+    ok(t && !/undefined/.test(t), `鍛冶の武器名が壊れている: "${t}"`);
+  }
+  ok(view.chips.length > 0, 'HUD に武器チップが無い');
+  for (const c of view.chips) {
+    ok(!/undefined/.test(c.txt + c.base), `HUD に undefined が出る: ${JSON.stringify(c)}`);
+    ok(/[一-龥ぁ-んァ-ヶ]/.test(c.txt), `HUD に武器名が出ない: ${JSON.stringify(c)}`);
+    ok(/[一-龥]/.test(c.base), `HUD に基本名が出ない: ${JSON.stringify(c)}`);
+  }
+  console.log(`    武器名: ${view.titles.map((t, i) => t + '(' + view.defNames[i] + ')').join(' / ')}`);
+  console.log(`    HUD チップ: ${view.chips.map((c) => c.base + ' ' + c.txt).join(' / ')}`);
+}
+
+sec('forge にリセット項目が無いこと');
+{
+  const has = await evalJs(`(() => ({
+    reroll: !!document.getElementById('btnReroll'),
+    text: (document.body.textContent || '').includes('引き直す'),
+    rateUp: (document.body.textContent || '').includes('Upgrade rate'),
+  }))()`);
+  ok(!has.reroll, '「語を引き直す」ボタンが残っている');
+  ok(!has.text, '「引き直す」という文言が残っている');
+  ok(!has.rateUp, '「Upgrade rate」がある');
+  const note = await evalJs('document.querySelector(".forge-note")?.textContent || ""');
+  ok(/レベルアップ/.test(note), `ヒント文言が無い: "${note}"`);
+  console.log(`    鍛冶の注記: ${note.trim()}`);
+}
+
 sec('ステージクリアと報酬');
 const cleared = await evalJs(`(async () => {
   const app = window.__wordrogue;
@@ -352,6 +488,24 @@ ok(cleared.rewardOpen, '報酬画面が表示された');
 const rwCards = await evalJs('document.querySelectorAll("#rewardList .rw-card").length');
 ok(rwCards === 3, `報酬カードの枚数: ${rwCards}`);
 
+sec('ステージ報酬にことばは出ない');
+{
+  // ことばは戦闘中のレベルアップでのみ入る。報酬からは配らない。
+  const kinds = await evalJs(`[...document.querySelectorAll('#rewardList .rw-card')]
+    .map(c => c.dataset.kind)`);
+  ok(!kinds.includes('word'), `報酬にことばがある: ${kinds.join(', ')}`);
+  for (const k of kinds) {
+    ok(['weapon', 'weaponup', 'self', 'rest'].includes(k), `知らない報酬の種類: ${k}`);
+  }
+  const dom = await evalJs(`({
+    swap: !!document.getElementById('rewardSwap'),
+    label: (document.getElementById('reward')?.textContent || '').includes('語袋が満杯'),
+  })`);
+  ok(!dom.swap, '交換用の DOM が残っている');
+  ok(!dom.label, '「語袋が満杯」の文言が残っている');
+  console.log(`    報酬の種類: ${kinds.join(' / ')}`);
+}
+
 sec('報酬を選ぶと次の報酬へ');
 await evalJs('document.querySelectorAll("#rewardList .rw-card")[0].click()');
 await sleep(500);
@@ -367,13 +521,7 @@ await evalJs(`(async () => {
   while (app.mode === 'reward' && guard++ < 6) {
     const c = document.querySelectorAll('#rewardList .rw-card');
     if (!c.length) break;
-    // 語袋が満杯なら交換を先に済ませる。
-    if (!document.getElementById('rewardSwap').hidden) {
-      const s = document.querySelector('#swapList .pword');
-      if (s) { s.click(); await new Promise(r => setTimeout(r, 200)); }
-    }
-    const card = document.querySelectorAll('#rewardList .rw-card');
-    if (card.length) card[0].click();
+    c[0].click();
     await new Promise(r => setTimeout(r, 350));
   }
 })()`);

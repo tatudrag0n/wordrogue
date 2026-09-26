@@ -88,10 +88,10 @@
           <div class="pouch" id="forgePouch"></div>
 
           <div class="forge-actions">
-            <button class="btn" id="btnReroll">
-              語を引き直す <span class="muted">(クールダウン中)</span>
-            </button>
-            <button class="btn btn-ghost" id="btnForgeHint">文のヒント</button>
+            <span class="forge-note">
+              ことばは<strong>レベルアップで獲得</strong>する。引き直しはない。
+            </span>
+            <button class="btn" id="btnForgeHint">文のヒント</button>
           </div>
 
           <div class="forge-hint" id="forgeHint" hidden></div>
@@ -165,10 +165,6 @@
         <p class="panel-sub" id="rewardSub">1 つ選べ。</p>
       </header>
       <div class="reward-list" id="rewardList"></div>
-      <div class="reward-swap" id="rewardSwap" hidden>
-        <p class="muted">語袋が満杯だ。捨てる語を選べ。</p>
-        <div class="swap-list" id="swapList"></div>
-      </div>
     </div>
   </div>
 

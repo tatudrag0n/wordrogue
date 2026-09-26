@@ -352,6 +352,11 @@ code {
   border-radius: 4px;
   padding: 1px 5px;
 }
+.wchip .wchip-base {
+  font-weight: 800;
+  color: #ffd43b;
+  letter-spacing: .1em;
+}
 .wchip .wchip-txt { letter-spacing: .04em; }
 .wchip.broken {
   border-color: var(--ng);
@@ -618,7 +623,9 @@ code {
 .pword-gram { opacity: .78; border-style: dotted; }
 
 .forge-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.forge-actions .btn { flex: 1; font-size: .82rem; padding: 7px 10px; }
+.forge-actions .btn { font-size: .82rem; padding: 7px 10px; }
+.forge-note { flex: 1; font-size: .8rem; color: var(--fg-dim); }
+.forge-note strong { color: var(--accent); }
 
 .forge-hint {
   font-size: .78rem;
@@ -823,10 +830,7 @@ code {
 .rw-card[data-kind="weapon"]   { border-left: 3px solid var(--thunder); }
 .rw-card[data-kind="weaponup"] { border-left: 3px solid var(--accent); }
 .rw-card[data-kind="self"]     { border-left: 3px solid var(--dark); }
-
-.reward-swap { display: flex; flex-direction: column; gap: 7px; }
-.swap-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.swap-list .pword { width: 46px; height: 46px; aspect-ratio: auto; }
+.rw-card[data-kind="rest"]     { border-left: 3px solid #6fcf97; }
 
 /* ══ 結算 ════════════════════════════════════════════════════════════ */
 

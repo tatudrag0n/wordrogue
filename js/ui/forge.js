@@ -3,13 +3,14 @@
 //
 // 語をクリックして選ぶ -> 枠をクリックで装着。戦闘中でも使える。
 // 開いている間、時間は止まる。
+//
+// 武器の枠のほか、プレイヤー自身の文の枠もある。
+// 武器名はその文そのもの (「爆裂無双雷剣」) になる。
 // ============================================================================
 
 import { $, el, clear } from '../core/util.js';
-import { WORDS, CATEGORIES, PARTICLES, possibleCompounds, drawWord, evaluate } from '../data/words.js';
+import { WORDS, CATEGORIES, PARTICLES, possibleCompounds, evaluate } from '../data/words.js';
 import { keyStats } from '../game/weapon.js';
-
-const REROLL_CD = 25;   // 秒 (ゲーム内時間)
 
 export class Forge {
   /**
@@ -25,17 +26,14 @@ export class Forge {
     this.pouchCount = $('#pouchCount');
     this.detailEl = $('#forgeDetail');
     this.hintEl = $('#forgeHint');
-    this.rerollBtn = $('#btnReroll');
     this.hintBtn = $('#btnForgeHint');
 
     /** @type {object|null} 選択中の語 */
     this.armed = null;
     this.hintOn = false;
-    this.rerollAt = 0;
 
     $('#forgeClose').addEventListener('click', () => this.close());
     $('#forgeBack').addEventListener('click', () => this.close());
-    this.rerollBtn.addEventListener('click', () => this.reroll());
     this.hintBtn.addEventListener('click', () => {
       this.hintOn = !this.hintOn;
       this.hintEl.hidden = !this.hintOn;
@@ -72,7 +70,7 @@ export class Forge {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 武器
+  // 武器と自身の文
   // ───────────────────────────────────────────────────────────────────────────
   renderWeapons() {
     const list = this.listEl;
@@ -86,11 +84,12 @@ export class Forge {
         class: 'wrow' + (res.active ? ` ${res.grade}` : ' broken'),
       });
 
-      // 見出し
+      // 見出し。武器名はそのまま文面。
       const head = el('div', { class: 'wrow-head' },
         el('span', { class: 'wrow-name' }, wi.title || wi.def.name),
+        el('span', { class: 'wrow-kind' }, wi.def.name),
         el('span', { class: 'wrow-lv' }, `Lv ${wi.level} / ${wi.def.maxLevel}`),
-        el('span', { class: 'wrow-kind' }, KIND_LABEL[res.active ? res.kind : 'none'] || ''),
+        el('span', { class: 'wrow-kind' }, KIND_LABEL[res.kind] || res.kind),
         el('span', {
           class: `wrow-grade grade-${res.grade}`,
         }, res.active ? res.gradeInfo.name : '不成文'),
@@ -104,33 +103,87 @@ export class Forge {
         row.append(el('div', { class: 'wrow-why', style: { color: 'var(--idiom)' } },
           `熟語「${res.evalResult.idiom.name}」成立 — ${res.evalResult.idiom.desc}`));
       }
+      if (res.active && res.evalResult.predicated) {
+        row.append(el('div', { class: 'wrow-why', style: { color: '#8ab4ff' } },
+          '述語あり — 文の力が上がる。'));
+      }
 
-      // 枠
-      const slots = el('div', { class: 'slots' });
-      wi.slots.forEach((word, i) => {
-        const isArmed = this.armed && word && this.armed === word;
-        const cls = 'slot'
-          + (word ? ' filled' : '')
-          + (this.armed ? ' drop' : '')
-          + (isArmed ? ' armed' : '');
-        const node = el('div', { class: cls, title: word ? `${word.text} を戻す` : '空の枠' },
-          word
-            ? el('span', {}, word.text)
-            : el('span', { class: 'empty-mark' }, '＿'));
-        node.addEventListener('click', () => this.onSlotClick(wi, i));
-        slots.append(node);
-
-        if (i < wi.slots.length - 1) slots.append(el('span', { class: 'slot-plus' }, '+'));
-      });
-      row.append(slots);
-
-      // 文面。核語 + 枠の語が連結したもの。
+      row.append(this.renderSlots(wi, (i) => this.onSlotClick(wi, i)));
       row.append(this.renderSentence(wi, res));
-
-      // 性能
       row.append(this.renderStats(res));
       list.append(row);
     }
+  }
+
+  /** 枠を並べる。onClick(i) でクリックを処理する。 */
+  renderSlots(wi, onClick) {
+    const slots = el('div', { class: 'slots' });
+    wi.slots.forEach((word, i) => {
+      const isArmed = this.armed && word && this.armed === word;
+      const cls = 'slot'
+        + (word ? ' filled' : '')
+        + (this.armed ? ' drop' : '')
+        + (isArmed ? ' armed' : '');
+      const node = el('div', { class: cls, title: word ? `${word.text} を戻す` : '空の枠' },
+        word
+          ? el('span', {}, word.text)
+          : el('span', { class: 'empty-mark' }, '＿'));
+      node.addEventListener('click', () => onClick(i));
+      slots.append(node);
+      if (i < wi.slots.length - 1) slots.append(el('span', { class: 'slot-plus' }, '+'));
+    });
+    return slots;
+  }
+
+  /**
+   * プレイヤー自身の文。「頑強疾走人」のような称号を作る。
+   */
+  renderSelfRow() {
+    const p = this.run.player;
+    const ev = evaluate(p.selfSlots.filter(Boolean));
+    const row = el('div', { class: 'wrow wrow-self' + (ev.valid ? ' ' + ev.grade : ' broken') });
+
+    row.append(el('div', { class: 'wrow-head' },
+      el('span', { class: 'wrow-name' }, p.stats.selfTitle || '自身'),
+      el('span', { class: 'wrow-kind' }, '称号'),
+      el('span', { class: 'wrow-grade grade-' + (ev.valid ? ev.grade : 'broken') },
+        ev.valid ? ev.gradeInfo.name : '不成文'),
+    ));
+
+    if (!ev.valid && p.selfSlots.some(Boolean)) {
+      row.append(el('div', { class: 'wrow-why' },
+        `${ev.reasonText} — 自身強化の語を 2 つ以上並べると文になる。`));
+    }
+
+    row.append(this.renderSlots({ slots: p.selfSlots }, (i) => this.onSelfSlotClick(i)));
+
+    // 文面。
+    const joined = p.selfSlots.filter(Boolean).map((w) => w.text).join('');
+    const right = el('span', { class: 'sn-res' },
+      el('span', { class: 'sn-eq' }, '= '),
+      el('b', { class: 'sn-text' }, joined || '—'),
+    );
+    if (ev.valid) {
+      right.append(el('span', { class: 'sn-seg' },
+        ev.segments.map((s) => el('i', { class: `sg ${catClass({ text: s })}` }, s))));
+    }
+    row.append(el('div', { class: 'sentence' }, right));
+
+    // 乗っている自身の効果。
+    const fx = [];
+    for (const w of p.selfSlots) {
+      if (!w || !w.player) continue;
+      for (const [k, v] of Object.entries(w.player)) {
+        fx.push(`${PS_LABEL[k] || k}${v > 0 ? '+' : ''}${Math.round(v * 100) / 100}`);
+      }
+    }
+    const stats = el('div', { class: 'wrow-stats' });
+    for (const t of fx) stats.append(el('span', { class: 'stat up' }, t));
+    if (ev.valid) {
+      stats.append(el('span', { class: 'stat idom' }, `文の力 x${p.stats.selfPower.toFixed(2)}`));
+    }
+    if (stats.childNodes.length) row.append(stats);
+    return row;
   }
 
   /**
@@ -140,14 +193,15 @@ export class Forge {
   renderSentence(wi, res) {
     const wrap = el('div', { class: 'sentence' });
 
-    const parts = [];
+    // 枠の語を + でつないで並べる。
+    const parts = el('span', { class: 'sn-parts' });
     wi.slots.forEach((w, i) => {
-      if (i > 0) parts.push(el('span', { class: 'sn-plus' }, '+'));
-      parts.push(w
+      if (i > 0) parts.append(el('span', { class: 'sn-plus' }, '+'));
+      parts.append(w
         ? el('span', { class: `sn-w ${catClass(w)}`, title: WORDS[w.text]?.cat || '' }, w.text)
         : el('span', { class: 'sn-empty' }, '＿'));
     });
-    wrap.append(el('span', { class: 'sn-parts' }, parts));
+    wrap.append(parts);
 
     // 連結した結果。
     const joined = wi.slots.filter(Boolean).map((w) => w.text).join('');
@@ -167,92 +221,6 @@ export class Forge {
     wrap.append(right);
     return wrap;
   }
-
-  /**
-   * プレイヤー自身の文。「頑強疾走人」のような称号を作る。
-   */
-  renderSelfRow() {
-    const p = this.run.player;
-    const ev = evaluate(p.selfSlots.filter(Boolean));
-    const row = el('div', { class: 'wrow wrow-self' + (ev.valid ? ' ' + ev.grade : ' broken') });
-
-    row.append(el('div', { class: 'wrow-head' },
-      el('span', { class: 'wrow-name' }, '自身'),
-      el('span', { class: 'wrow-kind' }, '称号'),
-      el('span', { class: 'wrow-grade grade-' + (ev.valid ? ev.grade : 'broken') },
-        ev.valid ? ev.gradeInfo.name : '不成文'),
-    ));
-
-    if (!ev.valid && p.selfSlots.some(Boolean)) {
-      row.append(el('div', { class: 'wrow-why' },
-        ev.reasonText + ' — 自身強化の語を 2 つ以上並べると文になる。'));
-    }
-
-    const slots = el('div', { class: 'slots' });
-    p.selfSlots.forEach((word, i) => {
-      const isArmed = this.armed && word && this.armed === word;
-      const cls = 'slot'
-        + (word ? ' filled' : '')
-        + (this.armed ? ' drop' : '')
-        + (isArmed ? ' armed' : '');
-      const node = el('div', { class: cls, title: word ? word.text + ' を戻す' : '空の枠' },
-        word ? el('span', {}, word.text) : el('span', { class: 'empty-mark' }, '＿'));
-      node.addEventListener('click', () => this.onSelfSlotClick(i));
-      slots.append(node);
-      if (i < p.selfSlots.length - 1) slots.append(el('span', { class: 'slot-plus' }, '+'));
-    });
-    row.append(slots);
-
-    // 文面。
-    const joined = p.selfSlots.filter(Boolean).map((w) => w.text).join('');
-    const right = el('span', { class: 'sn-res' },
-      el('span', { class: 'sn-eq' }, '= '),
-      el('b', { class: 'sn-text' }, joined || '—'),
-    );
-    if (ev.valid) {
-      right.append(el('span', { class: 'sn-seg' },
-        ev.segments.map((s) => el('i', { class: 'sg ' + catClass({ text: s }) }, s))));
-    }
-    row.append(el('div', { class: 'sentence' }, right));
-
-    // 乗っている自身の効果。
-    const fx = [];
-    for (const w of p.selfSlots) {
-      if (!w || !w.player) continue;
-      for (const [k, v] of Object.entries(w.player)) {
-        fx.push((PS_LABEL[k] || k) + (v > 0 ? '+' : '') + (Math.round(v * 100) / 100));
-      }
-    }
-    if (fx.length) {
-      row.append(el('div', { class: 'wrow-stats' },
-        fx.map((t) => el('span', { class: 'stat up' }, t))));
-    }
-    if (ev.valid) {
-      row.append(el('div', { class: 'wrow-stats' },
-        el('span', { class: 'stat idom' }, '文の力 x' + p.stats.selfPower.toFixed(2))));
-    }
-    return row;
-  }
-
-  onSelfSlotClick(i) {
-    const p = this.run.player;
-    if (this.armed) {
-      const w = this.armed;
-      this.armed = null;
-      this.run.placeSelfWord(i, w);
-      this.opt.audio?.worn?.({ active: true });
-      this.opt.onChange?.();
-      this.render();
-      return;
-    }
-    if (p.selfSlots[i]) {
-      this.run.toPouch(p.selfSlots[i]);
-      this.opt.audio?.tap?.();
-      this.opt.onChange?.();
-      this.render();
-    }
-  }
-
 
   renderStats(res) {
     const wrap = el('div', { class: 'wrow-stats' });
@@ -274,8 +242,8 @@ export class Forge {
   // 語袋
   // ───────────────────────────────────────────────────────────────────────────
   renderPouch() {
-    const el2 = this.pouchEl;
-    clear(el2);
+    const box = this.pouchEl;
+    clear(box);
 
     const counts = new Map();
     for (const w of this.run.pouch) {
@@ -284,7 +252,7 @@ export class Forge {
 
     for (const w of this.run.pouch) {
       if (!w) {
-        el2.append(el('div', { class: 'pword empty' }, ''));
+        box.append(el('div', { class: 'pword empty' }, ''));
         continue;
       }
       const cat = CATEGORIES[w.cat] || CATEGORIES.modifier;
@@ -297,7 +265,7 @@ export class Forge {
       const n = counts.get(w.text);
       if (n > 1) node.append(el('span', { class: 'pword-n' }, `×${n}`));
       node.addEventListener('click', () => this.onPouchClick(w));
-      el2.append(node);
+      box.append(node);
     }
 
     const filled = this.run.pouch.filter(Boolean).length;
@@ -314,7 +282,7 @@ export class Forge {
     const sel = this.armed;
     if (!sel) {
       d.append(el('span', { class: 'dt' }, '語を選んでから枠をクリック'));
-      d.append(el('span', { class: 'dl' }, '語袋か武器の枠から選ぶ。枠を空けると文が崩れる。'));
+      d.append(el('span', { class: 'dl' }, '語袋か武器か自身の枠。枠を空けると文が崩れる。'));
       return;
     }
 
@@ -345,11 +313,11 @@ export class Forge {
     const have = new Set();
     for (const w of this.run.pouch) if (w) have.add(w.text);
     for (const wi of this.run.weapons) for (const w of wi.slots) if (w) have.add(w.text);
-    have.add(...this.run.weapons.map((w) => w.def.core));
+    for (const w of this.run.player.selfSlots) if (w) have.add(w.text);
 
     const list = possibleCompounds(have, 20);
     if (!list.length) {
-      h.append(el('p', {}, '今の語では熟語を作れない。語を引き直そう。'));
+      h.append(el('p', {}, '今の語では熟語を作れない。レベルアップで語が増える。'));
       return;
     }
     h.append(el('p', {}, `今の語で作れる熟語 (${list.length} 種):`));
@@ -374,7 +342,6 @@ export class Forge {
   }
 
   onSlotClick(wi, index) {
-    const cur = wi.slots[index];
     if (this.armed) {
       const w = this.armed;
       this.armed = null;
@@ -384,41 +351,31 @@ export class Forge {
       this.render();
       return;
     }
-    if (cur) {
-      // 語袋へ戻す。
-      this.run.toPouch(cur);
+    if (wi.slots[index]) {
+      this.run.toPouch(wi.slots[index]);
       this.opt.audio?.tap?.();
       this.opt.onChange?.();
       this.render();
     }
   }
 
-  reroll() {
-    const now = this.run.time;
-    if (now < this.rerollAt) return;
-    // 語袋の中の語をすべて引き直す。
-    const rand = this.run.rand;
-    for (let i = 0; i < this.run.pouch.length; i++) {
-      if (!this.run.pouch[i]) continue;
-      this.run.pouch[i] = drawWord(rand);
+  onSelfSlotClick(i) {
+    const p = this.run.player;
+    if (this.armed) {
+      const w = this.armed;
+      this.armed = null;
+      this.run.placeSelfWord(i, w);
+      this.opt.audio?.worn?.({ active: true });
+      this.opt.onChange?.();
+      this.render();
+      return;
     }
-    // 武器の枠に埋まっている語は残す (失うと成立しなくなるため)。
-    this.rerollAt = now + REROLL_CD;
-    this.armed = null;
-    this.run.refreshStats();
-    this.opt.audio?.worn?.(null);
-    this.opt.onChange?.();
-    this.render();
-  }
-
-  /** 経過時間の表示を直す。ゲーム中も開けるのでクールダウンが進む。 */
-  tick() {
-    if (!this.isOpen) return;
-    const left = this.rerollAt - this.run.time;
-    const label = left > 0 ? `${Math.ceil(left)}秒後` : 'すぐ';
-    const span = this.rerollBtn.querySelector('span');
-    if (span) span.textContent = `(${label})`;
-    this.rerollBtn.disabled = left > 0;
+    if (p.selfSlots[i]) {
+      this.run.toPouch(p.selfSlots[i]);
+      this.opt.audio?.tap?.();
+      this.opt.onChange?.();
+      this.render();
+    }
   }
 }
 
@@ -449,12 +406,11 @@ const FX_LABEL = {
   lifesteal: '吸血', regen: '回復', shield: 'シールド', knock: '撃退',
   recoil: '反動', magnet: '吸引', slowImmune: '減速耐性', reflect: '反射',
   armor: '装甲', power: '文力', atkMul: '攻撃', xpMul: '経験値',
+  dmgMul: '威力',
 };
 
 const PS_LABEL = {
-  hp: '体力', spd: '移動速度', atk: '攻撃', armor: '装甲', crit: '会心',
+  hp: '体力', spd: '移動', atk: '攻撃', armor: '装甲', crit: '会心',
   regen: '回復', lifesteal: '吸血', luck: '幸運', magnet: '吸引',
   xp: '経験値', size: '大きさ', shield: 'シールド',
 };
-
-export { evaluate };

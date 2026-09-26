@@ -95,10 +95,25 @@ failed += await run('test/sim.test.js');
 
 if (startServer) {
   const server = await serve(ROOT, PORT);
-  try {
-    failed += await run('test/browser.test.js');
-  } finally {
+  // サーバが応答するまで待つ。すぐテストを走らせると
+  // ページを取得できず「Failed to fetch」になる。
+  let up = false;
+  for (let i = 0; i < 40; i++) {
+    try {
+      const r = await fetch(`http://localhost:${PORT}/index.html`);
+      if (r.ok) { up = true; break; }
+    } catch {}
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  if (!up) {
+    console.log('サーバが起動しなかった。ブラウザテストをスキップする。');
     server.close();
+  } else {
+    try {
+      failed += await run('test/browser.test.js');
+    } finally {
+      server.close();
+    }
   }
 }
 

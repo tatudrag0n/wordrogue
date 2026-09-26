@@ -262,7 +262,6 @@ function loop(now) {
     app.hud.update(run, (wi) => {
       if (app.mode === 'play') toggleForge();
     });
-    if (app.forge.isOpen) app.forge.tick();
 
     // 音楽。激昂度は経過時間から求める。
     if (app.mode === 'play' && !run.paused) {

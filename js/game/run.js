@@ -65,6 +65,7 @@ export class Run {
 
     /** @type {Array<object|null>} 語袋 */
     this.pouch = new Array(this.pouchSize).fill(null);
+    this.wordSeq = 0;   // 語袋から古い順に捨てるための通し番号
 
     // ── 武器 ──
     this.weapons = [];
@@ -157,15 +158,71 @@ export class Run {
     p.r = 13 * s.size;
   }
 
+  /**
+   * 語袋に語を渡す。満杯なら最も古い 1 語を捨てる。
+   * レベルアップの報酬で呼ばれる。
+   * @returns {boolean} 入れたか
+   */
+  giveWord(word) {
+    if (!word) return false;
+    word.t = ++this.wordSeq;
+    const i = this.pouch.indexOf(null);
+    if (i >= 0) {
+      this.pouch[i] = word;
+      this.refreshStats();
+      this.pushHint(`「${word.text}」を手に入れた`);
+      return true;
+    }
+    // 満杯。最も古い 1 語を捨てる。
+    let drop = 0;
+    for (let k = 1; k < this.pouch.length; k++) {
+      if ((this.pouch[k].t || 0) < (this.pouch[drop].t || 0)) drop = k;
+    }
+    const lost = this.pouch[drop];
+    this.pouch[drop] = word;
+    this.refreshStats();
+    this.pushHint(`「${word.text}」を手に入れた（「${lost.text}」は消えた）`);
+    return true;
+  }
+
+  /**
+   * レベルアップ。ことばを数枚配る。
+   * ステージ終わりの報酬ではなく、戦闘の中で手に入る。
+   */
+  grantLevelWords(level) {
+    this.growPouch(level);
+    const n = level % 5 === 0 ? 2 : 1;   // 5 の倍数のときは 2 枚
+    for (let i = 0; i < n; i++) {
+      const w = drawWord(this.rand);
+      if (w) this.giveWord(w);
+    }
+    // 自分自身の文にも入ることがある。
+    if (level % 4 === 1) {
+      const free = this.player.selfSlots.indexOf(null);
+      if (free >= 0) {
+        const w = drawWord(this.rand, { cat: 'buff' });
+        if (w) {
+          w.t = ++this.wordSeq;
+          this.player.selfSlots[free] = w;
+          this.refreshStats();
+          this.pushHint(`自身の文に「${w.text}」を迎えた`);
+        }
+      }
+    }
+  }
+
   /** 語袋に追加。満杯で replace=false なら false。 */
   addWord(word, silent = false, replace = false) {
     if (!word) return false;
+    word.t = ++this.wordSeq;
     const i = this.pouch.indexOf(null);
     if (i < 0) {
       if (!replace) return false;
-      const occupied = [];
-      for (let k = 0; k < this.pouch.length; k++) if (this.pouch[k]) occupied.push(k);
-      this.pouch[occupied[this.rand.int(occupied.length)]] = word;
+      let drop = 0;
+      for (let k = 1; k < this.pouch.length; k++) {
+        if ((this.pouch[k].t || 0) < (this.pouch[drop].t || 0)) drop = k;
+      }
+      this.pouch[drop] = word;
     } else {
       this.pouch[i] = word;
     }
@@ -512,15 +569,30 @@ export class Run {
       p.stamina = Math.min(p.maxStamina, p.stamina + STAMINA_REGEN * dt);
     }
 
-    // ダッシュ中は入力方向へ大きく加速する。 standing はその場で缩む。
-    const dirX = moving ? ax : Math.cos(p.face);
-    const dirY = moving ? ay : Math.sin(p.face);
-    const spd = p.stats.spd * (p.dashing ? DASH_MULT : 1);
-    p.vx += (dirX * spd - p.vx) * Math.min(1, (p.dashing ? 26 : 14) * dt);
-    p.vy += (dirY * spd - p.vy) * Math.min(1, (p.dashing ? 26 : 14) * dt);
+    // 入力がなければその場で止まる。ダッシュ中だけ向いている方向へ進む。
+    let dirX = 0, dirY = 0;
+    if (moving) {
+      dirX = ax; dirY = ay;
+      p.face = input.angle;
+    } else if (p.dashing) {
+      dirX = Math.cos(p.face);
+      dirY = Math.sin(p.face);
+    }
+    if (!p.dashing && !moving) {
+      // 摩擦。放したキーの勢いが残らないようにする。
+      const f = Math.exp(-18 * dt);
+      p.vx *= f;
+      p.vy *= f;
+      if (Math.abs(p.vx) < 1) p.vx = 0;
+      if (Math.abs(p.vy) < 1) p.vy = 0;
+    } else {
+      const spd = p.stats.spd * (p.dashing ? DASH_MULT : 1);
+      const k = Math.min(1, (p.dashing ? 26 : 16) * dt);
+      p.vx += (dirX * spd - p.vx) * k;
+      p.vy += (dirY * spd - p.vy) * k;
+    }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    if (moving) p.face = input.angle;
 
     // 残像。
     if (p.dashing) {
@@ -775,6 +847,7 @@ export class Run {
         p.xp -= p.xpNext;
         p.level++;
         p.xpNext = Math.round(5 + p.level * 4 + p.level ** 1.7);
+        this.grantLevelWords(p.level);
         this.onLevelUp?.(p.level);
       }
     } else if (q.type === 'heal') {
@@ -782,6 +855,15 @@ export class Run {
       this.audio.pickup();
       this.pushHint(`回復 ${q.value}`);
     }
+  }
+
+  /**
+   * 語袋を 8 レベルごとに 1 つずつ広げる。
+   * レベルアップで語が入ってくるので、袋がすぐ埋まらないようにする。
+   */
+  growPouch(level = this.player.level) {
+    const want = Math.min(20, 12 + Math.floor(level / 8));
+    while (this.pouch.length < want) this.pouch.push(null);
   }
 
   contactTick() {

@@ -143,12 +143,17 @@ export class Hud {
         + (res.active && res.grade === 'great' ? ' great' : '')
         + (res.active && res.grade === 'idiom' ? ' idiom' : '');
       node.querySelector('.wchip-lv').textContent = `Lv${wi.level}`;
-      // 武器名はそのまま文面。
-      node.querySelector('.wchip-txt').textContent = res.active
-        ? wi.title
-        : `${wi.title || wi.def.name} — ${res.reasonText}`;
+      // 武器名はそのまま文面。基本の型も添えてどちらの武器か分かるようにする。
+      const txt = node.querySelector('.wchip-txt');
+      if (!node.querySelector('.wchip-base')) {
+        const base = el('span', { class: 'wchip-base' }, '');
+        node.insertBefore(base, txt);
+      }
+      node.querySelector('.wchip-base').textContent = wi.def.name;
+      txt.textContent = res.active ? ` ${wi.title}` : ` ${wi.title || ''} — ${res.reasonText}`;
       node.title = res.active
-        ? `${res.gradeInfo.name}「${res.fullText}」 — 威力 ${res.stats.dmg.toFixed(0)} / ${KIND_LABEL[res.kind] || res.kind}`
+        ? `${wi.def.name}「${res.fullText}」 — ${res.gradeInfo.name} / `
+          + `${KIND_LABEL[res.kind] || res.kind} / 威力 ${res.stats.dmg.toFixed(0)}`
         : `不成文: ${res.reasonText}`;
     }
   }

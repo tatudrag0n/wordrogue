@@ -347,6 +347,99 @@ sec('攻撃エフェクトは十分長く見える');
   ok(afterHit > 10, `命中後にエフェクトが消える: 残り ${afterHit} フレーム`);
 }
 
+sec('入力なし・移動を止められる');
+{
+  const idle = { ax: 0, ay: 0, moving: false, angle: 0, dash: false };
+  const go = { ax: 1, ay: 0, moving: true, angle: 0, dash: false };
+
+  // 一度も入力しない。
+  const r1 = newRun(1);
+  const s0 = { x: r1.player.x, y: r1.player.y };
+  for (let i = 0; i < 180; i++) r1.update(1 / 60, idle);
+  const drift = Math.hypot(r1.player.x - s0.x, r1.player.y - s0.y);
+  ok(drift < 1, `入力なしでも前に進む: ${drift.toFixed(1)} px`);
+  ok(Math.hypot(r1.player.vx, r1.player.vy) < 1, `入力なしで速度が残る: ${r1.player.vx.toFixed(1)}`);
+  console.log(`  入力なし 3 秒の移動: ${drift.toFixed(2)} px`);
+
+  // 移動してから離す。
+  const r2 = newRun(1);
+  for (let i = 0; i < 60; i++) r2.update(1 / 60, go);
+  const movingSpeed = Math.hypot(r2.player.vx, r2.player.vy);
+  ok(movingSpeed > r2.player.stats.spd * 0.9, `移動していない: ${movingSpeed}`);
+  for (let i = 0; i < 30; i++) r2.update(1 / 60, idle);
+  const stopSpeed = Math.hypot(r2.player.vx, r2.player.vy);
+  ok(stopSpeed < 2, `手を離しても止まらない: ${stopSpeed.toFixed(1)} (移動時 ${movingSpeed.toFixed(0)})`);
+  console.log(`  移動 ${movingSpeed.toFixed(0)} → 離す ${stopSpeed.toFixed(1)}`);
+
+  // ダッシュを離しても止まる。
+  const r3 = newRun(1);
+  const dash = { ax: 1, ay: 0, moving: true, angle: 0, dash: true };
+  for (let i = 0; i < 60; i++) r3.update(1 / 60, dash);
+  ok(r3.player.dashing, 'ダッシュ状態になっていない');
+  ok(Math.hypot(r3.player.vx, r3.player.vy) > r3.player.stats.spd * 2.5, 'ダッシュが速い');
+  for (let i = 0; i < 60; i++) r3.update(1 / 60, idle);
+  ok(Math.hypot(r3.player.vx, r3.player.vy) < 2, 'ダッシュを離しても流れる');
+  console.log(`  ダッシュ後 ${Math.hypot(r3.player.vx, r3.player.vy).toFixed(1)} / スタミナ ${r3.player.stamina.toFixed(0)}`);
+
+  // スタミナが切れると通常移動に戻る。
+  const r4 = newRun(1);
+  for (let i = 0; i < 60 * 8; i++) r4.update(1 / 60, dash);
+  ok(r4.player.stamina < 2, `スタミナが切れなかった: ${r4.player.stamina}`);
+  ok(!r4.player.dashing, 'スタミナ切れでもダッシュしたまま');
+}
+
+sec('レベルアップでことばが獲得できる');
+{
+  const r = newRun(1);
+  const before = r.pouch.filter(Boolean).length;
+  const size0 = r.pouch.length;
+  r.grantLevelWords(2);
+  ok(r.pouch.filter(Boolean).length > before,
+    `レベルアップで語が入らない: ${before} -> ${r.pouch.filter(Boolean).length}`);
+
+  // 5 の倍数なら 2 枚。
+  const r2 = newRun(1);
+  const b2 = r2.pouch.filter(Boolean).length;
+  r2.grantLevelWords(5);
+  ok(r2.pouch.filter(Boolean).length >= b2 + 2, `5 の倍数で 2 枚入らない: ${b2} -> ${r2.pouch.filter(Boolean).length}`);
+
+  // 4 レベルごとに自身の文に 1 語。
+  const r3 = newRun(1);
+  r3.grantLevelWords(5);
+  const selfFilled = r3.player.selfSlots.filter(Boolean).length;
+  ok(selfFilled === 1, `自身の文に語が入らない: ${selfFilled}`);
+
+  // 語袋が 8 レベルごとに広がる。
+  const r4 = newRun(1);
+  ok(r4.pouch.length === size0, `初期サイズが変わった: ${r4.pouch.length}`);
+  for (let lv = 2; lv <= 20; lv++) r4.grantLevelWords(lv);
+  ok(r4.pouch.length > size0, `レベルを上げても語袋が広がらない: ${size0} -> ${r4.pouch.length}`);
+  ok(r4.pouch.length <= 20, `語袋が際限なく増える: ${r4.pouch.length}`);
+  console.log(`  語袋 12 -> ${r4.pouch.length} (Lv20)`);
+
+  // 実際にレベルアップ経由で入ること。
+  const r5 = newRun(1);
+  const n0 = r5.pouch.filter(Boolean).length;
+  r5.collect({ type: 'xp', value: 100 });
+  ok(r5.player.level > 1, `レベルが上がらない: ${r5.player.level}`);
+  ok(r5.pouch.filter(Boolean).length > n0, `レベルアップで語袋が増えない: ${n0} -> ${r5.pouch.filter(Boolean).length}`);
+  console.log(`  経験値 100 で Lv${r5.player.level} / 語袋 ${n0} -> ${r5.pouch.filter(Boolean).length}`);
+}
+
+sec('語袋が満杯でも語が入る');
+{
+  const r = newRun(1);
+  const { makeWord } = await import('../js/data/words.js');
+  while (r.pouch.includes(null)) r.addWord(makeWord('刃'), true);
+  ok(!r.pouch.includes(null), '語袋が埋まっていない');
+  const dropped = r.pouch[0].text;
+  r.giveWord(makeWord('雷'));
+  ok(r.pouch.length > 0, '語袋が壊れた');
+  ok(r.pouch.some((w) => w && w.text === '雷'), '新しい語が入っていない');
+  ok(r.pouch.every(Boolean), '空きが生じた');
+  console.log(`  満杯から「雷」を差し替え (${dropped} が消えた)`);
+}
+
 sec('形態語が形と攻撃を決める');
 {
   const r = freshWeapon(1, ['gun']);

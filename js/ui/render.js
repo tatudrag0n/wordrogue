@@ -43,12 +43,13 @@ export class Renderer {
 
   /**
    * 1 フレーム分を描く。
+   * 個別のエフェクトで例外が出ても、描画全体が止まってプレイヤーが
+   * 消えないように 1 段ずつ try で包む。
    * @param {object} run
    * @param {object} stick タッチスティックの表示状態
    */
   draw(run, stick) {
     const g = this.ctx;
-    this.begin();
 
     // カメラ (画面シェイク込み)。
     const p = run.player;
@@ -61,26 +62,55 @@ export class Renderer {
     this.camX = p.x - this.w / 2 + sx;
     this.camY = p.y - this.h / 2 + sy;
 
+    this.begin();
     g.save();
     g.translate(-this.camX, -this.camY);
 
-    this.drawGround(run);
-    this.drawCorpses(run);
-    this.drawFields(run);
-    this.drawPickups(run);
-    this.drawSlashes(run);
-    this.drawRings(run);
-    this.drawLightnings(run);
-    this.drawEnemies(run);
-    this.drawBullets(run);
-    this.drawPlayer(run);
-    this.drawLightnings(run);
-    this.drawDamageTexts(run);
+    this.step('ground', () => this.drawGround(run));
+    this.step('corpses', () => this.drawCorpses(run));
+    this.step('fields', () => this.drawFields(run));
+    this.step('pickups', () => this.drawPickups(run));
+    this.step('slashes', () => this.drawSlashes(run));
+    this.step('rings', () => this.drawRings(run));
+    this.step('beams', () => this.drawBeams(run));
+    this.step('enemies', () => this.drawEnemies(run));
+    this.step('bullets', () => this.drawBullets(run));
+    this.step('player', () => this.drawPlayer(run));
+    this.step('lightnings', () => this.drawLightnings(run));
+    this.step('texts', () => this.drawDamageTexts(run));
 
     g.restore();
 
-    this.drawVignette(run);
-    this.drawStickUI(stick);
+    this.step('vignette', () => this.drawVignette(run));
+    this.step('stick', () => this.drawStickUI(stick));
+  }
+
+  /**
+   * 描画を 1 段進める。例外は記録するだけで致命的にしない。
+   * ここで握り潰さないと、1 つのエフェクトの記述ミスで
+   * 後ろの drawPlayer まで実行されずプレイヤーが消える。
+   */
+  step(name, fn) {
+    try {
+      fn();
+    } catch (err) {
+      if (!this._drawErrors) this._drawErrors = new Map();
+      const n = (this._drawErrors.get(name) || 0) + 1;
+      this._drawErrors.set(name, n);
+      if (n === 1 && typeof console !== 'undefined') {
+        console.error('[render] ' + name + ' の描画に失敗:', err);
+      }
+      // 状態を戻しておかないと以降の描画が全部濁る。
+      this.ctx.globalAlpha = 1;
+      this.ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  /** 描画に失敗した回数。テストから監視する。 */
+  get drawErrorCount() {
+    let n = 0;
+    if (this._drawErrors) for (const v of this._drawErrors.values()) n += v;
+    return n;
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -652,12 +682,13 @@ export class Renderer {
       case 'earth':
       case 'gold':
       case 'steel': {
+        // 鉱物系。土埃や粉の軌跡を引く。
+        const wig = (n) => Math.sin(t * 30 + b.uid * 1.3 + n) * 0.5 * r * 0.8;
         g.lineWidth = 1.2;
         g.globalAlpha = 0.55;
         g.beginPath();
         g.moveTo(b.x - Math.cos(ang) * r * 1.2, b.y - Math.sin(ang) * r * 1.2);
-        g.lineTo(b.x - Math.cos(ang) * r * 2.2 + j0(t, b.uid),
-                 b.y - Math.sin(ang) * r * 2.2 + j0(t, b.uid + 1));
+        g.lineTo(b.x - Math.cos(ang) * r * 2.2 + wig(0), b.y - Math.sin(ang) * r * 2.2 + wig(1));
         g.stroke();
         break;
       }

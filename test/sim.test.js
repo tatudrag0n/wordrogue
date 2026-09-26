@@ -27,15 +27,28 @@ function freshWeapon(stageId = 1, weaponIds) {
   return r;
 }
 
-function newRun(stageId, weaponIds) {
-  return new Run({ stageId, audio, save, weaponIds, rng: makeRng(stageId * 7919 + 13) });
+/** セーブの初期値。テストごとに分けて、言玉などの持ち越しが混ざらないようにする。 */
+function freshSave() {
+  return { d: { meta: {} }, unlockWeapon() {} };
+}
+
+function newRun(stageId, weaponIds, sv) {
+  return new Run({
+    stageId, audio, save: sv || freshSave(), weaponIds,
+    rng: makeRng(stageId * 7919 + 13),
+  });
+}
+
+/** 語彙の状態を文字列に落とす。空き (null) は '·' として、比較用のスナップショットにする。 */
+function lexText(r) {
+  return r.lexicon.map((w) => (w ? w.text : '·')).join();
 }
 
 sec('ラン生成');
 let run = newRun(1);
 ok(run.state === 'playing', '状態が playing ではない');
 ok(run.weapons.length === 2, `武器数 ${run.weapons.length}`);
-ok(run.pouch.every((x) => x !== undefined), '語袋が壊れている');
+ok(run.lexicon.every((x) => x !== undefined), '語彙が壊れている');
 ok(run.player.hp === run.player.maxHp, 'HP が最大になっていない');
 ok(run.player.maxHp > 0, 'maxHp が 0');
 
@@ -205,21 +218,21 @@ sec('語を並べ替えて 文が変わる');
   ok(weak > 0, '成立文書でも威力が 0');
 }
 
-sec('語袋の操作');
+sec('語彙の操作');
 {
   const r = newRun(1);
   const w = makeWord('氷');
   ok(r.addWord(w, true), '語を追加できない');
   const loc = r.findWord(w);
-  ok(loc && loc.where === 'pouch', '追加した語が見つからない');
+  ok(loc && loc.where === 'lexicon', '追加した語が見つからない');
   ok(r.placeWord(r.weapons[1], 0, w), 'スロットに置けない');
   ok(r.findWord(w)?.where === 'slot', '語がスロットに移動していない');
-  ok(r.pouch.includes(null), '語袋が空いていない');
+  ok(r.lexicon.includes(null), '語彙が空いていない');
   // 置いた語を戻す。
-  ok(r.toPouch(w), '語袋に戻せない');
-  ok(r.findWord(w)?.where === 'pouch', '語袋に戻っていない');
+  ok(r.toLexicon(w), '語彙に戻せない');
+  ok(r.findWord(w)?.where === 'lexicon', '語彙に戻っていない');
   // 満杯。
-  while (r.pouch.includes(null)) r.addWord(makeWord('刃'), true);
+  while (r.lexicon.includes(null)) r.addWord(makeWord('刃'), true);
   ok(r.addWord(makeWord('炎'), true) === false, '満杯なのに追加できた');
 }
 
@@ -549,62 +562,320 @@ sec('経験値の吸引が暴れない');
   console.log('  経験値は切らない / 回復は 30 秒');
 }
 
-sec('レベルアップでことばが獲得できる');
+sec('レベルアップは 3 択 1 択');
 {
+  const { WORD_CHOICES, CHOICE_TIME } = await import('../js/game/run.js');
+
+  //  Coventry 3 つの候補が出て、選ぶまで語彙に入らない。
   const r = newRun(1);
-  const before = r.pouch.filter(Boolean).length;
-  const size0 = r.pouch.length;
+  const before = r.lexicon.filter(Boolean).length;
   r.grantLevelWords(2);
-  ok(r.pouch.filter(Boolean).length > before,
-    `レベルアップで語が入らない: ${before} -> ${r.pouch.filter(Boolean).length}`);
+  ok(r.pendingChoices.length === 1, `3 択が出ていない: ${r.pendingChoices.length}`);
+  const c = r.pendingChoices[0];
+  ok(c.words.length === WORD_CHOICES, `候補が ${WORD_CHOICES} 個でない: ${c.words.length}`);
+  ok(new Set(c.words.map((w) => w.text)).size === c.words.length, '候補が重複している');
+  ok(c.life === CHOICE_TIME, `制限時間が違う: ${c.life}`);
+  ok(r.lexicon.filter(Boolean).length === before, '選ぶ前に語が入った');
 
-  // 5 の倍数なら 2 枚。
+  // 1 つ選べば入る。選んだものだけ。
+  const picked = c.words[1];
+  ok(r.chooseWord(c.id, 1), '選べなかった');
+  ok(r.pendingChoices.length === 0, `3 択が残った: ${r.pendingChoices.length}`);
+  const now = r.lexicon.filter(Boolean);
+  ok(now.length === before + 1, `入らない: ${before} -> ${now.length}`);
+  ok(now.some((w) => w === picked), `選んだ語が別simp 东西thing Allocator Opinion 起來`);
+
+  // 5 の倍数なら 2 回分出る。
   const r2 = newRun(1);
-  const b2 = r2.pouch.filter(Boolean).length;
   r2.grantLevelWords(5);
-  ok(r2.pouch.filter(Boolean).length >= b2 + 2, `5 の倍数で 2 枚入らない: ${b2} -> ${r2.pouch.filter(Boolean).length}`);
+  ok(r2.pendingChoices.length === 2, `5 の倍数で 2 回出ていない: ${r2.pendingChoices.length}`);
 
-  // 4 レベルごとに自身の文に 1 語。
+  // 4 レベルごとに自身の文に 1 語 (これは自動)。
   const r3 = newRun(1);
   r3.grantLevelWords(5);
   const selfFilled = r3.player.selfSlots.filter(Boolean).length;
   ok(selfFilled === 1, `自身の文に語が入らない: ${selfFilled}`);
 
-  // 語袋が 8 レベルごとに広がる。
+  // 時間切れなら 1 番目が自動で入る。
   const r4 = newRun(1);
-  ok(r4.pouch.length === size0, `初期サイズが変わった: ${r4.pouch.length}`);
-  for (let lv = 2; lv <= 20; lv++) r4.grantLevelWords(lv);
-  ok(r4.pouch.length > size0, `レベルを上げても語袋が広がらない: ${size0} -> ${r4.pouch.length}`);
-  ok(r4.pouch.length <= 20, `語袋が際限なく増える: ${r4.pouch.length}`);
-  console.log(`  語袋 12 -> ${r4.pouch.length} (Lv20)`);
+  r4.grantLevelWords(2);
+  const n0 = r4.lexicon.filter(Boolean).length;
+  const first = r4.pendingChoices[0];
+  for (let i = 0; i < 60 * 9; i++) r4.update(1 / 60, { ax: 0, ay: 0, moving: false });
+  ok(r4.pendingChoices.length === 0, '時間切れで 3 択が残った');
+  ok(r4.lexicon.filter(Boolean).length === n0 + 1,
+    `時間切れで入らない: ${n0} -> ${r4.lexicon.filter(Boolean).length}`);
+  ok(r4.lexicon.some((w) => w && w.text === first.words[0].text),
+    '時間切れで 1 番目が選ばれた');
 
-  // 実際にレベルアップ経由で入ること。
+  // 実際にレベルアップ経由で出ること。
   const r5 = newRun(1);
-  const n0 = r5.pouch.filter(Boolean).length;
   r5.collect({ type: 'xp', value: 100 });
   ok(r5.player.level > 1, `レベルが上がらない: ${r5.player.level}`);
-  ok(r5.pouch.filter(Boolean).length > n0, `レベルアップで語袋が増えない: ${n0} -> ${r5.pouch.filter(Boolean).length}`);
-  console.log(`  経験値 100 で Lv${r5.player.level} / 語袋 ${n0} -> ${r5.pouch.filter(Boolean).length}`);
+  ok(r5.pendingChoices.length >= 1, 'レベルアップで 3 択が出ない');
+  console.log(`  Lv${r5.player.level} で ${r5.pendingChoices.length} 件の 3 択 / 語彙 ${n0} -> ${r4.lexicon.filter(Boolean).length}`);
 }
 
-sec('語袋が満杯でも語が入る');
+sec('語彙の容量は言玉で増える');
+{
+  const { LEXICON_MAX } = await import('../js/game/run.js');
+  const sv = freshSave();
+  const r = newRun(1, undefined, sv);
+  const size0 = r.lexicon.length;
+  ok(size0 === 12, `初期サイズが変わった: ${size0}`);
+  r.growLexicon(3);
+  ok(r.lexicon.length === size0 + 3, `言玉で広がらない: ${size0} -> ${r.lexicon.length}`);
+  // 次のステージへ持ち越す。
+  const r2 = newRun(2, undefined, sv);
+  ok(r2.lexicon.length === size0 + 3, `持ち越されない: ${r2.lexicon.length}`);
+  // 上限がある。
+  r.growLexicon(999);
+  ok(r.lexicon.length === LEXICON_MAX, `上限を守らない: ${r.lexicon.length}`);
+  r.growLexicon(5);
+  ok(r.lexicon.length === LEXICON_MAX, `上限を超えて増える: ${r.lexicon.length}`);
+  // セーブ側の値がおかしくて配列が肥大化しない。
+  const r3 = newRun(3, undefined, sv);
+  ok(r3.lexicon.length <= LEXICON_MAX, `壊れたセーブで肥大する: ${r3.lexicon.length}`);
+  // 別セーブなら影響を受けない。
+  ok(newRun(1).lexicon.length === size0, '別セーブまで影響する');
+  console.log(`  語彙 ${size0} -> ${size0 + 3} -> 上限 ${LEXICON_MAX}`);
+}
+
+sec('語彙が満杯なら 3 択は「捨てる」を求める');
+{
+  const fullRun = () => {
+    const r = newRun(1);
+    // 語が重ならないように別々の語で埋める (文字列比較が曖昧くならないように)。
+    const fill = ['火', '氷', '雷', '毒', '土', '風', '光', '闇', '水', '鋼', '巨', '速'];
+    let k = 0;
+    while (r.lexiconFreeCount > 0) r.addWord(makeWord(fill[k++ % fill.length]), true);
+    return r;
+  };
+
+  // 捨てる位置を指定すると、その語と入れ替わる。
+  const r = fullRun();
+  ok(r.lexiconFull, '満杯になっていない');
+  r.grantLevelWords(2);
+  const c = r.pendingChoices[0];
+  const before = r.lexicon.map((w) => (w ? w.text : null));
+  const target = before[3];
+  ok(r.chooseWord(c.id, 0, 3), '捨てる語を指定しても入らない');
+  const after = r.lexicon.map((w) => (w ? w.text : null));
+  ok(after[3] === c.words[0].text, `新しい語が 3 番目に入らない: ${after[3]}`);
+  ok(!after.includes(target), `捨てる語が残った: ${target}`);
+  ok(after.filter(Boolean).length === before.filter(Boolean).length,
+    `数が変わる: ${before.filter(Boolean).length} -> ${after.filter(Boolean).length}`);
+  console.log(`  満杯の 3 択: 「${target}」を捨てて「${c.words[0].text}」瞪着入れた`);
+
+  // discardIndex を渡さない (時間切れと同じ) なら最も古い語が自動的に消える。
+  const r2 = fullRun();
+  const ts = r2.lexicon.filter(Boolean).map((w) => w.t || 0);
+  const oldest = ts.indexOf(Math.min(...ts));
+  r2.grantLevelWords(2);
+  const c2 = r2.pendingChoices[0];
+  const t0 = r2.lexicon.filter(Boolean).map((w) => w.text);
+  ok(r2.chooseWord(c2.id, 0, null), '時間切れでも入らない');
+  const t1 = r2.lexicon.filter(Boolean).map((w) => w.text);
+  ok(t1.length === t0.length, `数が変わる: ${t0.length} -> ${t1.length}`);
+  ok(!t1.includes(t0[oldest]), `最古の語が残った: ${t0[oldest]}`);
+  const want = c2.words[0].text;
+  ok(t1.includes(want), `新しい語が入っていない: ${want} / ${t1.join(' ')}`);
+  console.log(`  時間切れ: 最古の「${t0[oldest]}」が消えて「${want}」が入った`);
+
+  // 語彙が満杯なら、武器から語を外せない。
+  const wi = r2.weapons[0];
+  const slotWord = wi.slots[0];
+  const res = r2.toLexicon(slotWord);
+  ok(!res.ok && res.reason === 'full', `満杯なのに外せた: ${JSON.stringify(res)}`);
+  ok(wi.slots[0] === slotWord, '語が消失した');
+  // 空きを作れば外せる。
+  r2.lexicon[0] = null;
+  ok(r2.toLexicon(slotWord).ok, '空きがあっても外せない');
+  console.log('  満杯時は武器から語を外せない / 空きを作れば外せる');
+}
+
+sec('語彙から「忘れる」');
 {
   const r = newRun(1);
-  const { makeWord } = await import('../js/data/words.js');
-  while (r.pouch.includes(null)) r.addWord(makeWord('刃'), true);
-  ok(!r.pouch.includes(null), '語袋が埋まっていない');
-  const dropped = r.pouch[0].text;
-  r.giveWord(makeWord('雷'));
-  ok(r.pouch.length > 0, '語袋が壊れた');
-  ok(r.pouch.some((w) => w && w.text === '雷'), '新しい語が入っていない');
-  ok(r.pouch.every(Boolean), '空きが生じた');
-  console.log(`  満杯から「雷」を差し替え (${dropped} が消えた)`);
+  const n0 = r.lexicon.filter(Boolean).length;
+  const free0 = r.lexiconFreeCount;
+  const target = r.lexicon[0];
+  ok(r.forgetWord(target) === target.text, '忘れるのに失敗した');
+  ok(r.lexiconFreeCount === free0 + 1, `空きが増えていない: ${free0} -> ${r.lexiconFreeCount}`);
+  ok(r.lexicon.filter(Boolean).length === n0 - 1, '数が減っていない');
+  // 連続してできる。
+  r.forgetWord(r.lexicon[1]);
+  r.forgetWord(r.lexicon[2]);
+  ok(r.lexiconFreeCount === free0 + 3, `連続して忘れる: ${r.lexiconFreeCount}`);
+  // 武器にある語は忘れる対象にならない。
+  const slotWord = r.weapons[0].slots[0];
+  ok(r.forgetWord(slotWord) === null, '武器の語を忘れてしまった');
+  ok(r.weapons[0].slots[0] === slotWord, '武器の語が消えた');
+  console.log(`  3 つ連続で忘れて空き ${free0} -> ${r.lexiconFreeCount} 個 / 武器の語は対象外`);
+}
+
+sec('語彙が満杯のときは語を勝手に捨てない');
+{
+  const r = newRun(1);
+  while (r.lexicon.includes(null)) r.addWord(makeWord('刃'), true);
+  ok(!r.lexicon.includes(null), '語彙が埋まっていない');
+  const before = r.lexicon.map((w) => w.text);
+
+  // force なしでは入れない (3 択の「捨てる」で決める)。
+  ok(!r.giveWord(makeWord('雷')), '満杯なのに無理に入れた');
+  ok(r.lexicon.map((w) => w.text).join() === before.join(), '語彙が変わった');
+
+  // force ありなら最古を捨てて入れる。
+  const oldestText = r.lexicon[r.oldestLexiconIndex()].text;
+  ok(r.giveWord(makeWord('雷'), true), 'force で入れない');
+  ok(r.lexicon.some((w) => w && w.text === '雷'), '新しい語が入っていない');
+  ok(!r.lexicon.some((w) => w && w.text === oldestText), `最古の語が残った: ${oldestText}`);
+  ok(r.lexicon.every(Boolean), '空きが生じた');
+  console.log(`  満杯: force なしでは断る / force で「${oldestText}」→「雷」`);
+}
+
+sec('ドラッグの入れ替えは語を消さない');
+{
+  const r = newRun(1);
+  const wi = r.weapons[0];
+  const self = r.player.selfSlots;
+
+  // 枠 ⇄ 枠。語は入ったまま、数は変わらない。
+  const a = makeWord('火');
+  const b = makeWord('刃');
+  wi.setSlot(0, a);
+  wi.setSlot(1, b);
+  const lexBefore = lexText(r);
+  const r1 = r.swapPlaces(
+    { kind: 'slot', wi, index: 0 },
+    { kind: 'slot', wi, index: 1 },
+  );
+  ok(r1.ok, `枠 ⇄ 枠 の入れ替えが失敗: ${r1.reason}`);
+  ok(wi.slots[0] === b && wi.slots[1] === a, '枠の語が入れ替わっていない');
+  ok(lexText(r) === lexBefore, '入れ替えで語彙が変わった');
+
+  // 枠 ⇄ 自身。
+  wi.setSlot(0, a);
+  self[0] = b;
+  const r2 = r.swapPlaces(
+    { kind: 'slot', wi, index: 0 },
+    { kind: 'self', index: 0 },
+  );
+  ok(r2.ok, `枠 ⇄ 自身の入れ替えが失敗: ${r2.reason}`);
+  ok(wi.slots[0] === b && self[0] === a, '枠と自身の語が入れ替わっていない');
+
+  // 語彙 ⇄ 枠。空きがあればそのまま移動する。
+  const lexWord = r.lexicon.find(Boolean);
+  const lexIndex = r.lexicon.indexOf(lexWord);
+  const emptySlot = wi.slots.findIndex((w) => !w);
+  ok(emptySlot >= 0, '空き枠が見つからない');
+  const r3 = r.swapPlaces(
+    { kind: 'lexicon', index: lexIndex },
+    { kind: 'slot', wi, index: emptySlot },
+  );
+  ok(r3.ok, `語彙 → 枠 が失敗: ${r3.reason}`);
+  ok(wi.slots[emptySlot] === lexWord, '枠に語が入っていない');
+  ok(r.lexicon[lexIndex] === null, '語彙に語が残っている');
+
+  // 語彙 ⇄ 語彙。埋まっているセルを 2 つ取り出す。
+  const i0 = r.lexicon.findIndex(Boolean);
+  const i1 = r.lexicon.findIndex((w, i) => i > i0 && w);
+  ok(i1 > i0, '語彙に語が 2 つない');
+  const w0 = r.lexicon[i0];
+  const w1 = r.lexicon[i1];
+  const r4 = r.swapPlaces(
+    { kind: 'lexicon', index: i0 },
+    { kind: 'lexicon', index: i1 },
+  );
+  ok(r4.ok, `語彙 ⇄ 語彙 が失敗: ${r4.reason}`);
+  ok(r.lexicon[i0] === w1 && r.lexicon[i1] === w0, '語彙の語が入れ替わっていない');
+
+  // 同じ置き場へドロップしても何も起こらない。
+  const r5 = r.swapPlaces(
+    { kind: 'slot', wi, index: 0 },
+    { kind: 'slot', wi, index: 0 },
+  );
+  ok(r5.ok && r5.reason === 'same', `同じ置き場へのドロップ: ${r5.reason}`);
+
+  console.log('  枠 ⇄ 枠 / 枠 ⇄ 自身 / 語彙 ⇄ 枠 / 語彙 ⇄ 語彙 すべて成立');
+}
+
+sec('語彙が満杯なら語を消さない');
+{
+  const r = newRun(1);
+  const wi = r.weapons[0];
+  const free = r.lexiconFreeCount;
+  // 語彙を埋める。
+  const filler = ['火', '水', '風', '雷', '刃', '槍', '盾', '靴', '冠', '鎖', '環', '光'];
+  for (let k = 0; k < free; k++) r.giveWord(makeWord(filler[k % filler.length]), true);
+  ok(r.lexiconFull, '満杯になっていない');
+  ok(r.lexicon.every(Boolean), '語彙に空きが残っている');
+
+  // 枠 → 語彙。満杯なので外せない。
+  const inSlot = makeWord('弾');
+  wi.setSlot(0, inSlot);
+  const inSelf = makeWord('火');
+  r.player.selfSlots[0] = inSelf;
+
+  // 語が 1 つも減っていないかを数えるのに使う。枠語を置いたあとの数で基を取る。
+  const total = () => r.lexicon.filter(Boolean).length
+    + r.weapons.reduce((n, w) => n + w.slots.filter(Boolean).length, 0)
+    + r.player.selfSlots.filter(Boolean).length;
+  const n0 = total();
+
+  const r1 = r.toLexicon(inSlot);
+  ok(!r1.ok && r1.reason === 'full', `満杯なのに語彙へ戻せた: ${r1.reason}`);
+  ok(wi.slots[0] === inSlot, '枠の語が消えた');
+  ok(total() === n0, '語が失われた');
+
+  // 埋まった枠を別の語と交換する。追い出す語の置き場がないので断る。
+  const other = r.lexicon[1];
+  const r2 = r.placeWord(wi, 0, other);
+  ok(!r2.ok && r2.reason === 'full', `placeWord が満杯を素通し: ${r2.reason}`);
+  ok(wi.slots[0] === inSlot, 'placeWord で枠の語が消えた');
+  ok(r.lexicon[1] === other, 'placeWord で語彙の語が消えた');
+  ok(total() === n0, 'placeWord で語が失われた');
+
+  // 自身の文も同じ。
+  const r3 = r.placeSelfWord(0, other);
+  ok(!r3.ok && r3.reason === 'full', `placeSelfWord が満杯を素通し: ${r3.reason}`);
+  ok(r.player.selfSlots[0] === inSelf, 'placeSelfWord で自身の語が消えた');
+  ok(r.lexicon[1] === other, 'placeSelfWord で語彙の語が消えた');
+  ok(total() === n0, 'placeSelfWord で語が失われた');
+
+  // ただし「埋まったセル ⇄ 埋まった枠」の入れ替えは、埋まりが変わらないので通る。
+  const lexWord = r.lexicon[2];
+  const r4 = r.swapPlaces(
+    { kind: 'lexicon', index: 2 },
+    { kind: 'slot', wi, index: 0 },
+  );
+  ok(r4.ok, `交換まで断られた: ${r4.reason}`);
+  ok(wi.slots[0] === lexWord, '枠へ語が入っていない');
+  ok(r.lexicon[2] === inSlot, '語彙へ語が戻っていない');
+  ok(total() === n0, '入れ替えで語が失われた');
+
+  // 語彙 → 空き枠。語彙の埋まりは変わらないので通る。
+  const r5 = r.swapPlaces(
+    { kind: 'lexicon', index: 1 },
+    { kind: 'slot', wi, index: 1 },
+  );
+  ok(r5.ok, `空き枠へ移せない: ${r5.reason}`);
+  ok(total() === n0, '移動で語が失われた');
+
+  // 空きを作れば語彙へ戻せるようになる。
+  const back = wi.slots[1];
+  r.forgetWord(r.lexicon[0]);
+  const r6 = r.toLexicon(back);
+  ok(r6.ok, `空きがあるのに語彙へ戻せない: ${r6.reason}`);
+  ok(total() === n0 - 1, '「忘れる」した分だけ数が減った');
+
+  console.log(`  toLexicon / placeWord / placeSelfWord は満杯で拒否 / 入れ替えは通る (空き ${r.lexiconFreeCount})`);
 }
 
 sec('形と攻撃は末尾語だけが決める');
 {
   // 武器ごとに末尾語を移し替えれば、攻撃の型が変わる。
-  // 語を並べ替えても、末尾語categorie 動かない。
+  // 語を並べ替えても、末尾語は動かない。
   for (const [id, wantShape, wantKind] of [
     ['sword', 'blade', 'slash'],
     ['gun', 'shot', 'shot'],
@@ -701,12 +972,12 @@ sec('指数的バグ: 敵が増殖し続ける');
   ok(r.state === 'playing' || r.state === 'clear', `途中で異常終了: ${r.state}`);
 }
 
-sec('開始時の語袋に語が入っていること');
+sec('開始時の語彙に語が入っていること');
 {
   const r = newRun(1);
-  const filled = r.pouch.filter(Boolean).length;
-  console.log(`  語袋 ${filled} 語: ${r.pouch.filter(Boolean).map((w) => w.text).join(' ')}`);
-  ok(filled >= 6, `語袋が少なすぎる: ${filled}`);
+  const filled = r.lexicon.filter(Boolean).length;
+  console.log(`  語彙 ${filled} 語: ${r.lexicon.filter(Boolean).map((w) => w.text).join(' ')}`);
+  ok(filled >= 6, `語彙が少なすぎる: ${filled}`);
 
   // すべての武器が最初から文として成立していること。
   for (const wi of r.weapons) {
@@ -715,19 +986,19 @@ sec('開始時の語袋に語が入っていること');
     ok(res.stats.dmg > 0, `${wi.def.name} の威力が 0`);
   }
 
-  // 語袋の任何一个の語と既存の枠の語を組み合わせれば文が成立できること。
+  // 語彙の任何一个の語と既存の枠の語を組み合わせれば文が成立できること。
   const wi = r.weapons[0];
   let found = false;
-  for (const w of r.pouch) {
+  for (const w of r.lexicon) {
     if (!w) continue;
     wi.setSlot(1, w);
     if (wi.resolve(r.player.stats).active) { found = true; break; }
   }
-  ok(found, '語袋のどの語でも既存の枠と合わせて文にできない');
+  ok(found, '語彙のどの語でも既存の枠と合わせて文にできない');
 
-  // 語袋に 2 語以上入る。1 語では 文の組み立て方に幅が出ないため。
-  ok(filled >= 9, `語袋が少なすぎる: ${filled} (10 語のはず)`);
-  console.log(`  語袋: ${r.pouch.filter(Boolean).map((w) => w.text).join(' ')}`);
+  // 語彙に 2 語以上入る。1 語では 文の組み立て方に幅が出ないため。
+  ok(filled >= 9, `語彙が少なすぎる: ${filled} (10 語のはず)`);
+  console.log(`  語彙: ${r.lexicon.filter(Boolean).map((w) => w.text).join(' ')}`);
 }
 
 sec('武器 1 つにつき複数語を並べられる');

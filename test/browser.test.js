@@ -175,11 +175,11 @@ sec('非表示の要素が実際に隠れていること (display の上書き�
 
 const runInfo = await evalJs(`(() => {
   const r = window.__wordrogue.run;
-  return { weapons: r.weapons.length, pouch: r.pouch.filter(Boolean).length,
+  return { weapons: r.weapons.length, lexicon: r.lexicon.filter(Boolean).length,
            enemies: r.enemies.length, hp: r.player.hp, state: r.state };
 })()`);
 ok(runInfo.weapons === 2, `武器数: ${runInfo.weapons}`);
-ok(runInfo.pouch > 0, `語袋に語がある: ${runInfo.pouch}`);
+ok(runInfo.lexicon > 0, `語彙に語がある: ${runInfo.lexicon}`);
 ok(runInfo.hp > 0, `HP: ${runInfo.hp}`);
 
 sec('実際にフレームが進むこと');
@@ -258,16 +258,16 @@ ok(coreGone === 0, `核語の表示が残っている: ${coreGone}`);
 // スタミナ_present か。
 const hasStamina = await evalJs('!!document.getElementById("staFill")');
 ok(hasStamina, 'スタミナバーが無い');
-const pwords = await evalJs('document.querySelectorAll("#forgePouch .pword:not(.empty)").length');
-ok(pwords > 0, `語袋の語: ${pwords}`);
+const pwords = await evalJs('document.querySelectorAll("#forgeLexicon .pword:not(.empty)").length');
+ok(pwords > 0, `語彙の語: ${pwords}`);
 
 sec('語を別の枠に移すと文が変わる');
 const changed = await evalJs(`(() => {
   const app = window.__wordrogue;
   const run = app.run;
   const before = run.weapons.map(w => w.resolve(run.player.stats).fullText);
-  // 語袋の最初の語を武器 0 の空き枠に入れる。
-  const word = run.pouch.find(w => w);
+  // 語彙の最初の語を武器 0 の空き枠に入れる。
+  const word = run.lexicon.find(w => w);
   run.placeWord(run.weapons[0], 1, word);
   const after = run.weapons.map(w => w.resolve(run.player.stats).fullText);
   return { before, after, text: word.text };
@@ -290,6 +290,264 @@ sec('鍛冶を閉じると時間が再開する');
 await evalJs('document.getElementById("forgeBack").click()');
 await sleep(300);
 ok(await evalJs('window.__wordrogue.run.paused === false'), '時間が再開した');
+
+sec('ドラッグできる要素とドロップ先が用意されていること');
+await evalJs('document.getElementById("btnForge").click()');
+await sleep(350);
+{
+  const dnd = await evalJs(`(() => {
+    const run = window.__wordrogue.run;
+    const wi = run.weapons[0];
+    wi.slots.fill(null);
+    const lex = [...document.querySelectorAll('#forgeLexicon .pword:not(.empty)')];
+    const slot0 = document.querySelectorAll('#forgeWeapons .wrow')[1].querySelector('.slot');
+    return {
+      draggables: document.querySelectorAll('#forge [draggable="true"]').length,
+      lexicon: lex.length,
+      slotDraggable: slot0.draggable,
+      slotFilled: slot0.classList.contains('filled'),
+      tailDraggable: [...document.querySelectorAll('#forge .slot-tail')].some(n => n.draggable),
+    };
+  })()`);
+  ok(dnd.draggables > 0, `draggable が設定されていない: ${dnd.draggables}`);
+  ok(!dnd.tailDraggable, '末尾語がドラッグできるようになっている');
+  console.log(`    draggable 要素 ${dnd.draggables} 個 / 語彙 ${dnd.lexicon} 語`);
+}
+
+sec('ドラッグで語を枠へ入れ、枠どうしで入れ替えられること');
+{
+  // HTML5 のドラッグは CDP から再現しにくいので、Forge の drop ハンドラを直接叩く。
+  const dnd = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    const wi = run.weapons[0];
+    const a = run.lexicon.findIndex(w => w);
+    const b = run.lexicon.findIndex((w, i) => i > a && w);
+    const wa = run.lexicon[a].text;
+    const wb = run.lexicon[b].text;
+
+    // 語彙 -> 空き枠。
+    forge.dragFrom = { kind: 'lexicon', index: a };
+    forge.dropOnto(forge.dragFrom, { kind: 'slot', wi, index: 0 });
+    const placed = { inSlot: wi.slots[0] && wi.slots[0].text, lexNowNull: run.lexicon[a] === null };
+
+    // もう 1 語を別の空き枠へ。
+    forge.dragFrom = { kind: 'lexicon', index: b };
+    forge.dropOnto(forge.dragFrom, { kind: 'slot', wi, index: 1 });
+    const placed2 = { inSlot: wi.slots[1] && wi.slots[1].text };
+
+    // 枠 0 と枠 1 を入れ替え。
+    forge.dragFrom = { kind: 'slot', wi, index: 0 };
+    forge.dropOnto(forge.dragFrom, { kind: 'slot', wi, index: 1 });
+    const swapped = { s0: wi.slots[0] && wi.slots[0].text, s1: wi.slots[1] && wi.slots[1].text };
+
+    // 枠 -> 語彙 (空きセル) なら戻せる。
+    const free = run.lexicon.indexOf(null);
+    forge.dragFrom = { kind: 'slot', wi, index: 0 };
+    forge.dropOnto(forge.dragFrom, { kind: 'lexicon', index: free });
+    const back = { slot0: wi.slots[0], lex: run.lexicon[free] && run.lexicon[free].text };
+
+    return { wa, wb, placed, placed2, swapped, back, free, title: wi.title };
+  })()`);
+  ok(dnd.placed.inSlot === dnd.wa, `語彙の語が枠に入らない: ${dnd.placed.inSlot}`);
+  ok(dnd.placed.lexNowNull, '語彙に語が残っている');
+  ok(dnd.placed2.inSlot === dnd.wb, `2 語目が入らない: ${dnd.placed2.inSlot}`);
+  ok(dnd.swapped.s0 === dnd.wb && dnd.swapped.s1 === dnd.wa,
+    `枠の入れ替えが違う: ${dnd.swapped.s0} / ${dnd.swapped.s1}`);
+  ok(dnd.back.slot0 === null, '枠から語が戻らない');
+  ok(dnd.back.lex === dnd.wb, `語彙へ語が戻らない: ${dnd.back.lex}`);
+  console.log(`    「${dnd.wa}」->枠0 ->枠1 と入れ替え -> 語彙へ戻す すべて成立`);
+}
+
+sec('語彙が満杯ならドラッグで語を消さないこと');
+{
+  const full = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    const wi = run.weapons[0];
+    // 語彙にある語を写して埋める。同じ語を何個並べてもよい。
+    const seed = run.lexicon.find(w => w);
+    const clone = () => ({ ...seed });
+    while (!run.lexiconFull) run.giveWord(clone(), true);
+    const wi0 = wi.slots[0] || clone();
+    wi.setSlot(0, wi0);
+    const before = wi0.text;
+
+    // 語彙 -> 埋まった枠。追い出せない。
+    forge.dragFrom = { kind: 'lexicon', index: 0 };
+    forge.dropOnto(forge.dragFrom, { kind: 'slot', wi, index: 0 });
+    const afterSwap = wi.slots[0] && wi.slots[0].text;
+
+    // 埋まったセル <-> 埋まった枠。語は失われない。
+    const lexText = run.lexicon[0].text;
+    forge.dragFrom = { kind: 'lexicon', index: 0 };
+    forge.dropOnto(forge.dragFrom, { kind: 'slot', wi, index: 0 });
+    const exchanged = wi.slots[0] && wi.slots[0].text;
+
+    return { full: run.lexiconFull, before, afterSwap, exchanged, lexText };
+  })()`);
+  ok(full.full, '満杯になっていない');
+  console.log(`    満杯: 「${full.before}」-> 枠(埋まり) で保持 / セルと枠で交換して「${full.exchanged}」`);
+  ok(full.exchanged === full.lexText, '交換で語彙の語が入らなかった');
+}
+
+sec('「忘れる」で語彙の空きを作れること');
+{
+  const forget = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    const before = run.lexiconFreeCount;
+    forge.forgetMode = false;
+    forge.toggleForget();
+    const on = forge.forgetMode;
+    const btnOn = document.getElementById('btnForgeForget').classList.contains('on');
+    const target = run.lexicon.findIndex(w => w);
+    const word = run.lexicon[target];
+    // 語彙の語をクリック = 忘れる。
+    document.querySelectorAll('#forgeLexicon .pword:not(.empty)')[target].click();
+    const after = run.lexiconFreeCount;
+    // 同じ語が複数あってもよいので、身分 (オブジェクト) で確かめる。
+    const gone = !run.lexicon.includes(word);
+    forge.toggleForget();
+    return { before, after, on, btnOn, gone, text: word.text, off: !forge.forgetMode };
+  })()`);
+  ok(forget.on, '忘れるモードにならない');
+  ok(forget.btnOn, '忘れるボタンが光らない');
+  ok(forget.after === forget.before + 1, `空きが増えていない: ${forget.before} -> ${forget.after}`);
+  ok(forget.gone, `「${forget.text}」がまだある`);
+  ok(forget.off, '忘れるモードが解除されない');
+  console.log(`    「${forget.text}」を忘れて空き ${forget.before} -> ${forget.after}`);
+}
+
+sec('語彙が満杯のときの 3 択は「捨てる」を求める');
+{
+  const choice = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const run = app.run;
+    const seed = run.lexicon.find(w => w);
+    const clone = () => ({ ...seed });
+    while (!run.lexiconFull) run.giveWord(clone(), true);
+    run.offerWordChoices();
+    app.hud.renderChoices(run, () => {});
+    const cand = document.querySelectorAll('#choiceList .choice-card').length;
+    const disc = document.getElementById('choiceForgetList');
+    const discCount = disc ? disc.querySelectorAll('button').length : 0;
+    // 捨てる語を選ぶ。
+    if (discCount) disc.querySelectorAll('button')[0].click();
+    const afterPick = !document.getElementById('choiceForgetList').hidden;
+    // 候補を選ぶ。
+    const card = document.querySelector('#choiceList .choice-card');
+    if (card) card.click();
+    return { cand, discCount, afterPick, full: run.lexiconFull, left: run.lexicon.filter(Boolean).length };
+  })()`);
+  ok(choice.cand === 3, `候補が ${choice.cand} 個 (3 択のはず)`);
+  ok(choice.discCount > 0, '捨てる語の一覧が出ていない');
+  ok(choice.full, '満杯になっていない');
+  ok(choice.afterPick, '語を選んでいないのに候補が出せない');
+  ok(choice.left > 0, '語彙が空になった');
+  console.log(`    満杯時の 3 択: 候補 ${choice.cand} / 捨てる語 ${choice.discCount} 語 / 語彙 ${choice.left} 語`);
+}
+
+sec('辞書は戦闘中から開け、閉じると時間が戻る');
+{
+  await evalJs('document.getElementById("btnDictInGame").click()');
+  await sleep(300);
+  const d0 = await evalJs(`({
+    hidden: document.getElementById('dict').hidden,
+    mode: window.__wordrogue.mode,
+    paused: window.__wordrogue.run.paused,
+  })`);
+  ok(!d0.hidden, '辞書が開いていない');
+  ok(d0.mode === 'dict', `mode が dict でない: ${d0.mode}`);
+  ok(d0.paused === true, '時間が止まっていない');
+
+  await evalJs('document.querySelector(\'[data-close="dict"]\').click()');
+  await sleep(250);
+  const d1 = await evalJs(`({
+    hidden: document.getElementById('dict').hidden,
+    mode: window.__wordrogue.mode,
+    paused: window.__wordrogue.run.paused,
+  })`);
+  ok(d1.hidden, '辞書が閉じない');
+  ok(d1.mode === 'play', `mode が play に戻らない: ${d1.mode}`);
+  ok(d1.paused === false, '時間が再開しない');
+  console.log('    戦闘中から開閉でき、閉じると時間が戻る');
+}
+
+sec('辞書メニューが開き、検索とカテゴリ絞り込みが効くこと');
+{
+  await evalJs('document.getElementById("btnDictInGame").click()');
+  await sleep(250);
+  const d = await evalJs(`(() => ({
+    rows: document.querySelectorAll('#dictList .dict-row').length,
+    tabs: document.querySelectorAll('#dictTabs .dict-tab').length,
+    count: document.getElementById('dictCount').textContent,
+    search: !!document.getElementById('dictSearch'),
+  }))()`);
+  ok(d.rows > 100, `辞書の行が少ない: ${d.rows}`);
+  ok(d.tabs === 7, `カテゴリのタブ数: ${d.tabs} (すべて + 6 カテゴリ)`);
+  ok(d.search, '検索欄が無い');
+  ok(/\d+ \/ \d+ 語/.test(d.count), `件数の表示: ${d.count}`);
+  console.log(`    辞書: ${d.rows} 語 / タブ ${d.tabs} 個 / ${d.count}`);
+
+  // 検索で絞る。
+  const found = await evalJs(`(() => {
+    const s = document.getElementById('dictSearch');
+    s.value = '火';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+    return {
+      rows: document.querySelectorAll('#dictList .dict-row').length,
+      texts: [...document.querySelectorAll('#dictList .dict-w')].map(n => n.textContent),
+    };
+  })()`);
+  ok(found.rows > 0, '検索で 0 件になった');
+  ok(found.rows < d.rows, `検索で絞れていない: ${found.rows} -> ${d.rows}`);
+  ok(found.texts.every((t) => t.includes('火')), `関係ない語が混じった: ${found.texts.join(',')}`);
+
+  // カテゴリで絞る。
+  const byCat = await evalJs(`(() => {
+    const s = document.getElementById('dictSearch');
+    s.value = '';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+    const tabs = [...document.querySelectorAll('#dictTabs .dict-tab')];
+    tabs.find(n => n.textContent === '接続').click();
+    // タブは描き直されるので、選び直して選択状態を見る。
+    const picked = [...document.querySelectorAll('#dictTabs .dict-tab')]
+      .find(n => n.textContent === '接続');
+    return {
+      rows: document.querySelectorAll('#dictList .dict-row').length,
+      allConn: [...document.querySelectorAll('#dictList .dict-cat')].every(n => n.textContent === '接続'),
+      on: picked.classList.contains('on'),
+    };
+  })()`);
+  ok(byCat.rows > 0, '接続詞が 1 つも出ていない');
+  ok(byCat.allConn, '接続詞以外のカテゴリが混じった');
+  ok(byCat.on, 'タブが選択状態にならない');
+  console.log(`    検索「火」-> ${found.rows} 語 / カテゴリ「接続」-> ${byCat.rows} 語`);
+
+  // 該当なし。
+  const none = await evalJs(`(() => {
+    const s = document.getElementById('dictSearch');
+    s.value = 'この語は絶対にない';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+    return {
+      empty: !!document.querySelector('#dictList .dict-empty'),
+      rows: document.querySelectorAll('#dictList .dict-row').length,
+    };
+  })()`);
+  ok(none.empty && none.rows === 0, '該当なしの表示が無い');
+  console.log('    該当なし -> 「見つからなかった。」');
+
+  // 検索語は残さない。閉じる -> 次のテストへ。
+  await evalJs('document.querySelector(\'[data-close="dict"]\').click()');
+  await sleep(250);
+  ok(await evalJs('document.getElementById("dict").hidden'), '辞書が閉じない');
+  ok(await evalJs('window.__wordrogue.run.paused === false'), '閉じても時間が止まったまま');
+  ok(await evalJs('document.getElementById("dictSearch").value === ""'), '検索語が残っている');
+}
 
 sec('ダッシュでスタミナが消費される');
 {
@@ -576,10 +834,10 @@ sec('ステージ報酬にことばは出ない');
   }
   const dom = await evalJs(`({
     swap: !!document.getElementById('rewardSwap'),
-    label: (document.getElementById('reward')?.textContent || '').includes('語袋が満杯'),
+    label: (document.getElementById('reward')?.textContent || '').includes('語彙が満杯'),
   })`);
   ok(!dom.swap, '交換用の DOM が残っている');
-  ok(!dom.label, '「語袋が満杯」の文言が残っている');
+  ok(!dom.label, '「語彙が満杯」の文言が残っている');
   console.log(`    報酬の種類: ${kinds.join(' / ')}`);
 }
 

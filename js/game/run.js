@@ -30,13 +30,18 @@ export const PICKUP_MAGNET = 120;   // 吸引が掛かり始める距離 (px)
 export const PICKUP_VMAX = 430;      // 吸引中の最高速度 (px/s)
 export const PICKUP_STEER = 9;       // 目標速度へ寄る速さ (大きいほど不离れない)
 
+// レベルアップの 3 択。選ばないと時間切れで 1 番目が自動採用される。
+export const WORD_CHOICES = 3;
+export const CHOICE_TIME = 7;         // 選べる秒数
+export const LEXICON_MAX = 30;        // 語彙の容量の上限 (言玉で拡張)
+
 export class Run {
   /**
    * @param {object} opt
    * @param {number}  opt.stageId
    * @param {object}  opt.save
    * @param {object}  opt.audio
-   * @param {number}  [opt.pouchSize]
+   * @param {number}  [opt.lexiconSize]
    * @param {string}[][opt.startingWords]
    * @param {string[]}[opt.weaponIds]
    */
@@ -44,7 +49,11 @@ export class Run {
     this.stage = getStage(opt.stageId);
     this.save = opt.save;
     this.audio = opt.audio;
-    this.pouchSize = opt.pouchSize ?? 12;
+    // 語彙の容量。ステージクリア報酬の「言玉」で増える。
+    // 言玉で買った分 (meta.lexicon) はステージをまたいで持ち越す。
+    const bought = opt.save?.d?.meta?.lexicon || 0;
+    this.lexiconBase = opt.lexiconSize ?? 12;
+    this.lexiconGrown = bought;
     this.rand = opt.rng || rng;
     // 描画側から毎フレーム更新される画面サイズ。
     this.viewW = opt.viewW || 960;
@@ -68,9 +77,13 @@ export class Run {
       alive: true,
     };
 
-    /** @type {Array<object|null>} 語袋 */
-    this.pouch = new Array(this.pouchSize).fill(null);
-    this.wordSeq = 0;   // 語袋から古い順に捨てるための通し番号
+    /** @type {Array<object|null>} 語彙 */
+    // 上限で切る。セーブの値がおかしくて配列が肥大化するのを防ぐ。
+    const size = Math.min(LEXICON_MAX, this.lexiconBase + this.lexiconGrown);
+    this.lexicon = new Array(size).fill(null);
+    this.wordSeq = 0;   // 語彙から古い順に捨てるための通し番号
+    /** レベルアップでまだ選んでいない 3 択の候補。 */
+    this.pendingChoices = [];
 
     // ── 武器 ──
     this.weapons = [];
@@ -89,10 +102,10 @@ export class Run {
       if (wi.def.startWord2) wi.setSlot(1, makeWord(wi.def.startWord2));
     }
 
-    // 語袋に語を渡す。セーブの恒久語 → 抽選の順。
+    // 語彙に語を渡す。セーブの恒久語 → 抽選の順。
     for (const w of (opt.startingWords || [])) this.addWord(makeWord(w), true);
-    const fill = opt.pouchFill ?? 10;
-    for (let i = this.pouch.filter(Boolean).length; i < fill; i++) {
+    const fill = opt.lexiconFill ?? 10;
+    for (let i = this.lexicon.filter(Boolean).length; i < fill; i++) {
       const w = drawWord(this.rand);
       if (w) this.addWord(w, true);
     }
@@ -137,6 +150,7 @@ export class Run {
     this.magnetPulse = 0;
     this.chains = 0;
     this.crafts = 0;
+    this.choiceSeq = 0;
 
     this.refreshStats(true);
   }
@@ -145,7 +159,7 @@ export class Run {
   // 能力
   // ───────────────────────────────────────────────────────────────────────────
   refreshStats(full = false) {
-    const s = resolvePlayerStats(this.pouch, this.player.selfSlots, this.save?.d.meta || {});
+    const s = resolvePlayerStats(this.lexicon, this.player.selfSlots, this.save?.d.meta || {});
     const p = this.player;
     const ratio = p.maxHp > 0 ? clamp(p.hp / p.maxHp, 0, 1) : 1;
     p.stats = s;
@@ -164,43 +178,71 @@ export class Run {
   }
 
   /**
-   * 語袋に語を渡す。満杯なら最も古い 1 語を捨てる。
-   * レベルアップの報酬で呼ばれる。
+   * 語彙に語を入れる。空きがあればそのまま。
+   * 満杯で force=false なら入れず、force=true なら最も古い 1 語を捨てる。
    * @returns {boolean} 入れたか
    */
-  giveWord(word) {
+  giveWord(word, force = false) {
     if (!word) return false;
     word.t = ++this.wordSeq;
-    const i = this.pouch.indexOf(null);
+    const i = this.lexicon.indexOf(null);
     if (i >= 0) {
-      this.pouch[i] = word;
+      this.lexicon[i] = word;
       this.refreshStats();
       this.pushHint(`「${word.text}」を手に入れた`);
       return true;
     }
+    if (!force) return false;
     // 満杯。最も古い 1 語を捨てる。
-    let drop = 0;
-    for (let k = 1; k < this.pouch.length; k++) {
-      if ((this.pouch[k].t || 0) < (this.pouch[drop].t || 0)) drop = k;
-    }
-    const lost = this.pouch[drop];
-    this.pouch[drop] = word;
+    const drop = this.oldestLexiconIndex();
+    const lost = this.lexicon[drop];
+    this.lexicon[drop] = word;
     this.refreshStats();
     this.pushHint(`「${word.text}」を手に入れた（「${lost.text}」は消えた）`);
     return true;
   }
 
+  /** 語彙で最も古い語の位置。空なら -1。 */
+  oldestLexiconIndex() {
+    let drop = -1;
+    let best = Infinity;
+    for (let k = 0; k < this.lexicon.length; k++) {
+      const w = this.lexicon[k];
+      if (!w) continue;
+      const t = w.t || 0;
+      if (t < best) { best = t; drop = k; }
+    }
+    return drop;
+  }
+
+  /** 語彙の空き数。 */
+  get lexiconFreeCount() { return this.lexicon.filter((x) => !x).length; }
+
+  /** 語彙が満杯か。満杯のときは武器から語を外せない。 */
+  get lexiconFull() { return this.lexiconFreeCount === 0; }
+
   /**
-   * レベルアップ。ことばを数枚配る。
-   * ステージ終わりの報酬ではなく、戦闘の中で手に入る。
+   * 語彙の容量を n 個増やす。ステージクリア報酬の「言玉」で使う。
+   * 増えた分はセーブの meta.lexicon に記録して、次のステージへ持ち越す。
+   */
+  growLexicon(n = 1) {
+    this.lexiconGrown += n;
+    const want = Math.min(LEXICON_MAX, this.lexiconBase + this.lexiconGrown);
+    while (this.lexicon.length < want) this.lexicon.push(null);
+    if (this.save?.d) {
+      this.save.d.meta = this.save.d.meta || {};
+      this.save.d.meta.lexicon = this.lexiconGrown;
+    }
+    return this.lexicon.length;
+  }
+
+  /**
+   * レベルアップ。3 つの候補から 1 つを選べるようにする。
+   * 選ばれている間は combat を止めない (時間制限つき)。
    */
   grantLevelWords(level) {
-    this.growPouch(level);
-    const n = level % 5 === 0 ? 2 : 1;   // 5 の倍数のときは 2 枚
-    for (let i = 0; i < n; i++) {
-      const w = drawWord(this.rand);
-      if (w) this.giveWord(w);
-    }
+    const n = level % 5 === 0 ? 2 : 1;   // 5 の倍数のときは 2 回
+    for (let i = 0; i < n; i++) this.offerWordChoices();
     // 自分自身の文にも入ることがある。
     if (level % 4 === 1) {
       const free = this.player.selfSlots.indexOf(null);
@@ -216,40 +258,121 @@ export class Run {
     }
   }
 
-  /** 語袋に追加。満杯で replace=false なら false。 */
+  /**
+   * 3 つの候補を作って、選んでもらう。
+   * 選んでいる間も時間は止まらない。時間切れなら 1 番目を自動で取る。
+   */
+  offerWordChoices() {
+    const pool = [];
+    const seen = new Set();
+    for (let i = 0; i < WORD_CHOICES * 3 && pool.length < WORD_CHOICES; i++) {
+      const w = drawWord(this.rand);
+      if (!w || seen.has(w.text)) continue;
+      seen.add(w.text);
+      pool.push(w);
+    }
+    if (!pool.length) return;
+    this.pendingChoices.push({
+      id: ++this.choiceSeq,
+      words: pool,
+      life: CHOICE_TIME,
+    });
+    this.onWordChoice?.(this.pendingChoices);
+  }
+
+  /**
+   * 3 択のうち 1 つを選んだ。
+   * 語彙が満杯なら、捨てる語を選んでもらう (timeLeft で時間切れ)。
+   * @param {number} id offerWordChoices が返した id
+   * @param {number} index 0..WORD_CHOICES-1
+   * @param {number|null} discardIndex 捨てる語の位置。null なら時間切れ扱い。
+   * @returns {boolean} 成功したか
+   */
+  chooseWord(id, index, discardIndex = null) {
+    const qi = this.pendingChoices.findIndex((c) => c.id === id);
+    if (qi < 0) return false;
+    const choice = this.pendingChoices[qi];
+    const word = choice.words[index];
+    if (!word) return false;
+    this.pendingChoices.splice(qi, 1);
+
+    if (this.lexiconFull) {
+      if (discardIndex === null) {
+        // 時間切れ。最も古い語を自動で捨てる。
+        const drop = this.oldestLexiconIndex();
+        if (drop < 0) return false;
+        const lost = this.lexicon[drop];
+        this.lexicon[drop] = null;
+        word.t = ++this.wordSeq;
+        this.lexicon[drop] = word;
+        this.refreshStats();
+        this.pushHint(`「${word.text}」を手に入れた（「${lost.text}」は消えた）`);
+        this.onWordChoice?.(this.pendingChoices);
+        return true;
+      }
+      const victim = this.lexicon[discardIndex];
+      if (!victim) return false;
+      this.lexicon[discardIndex] = null;
+      word.t = ++this.wordSeq;
+      this.lexicon[discardIndex] = word;
+      this.refreshStats();
+      this.pushHint(`「${victim.text}」を忘れて「${word.text}」を手に入れた`);
+      this.onWordChoice?.(this.pendingChoices);
+      return true;
+    }
+
+    this.giveWord(word);
+    this.onWordChoice?.(this.pendingChoices);
+    return true;
+  }
+
+  /**
+   * 語彙から 1 語を忘れる (捨てる)。
+   * 武器や自身の文にある語は入れない。
+   * @returns {string|null} 忘れた語
+   */
+  forgetWord(word) {
+    if (!word) return null;
+    const i = this.lexicon.indexOf(word);
+    if (i < 0) return null;
+    this.lexicon[i] = null;
+    this.refreshStats();
+    this.pushHint(`「${word.text}」を忘れた`);
+    return word.text;
+  }
+
+  /** 語彙に追加。満杯で replace=false なら false。 */
   addWord(word, silent = false, replace = false) {
     if (!word) return false;
     word.t = ++this.wordSeq;
-    const i = this.pouch.indexOf(null);
+    const i = this.lexicon.indexOf(null);
     if (i < 0) {
       if (!replace) return false;
       let drop = 0;
-      for (let k = 1; k < this.pouch.length; k++) {
-        if ((this.pouch[k].t || 0) < (this.pouch[drop].t || 0)) drop = k;
+      for (let k = 1; k < this.lexicon.length; k++) {
+        if ((this.lexicon[k].t || 0) < (this.lexicon[drop].t || 0)) drop = k;
       }
-      this.pouch[drop] = word;
+      this.lexicon[drop] = word;
     } else {
-      this.pouch[i] = word;
+      this.lexicon[i] = word;
     }
     this.refreshStats();
-    if (!silent) this.pushHint(`「${word.text}」を語袋に入れた`);
+    if (!silent) this.pushHint(`「${word.text}」を語彙に入れた`);
     return true;
   }
 
   removeWord(word) {
-    const i = this.pouch.indexOf(word);
+    const i = this.lexicon.indexOf(word);
     if (i < 0) return false;
-    this.pouch[i] = null;
+    this.lexicon[i] = null;
     this.refreshStats();
     return true;
   }
 
-  get pouchFree() { return this.pouch.filter((x) => !x).length; }
-
-  /** 語袋と武器スロットをまとめて検索する。 */
+  /** 語彙と武器スロットをまとめて検索する。 */
   findWord(word) {
-    const i = this.pouch.indexOf(word);
-    if (i >= 0) return { where: 'pouch', index: i, wi: null };
+    const i = this.lexicon.indexOf(word);
+    if (i >= 0) return { where: 'lexicon', index: i, wi: null };
     for (const wi of this.weapons) {
       const k = wi.slots.indexOf(word);
       if (k >= 0) return { where: 'slot', index: k, wi };
@@ -258,22 +381,32 @@ export class Run {
   }
 
   /**
-   * 語袋へ戻す。置き場があれば入れる。
+   * 語彙へ戻す。
+   *
+   * 語彙が満杯のときは武器や自身から語を外せない。返回值 reason で理由を返す。
+   * 以前は空きがないのに外。結果として語が消えていた。
+   * @returns {{ok:boolean, reason:string}}
    */
-  toPouch(word) {
-    const loc = this.findWord(word);
-    if (!loc) return false;
-    const free = this.pouch.indexOf(null);
+  toLexicon(word) {
+    const loc = this.findWordAnywhere(word);
+    if (!loc) return { ok: false, reason: 'notin' };
+    // もう語彙にあるなら何もしない。
+    if (loc.where === 'lexicon') return { ok: true, reason: 'already' };
+
+    const free = this.lexicon.indexOf(null);
+    if (free < 0) {
+      this.pushHint('語彙が満杯。武器から語を外せない');
+      return { ok: false, reason: 'full' };
+    }
     if (loc.wi) loc.wi.setSlot(loc.index, null);
-    else if (loc.self !== undefined) this.player.selfSlots[loc.index] = null;
-    else this.pouch[loc.index] = null;
-    if (free >= 0) this.pouch[free] = word;
+    else if (loc.where === 'self') this.player.selfSlots[loc.index] = null;
+    this.lexicon[free] = word;
     this.refreshStats();
-    return true;
+    return { ok: true, reason: 'moved' };
   }
 
   /**
-   * 語袋と全武器のスロットを検索する。
+   * 語彙と全武器のスロットを検索する。
    * @returns {{where:string, index:number, wi:object|null, self?:number}|null}
    */
   findWordAnywhere(word) {
@@ -284,55 +417,109 @@ export class Run {
     return null;
   }
 
-  /** 語袋・武器・自身のうちどれかへ装着する。 */
+  /** 語彙・武器・自身のうちどれかへ装着する。 */
   placeWordAnywhere(wi, slotIndex, word) {
-    if (!word) return false;
+    if (!word) return { ok: false, reason: 'noword' };
+    if (slotIndex < 0 || slotIndex >= wi.slots.length) {
+      return { ok: false, reason: 'range' };
+    }
     const prev = wi.slots[slotIndex] || null;
+    // 追い出す語の置き場がないなら動かさない。語を消さない。
+    if (prev && prev !== word && this.lexiconFreeCount <= 0) {
+      this.pushHint('語彙が満杯。「忘れる」で空きを作ると交換できる');
+      return { ok: false, reason: 'full' };
+    }
     const loc = this.findWordAnywhere(word);
     if (loc) {
-      if (loc.wi === wi && loc.index === slotIndex) return true;
+      if (loc.wi === wi && loc.index === slotIndex) return { ok: true, reason: 'same' };
       if (loc.wi) loc.wi.setSlot(loc.index, null);
       else if (loc.where === 'self') this.player.selfSlots[loc.index] = null;
-      else this.pouch[loc.index] = null;
+      else this.lexicon[loc.index] = null;
     }
     wi.setSlot(slotIndex, word);
-    // もともとあった語は、置き場があれば語袋へ戻す。
-    if (prev && prev !== word) {
-      const free = this.pouch.indexOf(null);
-      if (free >= 0) this.pouch[free] = prev;
-    }
+    // もともとあった語は、置き場があれば語彙へ戻す。
+    if (prev && prev !== word) this.lexicon[this.lexicon.indexOf(null)] = prev;
     this.refreshStats();
-    return true;
+    return { ok: true, reason: 'placed' };
   }
 
   /** プレイヤーの文に語を入れる。 */
   placeSelfWord(index, word) {
     const slots = this.player.selfSlots;
-    if (index < 0 || index >= slots.length) return false;
+    if (index < 0 || index >= slots.length) return { ok: false, reason: 'range' };
     const prev = slots[index] || null;
+    if (prev && prev !== word && this.lexiconFreeCount <= 0) {
+      this.pushHint('語彙が満杯。「忘れる」で空きを作ると交換できる');
+      return { ok: false, reason: 'full' };
+    }
     const loc = this.findWordAnywhere(word);
     if (loc) {
-      if (loc.where === 'self' && loc.index === index) return true;
+      if (loc.where === 'self' && loc.index === index) return { ok: true, reason: 'same' };
       if (loc.wi) loc.wi.setSlot(loc.index, null);
       else if (loc.where === 'self') slots[loc.index] = null;
-      else this.pouch[loc.index] = null;
+      else this.lexicon[loc.index] = null;
     }
     slots[index] = word || null;
-    if (prev && prev !== word) {
-      const free = this.pouch.indexOf(null);
-      if (free >= 0) this.pouch[free] = prev;
-    }
+    if (prev && prev !== word) this.lexicon[this.lexicon.indexOf(null)] = prev;
     this.refreshStats();
-    return true;
+    return { ok: true, reason: 'placed' };
   }
 
   /**
-  /**
-   * 語を武器のスロットに入れる。語袋か自身の文から取り除く。
+   * 語を武器のスロットに入れる。語彙か自身の文から取り除く。
    */
   placeWord(wi, slotIndex, word) {
-    if (!word) return false;
+    if (!word) return { ok: false, reason: 'noword' };
     return this.placeWordAnywhere(wi, slotIndex, word);
+  }
+
+  /**
+   * 2 つの置き場を丸ごと入れ替える。ドラッグの入れ替えに使う。
+   *
+   * 置き場の種類:
+   *   { kind: 'lexicon', index }   語彙
+   *   { kind: 'slot', wi, index } 武器
+   *   { kind: 'self', index }     自身の文
+   *
+   * 語彙の空き数が増える入れ替えはしない (語が消えるため)。
+   * @returns {{ok:boolean, reason:string}}
+   */
+  swapPlaces(a, b) {
+    if (!a || !b) return { ok: false, reason: 'noword' };
+    const sameTarget = a.kind === b.kind && a.index === b.index
+      && (a.wi || null) === (b.wi || null);
+    if (sameTarget) return { ok: true, reason: 'same' };
+
+    const get = (p) => {
+      if (p.kind === 'lexicon') return this.lexicon[p.index] || null;
+      if (p.kind === 'self') return this.player.selfSlots[p.index] || null;
+      return p.wi.slots[p.index] || null;
+    };
+    const set = (p, w) => {
+      if (p.kind === 'lexicon') this.lexicon[p.index] = w;
+      else if (p.kind === 'self') this.player.selfSlots[p.index] = w;
+      else p.wi.setSlot(p.index, w);
+    };
+
+    const wa = get(a);
+    const wb = get(b);
+    if (!wa && !wb) return { ok: true, reason: 'empty' };
+
+    // 入れ替え後の「語彙の埋まり具合」を数える。増えるなら入れ替えない。
+    // 語彙が満杯なら空きセルがないので通常は起こらないが、容量の仕様が
+    // 変わったときのために残しておく (語を消さないため)。
+    let filled = this.lexicon.filter((x) => x).length;
+    if (a.kind === 'lexicon') filled += (wb ? 1 : 0) - (wa ? 1 : 0);
+    if (b.kind === 'lexicon') filled += (wa ? 1 : 0) - (wb ? 1 : 0);
+    if (filled > this.lexicon.length) {
+      this.pushHint('語彙が満杯。「忘れる」で空きを作ると入れ替えられる');
+      return { ok: false, reason: 'full' };
+    }
+
+    set(a, wb);
+    set(b, wa);
+    this.refreshStats();
+    return { ok: true, reason: 'swapped' };
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -543,11 +730,29 @@ export class Run {
     this.bulletTick(d);
     this.fieldTick(d);
     this.pickupTick(d);
+    this.choiceTick(d);
     this.contactTick();
     this.sweep();
     this.fxTick(dt);
 
     if (!this.stage.boss && this.time >= this.stage.time) this.finish(true);
+  }
+
+  /**
+   * 3 択の制限時間。時間切れなら 1 番目を自動で取る。
+   * 語彙が満杯なら、1 番目を「捨てる」の設定に入れる。
+   */
+  choiceTick(dt) {
+    if (!this.pendingChoices.length) return;
+    for (let i = this.pendingChoices.length - 1; i >= 0; i--) {
+      const c = this.pendingChoices[i];
+      c.life -= dt;
+      if (c.life > 0) continue;
+      // 時間切れ。1 番目を自動採用する (満杯なら最も古い語を捨てる)。
+      // chooseWord の中で pendingChoices から取り除かれる。
+      this.chooseWord(c.id, 0, null);
+      this.onWordChoiceExpired?.(c);
+    }
   }
 
   playerTick(dt, input) {
@@ -875,15 +1080,6 @@ export class Run {
       this.audio.pickup();
       this.pushHint(`回復 ${q.value}`);
     }
-  }
-
-  /**
-   * 語袋を 8 レベルごとに 1 つずつ広げる。
-   * レベルアップで語が入ってくるので、袋がすぐ埋まらないようにする。
-   */
-  growPouch(level = this.player.level) {
-    const want = Math.min(20, 12 + Math.floor(level / 8));
-    while (this.pouch.length < want) this.pouch.push(null);
   }
 
   contactTick() {

@@ -6,6 +6,8 @@ import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
 import { WEAPONS, startingWeaponsFor, slotsForLevel, KIND_LABEL } from '../data/weapons.js';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js';
+import { FX_LABEL, PS_LABEL } from './labels.js';
 
 export class Menus {
   /** @param {{save:object, audio:object}} opt */
@@ -30,6 +32,11 @@ export class Menus {
     this.resultNext = $('#resultNext');
     this.howto = $('#howto');
     this.settings = $('#settings');
+    this.dict = $('#dict');
+
+    /** 辞書。検索語と絞り込みカテゴリ。 */
+    this.dictQuery = '';
+    this.dictCat = 'all';
 
     /** @type {number[]} 選択中のステージ */
     this.picked = [];
@@ -46,11 +53,26 @@ export class Menus {
     $('#btnStart').addEventListener('click', () => { tap(); this.showStages(); });
     $('#btnStages').addEventListener('click', () => { tap(); this.showStages(); });
     $('#btnHowto').addEventListener('click', () => { tap(); this.show('howto'); });
+    $('#btnDict').addEventListener('click', () => { tap(); this.show('dict'); });
     $('#btnSettings').addEventListener('click', () => { tap(); this.show('settings'); });
+
+    this.dictSearch = $('#dictSearch');
+    this.dictTabs = $('#dictTabs');
+    this.dictList = $('#dictList');
+    this.dictCount = $('#dictCount');
+    this.dictSearch.addEventListener('input', () => {
+      this.dictQuery = this.dictSearch.value.trim();
+      this.renderDict();
+    });
 
     for (const b of document.querySelectorAll('[data-close]')) {
       b.addEventListener('click', () => {
         tap();
+        // ゲーム中の辞書は main.js が時間を戻すので、そちらに任せる。
+        if (b.dataset.close === 'dict' && this.cb.onCloseDict) {
+          this.cb.onCloseDict();
+          return;
+        }
         this.hide(b.dataset.close);
         if (this.stages.hidden && this.title.hidden === false) this.show('title');
       });
@@ -64,9 +86,15 @@ export class Menus {
   }
 
   hideAll() {
-    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings']) {
+    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict']) {
       this[k].hidden = true;
     }
+  }
+
+  /** 辞書を閉じる。ゲーム中は main.js 側で時間を戻す。 */
+  hide(name) {
+    this[name].hidden = true;
+    if (name === 'dict') this.dictSearch.value = '';
   }
 
   show(name) {
@@ -74,6 +102,7 @@ export class Menus {
     this[name].hidden = false;
     if (name === 'title') this.renderTitle();
     if (name === 'settings') this.renderSettings();
+    if (name === 'dict') this.renderDict();
   }
 
   // ── タイトル ────────────────────────────────────────────────────────────
@@ -212,6 +241,98 @@ export class Menus {
     this.resultNext.textContent = isLast ? '全ステージ制覇' : '次のステージ';
     this.hideAll();
     this.result.hidden = false;
+  }
+
+  // ── 辞書 ────────────────────────────────────────────────────────────────
+  renderDict() {
+    if (!this.dictTabs.childElementCount) this.buildDictTabs();
+    this.renderDictList();
+  }
+
+  buildDictTabs() {
+    const cats = [
+      ['all', `すべて`, '#8ab4ff'],
+      ...Object.entries(CATEGORIES).map(([k, v]) => [k, v.name, v.color]),
+    ];
+    clear(this.dictTabs);
+    for (const [key, label, color] of cats) {
+      const b = el('button', {
+        class: 'dict-tab' + (this.dictCat === key ? ' on' : ''),
+        style: { borderColor: color, color: this.dictCat === key ? color : '' },
+      }, label);
+      b.addEventListener('click', () => {
+        this.audio?.tap?.();
+        this.dictCat = key;
+        this.buildDictTabs();
+        this.renderDictList();
+      });
+      this.dictTabs.append(b);
+    }
+  }
+
+  /** 語的效果を短い文にまとめる。ラベルの表は labels.js を共有する。 */
+  static fxLine(w) {
+    const out = [];
+    // 「自身」向けの語は fx と player が同じ内容。そっち側にだけ出す。
+    const own = w.cat === 'buff';
+    if (w.fx && !own) {
+      for (const [k, v] of Object.entries(w.fx)) {
+        if (!v) continue;
+        out.push(`${FX_LABEL[k] || k} ${v}`);
+      }
+    }
+    if (w.player) {
+      for (const [k, v] of Object.entries(w.player)) {
+        if (!v) continue;
+        out.push(`自身 ${PS_LABEL[k] || k} ${v}`);
+      }
+    }
+    return out;
+  }
+
+  renderDictList() {
+    const all = Object.values(WORDS);
+    const q = this.dictQuery;
+    const rows = all.filter((w) => {
+      if (this.dictCat !== 'all' && w.cat !== this.dictCat) return false;
+      if (!q) return true;
+      if (w.text.includes(q)) return true;
+      if (CONNECTOR_SET.has(w.text) && '接続'.includes(q)) return true;
+      const c = CATEGORIES[w.cat];
+      return !!c && c.name.includes(q);
+    });
+
+    this.dictCount.textContent = `${rows.length} / ${all.length} 語`;
+    clear(this.dictList);
+    if (!rows.length) {
+      this.dictList.append(el('div', { class: 'dict-empty' }, '見つからなかった。'));
+      return;
+    }
+    // 属性 → 効果 → 動詞 → 接続 の順に見せたいのでカテゴリ順に並べる。
+    const order = Object.keys(CATEGORIES);
+    rows.sort((a, b) => {
+      const d = order.indexOf(a.cat) - order.indexOf(b.cat);
+      return d !== 0 ? d : a.text.localeCompare(b.text, 'ja');
+    });
+
+    for (const w of rows) {
+      const cat = CATEGORIES[w.cat] || { name: w.cat, color: '#8ab4ff' };
+      const isConn = CONNECTOR_SET.has(w.text);
+      const lines = Menus.fxLine(w);
+      const phrases = PHRASE_BONUS[w.text];
+      const tags = [];
+      if (isConn) tags.push('接続詞 — 直前の語に結合');
+      if (w.el) tags.push(`属性 ${w.el}`);
+      if (w.text.length === 1) tags.push('1 文字');
+      if (phrases) tags.push(`熟語 ${Object.keys(phrases).length} 種`);
+
+      this.dictList.append(el('div', { class: 'dict-row' },
+        el('span', { class: 'dict-w', style: { borderColor: cat.color, color: cat.color } }, w.text),
+        el('span', { class: 'dict-cat', style: { color: cat.color } }, cat.name),
+        el('span', { class: 'dict-fx' }, lines.length ? lines.join(' / ') : '—'),
+        el('span', { class: 'dict-tags' }, tags.join('・')),
+      ));
+    }
   }
 
   // ── 設定 ────────────────────────────────────────────────────────────────

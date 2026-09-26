@@ -4,7 +4,9 @@
 
 import { $, el, clear, clamp, fmtNum, fmtTime } from '../core/util.js';
 import { KIND_LABEL } from '../data/weapons.js';
+import { WORDS, CATEGORIES } from '../data/words.js';
 import { statRows } from '../game/stats.js';
+import { FX_LABEL, fxLine as makeFxLine } from './labels.js';
 
 export class Hud {
   constructor() {
@@ -28,6 +30,19 @@ export class Hud {
     this.bossName = $('#bossName');
     this.bossFill = $('#bossFill');
     this.hudPaused = $('#hudPaused');
+
+    // 3 択
+    this.choiceBox = $('#hudChoice');
+    this.choiceTitle = $('#choiceTitle');
+    this.choiceTimer = $('#choiceTimer');
+    this.choiceList = $('#choiceList');
+    this.choiceForget = $('#choiceForget');
+    this.choiceForgetList = $('#choiceForgetList');
+    /** 捨てる語を選んだ位置。null は未選択。 */
+    this.forgetIndex = null;
+    /** いま表示している 3 択。 */
+    this._choice = null;
+    this._choiceSig = '';
 
     this._chipNodes = [];
     this._statNodes = null;
@@ -86,6 +101,9 @@ export class Hud {
 
     // 能力。ラベルと数値を別の要素にして、桁がずれても読み分けられるようにする。
     this.renderStats(s);
+
+    // 3 択。
+    this.renderChoices(run);
 
     // ステージ / 制限時間
     this.hudStage.textContent = `第 ${run.stage.id} 戦・${run.stage.name}`;
@@ -162,6 +180,96 @@ export class Hud {
           + `${KIND_LABEL[res.kind] || res.kind} / 威力 ${res.stats.dmg.toFixed(0)}`
         : `不成文: ${res.reasonText}`;
     }
+  }
+
+  /**
+   * レベルアップの 3 択。
+   * 語彙が満杯のときは、先に「何を捨てるか」を選ばせる。
+   * ゲームは止めない。時間切れなら run 側で自動で決まる。
+   * @param {object} run
+   * @param {(id:number, index:number, discardIndex:number|null)=>void} onPick
+   */
+  renderChoices(run, onPick) {
+    this._onPick = onPick || this._onPick;
+    const c = run.pendingChoices && run.pendingChoices[0];
+    if (!c) {
+      this.choiceBox.hidden = true;
+      this._choice = null;
+      this._choiceSig = '';
+      return;
+    }
+
+    const full = run.lexiconFull;
+    const sig = `${c.id}|${c.words.map((w) => w.text).join(',')}|${full}|${this.forgetIndex}|`
+      + run.lexicon.map((w) => (w ? w.text : '-')).join(',');
+    const left = Math.max(0, Math.ceil(c.life));
+    this.choiceTimer.textContent = String(left);
+    this.choiceTimer.classList.toggle('urgent', left <= 2);
+
+    if (this._choiceSig === sig) return;
+    this._choiceSig = sig;
+    this.choiceBox.hidden = false;
+
+    // 捨てる語の選択。満杯のときだけ出す。
+    this.choiceForget.hidden = !full;
+    if (full) {
+      this.choiceTitle.textContent = this.forgetIndex === null
+        ? '語彙が満杯 — 捨てることばを選んで'
+        : '捨てることばを選んだ — 新しいことばを選んで';
+      clear(this.choiceForgetList);
+      run.lexicon.forEach((w, i) => {
+        if (!w) return;
+        const node = el('button', {
+          class: 'choice-card forget' + (this.forgetIndex === i ? ' gone' : ''),
+          type: 'button',
+          title: `「${w.text}」を忘れる`,
+        }, el('span', {}, w.text));
+        node.addEventListener('click', () => {
+          this.forgetIndex = this.forgetIndex === i ? null : i;
+          this._choiceSig = '';
+          this.renderChoices(run);
+        });
+        this.choiceForgetList.append(node);
+      });
+    } else {
+      this.choiceTitle.textContent = 'ことばを 1 つ選んで';
+    }
+
+    // 候補。
+    clear(this.choiceList);
+    c.words.forEach((w, i) => {
+      const info = WORDS[w.text];
+      const cat = CATEGORIES[w.cat] || CATEGORIES.modifier;
+      const node = el('button', {
+        class: 'choice-card',
+        type: 'button',
+        style: { borderColor: cat.color },
+        title: this.fxLine(w),
+      },
+        el('span', {}, w.text),
+        el('span', { class: 'choice-card-cat' }, cat.name),
+        el('span', { class: 'choice-card-fx' }, this.fxLine(w)),
+      );
+      if (w.cat === 'connect') node.append(el('span', { class: 'conn-mark' }, '結'));
+      node.addEventListener('click', () => {
+        if (full && this.forgetIndex === null) {
+          this._choiceSig = '';
+          this.renderChoices(run);
+          return;
+        }
+        this._onPick?.(c.id, i, full ? this.forgetIndex : null);
+        this.forgetIndex = null;
+        this._choiceSig = '';
+      });
+      this.choiceList.append(node);
+    });
+  }
+
+  /** 語の効果を 1 行にまとめる (3 択のカードと詳細)。 */
+  fxLine(w) {
+    const info = WORDS[w.text];
+    if (!info) return '';
+    return makeFxLine(info.fx, FX_LABEL, 3);
   }
 
   /**

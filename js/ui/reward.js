@@ -8,6 +8,10 @@
 import { $, el, clear } from '../core/util.js';
 import { WEAPONS, slotsForLevel } from '../data/weapons.js';
 import { WeaponInst } from '../game/weapon.js';
+import { LEXICON_MAX } from '../game/run.js';
+
+/** 言玉 1 個で増える語彙の容量。 */
+export const GEM_GAIN = 1;
 
 export class RewardScreen {
   /**
@@ -75,6 +79,7 @@ export class RewardScreen {
 const KIND_LABEL = {
   weapon:   '武器',
   weaponup: '武器強化',
+  gem:      '言玉',
   rest:     '休息',
 };
 
@@ -144,6 +149,23 @@ export function rollRewards(run, save, opts = {}) {
         save.unlockWeapon(id);
         run.refreshStats();
       },
+    });
+  }
+
+  // ── 言玉。語彙の容量を 1 個増やす ──
+  // 次のステージへ持ち越す。
+  if (out.length < poolSize && run.lexicon.length < LEXICON_MAX) {
+    const gain = Math.min(GEM_GAIN, LEXICON_MAX - run.lexicon.length);
+    out.push({
+      kind: 'gem',
+      id: 'gem',
+      word: null,
+      glyph: '玉',
+      color: 'var(--ice, #7ad7ff)',
+      name: '言玉を拾う',
+      desc: '語彙の容量が 1 個増える。持ち越す。',
+      fx: `語彙 ${run.lexicon.length} → ${run.lexicon.length + gain}`,
+      apply: () => run.growLexicon(gain),
     });
   }
 

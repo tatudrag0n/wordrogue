@@ -25,15 +25,21 @@ export class Forge {
     this.opt = opt;
     this.root = $('#forge');
     this.listEl = $('#forgeWeapons');
-    this.pouchEl = $('#forgePouch');
-    this.pouchCount = $('#pouchCount');
+    this.lexiconEl = $('#forgeLexicon');
+    this.lexiconCount = $('#lexiconCount');
     this.detailEl = $('#forgeDetail');
     this.hintEl = $('#forgeHint');
     this.hintBtn = $('#btnForgeHint');
+    this.forgetBtn = $('#btnForgeForget');
 
     /** @type {object|null} 選択中の語 */
     this.armed = null;
+    /** 「忘れる」モード。語彙の語をクリックすると捨てる。 */
+    this.forgetMode = false;
     this.hintOn = false;
+
+    /** ドラッグ中の置き場。{kind, index, wi} */
+    this.dragFrom = null;
 
     $('#forgeClose').addEventListener('click', () => this.close());
     $('#forgeBack').addEventListener('click', () => this.close());
@@ -42,12 +48,18 @@ export class Forge {
       this.hintEl.hidden = !this.hintOn;
       this.render();
     });
+    this.forgetBtn.addEventListener('click', () => {
+      this.opt.audio?.tap?.();
+      this.toggleForget();
+    });
   }
 
-  setRun(run) { this.run = run; this.armed = null; }
+  setRun(run) { this.run = run; this.armed = null; this.forgetMode = false; }
 
   open() {
     this.armed = null;
+    this.forgetMode = false;
+    this.forgetBtn.classList.remove('on');
     this.root.hidden = false;
     this.run.paused = true;
     this.render();
@@ -57,6 +69,10 @@ export class Forge {
     this.root.hidden = true;
     this.run.paused = false;
     this.armed = null;
+    this.forgetMode = false;
+    this.forgetBtn.classList.remove('on');
+    this.dragFrom = null;
+    this.clearDropMarks();
     this.opt.onClose?.();
   }
 
@@ -67,7 +83,7 @@ export class Forge {
   /** 画面を再描画する。 */
   render() {
     this.renderWeapons();
-    this.renderPouch();
+    this.renderLexicon();
     this.renderDetail();
     if (this.hintOn) this.renderHint();
   }
@@ -111,15 +127,23 @@ export class Forge {
           '述語あり — 文の力が上がる。'));
       }
 
-      row.append(this.renderSlots(wi, (i) => this.onSlotClick(wi, i)));
+      row.append(this.renderSlots(
+        { slots: wi.slots, tail: wi.tail, kind: 'slot', wi },
+        (i) => this.onSlotClick(wi, i)));
       row.append(this.renderSentence(wi, res));
       row.append(this.renderStats(res));
       list.append(row);
     }
   }
 
-  /** 枠を並べる。onClick(i) でクリックを処理する。末尾語は外して置けない。 */
+  /**
+   * 枠を並べる。onClick(i) でクリックを処理する。
+   * 末尾語は枠の外に固定で付くので、触れない (ドラッグも受けない)。
+   * @param {{slots:Array, tail?:string, kind?:string, wi?:object}} wi
+   * @param {(i:number)=>void} onClick
+   */
   renderSlots(wi, onClick) {
+    const kind = wi.kind || 'slot';
     const slots = el('div', { class: 'slots' });
     wi.slots.forEach((word, i) => {
       const isArmed = this.armed && word && this.armed === word;
@@ -132,6 +156,9 @@ export class Forge {
           ? el('span', {}, word.text)
           : el('span', { class: 'empty-mark' }, '＿'));
       node.addEventListener('click', () => onClick(i));
+      const place = { kind, index: i, wi: wi.wi };
+      if (word) this.makeDraggable(node, place);
+      this.makeDropTarget(node, place);
       slots.append(node);
       if (i < wi.slots.length - 1) slots.append(el('span', { class: 'slot-plus' }, '+'));
     });
@@ -168,7 +195,9 @@ export class Forge {
         `${ev.reasonText} — 枠の語を 2 つ以上並べると文になる。`));
     }
 
-    row.append(this.renderSlots({ slots: p.selfSlots, tail: SELF_TAIL }, (i) => this.onSelfSlotClick(i)));
+    row.append(this.renderSlots(
+      { slots: p.selfSlots, tail: SELF_TAIL, kind: 'self' },
+      (i) => this.onSelfSlotClick(i)));
 
     // 文面。末尾の「人」は枠の外に固定で付く。
     const joined = p.selfSlots.filter(Boolean).map((w) => w.text).join('') + SELF_TAIL;
@@ -254,37 +283,50 @@ export class Forge {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 語袋
+  // 語彙
   // ───────────────────────────────────────────────────────────────────────────
-  renderPouch() {
-    const box = this.pouchEl;
+  renderLexicon() {
+    const box = this.lexiconEl;
     clear(box);
 
     const counts = new Map();
-    for (const w of this.run.pouch) {
+    for (const w of this.run.lexicon) {
       if (w) counts.set(w.text, (counts.get(w.text) || 0) + 1);
     }
 
-    for (const w of this.run.pouch) {
+    for (const w of this.run.lexicon) {
       if (!w) {
         box.append(el('div', { class: 'pword empty' }, ''));
         continue;
       }
       const cat = CATEGORIES[w.cat] || CATEGORIES.modifier;
       const conn = CONNECTOR_SET.has(w.text);
+      const i = this.run.lexicon.indexOf(w);
       const node = el('div', {
-        class: 'pword' + (this.armed === w ? ' armed' : '') + (conn ? ' pword-conn' : ''),
+        class: 'pword'
+          + (this.armed === w ? ' armed' : '')
+          + (conn ? ' pword-conn' : '')
+          + (this.forgetMode ? ' forgetable' : ''),
         style: { borderColor: cat.color },
-        title: `${w.text} [${cat.name}]${conn ? ' — 接続詞。直前の語に結合する。' : ''}`,
+        title: this.forgetMode
+          ? `${w.text} を忘れる（捨てる）`
+          : `${w.text} [${cat.name}]${conn ? ' — 接続詞。直前の語に結合する。' : ''}\n枠へドラッグして装着できます。`,
       }, el('span', {}, w.text));
       const n = counts.get(w.text);
       if (n > 1) node.append(el('span', { class: 'pword-n' }, `×${n}`));
-      node.addEventListener('click', () => this.onPouchClick(w));
+      node.addEventListener('click', () => this.onLexiconClick(w));
+      if (!this.forgetMode) this.makeDraggable(node, { kind: 'lexicon', index: i });
+      else this.makeDropTarget(node, { kind: 'lexicon', index: i });
       box.append(node);
     }
 
-    const filled = this.run.pouch.filter(Boolean).length;
-    this.pouchCount.textContent = `${filled} / ${this.run.pouch.length}`;
+    const filled = this.run.lexicon.filter(Boolean).length;
+    const full = this.run.lexiconFull;
+    this.lexiconCount.textContent = `${filled} / ${this.run.lexicon.length}`;
+    this.lexiconCount.classList.toggle('full', full);
+    this.forgetBtn.classList.toggle('on', this.forgetMode);
+    this.forgetBtn.textContent = this.forgetMode ? '忘れる (クリックで捨てる)' : '忘れる';
+    this.forgetBtn.disabled = filled === 0;
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -297,7 +339,7 @@ export class Forge {
     const sel = this.armed;
     if (!sel) {
       d.append(el('span', { class: 'dt' }, '語を選んでから枠をクリック'));
-      d.append(el('span', { class: 'dl' }, '語袋か武器か自身の枠。枠を空けると文が崩れる。'));
+      d.append(el('span', { class: 'dl' }, '語彙か武器か自身の枠。枠を空けると文が崩れる。'));
       return;
     }
 
@@ -332,7 +374,7 @@ export class Forge {
     clear(h);
 
     const have = new Set();
-    for (const w of this.run.pouch) if (w) have.add(w.text);
+    for (const w of this.run.lexicon) if (w) have.add(w.text);
     for (const wi of this.run.weapons) for (const w of wi.slots) if (w) have.add(w.text);
     for (const w of this.run.player.selfSlots) if (w) have.add(w.text);
 
@@ -356,9 +398,136 @@ export class Forge {
   // ───────────────────────────────────────────────────────────────────────────
   // 操作
   // ───────────────────────────────────────────────────────────────────────────
-  onPouchClick(word) {
+
+  /** 語彙の語をクリック。選ぶか、忘れるモードなら捨てる。 */
+  onLexiconClick(word) {
     this.opt.audio?.tap?.();
+    if (this.forgetMode) {
+      const gone = this.run.forgetWord(word);
+      if (gone) {
+        if (!this.run.lexiconFreeCount) this.forgetMode = false;
+        this.opt.onChange?.();
+      }
+      this.render();
+      return;
+    }
     this.armed = this.armed === word ? null : word;
+    this.render();
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ドラッグで移動・入れ替え
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * ドラッグを始める要素につける。置き場の中身を this.dragFrom に覚えておく。
+   * @param {{kind:string,index:number,wi?:object}} place
+   */
+  makeDraggable(node, place) {
+    node.draggable = true;
+    node.addEventListener('dragstart', (ev) => {
+      this.dragFrom = place;
+      this.armed = null;
+      node.classList.add('dragging');
+      try {
+        ev.dataTransfer.effectAllowed = 'move';
+        // Firefox はデータが無いと dragstart を起こさないので必ず入れる。
+        ev.dataTransfer.setData('text/plain', place.kind);
+      } catch {}
+    });
+    node.addEventListener('dragend', () => {
+      node.classList.remove('dragging');
+      this.dragFrom = null;
+      this.clearDropMarks();
+    });
+  }
+
+  /** ドロップ先につける。 */
+  makeDropTarget(node, place) {
+    node.addEventListener('dragover', (ev) => {
+      if (!this.dragFrom) return;
+      ev.preventDefault();
+      try { ev.dataTransfer.dropEffect = 'move'; } catch {}
+      node.classList.add('drop-hot');
+    });
+    node.addEventListener('dragleave', () => node.classList.remove('drop-hot'));
+    node.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      node.classList.remove('drop-hot');
+      const from = this.dragFrom;
+      this.dragFrom = null;
+      if (!from) return;
+      this.dropOnto(from, place);
+    });
+  }
+
+  clearDropMarks() {
+    for (const n of this.root.querySelectorAll('.drop-hot')) n.classList.remove('drop-hot');
+  }
+
+  /**
+   * from の語を to へ移す。語彙 ⇄ 枠、枠 ⇄ 枠。
+   * 語彙が満杯で語彙の埋まりが増えるときは入れ替えない。
+   */
+  dropOnto(from, to) {
+    if (!from || !to) return;
+    if (from.kind === to.kind && from.index === to.index && (from.wi || null) === (to.wi || null)) return;
+
+    // 語彙 → 枠。空き枠なら普通の装着、埋まっていれば入れ替え (満杯ガードを通る)。
+    if (from.kind === 'lexicon' && to.kind !== 'lexicon') {
+      const word = this.run.lexicon[from.index];
+      if (!word) return;
+      const occupied = this.wordAt(to) !== null;
+      const r = occupied ? this.run.swapPlaces(from, to)
+        : to.kind === 'self'
+          ? this.run.placeSelfWord(to.index, word)
+          : this.run.placeWord(to.wi, to.index, word);
+      if (r.ok) {
+        const wi = to.kind === 'slot' ? to.wi : null;
+        this.opt.audio?.worn?.(wi ? wi.resolve(this.run.player.stats) : { active: true });
+      } else {
+        this.opt.audio?.broken?.();
+      }
+      this.opt.onChange?.();
+      this.render();
+      return;
+    }
+    // 枠 → 語彙。空きセルなら語彙へ戻し、埋まっていれば入れ替え。
+    if (from.kind !== 'lexicon' && to.kind === 'lexicon') {
+      const word = this.wordAt(from);
+      if (!word) return;
+      const occupied = this.run.lexicon[to.index] != null;
+      const r = occupied ? this.run.swapPlaces(from, to) : this.run.toLexicon(word);
+      if (r.ok) this.opt.audio?.tap?.();
+      else this.opt.audio?.broken?.();
+      this.opt.onChange?.();
+      this.render();
+      return;
+    }
+    // 枠 ⇄ 枠 は入れ替え。
+    const r = this.run.swapPlaces(from, to);
+    if (r.ok) {
+      const wi = from.kind === 'slot' ? from.wi : to.wi;
+      this.opt.audio?.worn?.(wi ? wi.resolve(this.run.player.stats) : { active: true });
+    } else {
+      this.opt.audio?.broken?.();
+    }
+    this.opt.onChange?.();
+    this.render();
+  }
+
+  /** 置き場にある語を取る。 */
+  wordAt(place) {
+    if (place.kind === 'lexicon') return this.run.lexicon[place.index] || null;
+    if (place.kind === 'self') return this.run.player.selfSlots[place.index] || null;
+    return place.wi.slots[place.index] || null;
+  }
+
+  /** 「忘れる」モードの切り替え。語彙の語をクリックすると捨てる。 */
+  toggleForget() {
+    this.forgetMode = !this.forgetMode;
+    if (this.forgetMode) this.armed = null;
+    this.forgetBtn.classList.toggle('on', this.forgetMode);
     this.render();
   }
 
@@ -366,18 +535,21 @@ export class Forge {
     if (this.armed) {
       const w = this.armed;
       this.armed = null;
-      this.run.placeWord(wi, index, w);
+      const r = this.run.placeWord(wi, index, w);
       this.opt.audio?.worn?.(wi.resolve(this.run.player.stats));
       this.opt.onChange?.();
       this.render();
-      return;
+      return r;
     }
     if (wi.slots[index]) {
-      this.run.toPouch(wi.slots[index]);
-      this.opt.audio?.tap?.();
+      const r = this.run.toLexicon(wi.slots[index]);
+      if (r.ok) this.opt.audio?.tap?.();
+      else this.opt.audio?.broken?.();
       this.opt.onChange?.();
       this.render();
+      return r;
     }
+    return { ok: false, reason: 'empty' };
   }
 
   onSelfSlotClick(i) {
@@ -385,18 +557,21 @@ export class Forge {
     if (this.armed) {
       const w = this.armed;
       this.armed = null;
-      this.run.placeSelfWord(i, w);
+      const r = this.run.placeSelfWord(i, w);
       this.opt.audio?.worn?.({ active: true });
       this.opt.onChange?.();
       this.render();
-      return;
+      return r;
     }
     if (p.selfSlots[i]) {
-      this.run.toPouch(p.selfSlots[i]);
-      this.opt.audio?.tap?.();
+      const r = this.run.toLexicon(p.selfSlots[i]);
+      if (r.ok) this.opt.audio?.tap?.();
+      else this.opt.audio?.broken?.();
       this.opt.onChange?.();
       this.render();
+      return r;
     }
+    return { ok: false, reason: 'empty' };
   }
 }
 
@@ -426,11 +601,11 @@ const FX_LABEL = {
   lifesteal: '吸血', regen: '回復', shield: 'シールド', knock: '撃退',
   recoil: '反動', magnet: '吸引', slowImmune: '減速耐性', reflect: '反射',
   armor: '装甲', power: '文力', atkMul: '攻撃', xpMul: '経験値',
-  dmgMul: '威力',
+  dmgMul: '威力', hpMul: '体力',
 };
 
 const PS_LABEL = {
   hp: '体力', spd: '移動', atk: '攻撃', armor: '装甲', crit: '会心',
   regen: '回復', lifesteal: '吸血', luck: '幸運', magnet: '吸引',
-  xp: '経験値', size: '大きさ', shield: 'シールド',
+  xp: '経験値', size: '大きさ', shield: 'シールド', critDmg: '会心威力',
 };

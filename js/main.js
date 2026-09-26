@@ -46,7 +46,7 @@ function boot() {
   app.menus = new Menus({ save: app.save, audio: app.audio });
   app.reward = new RewardScreen({
     audio: app.audio,
-    pouch: [],
+    lexicon: [],
     onGive: (card) => card.apply?.(),
   });
 
@@ -61,6 +61,7 @@ function boot() {
 
   // 入力
   $('#btnForge').addEventListener('click', () => toggleForge());
+  $('#btnDictInGame').addEventListener('click', () => toggleDict());
   $('#btnPause').addEventListener('click', () => togglePause());
   window.addEventListener('keydown', onKey);
 
@@ -78,6 +79,7 @@ function boot() {
     onStart: (weaponIds) => startRun(weaponIds),
     onRetry: () => startRun(app.lastLoadout),
     onStages: () => { app.mode = 'title'; app.menus.showStages(); },
+    onCloseDict: () => { if (app.mode === 'dict') toggleDict(); },
     onNext: () => {
       const next = Math.min(STAGES.length, app.run.stage.id + 1);
       app.menus.showLoadout(next);
@@ -102,7 +104,7 @@ function startRun(weaponIds) {
     audio: app.audio,
     weaponIds: app.lastLoadout,
     startingWords: app.save.d.startingWords,
-    pouchSize: 12,
+    lexiconSize: 12,
   });
   run.shakeOn = app.save.setting('screenShake') !== false;
   run.showDamage = app.save.setting('showDamage') !== false;
@@ -114,6 +116,17 @@ function startRun(weaponIds) {
     app.audio.levelup();
     run.pushHint(`レベル ${lv} — 体力回復`);
     run.healPlayer(run.player.maxHp);
+  };
+  // 3 択を選んだとき。語彙が満杯なら run 側で「捨てる」を決めてから入る。
+  run.onWordChoice = (list) => {
+    app.hud.forgetIndex = null;
+    app.hud._choiceSig = '';
+    if (!list.length) app.audio.tap?.();
+  };
+  run.onWordChoiceExpired = () => {
+    // 時間切れの 1 番目は run 側で採用済み。UI の更新だけする。
+    app.hud.forgetIndex = null;
+    app.hud._choiceSig = '';
   };
 
   app.run = run;
@@ -172,7 +185,7 @@ function showNextReward() {
   app.pendingRewards--;
   app.mode = 'reward';
   app.hud.show(false);
-  app.reward.pouch = run.pouch;
+  app.reward.lexicon = run.lexicon;
   const cards = rollRewards(run, app.save, { count: 3 });
   app.reward.show(cards, () => showNextReward(), {
     title: 'クリア報酬',
@@ -204,6 +217,26 @@ function togglePause() {
   app.hud.setPaused(true);
 }
 
+/**
+ * 辞書を開閉する。戦闘中でも開ける。開いている間は時間を止める。
+ * 言葉鍛冶を開いているときは先に閉じる (2 枚同時に出さない)。
+ */
+function toggleDict() {
+  if (app.mode === 'dict') {
+    app.menus.hide('dict');
+    app.run.paused = false;
+    app.hud.setPaused(false);
+    app.mode = 'play';
+    return;
+  }
+  if (app.mode !== 'play' && app.mode !== 'forge') return;
+  if (app.mode === 'forge') toggleForge();
+  app.menus.show('dict');
+  app.run.paused = true;
+  app.hud.setPaused(true);
+  app.mode = 'dict';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // キー操作
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,12 +245,18 @@ function onKey(e) {
 
   if (app.mode === 'play') {
     if (k === 'q' || k === 'tab') { e.preventDefault(); toggleForge(); return; }
+    if (k === 'd') { e.preventDefault(); toggleDict(); return; }
     if (k === 'escape') { e.preventDefault(); togglePause(); return; }
     return;
   }
 
   if (app.mode === 'forge') {
     if (k === 'q' || k === 'escape') { e.preventDefault(); toggleForge(); return; }
+    return;
+  }
+
+  if (app.mode === 'dict') {
+    if (k === 'd' || k === 'escape') { e.preventDefault(); toggleDict(); return; }
     return;
   }
 
@@ -261,6 +300,10 @@ function loop(now) {
     app.renderer.draw(run, app.input.stickState());
     app.hud.update(run, (wi) => {
       if (app.mode === 'play') toggleForge();
+    });
+    // 3 択。時間制限つきで、時間は止まらない。
+    app.hud.renderChoices(run, (id, index, discardIndex) => {
+      if (run.chooseWord(id, index, discardIndex)) app.audio.phrase();
     });
 
     // 音楽。激昂度は経過時間から求める。

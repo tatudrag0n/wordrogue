@@ -378,6 +378,116 @@ code {
   animation: rise .2s;
 }
 
+/* レベルアップの 3 択。ゲームは止めない。 */
+.hud-choice {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(8, 11, 18, .93);
+  border: 1px solid rgba(255, 212, 59, .5);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, .55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: choiceIn .16s ease-out;
+}
+@keyframes choiceIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.hud-choice-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  justify-content: center;
+}
+.hud-choice-title {
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: #ffe9a8;
+}
+.hud-choice-timer {
+  font-family: var(--mono);
+  font-size: .78rem;
+  font-weight: 700;
+  color: #c7d3e8;
+  min-width: 1.4em;
+  text-align: right;
+}
+.hud-choice-timer.urgent { color: #ff9a9a; }
+.hud-choice-list { display: flex; gap: 8px; }
+.hud-choice-list.small { flex-wrap: wrap; max-width: 420px; }
+.hud-choice-note {
+  margin: 0 0 5px;
+  font-size: .74rem;
+  color: #ffb3c1;
+  text-align: center;
+}
+.hud-choice-forget {
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 84, 112, .35);
+}
+
+/* 3 択のカード。語彙の語と同じ見た目。 */
+.choice-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 74px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 2px solid var(--line-2);
+  background: rgba(255, 255, 255, .05);
+  color: #e8f0ff;
+  font-size: 1.02rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform .1s, background .1s, border-color .1s;
+}
+.choice-card:hover { transform: translateY(-3px); background: rgba(255, 255, 255, .12); }
+.choice-card:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.choice-card-cat {
+  font-size: .62rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  opacity: .8;
+}
+.choice-card-fx {
+  font-family: var(--mono);
+  font-size: .66rem;
+  font-weight: 600;
+  opacity: .92;
+}
+.choice-card.forget {
+  min-width: 46px;
+  padding: 5px 8px;
+  font-size: .9rem;
+  border-style: dashed;
+  border-color: rgba(255, 84, 112, .55);
+  background: rgba(255, 84, 112, .10);
+}
+.choice-card.forget:hover { background: rgba(255, 84, 112, .22); }
+.choice-card.gone { opacity: .38; }
+.choice-card .conn-mark {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: .58rem;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--connect, #8ab4ff);
+  color: #06121f;
+  font-weight: 700;
+}
 .hud-weapons {
   margin-top: auto;
   display: flex;
@@ -545,6 +655,17 @@ code {
 .slot.drop { border-color: var(--ok); background: #14261a; }
 .slot .empty-mark { color: var(--fg-mute); font-size: 1.1rem; font-weight: 400; }
 
+/* ドラッグ */
+.slot.filled, .pword { cursor: grab; }
+.slot.filled:active, .pword:active { cursor: grabbing; }
+.dragging { opacity: .35; }
+.drop-hot {
+  border-color: var(--accent) !important;
+  background: #2b2712 !important;
+  box-shadow: 0 0 0 2px rgba(255,212,59,.35);
+  transform: translateY(-1px);
+}
+
 .slot-plus {
   width: 26px; text-align: center;
   color: var(--fg-mute); font-size: .8rem;
@@ -636,7 +757,7 @@ code {
 .stat.bad  { color: var(--ng);  border-color: rgba(255,84,112,.35); }
 .stat.idom { color: var(--idiom); border-color: rgba(255,159,67,.45); background: rgba(60,38,14,.4); }
 
-/* 語袋 */
+/* 語彙 */
 .forge-side {
   display: flex;
   flex-direction: column;
@@ -646,7 +767,7 @@ code {
 .forge-side-head { display: flex; align-items: baseline; justify-content: space-between; }
 .forge-side-head h3 { margin: 0; font-size: .95rem; }
 
-.pouch {
+.lexicon {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
@@ -694,10 +815,30 @@ code {
 }
 .pword-conn { opacity: .85; border-style: dashed; }
 
-.forge-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.forge-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .forge-actions .btn { font-size: .82rem; padding: 7px 10px; }
 .forge-note { flex: 1; font-size: .8rem; color: var(--fg-dim); }
 .forge-note strong { color: var(--accent); }
+.btn-forget.on {
+  background: rgba(255, 84, 112, .22);
+  border-color: var(--ng);
+  color: #ffd0d8;
+}
+.btn-forget:disabled { opacity: .4; cursor: not-allowed; }
+
+/* 「忘れる」モード。語彙の語が捨てられる。 */
+.pword.forgetable {
+  cursor: crosshair;
+  border-style: dashed;
+  border-color: var(--ng);
+  opacity: .9;
+}
+.pword.forgetable:hover {
+  background: rgba(255, 84, 112, .25);
+  transform: scale(1.06);
+}
+/* 「忘れる」モードのボタン状態は .btn-forget.on で表現する。 */
+#lexiconCount.full { color: var(--ng); font-weight: 700; }
 
 .forge-hint {
   font-size: .78rem;
@@ -944,6 +1085,72 @@ code {
 .howto-list { margin: 0; padding-left: 20px; font-size: .87rem; color: var(--fg-dim); }
 .howto-list li { margin: 3px 0; }
 
+/* ══ 辞書 ══════════════════════════════════════════════════════════════ */
+
+.panel-dict { width: min(780px, 100%); }
+.dict-bar { display: flex; gap: 10px; align-items: center; flex: none; }
+.dict-bar input {
+  flex: 1;
+  background: #0b0f18;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: .92rem;
+  padding: 9px 12px;
+}
+.dict-bar input:focus { outline: none; border-color: var(--accent); }
+.dict-count { flex: none; font-family: var(--mono); font-size: .78rem; color: var(--fg-mute); }
+
+.dict-tabs { display: flex; gap: 5px; flex-wrap: wrap; flex: none; }
+.dict-tab {
+  background: transparent;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: .78rem;
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.dict-tab:hover { background: #161e2e; }
+.dict-tab.on { background: #1a2233; border-width: 1.5px; }
+
+.dict-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dict-row {
+  display: grid;
+  grid-template-columns: 3.4rem 4.6rem 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 9px;
+  background: #0b0f18;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+}
+.dict-row:hover { background: #121a28; }
+.dict-w {
+  justify-self: start;
+  border: 1.5px solid;
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: .95rem;
+  font-weight: 700;
+}
+.dict-cat { font-size: .74rem; }
+.dict-fx { font-size: .8rem; color: var(--fg-dim); }
+.dict-tags {
+  grid-column: 3;
+  font-size: .72rem;
+  color: var(--fg-mute);
+}
+.dict-empty { padding: 26px; text-align: center; color: var(--fg-mute); font-size: .9rem; }
+
 /* ══ 設定 ════════════════════════════════════════════════════════════ */
 
 .panel-settings { width: min(480px, 100%); }
@@ -970,7 +1177,10 @@ code {
   .forge-body { grid-template-columns: 1fr; }
   .panel-forge { height: 100%; }
   .forge-weapons { max-height: 44vh; }
-  .pouch { grid-template-columns: repeat(5, 1fr); min-height: 110px; }
+  .lexicon { grid-template-columns: repeat(5, 1fr); min-height: 110px; }
+  .dict-row { grid-template-columns: 3.2rem 1fr; }
+  .dict-cat { justify-self: start; }
+  .dict-fx, .dict-tags { grid-column: 2; }
   .hud-timer { font-size: 1.5rem; }
   .hud-top { padding: 8px 10px; gap: 8px; }
   .hud-stats { display: none; }

@@ -1,7 +1,7 @@
 // ============================================================================
 // ワードローグ — プレイヤー能力の解決
 //
-// 語袋の中の「自身強化語」と、プレイヤー自身の文、セーブの恒久強化から
+// 語彙の中の「自身強化語」と、プレイヤー自身の文、セーブの恒久強化から
 // 最終ステータスを作る。
 //
 // 自身の文は武器と同じく、末尾の語 (人) が枠の外に固定で付く。
@@ -35,20 +35,20 @@ export const BASE_PLAYER = {
   reflect: 0,      // 被弾を返す割合
 };
 
-/** 語袋の buff 語がプレイヤーに与えるキー一覧。 */
+/** 語彙の buff 語がプレイヤーに与えるキー一覧。 */
 const BUFF_KEYS = new Set([
   'hp', 'spd', 'atk', 'armor', 'crit', 'regen', 'lifesteal',
   'luck', 'magnet', 'xp', 'size', 'shield',
 ]);
 
 /**
- * 語袋と「自身の文」からプレイヤー能力を集計する。
- * @param {Array} pouch 語袋
+ * 語彙と「自身の文」からプレイヤー能力を集計する。
+ * @param {Array} lexicon 語彙
  * @param {Array<object>} selfSlots プレイヤーの文
  * @param {Object} meta セーブ側の恒久強化
  * @returns {typeof BASE_PLAYER}
  */
-export function resolvePlayerStats(pouch, selfSlots = [], meta = {}) {
+export function resolvePlayerStats(lexicon, selfSlots = [], meta = {}) {
   const s = { ...BASE_PLAYER };
   s.maxHp += meta.hp || 0;
   s.atkMul += meta.atk || 0;
@@ -57,8 +57,8 @@ export function resolvePlayerStats(pouch, selfSlots = [], meta = {}) {
   s.magnet += meta.magnet || 0;
   s.crit += meta.crit || 0;
 
-  // 語袋の buff 語。
-  for (const w of pouch) {
+  // 語彙の buff 語。
+  for (const w of lexicon) {
     if (!w || w.cat !== 'buff' || !w.player) continue;
     for (const [k, v] of Object.entries(w.player)) {
       if (!BUFF_KEYS.has(k)) continue;
@@ -110,23 +110,23 @@ export function resolvePlayerStats(pouch, selfSlots = [], meta = {}) {
   return s;
 }
 
-/** 語袋の中で重複している語をまとめる (表示用)。 */
-export function pouchSummary(pouch) {
+/** 語彙の中で重複している語をまとめる (表示用)。 */
+export function lexiconSummary(lexicon) {
   const count = new Map();
-  for (const w of pouch) {
+  for (const w of lexicon) {
     if (!w) continue;
     count.set(w.text, (count.get(w.text) || 0) + 1);
   }
-  return [...count.entries()].map(([text, n]) => ({ text, n, word: w(pouch, text) }))
+  return [...count.entries()].map(([text, n]) => ({ text, n, word: w(lexicon, text) }))
     .filter((x) => x.word);
 }
 
-const w = (pouch, text) => pouch.find((x) => x && x.text === text);
+const w = (lexicon, text) => lexicon.find((x) => x && x.text === text);
 
 /** 語彙の中で「文に使える」語 (接続詞でないもの) の数。 */
-export function contentCount(pouch) {
+export function lexiconContentCount(lexicon) {
   let n = 0;
-  for (const x of pouch) {
+  for (const x of lexicon) {
     if (x && !CONNECTOR_SET.has(x.text)) n++;
   }
   return n;

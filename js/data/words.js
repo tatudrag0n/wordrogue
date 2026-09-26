@@ -367,7 +367,7 @@ export function possibleCompounds(available, limit = 16) {
 }
 
 /**
- * 語袋から重み付き抽選で語を引く。
+ * 語彙から重み付き抽選で語を引く。
  * 接続詞も引けるが、比重は少し下げてある。
  */
 export function drawWord(rng, opts = {}) {

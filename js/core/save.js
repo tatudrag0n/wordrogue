@@ -15,7 +15,7 @@ const DEFAULTS = {
   bestScore: 0,
   totalKills: 0,
   totalRuns: 0,
-  startingWords: [],  // 恒久的に手に入れた語 (リスポーン時に語袋に入る)
+  startingWords: [],  // 恒久的に手に入れた語 (リスポーン時に語彙に入る)
   meta: {},            // 恒久強化_progress
   settings: { volume: 0.5, screenShake: true, showDamage: true },
   seenIntro: false,

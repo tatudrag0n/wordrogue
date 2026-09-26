@@ -42,6 +42,34 @@ if (syntaxBad) {
   process.exit(1);
 }
 
+// 日本語ファイルが壊れていないか。U+FFFD は文字化けで、
+// 編集中に混入するとそのまま画面に出る。HTML / CSS / MD まで含めて全部見る。
+{
+  const textExt = /\.(js|mjs|html|css|md)$/;
+  const targets = [...files];
+  for (const dir of ['css', 'test']) {
+    for (const e of await readdir(join(ROOT, dir), { withFileTypes: true })) {
+      if (e.isFile() && textExt.test(e.name)) targets.push(join(ROOT, dir, e.name));
+    }
+  }
+  for (const e of await readdir(ROOT, { withFileTypes: true })) {
+    if (e.isFile() && textExt.test(e.name)) targets.push(join(ROOT, e.name));
+  }
+
+  const broken = [];
+  for (const f of targets) {
+    const text = await readFile(f, 'utf8');
+    const n = (text.match(/\uFFFD/g) || []).length;
+    if (n) broken.push(`${f.replace(ROOT, '')} (${n})`);
+  }
+  console.log(`== 文字化け検査 ==\n  ${targets.length} ファイル / U+FFFD ${broken.length}`);
+  for (const b of broken) console.log(`\x1b[31m  ${b}\x1b[0m`);
+  if (broken.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
 // 攻撃の種類にはすべて日本語のラベルがあるはず。raw な kind が
 // UI に出ると「boomerang」のような英字が出るので、ここで止める。
 {
@@ -52,6 +80,34 @@ if (syntaxBad) {
   console.log(`== 攻撃种別のラベル ==\n  ${kinds.size} 種類 / 日本語なし ${missing.length} / ラベル無し ${notJa.length}`);
   if (missing.length) console.log('  ' + missing.join(', '));
   if (missing.length || notJa.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
+// 語の効果キーにはすべて日本語のラベルがある。無いと辞書に
+// 「magnet 0.5」のように生のキーがそのまま出る。
+{
+  const { WORDS } = await import(new URL('../js/data/words.js', import.meta.url));
+  const { FX_LABEL, PS_LABEL } = await import(new URL('../js/ui/labels.js', import.meta.url));
+  const keys = new Set();
+  const pkeys = new Set();
+  for (const k in WORDS) {
+    const w = WORDS[k];
+    // 「自身」向けの語は fx と player が同じ内容。player 側だけで見る。
+    if (w.cat !== 'buff') for (const a in (w.fx || {})) keys.add(a);
+    for (const a in (w.player || {})) pkeys.add(a);
+  }
+  const missFx = [...keys].filter((k) => !FX_LABEL[k]);
+  const missPs = [...pkeys].filter((k) => !PS_LABEL[k]);
+  const notJa = (k) => !/[぀-ヿ一-鿿]/.test(k);
+  const badJa = [...keys, ...pkeys]
+    .filter((k) => (FX_LABEL[k] || PS_LABEL[k]) && notJa(FX_LABEL[k] || PS_LABEL[k]));
+  console.log(`== 効果キーのラベル ==\n  武器 ${keys.size} / 自身 ${pkeys.size} / 未定義 ${missFx.length + missPs.length} / 日本語なし ${badJa.length}`);
+  if (missFx.length) console.log('  武器: ' + missFx.join(', '));
+  if (missPs.length) console.log('  自身: ' + missPs.join(', '));
+  if (badJa.length) console.log('  日本語なし: ' + badJa.join(', '));
+  if (missFx.length || missPs.length || badJa.length) {
     console.log('\n=== 失敗したテストがあります ===');
     process.exit(1);
   }

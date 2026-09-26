@@ -125,7 +125,12 @@ sec('モジュールが読み込まれていること');
 const appUp = await evalJs('!!window.__wordrogue');
 ok(appUp === true, '__wordrogue が定義されている');
 
-const dictSize = await evalJs('(async()=>{const m=await import("/js/data/words.js");return Object.keys(m.WORDS).length})()');
+// ページ基準でモジュールを取り込む。GitHub Pages でもローカルでも動くように。
+const dictSize = await evalJs(`(async () => {
+  const url = new URL('js/data/words.js', document.baseURI).href;
+  const m = await import(url);
+  return Object.keys(m.WORDS).length;
+})()`);
 ok(dictSize > 300, `辞書が読み込まれた: ${dictSize} 語`);
 
 sec('タイトル画面');

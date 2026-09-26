@@ -10,6 +10,7 @@
 
 import { $, el, clear } from '../core/util.js';
 import { WORDS, CATEGORIES, PARTICLES, possibleCompounds, evaluate } from '../data/words.js';
+import { KIND_LABEL } from '../data/weapons.js';
 import { keyStats } from '../game/weapon.js';
 
 export class Forge {
@@ -115,7 +116,7 @@ export class Forge {
     }
   }
 
-  /** 枠を並べる。onClick(i) でクリックを処理する。 */
+  /** 枠を並べる。onClick(i) でクリックを処理する。末尾語は外して置けない。 */
   renderSlots(wi, onClick) {
     const slots = el('div', { class: 'slots' });
     wi.slots.forEach((word, i) => {
@@ -132,6 +133,14 @@ export class Forge {
       slots.append(node);
       if (i < wi.slots.length - 1) slots.append(el('span', { class: 'slot-plus' }, '+'));
     });
+    // 末尾語。枠の外に固定で付くので触れない。
+    if (wi.tail) {
+      slots.append(el('span', { class: 'slot-plus' }, '+'));
+      slots.append(el('div', {
+        class: 'slot slot-tail',
+        title: `${wi.tail} — この武器の末尾語。枠の外に固定で付きます。`,
+      }, el('span', {}, wi.tail)));
+    }
     return slots;
   }
 
@@ -203,8 +212,10 @@ export class Forge {
     });
     wrap.append(parts);
 
-    // 連結した結果。
-    const joined = wi.slots.filter(Boolean).map((w) => w.text).join('');
+    // 連結した結果。末尾語は枠の外に付くので必ず含まれる。
+    const joined = wi.fullText !== undefined
+      ? wi.fullText
+      : wi.slots.filter(Boolean).map((w) => w.text).join('');
     const right = el('span', { class: 'sn-res' },
       el('span', { class: 'sn-eq' }, '= '),
       el('b', { class: 'sn-text' }, joined || '—'),
@@ -390,12 +401,6 @@ function catClass(w) {
   if (info.cat === 'buff') return 'sn-buff';
   return 'sn-n';
 }
-
-/** 攻撃の種類の日本語名。 */
-const KIND_LABEL = {
-  slash: '斬撃', shot: '射撃', bomb: '爆弾', chain: '連鎖',
-  orbit: '軌道', whip: '薙ぎ', aura: '城壁', beam: '光線', none: '',
-};
 
 const FX_LABEL = {
   dmg: '威力', rate: '攻撃/秒', speed: '速さ', count: '数', pierce: '貫通',

@@ -220,7 +220,30 @@ ok(rows === 3, `行の数: ${rows} (自身 1 + 武器 2)`);
 const selfRow = await evalJs('!!document.querySelector("#forgeWeapons .wrow-self")');
 ok(selfRow, 'プレイヤー自身の文の行が無い');
 const slots = await evalJs('document.querySelectorAll("#forgeWeapons .slot").length');
-ok(slots === 12, `枠の数: ${slots} (自身 4 + 武器 2 x 4 = 12)`);
+// 自身 4 + 武器 2 x (枠 4 + 末尾語 1)
+ok(slots === 14, `枠の数: ${slots} (自身 4 + 武器 2 x 5 = 14)`);
+
+sec('末尾語が枠の外に固定で出ていること');
+{
+  const tails = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    return {
+      defs: app.run.weapons.map(w => ({ id: w.defId, tail: w.tail, title: w.title })),
+      shown: [...document.querySelectorAll('#forgeWeapons .slot-tail')].map(n => n.textContent),
+      locked: [...document.querySelectorAll('#forgeWeapons .slot-tail')].length,
+      texts: [...document.querySelectorAll('#forgeWeapons .sn-text')].map(n => n.textContent),
+    };
+  })()`);
+  ok(tails.shown.length === 2, `末尾語 displayed が ${tails.shown.length} 個`);
+  for (const w of tails.defs) {
+    ok(tails.shown.includes(w.tail), `末尾語「${w.tail}」が表示されていない: ${tails.shown.join(',')}`);
+    ok(w.title.endsWith(w.tail), `名前が末尾語で終わっていない: ${w.title}`);
+  }
+  for (const t of tails.texts) {
+    if (t !== '—' && t !== '頑強疾走人') ok(/[一-龥]$/.test(t), `文面が末尾で終わっていない: ${t}`);
+  }
+  console.log(`    末尾語: ${tails.shown.join(' / ')} / 文面: ${tails.texts.join(' | ')}`);
+}
 const sent = await evalJs('document.querySelectorAll("#forgeWeapons .sentence").length');
 ok(sent === 3, `文面表示の数: ${sent}`);
 const sentText = await evalJs(

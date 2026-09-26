@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { $, el, clamp, fmtNum, fmtTime } from '../core/util.js';
+import { KIND_LABEL } from '../data/weapons.js';
 
 export class Hud {
   constructor() {
@@ -159,7 +160,3 @@ export class Hud {
   }
 }
 
-const KIND_LABEL = {
-  slash: '斬撃', shot: '射撃', bomb: '爆弾', chain: '連鎖',
-  orbit: '軌道', whip: '薙ぎ', aura: '城壁', beam: '光線',
-};

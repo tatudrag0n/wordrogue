@@ -5,12 +5,7 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, startingWeaponsFor, slotsForLevel } from '../data/weapons.js';
-
-const KIND_LABEL = {
-  slash: '斬撃', shot: '射撃', bomb: '爆弾', chain: '連鎖',
-  orbit: '軌道', whip: '薙ぎ', aura: '城壁', beam: '光線',
-};
+import { WEAPONS, startingWeaponsFor, slotsForLevel, KIND_LABEL } from '../data/weapons.js';
 
 export class Menus {
   /** @param {{save:object, audio:object}} opt */
@@ -160,9 +155,11 @@ export class Menus {
         disabled: !usable,
         title: lockedByProgress ? `第 ${d.unlock.stage} 戦で解放` : d.desc,
       },
-        el('div', { class: 'lo-name' }, d.name),
+        el('div', { class: 'lo-name' },
+          el('span', {}, d.name),
+          el('span', { class: 'lo-kind' }, KIND_LABEL[d.kind] || d.kind)),
         el('div', { class: 'lo-core' },
-          `枠 ${slotsForLevel(d, 1)}・開始「${d.startWord}${d.startWord2}」・攻撃 ${KIND_LABEL[d.kind] || d.kind}`),
+          `枠 ${slotsForLevel(d, 1)}・開始「${d.startWord}${d.startWord2}」・末尾「${d.tail}」`),
         el('div', { class: 'lo-desc' },
           lockedByProgress ? `第 ${d.unlock.stage} 戦で解放される` : (usable ? d.desc : '使用不可')),
       );

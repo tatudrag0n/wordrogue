@@ -1,7 +1,9 @@
 // ヘッドレスで 1 ステージを最後まで回すテスト。  node test/sim.test.js
 // DOM を使わないので Node でそのまま実行できる。
 import { Run } from '../js/game/run.js';
-import { makeWord } from '../js/data/words.js';
+import { makeWord, WORDS } from '../js/data/words.js';
+import { WEAPONS } from '../js/data/weapons.js';
+import { WeaponInst } from '../js/game/weapon.js';
 import { STAGES } from '../js/data/stages.js';
 import { makeRng } from '../js/core/util.js';
 
@@ -50,52 +52,102 @@ sec('武器の初期文');
   ok(!('core' in wi.def), '核語がまだ定義されている');
 }
 
-sec('核語は廃止されている');
+sec('末尾語は枠の外に固定で付く');
 {
   const wi = run.weapons[0];
   const x = wi.resolve(run.player.stats);
-  // 文面 = 枠の語の連結だけ。核語が混ざっていない。
-  const joined = wi.slots.filter(Boolean).map((w) => w.text).join('');
-  ok(x.fullText === joined, `文面に核語が混ざっている: ${x.fullText} != ${joined}`);
-  // 1 語だけにすると不成文になる。
-  wi.setSlot(1, null);
-  const broken = wi.resolve(run.player.stats);
-  ok(!broken.active, '1 語にしても有効になっている');
-  ok(broken.stats.dmg === 0, `威力が 0 でない: ${broken.stats.dmg}`);
-  wi.setSlot(1, wi.def.startWord2 ? makeWord(wi.def.startWord2) : null);
-  ok(wi.resolve(run.player.stats).valid, '戻し方がおかしい');
+  // 文面 = 枠の語の連結 + 末尾語。
+  const joined = wi.slots.filter(Boolean).map((w) => w.text).join('') + wi.tail;
+  ok(x.fullText === joined, `文面が末尾語つきでない: ${x.fullText} != ${joined}`);
+  ok(wi.title.endsWith(wi.tail), `名前が末尾語で終わっていない: ${wi.title}`);
+
+  // 末尾語は枠の 1 つとして数えない。語 1 つでは不成文。
+  wi.slots.fill(null);
+  wi.setSlot(0, makeWord('刃'));
+  const one = wi.resolve(run.player.stats);
+  ok(!one.active, '1 語にしても有効になっている');
+  ok(one.stats.dmg === 0, `威力が 0 でない: ${one.stats.dmg}`);
+
+  // 語 2 つで成立。
+  wi.setSlot(1, makeWord('利'));
+  ok(wi.resolve(run.player.stats).valid, '2 語でも不成文');
+  console.log(`  末尾語「${wi.tail}」/ 1 語 ${one.reasonText} / 2 語で成立`);
 }
 
-sec('武器名はその文面になる');
+sec('武器名はその文面になり 末尾は動かない');
 {
   const wi = run.weapons[0];
   wi.level = 8; wi.resizeSlots();
-  // 「爆裂無双雷剣」= 爆裂 + 無双 + 雷 + 剣
-  const words = ['爆裂', '無双', '雷', '剣'];
+  // 「爆裂無双雷」+ 剣 (末尾) = 「爆裂無双雷剣」
+  const words = ['爆裂', '無双', '雷'];
   words.forEach((t, i) => wi.setSlot(i, makeWord(t)));
   const res = wi.resolve(run.player.stats);
   console.log(`  「${wi.title}」 ${res.gradeInfo.name} 文力=${res.evalResult.fx.power.toFixed(2)} 攻撃=${res.kind}`);
-  ok(wi.title === words.join(''), `武器名が文面と違う: ${wi.title}`);
+  ok(wi.title === words.join('') + wi.tail, `武器名が文面と違う: ${wi.title}`);
   ok(res.valid, `「${wi.title}」が不成文: ${res.reasonText}`);
-  ok(res.kind === 'slash', `「剣」で斬撃になるはず: ${res.kind}`);
+  ok(res.kind === 'slash', `末尾が「剣」なら斬撃のはず: ${res.kind}`);
   ok(res.evalResult.fx.explode > 0, '「爆裂」で爆発が付くはず');
   ok(res.element === 'thunder', `「雷」で雷になるはず: ${res.element}`);
   ok(res.evalResult.fx.power > 1.3, `文の力が低い: ${res.evalResult.fx.power}`);
 
-  // 並び順で攻撃が変わること。
-  wi.setSlot(3, makeWord('弾'));
-  const shot = wi.resolve(run.player.stats);
-  ok(shot.kind === 'shot', `後ろの「弾」で射撃になるはず: ${shot.kind}`);
-  console.log(`  末尾を「弾」にすると ${shot.kind} / 形 ${shot.shape} / 名 ${wi.title}`);
+  // 並べ替えても末尾語と攻撃は変わらない。
+  const before = wi.title;
+  [wi.slots[0], wi.slots[1]] = [wi.slots[1], wi.slots[0]];
+  const swapped = wi.resolve(run.player.stats);
+  ok(swapped.kind === 'slash', `並べ替えで攻撃が変わった: ${swapped.kind}`);
+  ok(swapped.title.endsWith(wi.tail), '並べ替えで末尾が動いた');
+  ok(swapped.title !== before, '並べ替えても名前が変わらない');
+  console.log(`  入れ替え → 「${swapped.title}」 ${swapped.kind}`);
+
+  // 途中の形態語は効果だけ足し、攻撃の種類は変えない。
+  wi.slots.fill(null);
+  wi.setSlot(0, makeWord('刃'));
+  wi.setSlot(1, makeWord('利'));
+  wi.setSlot(2, makeWord('貫通'));
+  const mid = wi.resolve(run.player.stats);
+  ok(mid.kind === 'slash', `途中の「貫通」で攻撃が変わった: ${mid.kind}`);
+  ok(mid.evalResult.fx.pierce > 0, '「貫通」の効果が付いていない');
+  console.log(`  途中に「貫通」→ 攻撃 ${mid.kind} / 貫通 ${mid.stats.pierce}`);
+
+  // 爆弾を文に入れても、剣なら斬撃のまま。
+  wi.slots.fill(null);
+  wi.setSlot(0, makeWord('刃'));
+  wi.setSlot(1, makeWord('利'));
+  wi.setSlot(2, makeWord('爆弾'));
+  const bomb = wi.resolve(run.player.stats);
+  ok(bomb.kind === 'slash', `途中の「爆弾」で爆弾になった: ${bomb.kind}`);
+  ok(bomb.title.endsWith('剣'), `末尾が動いた: ${bomb.title}`);
+  ok(bomb.evalResult.fx.explode > 0, '「爆弾」の効果までは付く');
+  console.log(`  途中に「爆弾」→ 「${bomb.title}」 ${bomb.kind} (爆発 ${bomb.evalResult.fx.explode.toFixed(0)} は付く)`);
 
   // 「迅」+「雷」は 1 語の「迅雷」になる (最長一致)。
   wi.slots.fill(null);
   wi.setSlot(0, makeWord('迅'));
   wi.setSlot(1, makeWord('雷'));
   const xunlei = wi.resolve(run.player.stats);
-  ok(xunlei.evalResult.segments.join('/') === '迅/雷/剣'.slice(0, 3) || xunlei.evalResult.segments.includes('迅雷'),
-    `迅+雷 が最長一致にならない: ${xunlei.evalResult.segments.join('/')}`);
-  console.log(`  「迅」+「雷」→ ${xunlei.evalResult.segments.join('/')} (= ${xunlei.evalResult.fx.speed > 0 ? '迅雷' : '?'})`);
+  const seg = xunlei.evalResult.segments;
+  ok(seg.includes('迅雷') || seg.join('/') === '迅/雷/' + wi.tail,
+    `迅+雷 が最長一致にならない: ${seg.join('/')}`);
+  ok(seg[seg.length - 1] === wi.tail, `末尾語が最後にない: ${seg.join('/')}`);
+  console.log(`  「迅」+「雷」→ ${seg.join('/')}`);
+}
+
+sec('すべての武器が末尾語で攻撃を決める');
+{
+  const PS = { atk: 1, atkMul: 1, crit: 0, lifesteal: 0, magnet: 0, xpMul: 0, armor: 0, slowImmune: 0, hp: 100 };
+  for (const [id, def] of Object.entries(WEAPONS)) {
+    ok(WORDS[def.tail], `${def.name}: 末尾語「${def.tail}」が辞書に無い`);
+    const wi = new WeaponInst(id, 1);
+    wi.setSlot(0, makeWord(def.startWord));
+    wi.setSlot(1, makeWord(def.startWord2));
+    const r = wi.resolve(PS);
+    ok(r.active, `${def.name}: 開始語で不成文 (${r.reasonText})`);
+    ok(r.kind === def.kind, `${def.name}: 末尾「${def.tail}」で ${r.kind} になるはずが ${r.kind}`);
+    ok(r.title.endsWith(def.tail), `${def.name}: 名前が末尾で終わらない: ${r.title}`);
+    ok(r.evalResult.segments[r.evalResult.segments.length - 1] === def.tail,
+      `${def.name}: 分割の最後が末尾語でない: ${r.evalResult.segments.join('/')}`);
+    console.log(`  ${def.name.padEnd(4)} → 「${r.title}」 ${r.kind} / ${r.shape}`);
+  }
 }
 
 
@@ -103,25 +155,27 @@ sec('不成文の武器は無効化される');
 {
   const r = freshWeapon(1);
   const wi = r.weapons[0];
-  // 全部空 -> 語が無い -> 不成文。
+  // 全部空 -> 末尾語だけ -> 実質語 1 つ -> 不成文。
   let res = wi.resolve(r.player.stats);
   ok(!res.active, '空スロットで有効になっている');
   ok(res.stats.dmg === 0, `威力が 0 でない: ${res.stats.dmg}`);
   ok(res.reasonText, '理由テキストが無い');
-  ok(res.reason === 'empty', `理由 ${res.reason}`);
+  ok(res.reason === 'onelexeme', `理由 ${res.reason}`);
+  ok(res.fullText === wi.tail, `空のときの文面 ${res.fullText}`);
 
-  // 1 語だけ -> 実質語 1 つ -> 不成文。
+  // 1 語だけ -> 実質語が足りない -> 不成文。
   wi.setSlot(0, makeWord('刃'));
   res = wi.resolve(r.player.stats);
   ok(!res.active, '1 語だけで有効になっている');
-  ok(res.reason === 'onelexeme', `理由 ${res.reason}`);
+  ok(res.reason === 'fewwords', `理由 ${res.reason}`);
 
   // 助詞だけ -> 不成文。
   wi.setSlot(0, makeWord('の'));
   wi.setSlot(1, makeWord('は'));
   const r2 = wi.resolve(r.player.stats);
   ok(!r2.active, '助詞だけの文が成立している');
-  ok(r2.reason === 'noparticle', `理由 ${r2.reason}`);
+  // 末尾語が実質語 1 つぶん残るので noparticle ではなく onelexeme。
+  ok(r2.reason === 'onelexeme', `理由 ${r2.reason}`);
 
   // 2 語 -> 成立。火球 -> 熟語。
   wi.setSlot(0, makeWord('火'));
@@ -440,35 +494,53 @@ sec('語袋が満杯でも語が入る');
   console.log(`  満杯から「雷」を差し替え (${dropped} が消えた)`);
 }
 
-sec('形態語が形と攻撃を決める');
+sec('形と攻撃は末尾語だけが決める');
 {
+  // 武器ごとに末尾語を移し替えれば、攻撃の型が変わる。
+  // 語を並べ替えても、末尾語categorie 動かない。
+  for (const [id, wantShape, wantKind] of [
+    ['sword', 'blade', 'slash'],
+    ['gun', 'shot', 'shot'],
+    ['arrow', 'arrow', 'shot'],
+    ['bomb', 'bomb', 'bomb'],
+    ['orbit', 'blade', 'orbit'],
+    ['thunder', 'shot', 'chain'],
+    ['whip', 'blade', 'whip'],
+    ['aura', 'orb', 'aura'],
+    ['boomerang', 'blade', 'boomerang'],
+    ['beam', 'arrow', 'beam'],
+  ]) {
+    // 解放されているステージで始める。
+    const stage = WEAPONS[id].unlock ? WEAPONS[id].unlock.stage : 1;
+    const r = freshWeapon(stage, [id]);
+    const wi = r.weapons[0];
+    ok(wi && wi.defId === id, `${id}: 武器=${wi && wi.defId} (ステージ ${stage})`);
+    wi.setSlot(0, makeWord(WEAPONS[id].startWord));
+    wi.setSlot(1, makeWord(WEAPONS[id].startWord2));
+    const res = wi.resolve(r.player.stats);
+    ok(res.shape === wantShape, `${id}: 形 ${res.shape} が ${wantShape} でない`);
+    ok(res.kind === wantKind, `${id}: 攻撃 ${res.kind} が ${wantKind} でない`);
+  }
+
+  // 途中の形態語は形も攻撃も変えない。
   const r = freshWeapon(1, ['gun']);
   const wi = r.weapons[0];
-  // 語を並べると、その語が形と攻撃を決める。
   const res = (a, b2) => {
     wi.slots.fill(null);
     wi.setSlot(0, makeWord(a));
     wi.setSlot(1, makeWord(b2));
     return wi.resolve(r.player.stats);
   };
-  ok(res('炎', '矢').shape === 'arrow', '「炎の矢」→ arrow');
-  ok(res('雷', '球').shape === 'orb', '「雷の球」→ orb');
-  ok(res('火', '刃').shape === 'blade', '「火の刃」→ blade');
-  ok(res('火', '矢').shape === 'arrow', '「火の矢」→ arrow');
-  ok(res('火', '弾').shape === 'shot', '「火の弾」→ shot');
-  ok(res('火', '球').shape === 'orb', '「火の球」→ orb');
+  const base = res('火', '弾');
+  ok(base.shape === 'shot' && base.kind === 'shot', `末尾「銃」→ ${base.shape}/${base.kind}`);
+  for (const [a, b2] of [['火', '剣'], ['火', '球'], ['火', '刃'], ['火', '環'], ['火', '壁']]) {
+    const x = res(a, b2);
+    ok(x.shape === base.shape, `「${a}${b2}」で形が ${x.shape} に変わった (末尾は${wi.tail})`);
+    ok(x.kind === base.kind, `「${a}${b2}」で攻撃が ${x.kind} に変わった (末尾は${wi.tail})`);
+  }
+  console.log(`  末尾「${wi.tail}」なら途中の形態語でも形も攻撃も ${base.shape}/${base.kind} のまま`);
 
-  // 攻撃のタイプも形態語から決まる。
-  ok(res('火', '剣').kind === 'slash', '「火の剣」→ slash');
-  ok(res('火', '弾').kind === 'shot', '「火の弾」→ shot');
-  ok(res('火', '爆弾').kind === 'bomb', '「火の爆弾」→ bomb');
-  ok(res('火', '雷').kind === 'chain', '「火の雷」→ chain');
-  ok(res('火', '環').kind === 'orbit', '「火の環」→ orbit');
-  ok(res('火', '壁').kind === 'aura', '「火の壁」→ aura');
-  ok(res('火', '光線').kind === 'beam', '「火の光線」→ beam');
-  ok(res('火', '鞭').kind === 'whip', '「火の鞭」→ whip');
-
-  // 属性も合成語から決まる。
+  // 属性は文中の属性語から決まる (末尾語とは別)。
   ok(res('火', '弾').element === 'fire', '「火の弾」→ fire');
   ok(res('氷', '弾').element === 'ice', '「氷の弾」→ ice');
   ok(res('雷', '弾').element === 'thunder', '「雷の弾」→ thunder');
@@ -482,9 +554,10 @@ sec('形態語が形と攻撃を決める');
   wi.setSlot(2, makeWord('矢'));
   const s3 = wi.resolve(r.player.stats);
   ok(s3.active, `「火の矢」が不成立: ${s3.reasonText}`);
-  ok(s3.shape === 'arrow', '「火の矢」→ arrow');
+  ok(s3.shape === 'shot', `「火の矢銃」で形が ${s3.shape}`);
   ok(s3.element === 'fire', '「火の矢」→ fire');
   ok(s3.stats.burn > 0, '「火の矢」→ 炎上あり');
+  console.log(`  Lv6 の 3 語 → 「${s3.fullText}」 ${s3.kind} / ${s3.shape} / ${s3.element}`);
 }
 
 sec('貫通と拡散が実際に効く');
@@ -582,9 +655,9 @@ sec('武器 1 つにつき複数語を並べられる');
   wi.setSlot(2, makeWord('球'));
   const res = wi.resolve(r.player.stats);
   const ev = res.evalResult;
-  ok(res.valid, `Lv1 の枠で「刃火球」が成立しない: ${res.reasonText}`);
-  ok(res.fullText === '刃火球', `文面 ${res.fullText}`);
-  ok(ev.content === 3, `実質語数 ${ev.content}`);
+  ok(res.valid, `Lv1 の枠で「刃火球${wi.tail}」が成立しない: ${res.reasonText}`);
+  ok(res.fullText === '刃火球' + wi.tail, `文面 ${res.fullText}`);
+  ok(ev.content === 4, `実質語数 ${ev.content}`);
   ok(!!ev.idiom, `熟語「火球」が乗らない: ${ev.idiom}`);
   console.log(`  Lv1 の枠で → 「${res.fullText}」(${res.gradeInfo.name} / 熟語 ${ev.idiom.name})`);
 

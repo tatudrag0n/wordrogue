@@ -358,6 +358,14 @@ code {
   letter-spacing: .1em;
 }
 .wchip .wchip-txt { letter-spacing: .04em; }
+.slot-tail {
+  border-style: solid;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  cursor: default;
+  opacity: 1;
+}
+.slot-tail:hover { transform: none; }
 .wchip.broken {
   border-color: var(--ng);
   background: rgba(72, 18, 30, .95);
@@ -767,6 +775,11 @@ code {
 }
 .lo-card:disabled { opacity: .35; cursor: not-allowed; }
 .lo-name { font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.lo-kind {
+  font-size: .68rem; font-weight: 600; letter-spacing: .06em;
+  color: var(--accent); border: 1px solid currentColor;
+  border-radius: 3px; padding: 0 4px; opacity: .85;
+}
 .lo-core { font-size: .72rem; color: var(--fg-mute); }
 .lo-desc { font-size: .76rem; color: var(--fg-dim); margin-top: 3px; }
 .lo-lv {

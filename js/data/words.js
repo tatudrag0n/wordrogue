@@ -195,18 +195,22 @@ const REASONS = {
   onelexeme:  '実質語が 1 つだけ。文になっていない',
   unseg:      '辞書にある語に分割できない',
   noparticle: '助詞だけの羅列。実質語が要る',
+  fewwords:   '実質語が足りない。語を足してください',
 };
 
 /**
  * 語の配列を評価して、文として成立するか判定し、効果を合算する。
  * @param {Array<{text:string}>} words
+ * @param {{minContent?:number}} [opt] 実質語の最低数。既定は 2。
+ *   武器は末尾語 (tail) を文に含めて評価するため、末尾語ぶん余分に要求する。
  * @returns {{
  *   valid:boolean, reason:string, reasonText:string, text:string,
  *   segments:string[], content:number, grade:string, gradeInfo:Object,
  *   element:string, fx:Object, idiom:Object|null, bonusWords:number
  * }}
  */
-export function evaluate(words) {
+export function evaluate(words, opt = {}) {
+  const minContent = opt.minContent || 2;
   const texts = (words || []).map((w) => w.text);
   const joined = texts.join('');
 
@@ -252,15 +256,16 @@ export function evaluate(words) {
     }
   }
 
-  // 成立条件: 実効語 (助詞でない語) が 2 つ以上あること。
+  // 成立条件: 実効語 (助詞でない語) が minContent 個以上あること。
   //   助詞だけの羅列    …「のはが」   -> noparticle
   //   実質語が 1 つだけ …「火の」     -> onelexeme
   // 「火の球」「火球」は実質語が 2 つなので成立する。
-  if (content < 2) {
+  if (content < minContent) {
     return {
       ...base, segments: segs, content, valid: false,
-      reason: content === 0 ? 'noparticle' : 'onelexeme',
-      reasonText: content === 0 ? REASONS.noparticle : REASONS.onelexeme,
+      reason: content === 0 ? 'noparticle' : (content === 1 ? 'onelexeme' : 'fewwords'),
+      reasonText: content === 0 ? REASONS.noparticle
+        : (content === 1 ? REASONS.onelexeme : REASONS.fewwords),
       grade: 'broken', gradeInfo: GRADES.broken,
     };
   }

@@ -149,6 +149,9 @@ const RAW_FORM = `
 殲       form  -  dmg+9  pierce+3  knock+20
 壁       form  -  dmg+6  shield+18  area+10
 棘壁     form  -  dmg+5  area+14  slowImmune+1
+銃       form  -  dmg+7  count+1  speed+40
+弓       form  -  dmg+5  speed+110  pierce+1
+環刃     form  -  dmg+8  pierce+2  bounce+2
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────

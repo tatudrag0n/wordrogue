@@ -138,7 +138,7 @@ export function rollRewards(run, save, opts = {}) {
       glyph: d.name,
       color: 'var(--thunder)',
       name: `${d.name} を手に入れる`,
-      desc: `${d.desc} 開始「${d.startWord}${d.startWord2}」`,
+      desc: `${d.desc} 開始「${d.startWord}${d.startWord2}」・末尾「${d.tail}」`,
       fx: `枠 ${slotsForLevel(d, 1)} 個`,
       apply: () => {
         run.weapons.push(new WeaponInst(id, 1));

@@ -42,6 +42,21 @@ if (syntaxBad) {
   process.exit(1);
 }
 
+// 攻撃の種類にはすべて日本語のラベルがあるはず。raw な kind が
+// UI に出ると「boomerang」のような英字が出るので、ここで止める。
+{
+  const { WEAPONS, KIND_LABEL } = await import(new URL('../js/data/weapons.js', import.meta.url));
+  const kinds = new Set(Object.values(WEAPONS).map((d) => d.kind));
+  const missing = [...kinds].filter((k) => !KIND_LABEL[k]);
+  const notJa = [...kinds].filter((k) => KIND_LABEL[k] && !/[぀-ヿ一-鿿]/.test(KIND_LABEL[k]));
+  console.log(`== 攻撃种別のラベル ==\n  ${kinds.size} 種類 / 日本語なし ${missing.length} / ラベル無し ${notJa.length}`);
+  if (missing.length) console.log('  ' + missing.join(', '));
+  if (missing.length || notJa.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
 const PORT = Number(process.env.PORT || 8099);
 const startServer = process.env.NO_SERVE !== '1';
 

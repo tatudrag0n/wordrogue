@@ -1,11 +1,18 @@
 // ============================================================================
 // ワードローグ — プレイヤー能力の解決
 //
-// 語袋の中の「自身強化語」と、セーブの恒久強化から最終ステータスを作る。
+// 語袋の中の「自身強化語」と、プレイヤー自身の文、セーブの恒久強化から
+// 最終ステータスを作る。
+//
+// 自身の文は武器と同じく、末尾の語 (人) が枠の外に固定で付く。
+// 語を並べ替えても末尾は動かないので、称号は必ず「○○人」になる。
 // ============================================================================
 
-import { WORDS, PARTICLES, evaluate } from '../data/words.js';
+import { WORDS, PARTICLES, evaluate, makeWord } from '../data/words.js';
 import { clamp } from '../core/util.js';
+
+/** プレイヤー自身の文の末尾語。枠の外に固定で付く。 */
+export const SELF_TAIL = '人';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {
@@ -59,13 +66,16 @@ export function resolvePlayerStats(pouch, selfSlots = [], meta = {}) {
     }
   }
 
-  // プレイヤー自身の文。中の語が player を持っていれば足す。
-  // 文が成立していれば文の力を，已成为倍に効く。
-  let selfPower = 1;
-  let selfTitle = '';
-  for (const w of selfSlots) {
-    if (!w) continue;
-    selfTitle += w.text;
+  // プレイヤー自身の文。末尾語 (人) も一緒に評価する。
+  // 中の語が player を持っていれば足す。文が成立していれば文の力が半分だけ効く。
+  const selfFilled = selfSlots.filter(Boolean);
+  const selfAll = [...selfFilled, makeWord(SELF_TAIL)];
+  const selfTitle = selfAll.map((w) => w.text).join('');
+  // 末尾語はプレイヤーが置いた語ではないので、実質語の要求を 1 つ増やす。
+  const ev = evaluate(selfAll, { minContent: 3 });
+  const selfValid = ev.valid;
+  const selfPower = selfValid ? 1 + (ev.fx.power - 1) * 0.5 : 1;
+  for (const w of selfFilled) {
     const p = w.player || (w.cat === 'buff' ? w.fx : null);
     if (!p) continue;
     for (const [k, v] of Object.entries(p)) {
@@ -73,17 +83,11 @@ export function resolvePlayerStats(pouch, selfSlots = [], meta = {}) {
       s[k] = (s[k] || 0) + v;
     }
   }
-  if (selfSlots.filter(Boolean).length) {
-    const ev = evaluate(selfSlots.filter(Boolean));
-    selfPower = ev.valid ? 1 + (ev.fx.power - 1) * 0.5 : 1;
-    s.selfTitle = selfTitle;
-    s.selfValid = ev.valid;
-    s.selfPower = selfPower;
-  } else {
-    s.selfTitle = '';
-    s.selfValid = false;
-    s.selfPower = 1;
-  }
+  s.selfTitle = selfFilled.length ? selfTitle : '';
+  s.selfValid = selfFilled.length ? selfValid : false;
+  s.selfPower = selfPower;
+  s.selfPowerFx = ev.fx.power;
+  s.selfSegments = ev.segments;
   // 自身の文の力は、攻撃と防御に効く。
   s.atkMul *= selfPower;
   s.armor = clamp(s.armor * selfPower, 0, 0.8);
@@ -128,14 +132,41 @@ export function contentCount(pouch) {
   return n;
 }
 
-/**  player's one-liner for the HUD. */
+/**
+ * HUD に出す能力表示の並びを決める。
+ * 称号は hud-self 側で出るので、ここには数値だけ。
+ * 値が 0 のものは入れない。
+ * @param {typeof BASE_PLAYER} s
+ * @returns {Array<{key:string,label:string,value:string,kind:string}>}
+ */
+export function statRows(s) {
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  const rows = [];
+
+  rows.push({ key: 'atk', label: '攻撃', value: pct(s.atk * s.atkMul), kind: 'up' });
+  rows.push({ key: 'spd', label: '移動', value: String(Math.round(s.spd)), kind: '' });
+  rows.push({ key: 'hp', label: '体力', value: String(Math.round(s.maxHp)), kind: '' });
+  rows.push({ key: 'crit', label: '会心', value: pct(s.crit), kind: '' });
+  rows.push({ key: 'critDmg', label: '会心威力', value: `${s.critDmg.toFixed(2)}倍`, kind: '' });
+  rows.push({ key: 'armor', label: '減傷', value: pct(s.armor), kind: s.armor > 0 ? 'up' : '' });
+
+  // 0 のものは省略する。回復や吸血など、取ったときだけ効くもの。
+  if (s.regen > 0) rows.push({ key: 'regen', label: '回復', value: `${s.regen.toFixed(1)}/s`, kind: 'up' });
+  if (s.lifesteal > 0) rows.push({ key: 'lifesteal', label: '吸血', value: pct(s.lifesteal), kind: 'up' });
+  if (s.shield > 0) rows.push({ key: 'shield', label: 'シールド', value: String(Math.round(s.shield)), kind: 'up' });
+  if (s.magnet > 1.02) rows.push({ key: 'magnet', label: '吸引', value: `${s.magnet.toFixed(1)}倍`, kind: 'up' });
+  if (s.xpMul > 1.02) rows.push({ key: 'xpMul', label: '経験値', value: pct(s.xpMul), kind: 'up' });
+  if (s.slowImmune >= 1) rows.push({ key: 'slowImmune', label: '減速耐性', value: 'あり', kind: 'up' });
+  if (Math.abs(s.size - 1) > 0.02) {
+    rows.push({ key: 'size', label: '大きさ', value: `${s.size.toFixed(2)}倍`, kind: '' });
+  }
+
+  return rows;
+}
+
+/** 1 行のテキストに落とす版 (ログやテスト用)。 */
 export function statLine(s) {
-  return [
-    `攻 ${(s.atk * s.atkMul * 100).toFixed(0)}%`,
-    `速 ${Math.round(s.spd)}`,
-    `会心 ${(s.crit * 100).toFixed(0)}%`,
-    `減傷 ${(s.armor * 100).toFixed(0)}%`,
-  ].join('  ');
+  return statRows(s).map((r) => `${r.label} ${r.value}`).join('  ');
 }
 
 export { BUFF_KEYS };

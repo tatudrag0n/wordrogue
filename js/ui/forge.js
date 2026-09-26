@@ -9,8 +9,9 @@
 // ============================================================================
 
 import { $, el, clear } from '../core/util.js';
-import { WORDS, CATEGORIES, PARTICLES, possibleCompounds, evaluate } from '../data/words.js';
+import { WORDS, CATEGORIES, PARTICLES, possibleCompounds, evaluate, makeWord } from '../data/words.js';
 import { KIND_LABEL } from '../data/weapons.js';
+import { SELF_TAIL } from '../game/stats.js';
 import { keyStats } from '../game/weapon.js';
 
 export class Forge {
@@ -149,7 +150,9 @@ export class Forge {
    */
   renderSelfRow() {
     const p = this.run.player;
-    const ev = evaluate(p.selfSlots.filter(Boolean));
+    const filled = p.selfSlots.filter(Boolean);
+    // 末尾の「人」も含めて文を評価する (resolvePlayerStats と同じ)。
+    const ev = evaluate([...filled, makeWord(SELF_TAIL)], { minContent: 3 });
     const row = el('div', { class: 'wrow wrow-self' + (ev.valid ? ' ' + ev.grade : ' broken') });
 
     row.append(el('div', { class: 'wrow-head' },
@@ -159,15 +162,15 @@ export class Forge {
         ev.valid ? ev.gradeInfo.name : '不成文'),
     ));
 
-    if (!ev.valid && p.selfSlots.some(Boolean)) {
+    if (!ev.valid && filled.length) {
       row.append(el('div', { class: 'wrow-why' },
-        `${ev.reasonText} — 自身強化の語を 2 つ以上並べると文になる。`));
+        `${ev.reasonText} — 枠の語を 2 つ以上並べると文になる。`));
     }
 
-    row.append(this.renderSlots({ slots: p.selfSlots }, (i) => this.onSelfSlotClick(i)));
+    row.append(this.renderSlots({ slots: p.selfSlots, tail: SELF_TAIL }, (i) => this.onSelfSlotClick(i)));
 
-    // 文面。
-    const joined = p.selfSlots.filter(Boolean).map((w) => w.text).join('');
+    // 文面。末尾の「人」は枠の外に固定で付く。
+    const joined = p.selfSlots.filter(Boolean).map((w) => w.text).join('') + SELF_TAIL;
     const right = el('span', { class: 'sn-res' },
       el('span', { class: 'sn-eq' }, '= '),
       el('b', { class: 'sn-text' }, joined || '—'),

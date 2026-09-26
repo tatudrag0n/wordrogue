@@ -2,8 +2,9 @@
 // ワードローグ — HUD
 // ============================================================================
 
-import { $, el, clamp, fmtNum, fmtTime } from '../core/util.js';
+import { $, el, clear, clamp, fmtNum, fmtTime } from '../core/util.js';
 import { KIND_LABEL } from '../data/weapons.js';
+import { statRows } from '../game/stats.js';
 
 export class Hud {
   constructor() {
@@ -29,6 +30,7 @@ export class Hud {
     this.hudPaused = $('#hudPaused');
 
     this._chipNodes = [];
+    this._statNodes = null;
     this._lastHint = '';
   }
 
@@ -42,6 +44,7 @@ export class Hud {
    */
   update(run, onChipClick) {
     const p = run.player;
+    const s = p.stats;
 
     // HP / シールド
     const hpPct = clamp(p.hp / p.maxHp, 0, 1) * 100;
@@ -67,20 +70,22 @@ export class Hud {
     const selfTitle = p.stats.selfTitle || '';
     if (selfTitle) {
       this.hudSelf.hidden = false;
-      this.hudSelf.textContent = selfTitle;
+      clear(this.hudSelf);
+      this.hudSelf.append(
+        el('span', { class: 'hud-self-mark' }, '称号'),
+        el('b', { class: 'hud-self-text' }, selfTitle),
+        el('span', { class: 'hud-self-pow' }, `文の力 x${p.stats.selfPower.toFixed(2)}`),
+      );
       this.hudSelf.classList.toggle('invalid', p.stats.selfValid === false);
       this.hudSelf.title = p.stats.selfValid
         ? `自身の文「${selfTitle}」— 文の力が攻撃と防御に効く`
-        : `自身の文「${selfTitle}」— 不成文。実質語を 2 つ以上並べよう`;
+        : `自身の文「${selfTitle}」— 不成文。枠の語を 2 つ以上並べよう`;
     } else {
       this.hudSelf.hidden = true;
     }
 
-    // 能力
-    const s = p.stats;
-    this.hudStats.textContent =
-      `攻 ${Math.round(s.atk * s.atkMul * 100)}%  速 ${Math.round(s.spd)}  ` +
-      `会心 ${(s.crit * 100).toFixed(0)}%  減傷 ${(s.armor * 100).toFixed(0)}%`;
+    // 能力。ラベルと数値を別の要素にして、桁がずれても読み分けられるようにする。
+    this.renderStats(s);
 
     // ステージ / 制限時間
     this.hudStage.textContent = `第 ${run.stage.id} 戦・${run.stage.name}`;
@@ -156,6 +161,33 @@ export class Hud {
         ? `${wi.def.name}「${res.fullText}」 — ${res.gradeInfo.name} / `
           + `${KIND_LABEL[res.kind] || res.kind} / 威力 ${res.stats.dmg.toFixed(0)}`
         : `不成文: ${res.reasonText}`;
+    }
+  }
+
+  /**
+   * 能力表示。ラベルと数値を別の要素にして、桁がずれても読み分けられるようにする。
+   * 並びが変わらないので、更新は中身のテキストだけ差し替える。
+   */
+  renderStats(s) {
+    const rows = statRows(s);
+    if (!this._statNodes || this._statNodes.length !== rows.length) {
+      clear(this.hudStats);
+      this._statNodes = rows.map((r) => {
+        const node = el('div', { class: 'statbox' },
+          el('span', { class: 'statbox-k' }, r.label),
+          el('b', { class: 'statbox-v' }, r.value),
+        );
+        this.hudStats.append(node);
+        return { node, k: node.querySelector('.statbox-k'), v: node.querySelector('.statbox-v') };
+      });
+    }
+    for (let i = 0; i < rows.length; i++) {
+      const { node, k, v } = this._statNodes[i];
+      const r = rows[i];
+      k.textContent = r.label;
+      v.textContent = r.value;
+      node.className = 'statbox' + (r.kind ? ` ${r.kind}` : '');
+      node.title = `${r.label} ${r.value}`;
     }
   }
 }

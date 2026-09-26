@@ -90,9 +90,11 @@ export function makePickup(x, y, kind, value) {
     type: kind,      // 'xp' | 'heal' | 'magnet' | 'shield' | 'coin'
     value: value || 1,
     t: 0,
-    life: 24,
+    // 経験値は life を 0 にして切らない。拾えなかった分が消えるのはきつい。
+    life: kind === 'xp' ? 0 : 30,
     vx: (Math.random() - 0.5) * 90,
     vy: (Math.random() - 0.5) * 90,
+    pulling: 0,      // 1 なら吸引中 (描画で光らせる)
     dead: false,
   };
 }

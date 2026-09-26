@@ -25,6 +25,11 @@ export const DASH_MULT = 3.1;           // 移動速度の 3.1 倍
 export const STAMINA_REGEN = 26;        // 回復は毎秒 26
 export const DASH_RECOVER_DELAY = 0.28; // ダッシュをやめてから回復が始まるまでの秒数
 
+// 経験値などのピックアップ。吸引の効き方と、軌道が暴れないための上限。
+export const PICKUP_MAGNET = 120;   // 吸引が掛かり始める距離 (px)
+export const PICKUP_VMAX = 430;      // 吸引中の最高速度 (px/s)
+export const PICKUP_STEER = 9;       // 目標速度へ寄る速さ (大きいほど不离れない)
+
 export class Run {
   /**
    * @param {object} opt
@@ -813,21 +818,35 @@ export class Run {
 
   pickupTick(dt) {
     const p = this.player;
-    const magnet = 76 * (p.stats.magnet || 1) * (1 + this.magnetPulse);
+    const magnet = PICKUP_MAGNET * (p.stats.magnet || 1) * (1 + this.magnetPulse);
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const q = this.pickups[i];
       q.t += dt;
-      q.life -= dt;
-      if (q.life <= 0) { this.pickups.splice(i, 1); continue; }
+        // 経験値は拾えなかったら消えるべきではない。
 
-      const d = Math.hypot(p.x - q.x, p.y - q.y);
-      if (d < magnet) {
-        const a = Math.atan2(p.y - q.y, p.x - q.x);
-        const pull = (1 - d / magnet) * 950;
-        q.vx += Math.cos(a) * pull * dt;
-        q.vy += Math.sin(a) * pull * dt;
+      if (q.life > 0) {
+        q.life -= dt;
+        if (q.life <= 0) { this.pickups.splice(i, 1); continue; }
+      }
+
+      const dx = p.x - q.x, dy = p.y - q.y;
+      const d = Math.hypot(dx, dy);
+      if (d < magnet && d > 0.001) {
+        // 加速し放題にしていたのが振動の原因だった。
+        // 速度を「目標値に寄せる」形に変える。
+        // 目標速度は遠いほど速く、近いほど遅くするので、
+        // 通り過ぎたり引き返されたりせず、するすると为中心的滑る。
+        const t = 1 - d / magnet;
+        const target = PICKUP_VMAX * (0.30 + 0.70 * t);
+        const a = Math.atan2(dy, dx);
+        const k = 1 - Math.exp(-PICKUP_STEER * dt);
+        q.vx += (Math.cos(a) * target - q.vx) * k;
+        q.vy += (Math.sin(a) * target - q.vy) * k;
+        q.pulling = 1;
       } else {
-        q.vx *= 0.94; q.vy *= 0.94;
+        const damp = Math.exp(-3.2 * dt);
+        q.vx *= damp; q.vy *= damp;
+        q.pulling = 0;
       }
       q.x += q.vx * dt;
       q.y += q.vy * dt;
@@ -843,6 +862,7 @@ export class Run {
     const p = this.player;
     if (q.type === 'xp') {
       p.xp += q.value * (p.stats.xpMul || 1);
+      this.audio.xp();
       while (p.xp >= p.xpNext) {
         p.xp -= p.xpNext;
         p.level++;

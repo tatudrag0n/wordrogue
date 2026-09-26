@@ -221,7 +221,8 @@ const selfRow = await evalJs('!!document.querySelector("#forgeWeapons .wrow-self
 ok(selfRow, 'プレイヤー自身の文の行が無い');
 const slots = await evalJs('document.querySelectorAll("#forgeWeapons .slot").length');
 // 自身 4 + 武器 2 x (枠 4 + 末尾語 1)
-ok(slots === 14, `枠の数: ${slots} (自身 4 + 武器 2 x 5 = 14)`);
+// 自身 4 + 末尾語 1、武器 2 x (枠 4 + 末尾語 1)
+ok(slots === 15, `枠の数: ${slots} (自身 5 + 武器 2 x 5 = 15)`);
 
 sec('末尾語が枠の外に固定で出ていること');
 {
@@ -230,17 +231,18 @@ sec('末尾語が枠の外に固定で出ていること');
     return {
       defs: app.run.weapons.map(w => ({ id: w.defId, tail: w.tail, title: w.title })),
       shown: [...document.querySelectorAll('#forgeWeapons .slot-tail')].map(n => n.textContent),
-      locked: [...document.querySelectorAll('#forgeWeapons .slot-tail')].length,
       texts: [...document.querySelectorAll('#forgeWeapons .sn-text')].map(n => n.textContent),
     };
   })()`);
-  ok(tails.shown.length === 2, `末尾語 displayed が ${tails.shown.length} 個`);
+  // 自身 1 + 武器 2 = 3 つ。
+  ok(tails.shown.length === 3, `末尾語が ${tails.shown.length} 個 (自身 1 + 武器 2)`);
+  ok(tails.shown.includes('人'), `自身の末尾語「人」が表示されていない: ${tails.shown.join(',')}`);
   for (const w of tails.defs) {
     ok(tails.shown.includes(w.tail), `末尾語「${w.tail}」が表示されていない: ${tails.shown.join(',')}`);
     ok(w.title.endsWith(w.tail), `名前が末尾語で終わっていない: ${w.title}`);
   }
   for (const t of tails.texts) {
-    if (t !== '—' && t !== '頑強疾走人') ok(/[一-龥]$/.test(t), `文面が末尾で終わっていない: ${t}`);
+    if (t !== '—') ok(/[一-龥]$/.test(t), `文面が末尾で終わっていない: ${t}`);
   }
   console.log(`    末尾語: ${tails.shown.join(' / ')} / 文面: ${tails.texts.join(' | ')}`);
 }
@@ -334,9 +336,9 @@ sec('プレイヤー自身の文で称号ができる');
     const run = window.__wordrogue.run;
     const p = run.player;
     p.selfSlots.fill(null);
+    // 「人」は枠の外に固定で付くので、枠には入れない。
     p.selfSlots[0] = m.makeWord('頑強');
     p.selfSlots[1] = m.makeWord('疾走');
-    p.selfSlots[2] = m.makeWord('人');
     run.refreshStats();
     return {
       title: p.stats.selfTitle,
@@ -353,8 +355,28 @@ sec('プレイヤー自身の文で称号ができる');
   ok(res.armor > 0, `装甲が乗っていない: ${res.armor}`);
   await sleep(200);
   const shown = await evalJs('document.getElementById("hudSelf").textContent');
-  ok(shown === '頑強疾走人', `HUD に称号が出ていない: ${shown}`);
-  console.log(`    称号「${res.title}」 文の力 x${res.power.toFixed(2)} / 装甲 ${res.armor.toFixed(2)}`);
+  ok(shown.includes('頑強疾走人'), `HUD に称号が出ていない: ${shown}`);
+  ok(shown.includes('称号'), `HUD の称号ラベルが無い: ${shown}`);
+  ok(/文の力 x[\d.]+/.test(shown), `HUD に文の力が出ていない: ${shown}`);
+  console.log(`    称号「${res.title}」 文の力 x${res.power.toFixed(2)} / 装甲 ${res.armor.toFixed(2)} / HUD ${shown.trim()}`);
+
+  // 末尾の「人」は固定。並べ替えても外れない。
+  const tail = await evalJs(`(async () => {
+    const m = await import(new URL('js/data/words.js', document.baseURI).href);
+    const run = window.__wordrogue.run;
+    const p = run.player;
+    p.selfSlots[0] = m.makeWord('鋼');
+    p.selfSlots[1] = m.makeWord('疾');
+    run.refreshStats();
+    const a = p.stats.selfTitle;
+    [p.selfSlots[0], p.selfSlots[1]] = [p.selfSlots[1], p.selfSlots[0]];
+    run.refreshStats();
+    return { a, b: p.stats.selfTitle, slots: p.selfSlots.filter(Boolean).length };
+  })()`);
+  ok(tail.a === '鋼疾人', `末尾の「人」が付かない: ${tail.a}`);
+  ok(tail.b === '疾鋼人', `入れ替えると末尾が変わる: ${tail.b}`);
+  ok(tail.slots === 2, `枠に「人」を入れてしまった: ${tail.slots}`);
+  console.log(`    並べ替え → 「${tail.a}」→「${tail.b}」 末尾は人固定`);
 }
 
 sec('描画で例外が出てもプレイヤーが消えない');

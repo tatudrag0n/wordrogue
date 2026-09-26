@@ -1,9 +1,11 @@
 // ヘッドレスで 1 ステージを最後まで回すテスト。  node test/sim.test.js
 // DOM を使わないので Node でそのまま実行できる。
-import { Run } from '../js/game/run.js';
+import { Run, PICKUP_VMAX, PICKUP_MAGNET } from '../js/game/run.js';
 import { makeWord, WORDS } from '../js/data/words.js';
 import { WEAPONS } from '../js/data/weapons.js';
 import { WeaponInst } from '../js/game/weapon.js';
+import { makePickup } from '../js/game/entities.js';
+import { SELF_TAIL, resolvePlayerStats } from '../js/game/stats.js';
 import { STAGES } from '../js/data/stages.js';
 import { makeRng } from '../js/core/util.js';
 
@@ -440,6 +442,110 @@ sec('入力なし・移動を止められる');
   for (let i = 0; i < 60 * 8; i++) r4.update(1 / 60, dash);
   ok(r4.player.stamina < 2, `スタミナが切れなかった: ${r4.player.stamina}`);
   ok(!r4.player.dashing, 'スタミナ切れでもダッシュしたまま');
+}
+
+sec('自身の文の末尾は「人」で固定');
+{
+  const r = freshWeapon(1);
+  const p = r.player;
+  p.selfSlots.fill(null);
+
+  // 称号は空。
+  r.refreshStats();
+  ok(p.stats.selfTitle === '', `称号が最初から入っている: ${p.stats.selfTitle}`);
+
+  // 1 語では不成文。末尾の「人」だけでは文にならない。
+  p.selfSlots[0] = makeWord('頑強');
+  r.refreshStats();
+  ok(p.stats.selfValid === false, '1 語で称号が成立している');
+  ok(p.stats.selfTitle === '頑強人', `称号が「${p.stats.selfTitle}」`);
+
+  // 2 語で成立。末尾は「人」。
+  p.selfSlots[1] = makeWord('疾走');
+  r.refreshStats();
+  ok(p.stats.selfValid === true, '2 語で称号が成立しない');
+  ok(p.stats.selfTitle === '頑強疾走人', `称号が「${p.stats.selfTitle}」`);
+  ok(p.stats.selfTitle.endsWith(SELF_TAIL), `末尾が「${SELF_TAIL}」でない: ${p.stats.selfTitle}`);
+
+  // 並べ替えても末尾は動かない。
+  [p.selfSlots[0], p.selfSlots[1]] = [p.selfSlots[1], p.selfSlots[0]];
+  r.refreshStats();
+  ok(p.stats.selfTitle === '疾走頑強人', `並べ替えで称号が変わらない: ${p.stats.selfTitle}`);
+
+  // 「人」を枠に入れても二重にはならない (末尾は別枠)。
+  const n = p.selfSlots.filter(Boolean).length;
+  ok(n === 2, `枠の数が変わっている: ${n}`);
+
+  // 称号の力がattackと防御に効く。
+  ok(p.stats.atkMul > 1, `攻撃に称号の力が乗っていない: ${p.stats.atkMul}`);
+  ok(p.stats.armor > 0, `防御に称号の力が乗っていない: ${p.stats.armor}`);
+
+  // 分割の最後が「人」。
+  const seg = p.stats.selfSegments;
+  ok(seg[seg.length - 1] === SELF_TAIL, `分割の最後が「${SELF_TAIL}」でない: ${seg.join('/')}`);
+
+  // resolvePlayerStats を直接呼んでも同じ称号。
+  const direct = resolvePlayerStats([], p.selfSlots, {});
+  ok(direct.selfTitle === '疾走頑強人', `直接呼んだ称号が「${direct.selfTitle}」`);
+
+  console.log(`  「${p.stats.selfTitle}」 文の力 x${p.stats.selfPower.toFixed(2)} / ${seg.join('/')} / 攻撃 x${p.stats.atkMul.toFixed(2)}`);
+}
+
+sec('経験値の吸引が暴れない');
+{
+  // 吸引力の中で速度が天井を超えないこと。超えると通り過ぎて振動する。
+  const r = freshWeapon(1);
+  const p = r.player;
+  p.x = 0; p.y = 0;
+  r.pickups.length = 0;
+
+  let maxSpeed = 0;
+  let overshoot = 0;
+  for (let i = 0; i < 20; i++) {
+    // 吸引力の中の範囲に並べる。外のものはそもそも寄ってこない。
+    const a = (i / 20) * Math.PI * 2;
+    r.pickups.push(makePickup(Math.cos(a) * (40 + i * 3), Math.sin(a) * (40 + i * 3), 'xp', 1));
+  }
+  // 各オーブの「 지금까지の最短距離」を持つ。
+  const closest = new Map();
+  for (const q of r.pickups) closest.set(q, Math.hypot(q.x, q.y));
+  for (let f = 0; f < 240; f++) {
+    r.pickupTick(1 / 60);
+    for (const q of r.pickups) {
+      maxSpeed = Math.max(maxSpeed, Math.hypot(q.vx, q.vy));
+      const d = Math.hypot(q.x, q.y);
+      const c = closest.get(q);
+      // 近づいてから、また遠ざかる = 通り過ぎ。
+      if (c < 26 && d > c + 22) overshoot++;
+      if (d < c) closest.set(q, d);
+    }
+  }
+  ok(maxSpeed <= PICKUP_VMAX + 1, `速度が天井を超えた: ${maxSpeed.toFixed(0)} > ${PICKUP_VMAX}`);
+  ok(overshoot === 0, `通り過ぎ ${overshoot} 回`);
+  ok(r.pickups.length === 0, `吸引されずに残った: ${r.pickups.length}`);
+  console.log(`  最高速度 ${maxSpeed.toFixed(0)} (天井 ${PICKUP_VMAX}) / 通り越し ${overshoot} / 20 個回収`);
+
+  // 吸引力の外では動かない。
+  const r2 = freshWeapon(1);
+  r2.player.x = 0; r2.player.y = 0;
+  r2.pickups.length = 0;
+  r2.pickups.push(makePickup(PICKUP_MAGNET + 200, 0, 'xp', 1));
+  const far = r2.pickups[0];
+  const x0 = far.x;
+  for (let f = 0; f < 60; f++) r2.pickupTick(1 / 60);
+  ok(Math.abs(far.x - x0) < 12, `吸引力の外で引き寄せられた: ${(far.x - x0).toFixed(1)} px`);
+
+  // 経験値は時間切れで消えない。
+  const r3 = freshWeapon(1);
+  r3.pickups.length = 0;
+  const xp = makePickup(0, 0, 'xp', 1);
+  xp.life = 0;
+  r3.pickups.push(xp);
+  for (let f = 0; f < 60 * 60; f++) r3.pickupTick(1 / 60);
+  ok(r3.pickups.includes(xp) || r3.player.xp > 0, '経験値が時間切れで消えた');
+  ok(makePickup(0, 0, 'xp', 1).life === 0, '経験値の life が 0 でない');
+  ok(makePickup(0, 0, 'heal', 1).life > 0, '回復の life が 0 になった');
+  console.log('  経験値は切らない / 回復は 30 秒');
 }
 
 sec('レベルアップでことばが獲得できる');

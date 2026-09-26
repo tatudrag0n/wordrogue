@@ -203,24 +203,27 @@ code {
   background: #0b0f18;
   border: 1px solid var(--line);
   border-radius: 5px;
-  overflow: hidden;
+  /* 文字を外に出るので切り詰めない。丸い角は fill 側で確保する。 */
+  overflow: visible;
 }
 .bar-fill {
   position: absolute; inset: 0 auto 0 0;
   width: 100%;
+  border-radius: 4px 0 0 4px;
   background: linear-gradient(180deg, #ff6b81, #d92d47);
   transition: width .12s linear;
 }
 .bar-shield {
   position: absolute; inset: 0 auto 0 0;
   width: 0;
+  border-radius: 4px 0 0 4px;
   background: linear-gradient(180deg, #9ae6ff, #3aa9d8);
   opacity: .85;
   transition: width .12s linear;
 }
-.bar-xp { height: 13px; }
+.bar-xp { height: 14px; }
 .bar-xp .bar-fill { background: linear-gradient(180deg, #ffe98a, #e8b425); }
-.bar-sta { height: 9px; }
+.bar-sta { height: 10px; }
 .bar-sta .bar-fill {
   background: linear-gradient(180deg, #a8f0c0, #3fbf6a);
   transition: width .06s linear;
@@ -231,17 +234,44 @@ code {
 
 .hud-self {
   align-self: flex-start;
-  font-size: .82rem;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  font-size: .92rem;
   font-weight: 700;
-  letter-spacing: .1em;
+  letter-spacing: .12em;
   color: #ffe9a8;
-  background: rgba(8, 11, 18, .82);
+  background: rgba(8, 11, 18, .86);
   border: 1px solid rgba(255, 212, 59, .45);
-  border-radius: 999px;
-  padding: 2px 10px;
+  border-radius: 8px;
+  padding: 3px 10px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
 }
+.hud-self-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hud-self-mark {
+  font-size: .64rem;
+  font-weight: 600;
+  letter-spacing: .14em;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
+  opacity: .85;
+}
+.hud-self-pow {
+  font-family: var(--mono);
+  font-size: .68rem;
+  font-weight: 600;
+  color: #c7d3e8;
+  letter-spacing: .02em;
+}
 .hud-self.invalid { color: #ffb3c1; border-color: rgba(255, 84, 112, .5); }
+.hud-self.invalid .hud-self-pow { color: #ffb3c1; }
 .bar-text {
   position: absolute; inset: 0;
   display: grid; place-items: center;
@@ -250,26 +280,60 @@ code {
   text-shadow: 0 1px 2px rgba(0,0,0,.85);
   letter-spacing: .04em;
 }
+/* 細いバー (経験値 / スタミナ) には、中に文字を入れると読めない。
+   右の外へ出して、横に並べる。 */
+.bar-xp .bar-text,
+.bar-sta .bar-text {
+  inset: 50% auto auto 100%;
+  transform: translate(7px, -50%);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(8, 11, 18, .8);
+  font-size: .68rem;
+  color: #e8f0ff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .95);
+  white-space: nowrap;
+}
 
 .hud-stats {
   align-self: flex-start;
-  font-size: .74rem;
-  color: #c7d3e8;
-  font-family: var(--mono);
-  letter-spacing: .02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   max-width: 100%;
   /* 背景が黒いので、必ず読める土台を置く。 */
-  padding: 3px 9px;
-  border-radius: 999px;
+  padding: 4px;
+  border-radius: 8px;
   background: rgba(8, 11, 18, .78);
   border: 1px solid rgba(58, 71, 97, .8);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+}
+
+/* 能力 1 項目。ラベルは小さく淡く、数値は大きく明るく。 */
+.statbox {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .04);
+  white-space: nowrap;
+}
+.statbox-k {
+  font-size: .68rem;
+  color: #8ea0bd;
+  letter-spacing: .08em;
+}
+.statbox-v {
+  font-family: var(--mono);
+  font-size: .84rem;
+  font-weight: 700;
+  color: #e8f0ff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
 }
+.statbox.up .statbox-v { color: #8ce99a; }
+.statbox.up { background: rgba(140, 233, 154, .10); }
 
 .hud-stage {
   font-size: .8rem;

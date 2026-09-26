@@ -213,15 +213,30 @@ export class Renderer {
     const g = this.ctx;
     for (const q of run.pickups) {
       const bob = Math.sin(q.t * 6) * 2;
-      const fade = q.life < 3 ? (Math.floor(q.life * 8) % 2 ? 0.3 : 1) : 1;
+      // life が 0 (消えないもの) は点滅させない。
+      const fade = q.life > 0 && q.life < 3 ? (Math.floor(q.life * 8) % 2 ? 0.3 : 1) : 1;
+      const y = q.y + bob;
+
+      // 吸引中は軌道が読めるように尾を引く。
+      if (q.pulling) {
+        const sp = Math.hypot(q.vx, q.vy);
+        g.globalAlpha = fade * 0.5;
+        g.strokeStyle = q.type === 'heal' ? '#7dff9b' : '#ffd43b';
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(q.x, y);
+        g.lineTo(q.x - (q.vx / (sp || 1)) * 16, y - (q.vy / (sp || 1)) * 16);
+        g.stroke();
+      }
+
       g.globalAlpha = fade;
       g.fillStyle = q.type === 'heal' ? '#7dff9b' : '#ffd43b';
       g.beginPath();
-      g.arc(q.x, q.y + bob, q.r, 0, TAU);
+      g.arc(q.x, y, q.r, 0, TAU);
       g.fill();
       g.globalAlpha = fade * 0.35;
       g.beginPath();
-      g.arc(q.x, q.y + bob, q.r * 2.2, 0, TAU);
+      g.arc(q.x, y, q.r * 2.2, 0, TAU);
       g.fill();
     }
     g.globalAlpha = 1;

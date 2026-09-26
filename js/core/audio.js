@@ -103,6 +103,7 @@ export class Audio {
   }
 
   // ── ゲーム用の効果音 ─────────────────────────────────────────────────────
+  _xpAt = -1;   // 最後に経験値の音を鳴らした時刻
   hit()     { this.noise({ dur: 0.07, vol: 0.10, hp: 900, lp: 5200 }); }
   slash()   { this.noise({ dur: 0.11, vol: 0.11, hp: 1600, lp: 7000 }); this.tone({ freq: 900, type: 'sawtooth', dur: 0.06, vol: 0.05, slide: 0.4 }); }
   shoot()   { this.tone({ freq: 1500, type: 'square', dur: 0.05, vol: 0.05, slide: 0.35 }); }
@@ -110,6 +111,16 @@ export class Audio {
   hurt()    { this.tone({ freq: 260, type: 'sawtooth', dur: 0.2, vol: 0.16, slide: 0.42 }); this.noise({ dur: 0.16, vol: 0.12, hp: 200, lp: 2600 }); }
   kill()    { this.tone({ freq: 700, type: 'square', dur: 0.07, vol: 0.07, slide: 1.5 }); }
   pickup()  { this.tone({ freq: 880, type: 'sine', dur: 0.09, vol: 0.10 }); this.tone({ freq: 1320, type: 'sine', dur: 0.11, vol: 0.08, delay: 0.06 }); }
+  /**
+   * 経験値を拾ったとき。同時に何十個も届くので、
+   * 小音量にして、短い間隔では 1 回にまとめる。
+   */
+  xp() {
+    const now = this.ctx ? this.ctx.currentTime : 0;
+    if (now - this._xpAt < 0.055) return;
+    this._xpAt = now;
+    this.tone({ freq: 1560, type: 'sine', dur: 0.05, vol: 0.035 });
+  }
   levelup() { [0, 4, 7, 12].forEach((n, i) => this.tone({ freq: hz(69 + n), type: 'triangle', dur: 0.18, vol: 0.12, delay: i * 0.07 })); }
 
   /** 文が成立したとき。pleasant な 2 音。 */

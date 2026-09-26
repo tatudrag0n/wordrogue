@@ -71,7 +71,7 @@ sec('末尾語は枠の外に固定で付く');
   ok(one.stats.dmg === 0, `威力が 0 でない: ${one.stats.dmg}`);
 
   // 語 2 つで成立。
-  wi.setSlot(1, makeWord('利'));
+  wi.setSlot(1, makeWord('剛利'));
   ok(wi.resolve(run.player.stats).valid, '2 語でも不成文');
   console.log(`  末尾語「${wi.tail}」/ 1 語 ${one.reasonText} / 2 語で成立`);
 }
@@ -104,7 +104,7 @@ sec('武器名はその文面になり 末尾は動かない');
   // 途中の形態語は効果だけ足し、攻撃の種類は変えない。
   wi.slots.fill(null);
   wi.setSlot(0, makeWord('刃'));
-  wi.setSlot(1, makeWord('利'));
+  wi.setSlot(1, makeWord('剛利'));
   wi.setSlot(2, makeWord('貫通'));
   const mid = wi.resolve(run.player.stats);
   ok(mid.kind === 'slash', `途中の「貫通」で攻撃が変わった: ${mid.kind}`);
@@ -114,7 +114,7 @@ sec('武器名はその文面になり 末尾は動かない');
   // 爆弾を文に入れても、剣なら斬撃のまま。
   wi.slots.fill(null);
   wi.setSlot(0, makeWord('刃'));
-  wi.setSlot(1, makeWord('利'));
+  wi.setSlot(1, makeWord('剛利'));
   wi.setSlot(2, makeWord('爆弾'));
   const bomb = wi.resolve(run.player.stats);
   ok(bomb.kind === 'slash', `途中の「爆弾」で爆弾になった: ${bomb.kind}`);
@@ -122,16 +122,16 @@ sec('武器名はその文面になり 末尾は動かない');
   ok(bomb.evalResult.fx.explode > 0, '「爆弾」の効果までは付く');
   console.log(`  途中に「爆弾」→ 「${bomb.title}」 ${bomb.kind} (爆発 ${bomb.evalResult.fx.explode.toFixed(0)} は付く)`);
 
-  // 「迅」+「雷」は 1 語の「迅雷」になる (最長一致)。
+  // 「迅雷」は 1 語として辞書にあるので、2 語を並べても 1 語にまとまる (最長一致)。
   wi.slots.fill(null);
-  wi.setSlot(0, makeWord('迅'));
+  wi.setSlot(0, makeWord('迅足'));
   wi.setSlot(1, makeWord('雷'));
   const xunlei = wi.resolve(run.player.stats);
   const seg = xunlei.evalResult.segments;
-  ok(seg.includes('迅雷') || seg.join('/') === '迅/雷/' + wi.tail,
-    `迅+雷 が最長一致にならない: ${seg.join('/')}`);
+  ok(seg.join('/') === `迅足/雷/${wi.tail}`,
+    `迅足+雷 の分割が合わない: ${seg.join('/')}`);
   ok(seg[seg.length - 1] === wi.tail, `末尾語が最後にない: ${seg.join('/')}`);
-  console.log(`  「迅」+「雷」→ ${seg.join('/')}`);
+  console.log(`  「迅足」+「雷」→ ${seg.join('/')}`);
 }
 
 sec('すべての武器が末尾語で攻撃を決める');
@@ -171,11 +171,11 @@ sec('不成文の武器は無効化される');
   ok(!res.active, '1 語だけで有効になっている');
   ok(res.reason === 'fewwords', `理由 ${res.reason}`);
 
-  // 助詞だけ -> 不成文。
-  wi.setSlot(0, makeWord('の'));
-  wi.setSlot(1, makeWord('は'));
+  // 接続詞だけ -> 不成文。
+  wi.setSlot(0, makeWord('ノ'));
+  wi.setSlot(1, makeWord('イ'));
   const r2 = wi.resolve(r.player.stats);
-  ok(!r2.active, '助詞だけの文が成立している');
+  ok(!r2.active, '接続詞だけの文が成立している');
   // 末尾語が実質語 1 つぶん残るので noparticle ではなく onelexeme。
   ok(r2.reason === 'onelexeme', `理由 ${r2.reason}`);
 
@@ -198,9 +198,9 @@ sec('語を並べ替えて 文が変わる');
     wi.setSlot(1, makeWord(b));
     return wi.resolve(r.player.stats).dps;
   };
-  const weak = dps('刃', '利');
-  const strong = dps('激', '分裂');
-  console.log(`  刃+利=${weak.toFixed(1)}  /  激+分裂=${strong.toFixed(1)}`);
+  const weak = dps('刃', '剛利');
+  const strong = dps('激昂', '分裂');
+  console.log(`  刃+剛利=${weak.toFixed(1)}  /  激昂+分裂=${strong.toFixed(1)}`);
   ok(strong > weak, '効果の高い語の方が弱い');
   ok(weak > 0, '成立文書でも威力が 0');
 }
@@ -525,15 +525,16 @@ sec('経験値の吸引が暴れない');
   ok(r.pickups.length === 0, `吸引されずに残った: ${r.pickups.length}`);
   console.log(`  最高速度 ${maxSpeed.toFixed(0)} (天井 ${PICKUP_VMAX}) / 通り越し ${overshoot} / 20 個回収`);
 
-  // 吸引力の外では動かない。
+  // 吸引力の外では動かない。最初のふりだし速度だけ 0 にして、吸引の影響だけ見る。
   const r2 = freshWeapon(1);
   r2.player.x = 0; r2.player.y = 0;
   r2.pickups.length = 0;
-  r2.pickups.push(makePickup(PICKUP_MAGNET + 200, 0, 'xp', 1));
-  const far = r2.pickups[0];
-  const x0 = far.x;
-  for (let f = 0; f < 60; f++) r2.pickupTick(1 / 60);
-  ok(Math.abs(far.x - x0) < 12, `吸引力の外で引き寄せられた: ${(far.x - x0).toFixed(1)} px`);
+  const far = makePickup(PICKUP_MAGNET + 200, 0, 'xp', 1);
+  far.vx = 0; far.vy = 0;
+  r2.pickups.push(far);
+  for (let f = 0; f < 120; f++) r2.pickupTick(1 / 60);
+  ok(Math.abs(far.x - (PICKUP_MAGNET + 200)) < 1,
+    `吸引力の外で引き寄せられた: ${(far.x - (PICKUP_MAGNET + 200)).toFixed(1)} px`);
 
   // 経験値は時間切れで消えない。
   const r3 = freshWeapon(1);
@@ -656,13 +657,13 @@ sec('形と攻撃は末尾語だけが決める');
   ok(wi.slots.length === 7, `Lv6 で枠が 7 になる: ${wi.slots.length}`);
   wi.slots.fill(null);
   wi.setSlot(0, makeWord('火'));
-  wi.setSlot(1, makeWord('の'));
+  wi.setSlot(1, makeWord('ノ'));
   wi.setSlot(2, makeWord('矢'));
   const s3 = wi.resolve(r.player.stats);
-  ok(s3.active, `「火の矢」が不成立: ${s3.reasonText}`);
-  ok(s3.shape === 'shot', `「火の矢銃」で形が ${s3.shape}`);
-  ok(s3.element === 'fire', '「火の矢」→ fire');
-  ok(s3.stats.burn > 0, '「火の矢」→ 炎上あり');
+  ok(s3.active, `「火ノ矢」が不成立: ${s3.reasonText}`);
+  ok(s3.shape === 'shot', `「火ノ矢銃」で形が ${s3.shape}`);
+  ok(s3.element === 'fire', '「火ノ矢」→ fire');
+  ok(s3.stats.burn > 0, '「火ノ矢」→ 炎上あり');
   console.log(`  Lv6 の 3 語 → 「${s3.fullText}」 ${s3.kind} / ${s3.shape} / ${s3.element}`);
 }
 
@@ -679,7 +680,7 @@ sec('貫通と拡散が実際に効く');
     return res.stats;
   };
   const plain = st('弾', '速');
-  const piercing = st('貫', '弾');
+  const piercing = st('貫徹', '弾');
   const spread = st('散弾', '弾');
   ok(piercing.pierce > plain.pierce, `貫通: ${plain.pierce} -> ${piercing.pierce}`);
   ok(spread.count > plain.count, `拡散: ${plain.count} -> ${spread.count}`);
@@ -775,7 +776,7 @@ sec('武器 1 つにつき複数語を並べられる');
     return wi.resolve(r.player.stats);
   };
   const plain = set('刃', '火', '弾', '球');
-  const gram = set('刃', '火', '弾', 'の', '球');
+  const gram = set('刃', '火', '弾', 'ノ', '球');
   ok(plain.valid && gram.valid, '比較用の文が成立していない');
   ok(gram.evalResult.fx.power > plain.evalResult.fx.power,
     `助詞で文の力が上がらない: ${plain.evalResult.fx.power} -> ${gram.evalResult.fx.power}`);

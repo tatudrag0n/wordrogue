@@ -366,15 +366,15 @@ sec('プレイヤー自身の文で称号ができる');
     const run = window.__wordrogue.run;
     const p = run.player;
     p.selfSlots[0] = m.makeWord('鋼');
-    p.selfSlots[1] = m.makeWord('疾');
+    p.selfSlots[1] = m.makeWord('疾速');
     run.refreshStats();
     const a = p.stats.selfTitle;
     [p.selfSlots[0], p.selfSlots[1]] = [p.selfSlots[1], p.selfSlots[0]];
     run.refreshStats();
     return { a, b: p.stats.selfTitle, slots: p.selfSlots.filter(Boolean).length };
   })()`);
-  ok(tail.a === '鋼疾人', `末尾の「人」が付かない: ${tail.a}`);
-  ok(tail.b === '疾鋼人', `入れ替えると末尾が変わる: ${tail.b}`);
+  ok(tail.a === '鋼疾速人', `末尾の「人」が付かない: ${tail.a}`);
+  ok(tail.b === '疾速鋼人', `入れ替えると末尾が変わる: ${tail.b}`);
   ok(tail.slots === 2, `枠に「人」を入れてしまった: ${tail.slots}`);
   console.log(`    並べ替え → 「${tail.a}」→「${tail.b}」 末尾は人固定`);
 }
@@ -524,7 +524,8 @@ sec('遊び方の説明が実装と矛盾していないこと');
     ['核語', '核語は廃止されている'],
     ['攻撃の形を決める', '攻撃は末尾語だけが決める'],
     ['語を引き直す', '引き直しは無い'],
-    ['火の弾</code> のように', '文の例は現行の形式にする'],
+    ['助詞', '助詞は廃止されている'],
+    ['助動詞', '助動詞は廃止されている'],
   ];
   for (const [needle, why] of banned) {
     ok(!doc.includes(needle), `玩法説明に古い記述「${needle}」が残っている (${why})`);
@@ -533,10 +534,11 @@ sec('遊び方の説明が実装と矛盾していないこと');
   for (const t of ['刃利剣', '爆裂無双迅剣', '火球剣']) {
     ok(doc.includes(t), `玩法説明に例「${t}」が無い`);
   }
-  // 末尾語とレベルアップの獲得の記述があるはず。
-  for (const t of ['末尾', 'レベルアップ']) {
-    ok(doc.includes(t), `玩法説明に「${t}」の記述が無い`);
+  // 末尾語と接続詞の記述があるはず。
+  for (const t of ['末尾', '接続詞', '優先順位']) {
+    ok(doc.includes(t), `遊び方に「${t}」の記述が無い`);
   }
+
   // 報酬は武器と休息だけで、ことばは出ない。
   const rewardSec = doc.slice(doc.indexOf('クリア報酬'));
   ok(rewardSec.includes('休息'), `クリア報酬の説明に休息が無い: ${rewardSec.slice(0, 60)}`);

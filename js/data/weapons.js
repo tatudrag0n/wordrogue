@@ -34,7 +34,7 @@ export const WEAPONS = {
     desc: '扇形を薙ぎ払う。近接の基本。',
     base: { dmg: 9, rate: 1.5, range: 92, arc: 1.9, size: 1, crit: 0.05 },
     grow: { dmg: 3.2, rate: 0.1, range: 4, arc: 0.05 },
-    startWord: '刃', startWord2: '利', maxLevel: 8, startSlots: 4, unlock: null,
+    startWord: '刃', startWord2: '必殺', maxLevel: 8, startSlots: 4, unlock: null,
   },
   gun: {
     id: 'gun', name: '銃', kind: 'shot', glyph: '銃', tail: '銃',
@@ -48,7 +48,7 @@ export const WEAPONS = {
     desc: '貫通して飛ぶ。素直に強い。',
     base: { dmg: 8, rate: 1.1, speed: 420, pierce: 2, size: 1, crit: 0.08, homing: 0 },
     grow: { dmg: 2.8, rate: 0.1, pierce: 0.34, speed: 10 },
-    startWord: '矢', startWord2: '貫', maxLevel: 8, startSlots: 4, unlock: { stage: 1 },
+    startWord: '矢', startWord2: '貫徹', maxLevel: 8, startSlots: 4, unlock: { stage: 1 },
   },
   bomb: {
     id: 'bomb', name: '爆弾', kind: 'bomb', glyph: '爆', tail: '爆弾',
@@ -62,7 +62,7 @@ export const WEAPONS = {
     desc: 'アドレスのまわりに回る刃。',
     base: { dmg: 7, orbit: 2, size: 1, crit: 0.04, rate: 0.5 },
     grow: { dmg: 2.4, orbit: 0.34, size: 0.05 },
-    startWord: '鋼', startWord2: '迅', maxLevel: 8, startSlots: 4, unlock: { stage: 2 },
+    startWord: '鋼', startWord2: '迅足', maxLevel: 8, startSlots: 4, unlock: { stage: 2 },
   },
   thunder: {
     id: 'thunder', name: '雷', kind: 'chain', glyph: '雷', tail: '雷',
@@ -76,7 +76,7 @@ export const WEAPONS = {
     desc: '周囲を薙ぐ。近接の範囲攻撃。',
     base: { dmg: 10, rate: 1.25, range: 130, area: 10, size: 1, knock: 60, crit: 0.05 },
     grow: { dmg: 3.4, rate: 0.1, range: 7, area: 2 },
-    startWord: '嵐', startWord2: '強', maxLevel: 8, startSlots: 4, unlock: { stage: 3 },
+    startWord: '嵐', startWord2: '強力', maxLevel: 8, startSlots: 4, unlock: { stage: 3 },
   },
   aura: {
     id: 'aura', name: '棘壁', kind: 'aura', glyph: '壁', tail: '壁',
@@ -90,7 +90,7 @@ export const WEAPONS = {
     desc: '飛んで戻ってくる刃。貫通する。',
     base: { dmg: 10, rate: 0.9, speed: 300, pierce: 4, bounce: 2, size: 1, crit: 0.06 },
     grow: { dmg: 3.4, rate: 0.1, pierce: 0.34, bounce: 0.3 },
-    startWord: '迅', startWord2: '貫', maxLevel: 8, startSlots: 4, unlock: { stage: 4 },
+    startWord: '刃', startWord2: '貫徹', maxLevel: 8, startSlots: 4, unlock: { stage: 4 },
   },
   beam: {
     id: 'beam', name: '光線', kind: 'beam', glyph: '光', tail: '光線',

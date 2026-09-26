@@ -8,7 +8,7 @@
 // 語を並べ替えても末尾は動かないので、称号は必ず「○○人」になる。
 // ============================================================================
 
-import { WORDS, PARTICLES, evaluate, makeWord } from '../data/words.js';
+import { WORDS, CONNECTOR_SET, evaluate, makeWord } from '../data/words.js';
 import { clamp } from '../core/util.js';
 
 /** プレイヤー自身の文の末尾語。枠の外に固定で付く。 */
@@ -123,11 +123,11 @@ export function pouchSummary(pouch) {
 
 const w = (pouch, text) => pouch.find((x) => x && x.text === text);
 
-/** 語袋の中で「文に使える」語 (助詞でないもの) の数。 */
+/** 語彙の中で「文に使える」語 (接続詞でないもの) の数。 */
 export function contentCount(pouch) {
   let n = 0;
   for (const x of pouch) {
-    if (x && !PARTICLES.has(x.text)) n++;
+    if (x && !CONNECTOR_SET.has(x.text)) n++;
   }
   return n;
 }

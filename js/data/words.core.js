@@ -31,8 +31,7 @@ export const CATEGORIES = {
   modifier: { name: '効果', color: '#9dff5c', weight: 24 },
   verb:     { name: '動詞', color: '#ff8fab', weight: 18 },
   buff:     { name: '自身', color: '#b47bff', weight: 12 },
-  grammar:  { name: '文語', color: '#c8b6ff', weight: 8 },
-  aux:      { name: '助動詞', color: '#8ab4ff', weight: 7 },
+  connect:  { name: '接続', color: '#8ab4ff', weight: 18 },
 };
 
 const RAW_ELEMENT = `
@@ -161,23 +160,23 @@ const RAW_MODIFIER = `
 巨大     modifier  -  size+0.40  area+10  speed-8
 極大     modifier  -  size+0.80  area+22  speed-16  dmg+2
 巨大化   modifier  -  size+0.50  dmg+5  area+12  speed-12
-広       modifier  -  area+14  size+0.15
+広域       modifier  -  area+14  size+0.15
 小的     modifier  -  size-0.35  speed+45  rate+0.4
-迅       modifier  -  rate+0.6
-疾       modifier  -  rate+0.4  speed+35
-緩       modifier  -  rate-0.5  dmg+5  area+10
+迅足       modifier  -  rate+0.6
+疾速       modifier  -  rate+0.4  speed+35
+緩徐       modifier  -  rate-0.5  dmg+5  area+10
 鋭       modifier  -  dmg+6  crit+0.05
 鋭利     modifier  -  dmg+7  crit+0.06
-利       modifier  -  dmg+5  crit+0.03
-強       modifier  -  dmg+8
-激       modifier  -  dmg+12
+剛利       modifier  -  dmg+5  crit+0.03
+強力       modifier  -  dmg+8
+激昂       modifier  -  dmg+12
 破壊     modifier  -  dmg+10  area+8
 執念     modifier  -  dmg+7  rate+0.2
 多       modifier  -  count+2  spread+0.18
 多数     modifier  -  count+4  spread+0.16
 散弾     modifier  -  count+3  spread+0.42
 分裂     modifier  -  split+3
-貫       modifier  -  pierce+2
+貫徹       modifier  -  pierce+2
 追尾     modifier  -  homing+0.35
 導       modifier  -  homing+0.55  speed+20
 誘導     modifier  -  homing+0.70  speed+15
@@ -203,7 +202,7 @@ const RAW_MODIFIER = `
 加速     modifier  -  rate+0.8  speed+30
 減速     modifier  -  chill+0.20
 毒化     modifier  -  poison+4
-蝕       modifier  -  poison+2  pierce+2
+侵蝕       modifier  -  poison+2  pierce+2
 精神     modifier  -  crit+0.06  regen+0.5
 特攻     modifier  -  atkMul+0.10  crit+0.05  pierce+2
 白化     modifier  -  area+20  duration+0.8
@@ -250,68 +249,17 @@ const RAW_BUFF = `
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 文語: 助詞・接続詞。文をつなぐ役目と小さなボーナス。
-// 「火の弾」「雷の矢」のような文を作れる 要。
-// ただし助詞だけの羅列は文として成立しない (実質語が 2 つ以上必要)。
-// ─────────────────────────────────────────────────────────────────────────────
-const RAW_GRAMMAR = `
-の       grammar  -  dmg+1
-は       grammar  -  dmg+1
-が       grammar  -  dmg+1
-を       grammar  -  dmg+1
-に       grammar  -  dmg+1
-で       grammar  -  dmg+1
-と       grammar  -  dmg+1
-も       grammar  -  dmg+1
-や       grammar  -  dmg+1
-へ       grammar  -  dmg+1
-、       grammar  -  dmg+1
-。       grammar  -  dmg+1
-から     grammar  -  dmg+1  speed+12
-まで     grammar  -  dmg+1  pierce+1
-ほど     grammar  -  dmg+1  rate+0.15
-だけ     grammar  -  dmg+1  area+4
-ずつ     grammar  -  dmg+1  size+0.05
-より     grammar  -  dmg+1  crit+0.02
-こそ     grammar  -  dmg+2  crit+0.02
-さえ     grammar  -  dmg+1  shield+6
-ながら   grammar  -  dmg+1  duration+0.4
-ばかり   grammar  -  dmg+1  regen+0.3
-など     grammar  -  dmg+1  magnet+0.2
-さらに   grammar  -  dmg+2  atkMul+0.03
-まだ     grammar  -  dmg+1  rate+0.10
-すぐ     grammar  -  dmg+1  rate+0.20
-よく     grammar  -  dmg+1  crit+0.02
-とても   grammar  -  dmg+2  pierce+1
-かなり   grammar  -  dmg+2  size+0.10
-ずっと   grammar  -  dmg+1  duration+0.6
-ちょっと grammar  -  dmg+1  size-0.10  rate+0.30
-り        grammar  -  dmg+1
-れ        grammar  -  dmg+1
-て        grammar  -  dmg+1
-よ        grammar  -  dmg+1
-な        grammar  -  dmg+1
-のみ      grammar  -  dmg+1  crit+0.01
-つつ      grammar  -  dmg+1  duration+0.3
-ごとに    grammar  -  dmg+1  count+1
-しか      grammar  -  dmg+2
-および    grammar  -  dmg+1  pierce+1
-ほど以上  grammar  -  dmg+1  size+0.05
-てから    grammar  -  dmg+1  rate+0.15
-`;
-
-// ─────────────────────────────────────────────────────────────────────────────
 // 核語: 武器に最初から埋め込まれ、語袋には出ない
 // ただし語袋にも引ける。強い語なので。
 // ─────────────────────────────────────────────────────────────────────────────
 const RAW_CORE = `
-心   modifier  -  dmg+3   rate+0.20
+心意   modifier  -  dmg+3   rate+0.20
 力   modifier  -  dmg+6
-技   modifier  -  crit+0.08  dmg+2
-守   modifier  -  shield+20  regen+0.4
-感   modifier  -  area+10  size+0.15
-縛   modifier  -  slowImmune+1  magnet+0.4
-智   modifier  -  xpMul+0.20  atkMul+0.05
+技巧   modifier  -  crit+0.08  dmg+2
+守護   modifier  -  shield+20  regen+0.4
+感知   modifier  -  area+10  size+0.15
+束縛   modifier  -  slowImmune+1  magnet+0.4
+智慧   modifier  -  xpMul+0.20  atkMul+0.05
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -319,10 +267,35 @@ const RAW_CORE = `
 // 単独でも効果を持つので語袋から引ける。
 // ─────────────────────────────────────────────────────────────────────────────
 const RAW_EXTRA = `
+// ── 接続詞の結合元 (words.connect.js の CONNECT_SOURCES と対になる) ──
+// これらは一文字のまま残す。接続詞が結ぶ先として具体的に必要だから。
+律     modifier  -  dmg+5  rate+0.20
+回帰   modifier  -  dmg+4  bounce+3
+潮流   element  water   dmg+4  speed+50
+呪イ   element  dark    dmg+3  poison+1
+伝説   modifier  -  dmg+6  crit+0.05
+固     modifier  -  dmg+4  armor+2
+硬     modifier  -  dmg+5  armor+3
+早     modifier  -  dmg+3  rate+0.35
+呪縛   element  dark    dmg+3  chain+2
+回避   modifier  -  dmg+3  speed+60  crit+0.03
+思考   modifier  -  dmg+5  crit+0.04
+自律   modifier  -  dmg+4  rate+0.25
+浸食   modifier  -  dmg+5  burn+2
+改造   modifier  -  dmg+6  pierce+3
+催眠   element  dark    dmg+3  chill+2
+失     modifier  -  dmg+3  pierce+2
+荘厳   modifier  -  dmg+5  area+12  armor+2
+断     modifier  -  dmg+5  pierce+4
+穿     modifier  -  dmg+5  pierce+6
+別     modifier  -  dmg+3  split+2
+無敵   modifier  -  dmg+9  crit+0.06
+天下   modifier  -  dmg+7  size+0.20  area+10
+
 一     modifier  -  count+1  dmg+1
 二     modifier  -  count+1  dmg+2
 十     modifier  -  count+3
-百     modifier  -  count+5
+百発     modifier  -  count+5
 千     modifier  -  count+7  spread+0.2
 万     modifier  -  count+9  spread+0.3
 人       buff  -  atk+0.03  spd+0.02
@@ -330,7 +303,7 @@ const RAW_EXTRA = `
 馬     modifier  -  speed+60
 虎     modifier  -  crit+0.08  dmg+6
 穴     modifier  -  pierce+2
-入     modifier  -  homing+0.30
+侵入     modifier  -  homing+0.30
 子     modifier  -  split+2
 卵     modifier  -  pierce+4  dmg-2
 撃     modifier  -  dmg+7  rate+0.3
@@ -374,8 +347,8 @@ const RAW_EXTRA = `
 炭     modifier  -  burn+4
 流     modifier  -  speed+55  homing+0.25
 星     modifier  -  count+2  crit+0.05
-無     modifier  -  dmg+5  atkMul+0.06
-双     modifier  -  count+3
+無形     modifier  -  dmg+5  atkMul+0.06
+双牙     modifier  -  count+3
 蒼     modifier  -  chill+0.12  area+10
 穹     modifier  -  area+22  pierce+3
 灼     modifier  -  burn+5
@@ -394,7 +367,7 @@ const RAW_EXTRA = `
 咆     modifier  -  knock+70  area+12
 哮     modifier  -  dmg+6  shock+0.15
 黄     modifier  -  magnet+0.30  dmg+3
-律     modifier  -  rate+0.7  dmg+3
+律則   modifier  -  rate+0.7  dmg+3
 豊     modifier  -  xpMul+0.25  count+1
 饒     modifier  -  xpMul+0.30  area+12
 化     modifier  -  split+2
@@ -446,15 +419,21 @@ const RAW_VERB = `
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 助動詞: 述語のマーカー。実質語には数えないが、文を「文」にする。
+// 接続詞: 直前の語に結合する。優先順位と結合先は words.connect.js が持つ。
+// 効果の値はそちらの CONNECTORS を正とする。ここでは並びだけ決める。
 // ─────────────────────────────────────────────────────────────────────────────
-const RAW_AUX = `
-する      aux  -  dmg+1
-なり      aux  -  dmg+1
-べし      aux  -  dmg+1  crit+0.02
+const RAW_CONNECT = `
+サレタ   connect  -  dmg+2
+ワレタ   connect  -  dmg+2  armor+0.02
+スル     connect  -  dmg+3  rate+0.15
+セシ     connect  -  dmg+3  rate+0.10
+ノ       connect  -  dmg+1  size+0.05
+イ       connect  -  dmg+2  crit+0.01
+ナ       connect  -  dmg+2  area+4
+ツ       connect  -  dmg+2  rate+0.10
 `;
 
 export const RAW_TABLES = [
   RAW_ELEMENT, RAW_FORM, RAW_MODIFIER, RAW_VERB, RAW_BUFF,
-  RAW_GRAMMAR, RAW_AUX, RAW_CORE, RAW_EXTRA,
+  RAW_CONNECT, RAW_CORE, RAW_EXTRA,
 ];

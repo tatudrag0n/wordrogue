@@ -572,7 +572,7 @@ code {
   padding: 1px 5px;
   font-weight: 700;
 }
-.sn-gram  { border-style: dotted; color: #d6c9ff; background: #1b1730; }
+.sn-conn  { border-style: dotted; color: #a8c8ff; background: #141d30; }
 .sn-verb  { border-color: rgba(255,143,171,.5); color: #ffc2d1; background: #2a1620; }
 .sn-buff  { border-color: rgba(180,123,255,.5); color: #dcc6ff; background: #1e1630; }
 .sn-empty { color: #3a4459; font-weight: 400; }
@@ -692,7 +692,7 @@ code {
   font-size: .6rem;
   color: var(--fg-mute);
 }
-.pword-gram { opacity: .78; border-style: dotted; }
+.pword-conn { opacity: .85; border-style: dashed; }
 
 .forge-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .forge-actions .btn { font-size: .82rem; padding: 7px 10px; }

@@ -9,7 +9,8 @@
 // ============================================================================
 
 import { $, el, clear } from '../core/util.js';
-import { WORDS, CATEGORIES, PARTICLES, possibleCompounds, evaluate, makeWord } from '../data/words.js';
+import { WORDS, CATEGORIES, CONNECTOR_SET, possibleCompounds, evaluate, makeWord } from '../data/words.js';
+import { CONNECTORS, SOURCES_BY_CONNECTOR } from '../data/words.connect.js';
 import { KIND_LABEL } from '../data/weapons.js';
 import { SELF_TAIL } from '../game/stats.js';
 import { keyStats } from '../game/weapon.js';
@@ -200,7 +201,7 @@ export class Forge {
 
   /**
    * 文面を表示する。枠の語を区切って連結した結果と、その分割結果。
-   * 助詞と動詞は色が変わるので、どれが骨組みでどれが中身かが分かる。
+   * 接続詞と動詞は色が変わるので、どれが骨組みでどれが中身かが分かる。
    */
   renderSentence(wi, res) {
     const wrap = el('div', { class: 'sentence' });
@@ -270,11 +271,11 @@ export class Forge {
         continue;
       }
       const cat = CATEGORIES[w.cat] || CATEGORIES.modifier;
-      const gram = PARTICLES.has(w.text);
+      const conn = CONNECTOR_SET.has(w.text);
       const node = el('div', {
-        class: 'pword' + (this.armed === w ? ' armed' : '') + (gram ? ' pword-gram' : ''),
+        class: 'pword' + (this.armed === w ? ' armed' : '') + (conn ? ' pword-conn' : ''),
         style: { borderColor: cat.color },
-        title: `${w.text} [${cat.name}]${gram ? ' — 助詞。文をつなぐ。' : ''}`,
+        title: `${w.text} [${cat.name}]${conn ? ' — 接続詞。直前の語に結合する。' : ''}`,
       }, el('span', {}, w.text));
       const n = counts.get(w.text);
       if (n > 1) node.append(el('span', { class: 'pword-n' }, `×${n}`));
@@ -315,9 +316,15 @@ export class Forge {
       }
     }
     d.append(el('span', { class: 'dl' }, parts.length ? parts.join('  ') : '効果なし'));
-    d.append(el('span', { class: 'dl' }, PARTICLES.has(sel.text)
-      ? '助詞。分割はするが実質語には数えない。'
-      : '実質語。文の成立に必要。'));
+    if (CONNECTOR_SET.has(sel.text)) {
+      const srcs = CONNECTOR_SOURCES_OF(sel.text);
+      d.append(el('span', { class: 'dl' },
+        `接続詞。直前の語に結合する。優先順位 ${CONNECTORS[sel.text].pri}。`));
+      d.append(el('span', { class: 'dl' },
+        srcs.length ? `結合できる語: ${srcs.join('・')}` : '結合できる語はない (宙に浮く)。'));
+    } else {
+      d.append(el('span', { class: 'dl' }, '実質語。文の成立に必要。'));
+    }
   }
 
   renderHint() {
@@ -395,11 +402,16 @@ export class Forge {
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
 
-/** 語の種類から CSS クラスを作る。助詞と動詞を区別する。 */
+/** この接続詞に結合できる語を並べる。 */
+function CONNECTOR_SOURCES_OF(conn) {
+  return SOURCES_BY_CONNECTOR[conn] || [];
+}
+
+/** 語の種類から CSS クラスを作る。接続詞と動詞を区別する。 */
 function catClass(w) {
   const info = WORDS[w?.text];
   if (!info) return 'sn-x';
-  if (info.cat === 'grammar' || info.cat === 'aux') return 'sn-gram';
+  if (info.cat === 'connect') return 'sn-conn';
   if (info.cat === 'verb') return 'sn-verb';
   if (info.cat === 'buff') return 'sn-buff';
   return 'sn-n';

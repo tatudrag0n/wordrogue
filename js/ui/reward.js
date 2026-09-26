@@ -75,7 +75,6 @@ export class RewardScreen {
 const KIND_LABEL = {
   weapon:   '武器',
   weaponup: '武器強化',
-  self:     '自身の強化',
   rest:     '休息',
 };
 

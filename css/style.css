@@ -839,10 +839,8 @@ code {
 .rw-desc { font-size: .78rem; color: var(--fg-dim); }
 .rw-fx { font-family: var(--mono); font-size: .72rem; color: var(--ok); }
 
-.rw-card[data-kind="word"]     { border-left: 3px solid var(--ice); }
 .rw-card[data-kind="weapon"]   { border-left: 3px solid var(--thunder); }
 .rw-card[data-kind="weaponup"] { border-left: 3px solid var(--accent); }
-.rw-card[data-kind="self"]     { border-left: 3px solid var(--dark); }
 .rw-card[data-kind="rest"]     { border-left: 3px solid #6fcf97; }
 
 /* ══ 結算 ════════════════════════════════════════════════════════════ */

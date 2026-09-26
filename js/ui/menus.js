@@ -132,7 +132,7 @@ export class Menus {
 
     const st = STAGES.find((s) => s.id === stageId);
     this.loadoutTitle.textContent = `第 ${stageId} 戦・${st.name}`;
-    this.loadoutSub.textContent = '武器を 1〜4 つ選べ。武器ごとに核語が決まっている。';
+    this.loadoutSub.textContent = '武器を 1〜4 つ選べ。武器ごとに末尾の語が決まっている。';
 
     this.renderLoadout();
     this.hideAll();

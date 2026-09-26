@@ -493,6 +493,36 @@ sec('forge にリセット項目が無いこと');
   console.log(`    鍛冶の注記: ${note.trim()}`);
 }
 
+sec('遊び方の説明が実装と矛盾していないこと');
+{
+  // 玩法説明は手で書いているので、実装から変わった項目を放置すると
+  // 古いルールのまま画面に出る。ここで止める。
+  const doc = await evalJs('document.getElementById("howto").textContent');
+  const banned = [
+    ['核語', '核語は廃止されている'],
+    ['攻撃の形を決める', '攻撃は末尾語だけが決める'],
+    ['語を引き直す', '引き直しは無い'],
+    ['火の弾</code> のように', '文の例は現行の形式にする'],
+  ];
+  for (const [needle, why] of banned) {
+    ok(!doc.includes(needle), `玩法説明に古い記述「${needle}」が残っている (${why})`);
+  }
+  // 例の武器名は現在の形 (末尾語つき) であるべき。
+  for (const t of ['刃利剣', '爆裂無双迅剣', '火球剣']) {
+    ok(doc.includes(t), `玩法説明に例「${t}」が無い`);
+  }
+  // 末尾語とレベルアップの獲得の記述があるはず。
+  for (const t of ['末尾', 'レベルアップ']) {
+    ok(doc.includes(t), `玩法説明に「${t}」の記述が無い`);
+  }
+  // 報酬は武器と休息だけで、ことばは出ない。
+  const rewardSec = doc.slice(doc.indexOf('クリア報酬'));
+  ok(rewardSec.includes('休息'), `クリア報酬の説明に休息が無い: ${rewardSec.slice(0, 60)}`);
+  ok(rewardSec.includes('ことばはここでは出ない'), '報酬からことばが出ない旨が書かれていない');
+  ok(!rewardSec.includes('自身の強化'), '報酬の説明に旧仕様の自身の強化が残っている');
+  console.log(`    遊び方 ${doc.length} 文字 / 古い記述なし`);
+}
+
 sec('ステージクリアと報酬');
 const cleared = await evalJs(`(async () => {
   const app = window.__wordrogue;

@@ -147,7 +147,7 @@
     <div class="panel">
       <header class="panel-head">
         <h2 id="loadoutTitle">武器を選べ</h2>
-        <p class="panel-sub" id="loadoutSub">最大 4 つまで。武器ごとに核語が決まっている。</p>
+        <p class="panel-sub" id="loadoutSub">最大 4 つまで。武器ごとに末尾の語が決まっている。</p>
       </header>
       <div class="loadout-list" id="loadoutList"></div>
       <footer class="panel-foot">
@@ -193,58 +193,93 @@
       </header>
       <div class="howto-body">
         <section>
-        <section>
-          <h3>1. 文がそのまま武器の名前になる</h3>
-          <p>
-            武器には<strong>枠</strong>がある。枠に語を並べると、それがそのまま
-            <strong>武器名</strong> になる。武器レベルに応じて <strong>4 から 7 枠</strong>。
-          </p>
-          <ul class="howto-list">
-            <li><b class="ok">成立</b> …「刃」+「利」→ <code>利刃</code></li>
-            <li><b class="ok">積み重ねる</b> …「爆裂」+「無双」+「雷」+「剣」→ <code>爆裂無双雷剣</code></li>
-            <li><b class="ok">熟語</b> …「火」+「球」→ <code>火球</code> で追加ボーナス</li>
-            <li><b class="ng">不成文</b> … 実質語が 2 つ足りない / 助詞だけ / 分割できない → <strong>その武器は無効</strong></li>
-          </ul>
-          <p>
-            成立条件は「語が辞書で完全に分割できて、<strong>実質語（助詞でない語）を 2 つ以上</strong>含むこと」。
-            長い文ほど<strong>文の力</strong>が上がり、熟語を maid するとさらに伸びる。
-          </p>
-        </section>
-        <section>
-          <h3>2. 語の種類</h3>
-          <ul class="howto-list">
-            <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
-            <li><b>形態</b> … 剣・弾・矢・球・爆弾・雷・環・壁・光線など。<strong>攻撃の形を決める</strong>。</li>
-            <li><b>効果</b> … 巨大・貫通・分裂・散弾など。数値を上げる。</li>
-            <li><b>動詞</b> … 燃える・貫く・凍るなど。1 枚で 1 つの動作になる。</li>
-            <li><b>助詞</b> … の・は・をなど。<code>火の弾</code> のように文を読める形にする。</li>
-            <li><b>助動詞</b> … <code>する</code> など。述語になり文の骨組みがそろう。</li>
-            <li><b>自身</b> … 頑強・疾走など。プレイヤーに効く。</li>
-          </ul>
-        </section>
-        <section>
-          <h3>3. プレイヤー自身も文にする</h3>
-          <p>
-            言葉鍛冶の一番上に<strong>自身の枠</strong>がある。
-            「頑強」+「疾走」+「人」で <code>頑強疾走人</code> のように称号になり、
-            文の力が<strong>攻撃と防御</strong>に効く。
-          </p>
-        </section>
-        <section>
-          <h3>4. 戦闘中はいつでも組み替えられる</h3>
-          <p>
-            <kbd>Q</kbd> で言葉鍛冶を開く。開いている間だけ時間が止まるので、
-            戦況を見てから並び替えられる。
-          </p>
-        </section>
-        <section>
-          <h3>5. クリア報酬</h3>
-          <p>
-            ステージを終えると<strong>ことば</strong>・<strong>武器</strong>・
-            <strong>自身の強化</strong>から選べる。
-            武器レベルを 2 / 4 / 6 で上げると枠が 1 つずつ増える。
-          </p>
-        </section>
+      <section>
+      <h3>1. 文がそのまま武器の名前になる</h3>
+      <p>
+      武器には<strong>枠</strong>がある。枠に語を並べると、それがそのまま
+      <strong>武器名</strong> になる。武器レベルに応じて <strong>4 から 7 枠</strong>。
+      </p>
+      <ul class="howto-list">
+      <li><b class="ok">成立</b> …「刃」+「利」→ <code>刃利剣</code></li>
+      <li><b class="ok">積み重ねる</b> …「爆裂」+「無双」+「迅」→ <code>爆裂無双迅剣</code></li>
+      <li><b class="ok">熟語</b> …「火」+「球」→ <code>火球剣</code> で追加ボーナス</li>
+      <li><b class="ng">不成文</b> … 実質語が足りない / 助詞だけ / 分割できない → <strong>その武器は無効</strong></li>
+      </ul>
+      <p>
+      成立条件は「語が辞書で完全に分割できて、<strong>実質語（助詞でない語）を 2 つ以上</strong>含むこと」。
+      長い文ほど<strong>文の力</strong>が上がり、熟語を作るとさらに伸びる。
+      </p>
+      </section>
+      <section>
+      <h3>2. 末尾の語は武器ごとに固定</h3>
+      <p>
+      武器名の<strong>末尾の語</strong>は枠の外に固定で付く。並べ替えても動かない。
+      だから<strong>名前と攻撃の型が必ず一致する</strong>。
+      </p>
+      <ul class="howto-list">
+      <li>剣 → <code>剣</code> 斬撃 ／ 銃 → <code>銃</code> 射撃 ／ 弓 → <code>弓</code> 射撃</li>
+      <li>爆弾 → <code>爆弾</code> 爆弾 ／ 雷 → <code>雷</code> 連鎖 ／ 鞭 → <code>鞭</code> 薙ぎ</li>
+      <li>回転刃 → <code>環</code> 軌道 ／ 棘壁 → <code>壁</code> 城壁</li>
+      <li>環刃 → <code>環刃</code> 還刃 ／ 光線 → <code>光線</code> 光線</li>
+      </ul>
+      <p>
+      <strong>攻撃を決めるのは末尾の語だけ。</strong>
+      途中に別の形態語を並べても攻撃は変わらず、効果（貫通・巨大・分裂など）だけが加わる。
+      「刃」+「利」+「爆弾」は <code>刃利爆弾剣</code> だが、この武器は<strong>斬撃のまま</strong>（爆発は付く）。
+      </p>
+      </section>
+      <section>
+      <h3>3. 語の種類</h3>
+      <ul class="howto-list">
+      <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
+      <li><b>形態</b> … 剣・銃・弓・弾・矢・球・環・壁など。効果と末尾語になる。</li>
+      <li><b>効果</b> … 巨大・貫通・分裂・散弾など。数値を上げる。</li>
+      <li><b>動詞</b> … 燃える・貫く・凍るなど。1 枚で 1 つの動作になる。</li>
+      <li><b>助詞</b> … の・は・をなど。<code>火の弾</code> のように文を読める形にする。</li>
+      <li><b>助動詞</b> … <code>する</code> など。述語になり文の骨組みがそろう。</li>
+      <li><b>自身</b> … 頑強・疾走など。プレイヤーに効く。</li>
+      </ul>
+      </section>
+      <section>
+      <h3>4. プレイヤー自身も文にする</h3>
+      <p>
+      言葉鍛冶の一番上に<strong>自身の枠</strong>がある。
+      「頑強」+「疾走」+「人」で <code>頑強疾走人</code> のように称号になり、
+      文の力が<strong>攻撃と防御</strong>に効く。
+      </p>
+      </section>
+      <section>
+      <h3>5. 戦闘中はいつでも組み替えられる</h3>
+      <p>
+      <kbd>Q</kbd> で言葉鍛冶を開く。開いている間だけ時間が止まるので、
+      戦況を見てから並び替えられる。
+      </p>
+      </section>
+      <section>
+      <h3>6. ことばはレベルアップでもらう</h3>
+      <p>
+      新しいことばはステージ終わりに<strong>もらいません</strong>。
+      <strong>戦闘中のレベルアップ</strong>で入ります。引き直しボタンもありません。
+      </p>
+      <ul class="howto-list">
+      <li>ふつうのレベルアップ … 語袋に <strong>1 枚</strong></li>
+      <li><strong>5 の倍数</strong> … 語袋に <strong>2 枚</strong></li>
+      <li><strong>1 / 5 / 9 …</strong> … 自分自身の文の空き枠に <strong>1 枚</strong></li>
+      </ul>
+      <p>
+      語袋は 12 枚から始まり、8 レベルごとに 1 枚ずつ広くなる（上限 20）。
+      満杯のときは<strong>一番古い 1 語</strong>が消えてかわり、新しいことばが入る。
+      </p>
+      </section>
+      <section>
+      <h3>7. クリア報酬</h3>
+      <p>
+      ステージを終えると<strong>武器</strong>・<strong>武器強化</strong>・
+      <strong>休息</strong>から選べる。武器レベルを 2 / 4 / 6 で上げると枠が 1 つずつ増える。
+      ことばはここでは出ない。
+      </p>
+      </section>
+
         <section>
           <h3>操作</h3>
           <ul class="howto-list">

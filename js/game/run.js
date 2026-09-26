@@ -78,7 +78,7 @@ export class Run {
     }
     if (!this.weapons.length) this.weapons.push(new WeaponInst('sword', 1));
 
-    // 各武器の開始時の 2 語。核語は無いので 2 語ないと文にならない。
+    // 各武器の開始時の 2 語。末尾語と合わせても文にならないので最低 2 語必要。
     for (const wi of this.weapons) {
       if (wi.def.startWord) wi.setSlot(0, makeWord(wi.def.startWord));
       if (wi.def.startWord2) wi.setSlot(1, makeWord(wi.def.startWord2));

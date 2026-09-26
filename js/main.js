@@ -252,6 +252,8 @@ function loop(now) {
     while (app.acc >= STEP && guard++ < 5) {
       app.acc -= STEP;
       run.viewR = app.renderer.viewR;
+      run.viewW = app.renderer.w;
+      run.viewH = app.renderer.h;
       run.update(STEP, app.input);
     }
     if (guard >= 5) app.acc = 0;

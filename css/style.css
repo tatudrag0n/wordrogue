@@ -230,13 +230,23 @@ code {
 }
 
 .hud-stats {
+  align-self: flex-start;
   font-size: .74rem;
-  color: var(--fg-dim);
+  color: #c7d3e8;
   font-family: var(--mono);
   letter-spacing: .02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
+  /* 背景が黒いので、必ず読める土台を置く。 */
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(8, 11, 18, .78);
+  border: 1px solid rgba(58, 71, 97, .8);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
 }
 
 .hud-stage {
@@ -270,11 +280,15 @@ code {
 .hud-hint {
   align-self: center;
   margin-top: 4px;
-  padding: 6px 16px;
-  background: rgba(10, 14, 22, .88);
-  border: 1px solid var(--line);
+  padding: 7px 18px;
+  background: rgba(10, 14, 22, .92);
+  border: 1px solid var(--line-2);
   border-radius: 999px;
-  font-size: .84rem;
+  font-size: .86rem;
+  color: #f0f5ff;
+  font-weight: 600;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .6);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
   animation: rise .2s;
 }
 
@@ -282,8 +296,12 @@ code {
   margin-top: auto;
   display: flex;
   gap: 8px;
-  padding: 0 14px 12px;
+  padding: 8px 14px 12px;
   flex-wrap: wrap;
+  align-items: flex-end;
+  /* 武器チップの土台。黒背景の上にそのまま置いても読めるように。 */
+  background: linear-gradient(to top, rgba(6, 8, 13, .82), rgba(6, 8, 13, 0));
+  border-radius: 12px 12px 0 0;
 }
 
 .wchip {
@@ -292,31 +310,35 @@ code {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 11px 5px 7px;
-  background: rgba(16, 21, 32, .9);
+  padding: 6px 12px 6px 8px;
+  background: rgba(16, 21, 32, .95);
   border: 1px solid var(--line-2);
   border-radius: 8px;
-  font-size: .8rem;
+  font-size: .82rem;
+  font-weight: 600;
+  color: #eef3ff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .5);
   transition: border-color .12s, background .12s;
 }
-.wchip:hover { background: #1b2333; }
+.wchip:hover { background: #1f2939; }
 .wchip .wchip-lv {
   font-family: var(--mono);
   font-size: .68rem;
-  color: var(--fg-mute);
-  background: #0c1018;
+  color: var(--fg-dim);
+  background: #05070c;
   border-radius: 4px;
-  padding: 1px 4px;
+  padding: 1px 5px;
 }
 .wchip .wchip-txt { letter-spacing: .04em; }
 .wchip.broken {
   border-color: var(--ng);
-  background: rgba(60, 16, 26, .9);
-  color: #ffb3c1;
+  background: rgba(72, 18, 30, .95);
+  color: #ffc9d4;
 }
 .wchip.broken .wchip-txt { text-decoration: line-through; text-decoration-thickness: 1px; }
 .wchip.idiom { border-color: var(--idiom); }
-.wchip.great { border-color: var(--great); box-shadow: 0 0 0 1px rgba(255,107,139,.3); }
+.wchip.great { border-color: var(--great); box-shadow: 0 0 0 1px rgba(255,107,139,.35); }
 
 .hud-paused {
   position: absolute; inset: 0;

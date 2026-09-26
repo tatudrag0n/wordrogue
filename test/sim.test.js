@@ -170,6 +170,162 @@ sec('全ステージのウェーブ定義が妥当');
   }
 }
 
+sec('弾とエフェクトの座標が有限値であること (NaN 防止)');
+{
+  const r = newRun(1, ['sword', 'gun']);
+  const inp = { ax: 0, ay: 0, moving: false, angle: 0 };
+  r.spawnEnemy('slime', { x: r.player.x + 200, y: r.player.y - 120 });
+  r.spawnEnemy('slime', { x: r.player.x - 240, y: r.player.y + 90 });
+  r.enemies.forEach((e) => { e.spawned = 1; });
+
+  let checked = 0;
+  for (let i = 0; i < 400; i++) {
+    r.update(1 / 60, inp);
+    for (const b of r.bullets) {
+      checked++;
+      ok(Number.isFinite(b.x) && Number.isFinite(b.y)
+         && Number.isFinite(b.vx) && Number.isFinite(b.vy),
+         `弾の座標が NaN: x=${b.x} y=${b.y}`);
+    }
+    for (const s of r.slashes) {
+      ok(Number.isFinite(s.a) && Number.isFinite(s.r), `斬撃の角度が NaN: a=${s.a}`);
+    }
+    for (const f of r.fields) {
+      ok(Number.isFinite(f.x) && Number.isFinite(f.y), `フィールドが NaN: ${f.x},${f.y}`);
+    }
+    if (checked > 300) break;
+  }
+  ok(checked > 0, '弾が 1 発も生成されなかった');
+  console.log(`  ${checked} 発の弾と各エフェクトの座標を確認`);
+}
+
+sec('敵がいないとき也能正常に撃つ');
+{
+  const r = newRun(1, ['sword', 'gun']);
+  const inp = { ax: 0, ay: 0, moving: false, angle: 0.7 };
+  for (let i = 0; i < 120; i++) r.update(1 / 60, inp);
+  ok(r.bullets.length > 0 || r.slashes.length > 0, '敵が 0 体でも攻撃は出る');
+  for (const b of r.bullets) {
+    ok(Number.isFinite(b.x) && Number.isFinite(b.y), `弾が NaN: ${b.x},${b.y}`);
+  }
+  for (const s of r.slashes) {
+    ok(Number.isFinite(s.a), `斬撃の角度が NaN: ${s.a}`);
+  }
+}
+
+sec('敵は画面外からしか出現しない');
+{
+  const r = newRun(1, ['sword', 'gun']);
+  r.viewW = 1280; r.viewH = 800;
+  const hw = 1280 / 2, hh = 800 / 2;
+  let inside = 0, tooClose = 0, n = 0;
+  for (let i = 0; i < 400; i++) {
+    const p = r.edgeSpawn(0);
+    n++;
+    // 画面矩形の内側に入っていないこと。
+    if (Math.abs(p.x - r.player.x) < hw && Math.abs(p.y - r.player.y) < hh) inside++;
+    // プレイヤーから十分離れていること。
+    if (Math.hypot(p.x - r.player.x, p.y - r.player.y) < 280) tooClose++;
+  }
+  ok(inside === 0, `画面内に出現した: ${inside}/${n}`);
+  ok(tooClose === 0, `近すぎて出現した: ${tooClose}/${n}`);
+
+  // 実際に湧いた敵も最初は画面外。
+  const r2 = newRun(3);
+  r2.viewW = 1280; r2.viewH = 800;
+  const inp = { ax: 0, ay: 0, moving: false, angle: 0 };
+  let inView = 0, total = 0;
+  for (let i = 0; i < 60 * 30; i++) {
+    r2.update(1 / 60, inp);
+    for (const e of r2.enemies) {
+      if (e.spawned > 0.35) continue;   // 出現演出の途中だけ見る
+      total++;
+      if (Math.abs(e.x - r2.player.x) < hw && Math.abs(e.y - r2.player.y) < hh) inView++;
+    }
+  }
+  ok(inView === 0, `湧いた敵が画面内: ${inView}/${total}`);
+  console.log(`  出現位置を ${n} 回抽查 + 実際に湧いた ${total} 体を確認`);
+}
+
+sec('攻撃エフェクトは十分長く見える');
+{
+  const r = newRun(1, ['sword', 'gun']);
+  const inp = { ax: 0, ay: 0, moving: false, angle: 0 };
+  r.spawnEnemy('bat', { x: r.player.x + 30, y: r.player.y });
+  r.enemies.forEach((e) => { e.spawned = 1; e.hp = 1e9; });
+  let frames = 0, maxConcurrent = 0;
+  for (let i = 0; i < 300; i++) {
+    r.update(1 / 60, inp);
+    if (r.slashes.length) { frames++; maxConcurrent = Math.max(maxConcurrent, r.slashes.length); }
+  }
+  ok(frames >= 15, `斬撃が見えるフレーム太少: ${frames} (0.5 秒以上必要)`);
+  console.log(`  斬撃エフェクト ${frames} フレーム表示 (最大同時 ${maxConcurrent})`);
+
+  // 敵に命中してもエフェクトが消えないこと。
+  const r2 = newRun(1, ['sword', 'gun']);
+  r2.spawnEnemy('bat', { x: r2.player.x + 25, y: r2.player.y });
+  r2.enemies.forEach((e) => { e.spawned = 1; });
+  let afterHit = 0;
+  for (let i = 0; i < 120; i++) {
+    r2.update(1 / 60, inp);
+    if (i > 3 && r2.slashes.length) afterHit++;
+  }
+  ok(afterHit > 10, `命中後にエフェクトが消える: 残り ${afterHit} フレーム`);
+}
+
+sec('形態語が弾の形に反映される');
+{
+  const r = newRun(1, ['gun']);
+  const wi = r.weapons[0];
+  // スロットは Lv1 なので 2 枠。並び順によって後ろの形態語が勝つことを確認する。
+  const res = (a, b2) => {
+    wi.setSlot(0, makeWord(a));
+    wi.setSlot(1, makeWord(b2));
+    return wi.resolve(r.player.stats).stats;
+  };
+  ok(res('矢', '炎').shape === 'arrow', '「炎の矢」→ arrow');
+  ok(res('球', '雷').shape === 'orb', '「雷の球」→ orb');
+  ok(res('刃', '氷').shape === 'blade', '「氷の刃」→ blade');
+  ok(res('弾', '毒').shape === 'shot', '「毒の弾」→ shot');
+  // 文の語順を逆にすると形が変わる。
+  ok(res('球', 'の').shape === 'orb', '「の球」→ orb');
+  ok(res('の', '球').shape === 'orb', '「球の」→ orb');
+
+  // 属性も同じように合成語から決まる。
+  ok(res('火', 'の').el === 'fire', '「の火」→ fire');
+  ok(res('氷', 'の').el === 'ice', '「の氷」→ ice');
+  ok(res('雷', 'の').el === 'thunder', '「の雷」→ thunder');
+
+  // レベルを上げると枠が増えて複数形にできる。
+  wi.levelUp(); wi.levelUp();
+  ok(wi.slots.length === 3, `Lv3 で枠が 3 になる: ${wi.slots.length}`);
+  wi.setSlot(0, makeWord('火'));
+  wi.setSlot(1, makeWord('の'));
+  wi.setSlot(2, makeWord('矢'));
+  const s3 = wi.resolve(r.player.stats).stats;
+  ok(s3.shape === 'arrow', '「火の矢」→ arrow');
+  ok(s3.el === 'fire', '「火の矢」→ fire');
+  ok(s3.burn > 0, '「火の矢」→ 炎上あり');
+}
+
+sec('貫通と拡散が実際に効く');
+{
+  const r = newRun(1, ['gun']);
+  const wi = r.weapons[0];
+  const st = (a, b2) => {
+    wi.setSlot(0, makeWord(a));
+    wi.setSlot(1, makeWord(b2));
+    return wi.resolve(r.player.stats).stats;
+  };
+  const plain = st('弾', 'の');
+  const piercing = st('貫', 'の');
+  const spread = st('散弾', 'の');
+  ok(piercing.pierce > plain.pierce, `貫通: ${plain.pierce} -> ${piercing.pierce}`);
+  ok(spread.count > plain.count, `拡散: ${plain.count} -> ${spread.count}`);
+  ok(spread.spread > plain.spread, `扇: ${plain.spread} -> ${spread.spread}`);
+  console.log(`  貫通 ${plain.pierce}->${piercing.pierce} / 数 ${plain.count}->${spread.count} / 扇 ${plain.spread}->${spread.spread}`);
+}
+
 sec('指数的バグ: 敵が増殖し続ける');
 {
   const r = newRun(3);

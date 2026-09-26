@@ -21,6 +21,27 @@ function coreWordOf(defId) {
   return coreCache.get(defId);
 }
 
+/** 形態語を描画用の形に対応させる。同じ形の語はまとめる。 */
+const FORM_SHAPE = {
+  矢: 'arrow', 針: 'arrow', 竜頭: 'arrow', 夾撃: 'arrow',
+  弾: 'shot', 乱打: 'shot',
+  刃: 'blade', 刀: 'blade', 太刀: 'blade', 大剣: 'blade', 爪: 'blade', 牙: 'blade', 鞭: 'blade',
+  球: 'orb', 塊: 'orb', 彗星: 'orb',
+  爆弾: 'bomb',
+};
+
+/**
+ * 文面の中から形を決める。後ろにある形態語を優先する。
+ * 例:「炎の球の矢」なら 矢 (arrow)。
+ */
+function shapeOf(segments) {
+  let shape = null;
+  for (const s of segments) {
+    if (FORM_SHAPE[s]) shape = FORM_SHAPE[s];
+  }
+  return shape;
+}
+
 export class WeaponInst {
   /**
    * @param {string} defId
@@ -168,6 +189,8 @@ export class WeaponInst {
     st.reflect = st.reflect || 0;
     // 弾・分裂・フィールドが参照する属性。
     st.el = e.element;
+    // 描画用の形。形態語が鍵になる。
+    st.shape = shapeOf(e.segments);
 
     // 概算 DPS (UI の比較用)。
     const multi = Math.max(1, st.count) * (1 + st.split * 0.4) * (1 + st.pierce * 0.25)

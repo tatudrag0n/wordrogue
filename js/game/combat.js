@@ -26,8 +26,9 @@ export function fireWeapon(run, wi, res) {
   wi.flash = 1;
   wi.phase += 0.6;
 
-  // 照準。敵がいれば最寄りを向く。
-  const aim = run.nearestEnemy(p.x, p.y) || p.face;
+  // 照準。敵がいれば最寄りを向く。angle を返す (敵オブジェクトではない)。
+  const tgt = run.nearestEnemy(p.x, p.y);
+  const aim = tgt ? Math.atan2(tgt.y - p.y, tgt.x - p.x) : p.face;
   const el = res.element || 'none';
   const elInfo = ELEMENTS[el] || ELEMENTS.none;
 
@@ -62,7 +63,7 @@ function doSlash(run, wi, st, aim, el, elInfo) {
     x: p.x, y: p.y, a: aim,
     r: reach,
     arc,
-    life: 0.18, maxLife: 0.18,
+    life: 0.32, maxLife: 0.32,
     color: elInfo.color,
     hit: new Set(),
   });
@@ -87,7 +88,7 @@ function doWhip(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = (st.range + (st.area || 0)) * (p.stats.size || 1);
   run.rings.push({
-    x: p.x, y: p.y, r: reach, life: 0.24, maxLife: 0.24,
+    x: p.x, y: p.y, r: reach, life: 0.36, maxLife: 0.36,
     color: elInfo.color, hit: new Set(),
   });
   run.audio.slash();
@@ -131,6 +132,7 @@ function doShot(run, wi, st, aim, boomerang, el, elInfo) {
       boomerang,
       range: boomerang ? 260 : 0,
       element: el,
+      shape: boomerang ? 'blade' : (st.shape || 'shot'),
       color: elInfo.color,
       kindName: boomerang ? 'boomerang' : 'shot',
     });
@@ -183,7 +185,7 @@ function doChain(run, wi, st, aim, el) {
     const tgt = run.nearestEnemy(ex, ey, hit, 340);
     if (!tgt) break;
     hit.push(tgt.uid);
-    run.lightnings.push({ x1: ex, y1: ey, x2: tgt.x, y2: tgt.y, life: 0.16, maxLife: 0.16 });
+    run.lightnings.push({ x1: ex, y1: ey, x2: tgt.x, y2: tgt.y, life: 0.24, maxLife: 0.24 });
     run.damage(tgt, st, {
       crit: rollCrit(st),
       knock: st.knock,
@@ -205,7 +207,7 @@ function doBeam(run, wi, st, aim, el, elInfo) {
   const len = st.range;
   const wdt = 10 * st.size;
   const hit = new Set();
-  run.beams.push({ x: p.x, y: p.y, a: aim, len, w: wdt, life: 0.22, maxLife: 0.22 });
+  run.beams.push({ x: p.x, y: p.y, a: aim, len, w: wdt, life: 0.3, maxLife: 0.3 });
 
   const dx = Math.cos(aim), dy = Math.sin(aim);
   for (const e of run.enemies) {
@@ -229,7 +231,7 @@ function doAura(run, wi, st, el) {
   const p = run.player;
   const reach = st.range * (p.stats.size || 1) * st.size;
   run.fields.push(makeField(p.x, p.y, reach, st.dmg, {
-    life: 0.35,
+    life: 0.5,
     element: el,
     burn: st.burn, poison: st.poison, chill: st.chill, shock: st.shock,
     freeze: st.freeze,

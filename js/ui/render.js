@@ -197,35 +197,70 @@ export class Renderer {
     g.globalAlpha = 1;
   }
 
+  /**
+   * 斬撃。薄い扇形の塗りではなく、刃が走过った軌跡として見せる。
+   * 内側ほど濃く、先端に明るい縁を乗せる。
+   */
   drawSlashes(run) {
     const g = this.ctx;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
     for (const s of run.slashes) {
       const t = s.life / s.maxLife;
-      g.save();
-      g.globalAlpha = t * 0.5;
-      g.fillStyle = s.color;
+      const a0 = s.a - s.arc / 2;
+      const a1 = s.a + s.arc / 2;
+      // 広がる軌跡。外周到内に向けて濃くする。
+      const rOut = s.r * (1.12 - t * 0.14);
+      const rIn = s.r * (0.3 + (1 - t) * 0.14);
+      const steps = 4;
+      for (let i = 0; i < steps; i++) {
+        const f = i / steps;
+        const rr = rIn + (rOut - rIn) * f;
+        g.globalAlpha = t * (0.30 - f * 0.19);
+        g.fillStyle = s.color;
+        g.beginPath();
+        g.moveTo(s.x, s.y);
+        g.arc(s.x, s.y, rr, a0, a1);
+        g.closePath();
+        g.fill();
+      }
+      // 刃先の明るい縁。
+      g.globalAlpha = t * t * 0.95;
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 2.4;
       g.beginPath();
-      g.moveTo(s.x, s.y);
-      g.arc(s.x, s.y, s.r * (1.05 - t * 0.12), s.a - s.arc / 2, s.a + s.arc / 2);
-      g.closePath();
-      g.fill();
-      g.restore();
+      g.arc(s.x, s.y, rOut * 0.99, a0, a1);
+      g.stroke();
+      g.globalAlpha = t * 0.6;
+      g.strokeStyle = s.color;
+      g.lineWidth = 4.5;
+      g.beginPath();
+      g.arc(s.x, s.y, rOut * 0.97, a0, a1);
+      g.stroke();
     }
+    g.restore();
   }
 
   drawRings(run) {
     const g = this.ctx;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
     for (const s of run.rings) {
       const t = s.life / s.maxLife;
-      g.save();
-      g.globalAlpha = t * 0.42;
+      g.globalAlpha = t * 0.5;
       g.strokeStyle = s.color;
-      g.lineWidth = 7 * t + 1;
+      g.lineWidth = 9 * t + 1.5;
       g.beginPath();
-      g.arc(s.x, s.y, s.r * (1.02 - t * 0.1), 0, TAU);
+      g.arc(s.x, s.y, s.r * (1.04 - t * 0.12), 0, TAU);
       g.stroke();
-      g.restore();
+      g.globalAlpha = t * t * 0.8;
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.arc(s.x, s.y, s.r * (1.04 - t * 0.12), 0, TAU);
+      g.stroke();
     }
+    g.restore();
   }
 
   drawEnemies(run) {
@@ -315,18 +350,18 @@ export class Renderer {
 
   drawBullets(run) {
     const g = this.ctx;
+    // 弾が多いときは細部を落として矩形描画にフォールバックする。
+    const detail = run.bullets.length <= 150;
     g.save();
     g.globalCompositeOperation = 'lighter';
     for (const b of run.bullets) {
-      const c = b.color || '#fff';
-      const r = Math.max(2, b.r);
-
       if (b.kindName === 'orbit') {
         g.save();
         g.translate(b.x, b.y);
         g.rotate(b.spin);
-        g.fillStyle = c;
+        g.fillStyle = b.color || '#fff';
         g.globalAlpha = 0.95;
+        const r = Math.max(2, b.r);
         g.beginPath();
         g.moveTo(r, 0);
         g.lineTo(0, r * 0.45);
@@ -337,33 +372,301 @@ export class Renderer {
         g.restore();
         continue;
       }
-
-      g.globalAlpha = 0.35;
-      g.fillStyle = c;
-      g.beginPath();
-      g.arc(b.x, b.y, r * 2.1, 0, TAU);
-      g.fill();
-
-      g.globalAlpha = 1;
-      g.beginPath();
-      g.arc(b.x, b.y, r, 0, TAU);
-      g.fill();
-
-      // 進行方向に伸ばす。
-      const sp = Math.hypot(b.vx, b.vy);
-      if (sp > 20 && b.kindName !== 'bomb') {
-        g.globalAlpha = 0.5;
-        g.strokeStyle = c;
-        g.lineWidth = r * 1.1;
-        g.lineCap = 'round';
-        g.beginPath();
-        g.moveTo(b.x, b.y);
-        g.lineTo(b.x - (b.vx / sp) * r * 3.4, b.y - (b.vy / sp) * r * 3.4);
-        g.stroke();
-      }
+      this.drawProjectile(g, b, run.t, detail);
     }
     g.restore();
   }
+
+  /**
+   * 弾を 1 発描く。属性と形状で絵柄を変える。
+   * 貫通する数だけ尾が伸び、拡散は扇状に並ぶ。
+   */
+
+  drawProjectile(g, b, t, detail) {
+    const c = b.color || '#ffffff';
+    const el = b.element || 'none';
+    const r = Math.max(2, b.r);
+    const sp = Math.hypot(b.vx, b.vy);
+    const ang = sp > 1 ? Math.atan2(b.vy, b.vx) : 0;
+    const shape = b.shape || (b.kindName === 'bomb' ? 'bomb' : 'shot');
+    const pierce = b.pierce > 0 ? b.pierce : 0;
+
+    // ── 尾。速度と尾の長さは貫通の数と形とで変わる。
+    //    炎と雷は尾を長めに敷く。扇状に広がったときの一体感が出る。
+    if (sp > 20 && b.kindName !== 'bomb') {
+      const wild = (el === 'fire' || el === 'thunder') ? 1.9
+        : (el === 'poison' || el === 'blood' || el === 'nature') ? 1.3 : 1;
+      const len = r * (shape === 'arrow' ? 7 : 3.4) * wild
+        * (1 + pierce * 0.4) * (1 + (b.size - 1) * 0.5);
+      g.save();
+      g.translate(b.x, b.y);
+      g.rotate(ang);
+      g.globalAlpha = 0.5;
+      g.fillStyle = c;
+      g.beginPath();
+      g.moveTo(r * 0.8, 0);
+      g.lineTo(0, -r * 0.95);
+      g.lineTo(-len, 0);
+      g.lineTo(0, r * 0.95);
+      g.closePath();
+      g.fill();
+      g.globalAlpha = 0.22;
+      g.beginPath();
+      g.moveTo(r * 0.6, 0);
+      g.lineTo(0, -r * 1.7);
+      g.lineTo(-len * 1.25, 0);
+      g.lineTo(0, r * 1.7);
+      g.closePath();
+      g.fill();
+      g.restore();
+    }
+
+    // ── 頭部。形状で絵を替える。──
+    g.save();
+    g.translate(b.x, b.y);
+    g.rotate(ang);
+
+    if (shape === 'arrow') {
+      // 矢。細長く、先に返しがある。白い芯は小さくして属性の色を残す。
+      const L = r * 3.6, W = r * 0.95;
+      // 外側のglow。
+      g.globalAlpha = 0.3;
+      g.fillStyle = c;
+      g.beginPath();
+      g.moveTo(L * 1.5, 0);
+      g.lineTo(-L * 0.9, -W * 2.1);
+      g.lineTo(-L * 1.25, 0);
+      g.lineTo(-L * 0.9, W * 2.1);
+      g.closePath();
+      g.fill();
+      // 弾体。
+      g.globalAlpha = 1;
+      g.beginPath();
+      g.moveTo(L, 0);
+      g.lineTo(L * 0.15, -W);
+      g.lineTo(-L * 0.75, -W * 0.42);
+      g.lineTo(-L * 0.95, 0);
+      g.lineTo(-L * 0.75, W * 0.42);
+      g.lineTo(L * 0.15, W);
+      g.closePath();
+      g.fill();
+      // 芯。属性の色が失われすぎないように、先端だけを白くする。
+      g.globalAlpha = 0.75;
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.moveTo(L * 0.95, 0);
+      g.lineTo(L * 0.3, -W * 0.42);
+      g.lineTo(L * 0.2, 0);
+      g.lineTo(L * 0.3, W * 0.42);
+      g.closePath();
+      g.fill();
+    } else if (shape === 'blade') {
+      const L = r * 2.8, W = r * 0.6;
+      g.globalAlpha = 1;
+      g.fillStyle = c;
+      g.beginPath();
+      g.moveTo(L, 0);
+      g.lineTo(0, -W);
+      g.lineTo(-L, 0);
+      g.lineTo(0, W);
+      g.closePath();
+      g.fill();
+    } else if (shape === 'orb') {
+      g.globalAlpha = 0.5;
+      g.fillStyle = c;
+      g.beginPath();
+      g.arc(0, 0, r * 1.9, 0, TAU);
+      g.fill();
+      g.globalAlpha = 1;
+      g.beginPath();
+      g.arc(0, 0, r, 0, TAU);
+      g.fill();
+      g.globalAlpha = 0.85;
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.arc(-r * 0.25, -r * 0.25, r * 0.42, 0, TAU);
+      g.fill();
+    } else if (shape === 'bomb') {
+      // 爆弾。暗い球と導火線の火花。
+      g.globalAlpha = 0.4;
+      g.fillStyle = c;
+      g.beginPath();
+      g.arc(0, 0, r * 2, 0, TAU);
+      g.fill();
+      g.globalAlpha = 1;
+      g.fillStyle = '#2a2028';
+      g.beginPath();
+      g.arc(0, 0, r, 0, TAU);
+      g.fill();
+      g.globalAlpha = 0.95;
+      g.fillStyle = c;
+      g.beginPath();
+      g.arc(0, -r * 1.5, r * 0.42, 0, TAU);
+      g.fill();
+    } else {
+      // 弾。進行方向に少し伸ばしたカプセル。
+      const L = r * 1.7;
+      g.globalAlpha = 0.4;
+      g.fillStyle = c;
+      g.beginPath();
+      g.ellipse(0, 0, L * 1.5, r * 1.9, 0, 0, TAU);
+      g.fill();
+      g.globalAlpha = 1;
+      g.beginPath();
+      g.ellipse(0, 0, L, r, 0, 0, TAU);
+      g.fill();
+      if (detail) {
+        // 芯は小さく。属性の色が残るようにする。
+        g.globalAlpha = 0.55;
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.ellipse(L * 0.25, 0, r * 0.5, r * 0.44, 0, 0, TAU);
+        g.fill();
+      }
+    }
+    g.restore();
+
+    if (!detail) return;
+
+    // ── 属性ごとの効果。炎の舌・氷片・稲光など。──
+    g.save();
+    g.globalAlpha = 0.9;
+    g.strokeStyle = c;
+    g.lineCap = 'round';
+    switch (el) {
+      case 'fire': {
+        // 炎。 进行方向の後ろで 3 本の舌が揺れる。
+        g.fillStyle = c;
+        for (let i = 0; i < 3; i++) {
+          const w = 0.9 + Math.sin(t * 22 + i * 2.1 + b.uid) * 0.35;
+          const d = r * (1.5 + i * 1.15);
+          g.globalAlpha = 0.5 - i * 0.13;
+          g.beginPath();
+          g.moveTo(b.x + Math.cos(ang) * r * 0.4, b.y + Math.sin(ang) * r * 0.4);
+          g.lineTo(b.x - Math.cos(ang) * d + Math.cos(ang + 1.57) * r * w,
+                   b.y - Math.sin(ang) * d + Math.sin(ang + 1.57) * r * w);
+          g.lineTo(b.x - Math.cos(ang) * d * 1.25, b.y - Math.sin(ang) * d * 1.25);
+          g.lineTo(b.x - Math.cos(ang) * d - Math.cos(ang + 1.57) * r * w,
+                   b.y - Math.sin(ang) * d - Math.sin(ang + 1.57) * r * w);
+          g.closePath();
+          g.fill();
+        }
+        break;
+      }
+      case 'ice': {
+        g.lineWidth = 1.6;
+        for (let i = 0; i < 2; i++) {
+          const a = ang + 1.57 + (i ? 0.5 : -0.5);
+          const d = r * 1.5;
+          g.globalAlpha = 0.7;
+          g.beginPath();
+          g.moveTo(b.x - Math.cos(ang) * r, b.y - Math.sin(ang) * r);
+          g.lineTo(b.x - Math.cos(ang) * d + Math.cos(a) * r * 1.1,
+                   b.y - Math.sin(ang) * d + Math.sin(a) * r * 1.1);
+          g.stroke();
+        }
+        break;
+      }
+      case 'thunder': {
+        g.lineWidth = 1.4;
+        g.globalAlpha = 0.85;
+        g.beginPath();
+        g.moveTo(b.x - Math.cos(ang) * r * 1.2, b.y - Math.sin(ang) * r * 1.2);
+        const j = (n) => (Math.sin(t * 40 + b.uid * 1.7 + n) * 0.5) * r * 0.9;
+        g.lineTo(b.x - Math.cos(ang) * r * 2.4 + j(0), b.y - Math.sin(ang) * r * 2.4 + j(1));
+        g.lineTo(b.x - Math.cos(ang) * r * 3.6 + j(2), b.y - Math.sin(ang) * r * 3.6 + j(3));
+        g.stroke();
+        break;
+      }
+      case 'poison': {
+        g.fillStyle = c;
+        g.globalAlpha = 0.5;
+        g.beginPath();
+        g.arc(b.x - Math.cos(ang) * r * 1.8, b.y - Math.sin(ang) * r * 1.8 + r * 0.4,
+              r * 0.5 + Math.sin(t * 9) * r * 0.12, 0, TAU);
+        g.fill();
+        break;
+      }
+      case 'light': {
+        g.globalAlpha = 0.4;
+        g.beginPath();
+        g.arc(b.x, b.y, r * 2.4, 0, TAU);
+        g.stroke();
+        break;
+      }
+      case 'dark': {
+        g.globalAlpha = 0.5;
+        g.fillStyle = c;
+        g.beginPath();
+        g.ellipse(b.x - Math.cos(ang) * r * 1.6, b.y - Math.sin(ang) * r * 1.6,
+                  r * 1.5, r * 0.85, ang, 0, TAU);
+        g.fill();
+        break;
+      }
+      case 'wind': {
+        g.lineWidth = 1.3;
+        g.globalAlpha = 0.6;
+        for (let i = 0; i < 2; i++) {
+          const a = ang + (i ? 0.9 : -0.9);
+          g.beginPath();
+          g.arc(b.x, b.y, r * (1.6 + i * 0.5), a, a + 1.1);
+          g.stroke();
+        }
+        break;
+      }
+      case 'water': {
+        g.fillStyle = c;
+        g.globalAlpha = 0.45;
+        g.beginPath();
+        g.arc(b.x - Math.cos(ang) * r * 1.5, b.y - Math.sin(ang) * r * 1.5,
+              r * 0.45, 0, TAU);
+        g.fill();
+        break;
+      }
+      case 'blood': {
+        g.fillStyle = c;
+        g.globalAlpha = 0.5;
+        g.beginPath();
+        g.moveTo(b.x, b.y);
+        g.lineTo(b.x - Math.cos(ang) * r * 2.2 + Math.cos(ang + 1.57) * r,
+                 b.y - Math.sin(ang) * r * 2.2 + Math.sin(ang + 1.57) * r);
+        g.lineTo(b.x - Math.cos(ang) * r * 2.6, b.y - Math.sin(ang) * r * 2.6);
+        g.lineTo(b.x - Math.cos(ang) * r * 2.2 - Math.cos(ang + 1.57) * r,
+                 b.y - Math.sin(ang) * r * 2.2 - Math.sin(ang + 1.57) * r);
+        g.closePath();
+        g.fill();
+        break;
+      }
+      case 'nature': {
+        g.fillStyle = c;
+        g.globalAlpha = 0.55;
+        g.save();
+        g.translate(b.x - Math.cos(ang) * r * 1.6, b.y - Math.sin(ang) * r * 1.6);
+        g.rotate(ang + Math.sin(t * 7) * 0.5);
+        g.beginPath();
+        g.ellipse(0, 0, r * 1.1, r * 0.45, 0, 0, TAU);
+        g.fill();
+        g.restore();
+        break;
+      }
+      case 'earth':
+      case 'gold':
+      case 'steel': {
+        g.lineWidth = 1.2;
+        g.globalAlpha = 0.55;
+        g.beginPath();
+        g.moveTo(b.x - Math.cos(ang) * r * 1.2, b.y - Math.sin(ang) * r * 1.2);
+        g.lineTo(b.x - Math.cos(ang) * r * 2.2 + j0(t, b.uid),
+                 b.y - Math.sin(ang) * r * 2.2 + j0(t, b.uid + 1));
+        g.stroke();
+        break;
+      }
+      default:
+        break;
+    }
+    g.restore();
+  }
+
 
   drawPlayer(run) {
     const g = this.ctx;

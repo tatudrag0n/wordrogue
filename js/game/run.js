@@ -35,6 +35,9 @@ export class Run {
     this.audio = opt.audio;
     this.pouchSize = opt.pouchSize ?? 12;
     this.rand = opt.rng || rng;
+    // 描画側から毎フレーム更新される画面サイズ。
+    this.viewW = opt.viewW || 960;
+    this.viewH = opt.viewH || 600;
     this.viewR = 480;
 
     this.player = {
@@ -249,10 +252,31 @@ export class Run {
   // ───────────────────────────────────────────────────────────────────────────
   // スポーン
   // ───────────────────────────────────────────────────────────────────────────
-  edgeSpawn(radius = 0) {
-    const a = this.rand.angle();
-    const r = radius || this.viewR;
-    return { x: this.player.x + Math.cos(a) * r, y: this.player.y + Math.sin(a) * r };
+  /**
+   * 画面の外から出現させる座標を返す。
+   * 円ではなく「画面の外接矩形」上から位置を選ぶ。
+   * 半径 viewR の円だと横・縦の端でちょうど画面端に着地して見えてしまうため。
+   */
+  edgeSpawn(pad = 0) {
+    const hw = (this.viewW || 960) / 2 + 48 + pad;
+    const hh = (this.viewH || 600) / 2 + 48 + pad;
+    const p = this.player;
+    let x, y;
+    switch (this.rand.int(4)) {
+      case 0: x = -hw; y = this.rand.range(-hh, hh); break;
+      case 1: x = hw; y = this.rand.range(-hh, hh); break;
+      case 2: x = this.rand.range(-hw, hw); y = -hh; break;
+      default: x = this.rand.range(-hw, hw); y = hh; break;
+    }
+    // 万一プレイヤーに近すぎたら外側へ押しやる。
+    const dx = p.x + x - p.x, dy = p.y + y - p.y;
+    const d = Math.hypot(dx, dy);
+    const min = 300;
+    if (d < min && d > 0) {
+      const k = min / d;
+      x *= k; y *= k;
+    }
+    return { x: p.x + x, y: p.y + y };
   }
 
   spawnEnemy(id, at) {
@@ -274,7 +298,11 @@ export class Run {
   spawnBoss() {
     if (this.bossSpawned || !this.stage.boss) return;
     this.bossSpawned = true;
-    const e = this.spawnEnemy(this.stage.boss, { x: this.player.x, y: this.player.y - 400 });
+    // ボスも画面外の上端から来る。
+    const e = this.spawnEnemy(this.stage.boss, {
+      x: this.player.x + this.rand.range(-160, 160),
+      y: this.player.y - (this.viewH || 600) / 2 - 120,
+    });
     if (!e) return;
     this.boss = e;
     this.audio.boss();

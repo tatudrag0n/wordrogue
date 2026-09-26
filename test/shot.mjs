@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const URL_ = 'http://localhost:8099/index.html';
+const CHROME = process.env.CHROME_PATH
+  || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const URL_ = process.env.GAME_URL || 'http://localhost:8099/index.html';
 const PORT = 9225;
 const OUT = process.argv[2] || 'shot';
 const SETTLE = Number(process.argv[3] || 2500);

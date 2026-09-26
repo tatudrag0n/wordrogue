@@ -672,6 +672,21 @@ export class Renderer {
     const g = this.ctx;
     const p = run.player;
 
+    // ダッシュの残像。
+    for (const t of p.dashTrail || []) {
+      const a = (t.life / t.maxLife) * 0.42;
+      if (a <= 0.01) continue;
+      g.save();
+      g.globalAlpha = a;
+      g.translate(t.x, t.y);
+      g.rotate(t.a);
+      g.fillStyle = '#ffd43b';
+      g.beginPath();
+      g.arc(0, 0, p.r * 0.95, 0, TAU);
+      g.fill();
+      g.restore();
+    }
+
     // 吸収シールド。
     if (p.shield > 0) {
       g.save();

@@ -220,6 +220,28 @@ code {
 }
 .bar-xp { height: 13px; }
 .bar-xp .bar-fill { background: linear-gradient(180deg, #ffe98a, #e8b425); }
+.bar-sta { height: 9px; }
+.bar-sta .bar-fill {
+  background: linear-gradient(180deg, #a8f0c0, #3fbf6a);
+  transition: width .06s linear;
+}
+.bar-sta .bar-fill.dashing { background: linear-gradient(180deg, #ffe98a, #f5a623); }
+.bar-sta .bar-fill.empty { background: linear-gradient(180deg, #ff9a9a, #d94848); }
+.bar-sta .bar-text { font-size: .62rem; }
+
+.hud-self {
+  align-self: flex-start;
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: #ffe9a8;
+  background: rgba(8, 11, 18, .82);
+  border: 1px solid rgba(255, 212, 59, .45);
+  border-radius: 999px;
+  padding: 2px 10px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
+}
+.hud-self.invalid { color: #ffb3c1; border-color: rgba(255, 84, 112, .5); }
 .bar-text {
   position: absolute; inset: 0;
   display: grid; place-items: center;
@@ -451,7 +473,7 @@ code {
   color: var(--fg-mute); font-size: .8rem;
 }
 
-/* 文面。核語 + 枠の語 = 連結した文 */
+/* 文面。枠の語を区切って連結した結果と、その分割結果 */
 .sentence {
   display: flex;
   align-items: center;
@@ -464,13 +486,6 @@ code {
   font-size: .95rem;
   letter-spacing: .06em;
 }
-.sn-core {
-  color: #0f1420;
-  background: var(--accent);
-  border-radius: 5px;
-  padding: 1px 6px;
-  font-weight: 700;
-}
 .sn-parts { display: inline-flex; align-items: center; gap: 3px; }
 .sn-plus { color: var(--fg-mute); font-size: .78rem; }
 .sn-w {
@@ -480,12 +495,19 @@ code {
   padding: 1px 5px;
   font-weight: 700;
 }
-.sn-gram {
-  border-style: dotted;
-  color: #d6c9ff;
-  background: #1b1730;
-}
+.sn-gram  { border-style: dotted; color: #d6c9ff; background: #1b1730; }
+.sn-verb  { border-color: rgba(255,143,171,.5); color: #ffc2d1; background: #2a1620; }
+.sn-buff  { border-color: rgba(180,123,255,.5); color: #dcc6ff; background: #1e1630; }
 .sn-empty { color: #3a4459; font-weight: 400; }
+
+.wrow-self { border-color: rgba(255, 212, 59, .35); background: #14120a; }
+.wrow-kind {
+  font-size: .7rem;
+  color: var(--fg-mute);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 5px;
+}
 
 .sn-res {
   margin-left: auto;
@@ -510,6 +532,14 @@ code {
   padding: 0 3px;
 }
 .sg-gram { color: #b9a8ff; border-style: dotted; }
+.sg-verb { color: #ffb0c2; border-color: rgba(255,143,171,.35); }
+.sn-pred {
+  font-size: .68rem;
+  color: #8ab4ff;
+  border: 1px solid rgba(138,180,255,.45);
+  border-radius: 3px;
+  padding: 0 4px;
+}
 
 .wrow-stats {
   display: flex;

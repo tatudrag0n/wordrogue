@@ -4,7 +4,7 @@
 // 語袋の中の「自身強化語」と、セーブの恒久強化から最終ステータスを作る。
 // ============================================================================
 
-import { WORDS, PARTICLES } from '../data/words.js';
+import { WORDS, PARTICLES, evaluate } from '../data/words.js';
 import { clamp } from '../core/util.js';
 
 /** 素の能力。 */
@@ -35,12 +35,13 @@ const BUFF_KEYS = new Set([
 ]);
 
 /**
- * 語袋からプレイヤー能力を集計する。
- * @param {Array<{cat:string,text:string,player:Object|null}>} pouch
+ * 語袋と「自身の文」からプレイヤー能力を集計する。
+ * @param {Array} pouch 語袋
+ * @param {Array<object>} selfSlots プレイヤーの文
  * @param {Object} meta セーブ側の恒久強化
  * @returns {typeof BASE_PLAYER}
  */
-export function resolvePlayerStats(pouch, meta = {}) {
+export function resolvePlayerStats(pouch, selfSlots = [], meta = {}) {
   const s = { ...BASE_PLAYER };
   s.maxHp += meta.hp || 0;
   s.atkMul += meta.atk || 0;
@@ -49,6 +50,7 @@ export function resolvePlayerStats(pouch, meta = {}) {
   s.magnet += meta.magnet || 0;
   s.crit += meta.crit || 0;
 
+  // 語袋の buff 語。
   for (const w of pouch) {
     if (!w || w.cat !== 'buff' || !w.player) continue;
     for (const [k, v] of Object.entries(w.player)) {
@@ -56,6 +58,35 @@ export function resolvePlayerStats(pouch, meta = {}) {
       s[k] = (s[k] || 0) + v;
     }
   }
+
+  // プレイヤー自身の文。中の語が player を持っていれば足す。
+  // 文が成立していれば文の力を，已成为倍に効く。
+  let selfPower = 1;
+  let selfTitle = '';
+  for (const w of selfSlots) {
+    if (!w) continue;
+    selfTitle += w.text;
+    const p = w.player || (w.cat === 'buff' ? w.fx : null);
+    if (!p) continue;
+    for (const [k, v] of Object.entries(p)) {
+      if (!BUFF_KEYS.has(k)) continue;
+      s[k] = (s[k] || 0) + v;
+    }
+  }
+  if (selfSlots.filter(Boolean).length) {
+    const ev = evaluate(selfSlots.filter(Boolean));
+    selfPower = ev.valid ? 1 + (ev.fx.power - 1) * 0.5 : 1;
+    s.selfTitle = selfTitle;
+    s.selfValid = ev.valid;
+    s.selfPower = selfPower;
+  } else {
+    s.selfTitle = '';
+    s.selfValid = false;
+    s.selfPower = 1;
+  }
+  // 自身の文の力は、攻撃と防御に効く。
+  s.atkMul *= selfPower;
+  s.armor = clamp(s.armor * selfPower, 0, 0.8);
 
   // 補正と上限。
   s.armor = clamp(s.armor, 0, 0.75);

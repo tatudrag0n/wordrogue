@@ -76,14 +76,17 @@ export const DRAWABLE = Object.keys(WORDS).filter((w) => {
 });
 
 /**
- * 語袋から引ける語。助詞 (文語) も含む。
+ * 語袋から引ける語。助詞 (文語) と助動詞も含む。
  * 助詞は「火の弾」のように文を読める形にするため必要。
- * 出unix도는低めにして、 substantive 語を薄めaffeDensity。
+ * 動詞は 1 枚で 1 つの動作になる。
+ * 出る比重は種別ごとに少しずつ抑えてある。
  */
 export const DRAWABLE_ALL = Object.keys(WORDS).filter((w) => {
   const c = WORDS[w].cat;
-  return c === 'element' || c === 'form' || c === 'modifier' || c === 'buff' || c === 'grammar';
+  return c === 'element' || c === 'form' || c === 'modifier' || c === 'buff'
+    || c === 'grammar' || c === 'verb' || c === 'aux';
 });
+
 
 /** 助詞・文語。分割はするが、それだけでは文にならない。 */
 export const PARTICLES = new Set(
@@ -92,7 +95,8 @@ export const PARTICLES = new Set(
 
 /** 種別ごとの語配列。 */
 export const WORDS_BY_CAT = {
-  element: [], form: [], modifier: [], buff: [], grammar: [],
+  element: [], form: [], modifier: [], verb: [], buff: [],
+  grammar: [], aux: [],
 };
 for (const w of Object.keys(WORDS)) WORDS_BY_CAT[WORDS[w].cat].push(w);
 
@@ -210,6 +214,9 @@ export function evaluate(words) {
     text: joined,
     segments: [],
     content: 0,
+    verbs: 0,
+    aux: 0,
+    predicated: false,
     element: 'none',
     fx: {},
     idiom: null,
@@ -224,15 +231,21 @@ export function evaluate(words) {
   if (!segs) {
     return { ...base, valid: false, reason: 'unseg', reasonText: REASONS.unseg, grade: 'broken', gradeInfo: GRADES.broken };
   }
-  // 分割結果から実効語 (助詞でない語) を数えながら効果を集計する。
+  // 分割結果から実効語 (助詞でも助動詞でもない語) を数えながら効果を集計する。
   let content = 0;
+  let verbs = 0;
+  let aux = 0;
   const elWeight = Object.create(null);
   const fx = Object.create(null);
 
   for (const s of segs) {
     const w = WORDS[s];
     if (!w) continue;
-    if (!PARTICLES.has(s)) content++;
+    // 助詞と助動詞は文の骨組みであって、実効語ではない。
+    const filler = PARTICLES.has(s) || w.cat === 'aux';
+    if (!filler) content++;
+    if (w.cat === 'verb') verbs++;
+    if (w.cat === 'aux') aux++;
     if (w.el) elWeight[w.el] = (elWeight[w.el] || 0) + 1;
     for (const [k, v] of Object.entries(w.fx)) {
       fx[k] = (fx[k] || 0) + v;
@@ -267,17 +280,27 @@ export function evaluate(words) {
     }
   }
 
-  // 文の長さに応じた「文の力」。
-  // 実質語 1 つに 8%、助詞 1 つに 5%、熟語に 15%。
-  // 長い・読みやすい文ほど強くなるようにする。
+  // 文の構造に応じた「文の力」。
+  //   実質語 1 つに 8%
+  //   助詞   1 つに 5%
+  //   動詞   1 つに 4%  (動作を表している)
+  //   述語 (助動詞「する」) があれば 10%。文の骨組みがそろっている。
+  //   熟語に 15%
+  // 長い・読みやすい・述語のある文ほど強くなる。
   const bonusWords = Math.max(0, content - 1);
-  const particles = segs.length - content;
-  fx.power = 1 + bonusWords * 0.08 + particles * 0.05 + (idiom ? 0.15 : 0);
+  const particles = segs.length - content - aux;
+  const predicated = aux > 0;
+  fx.power = 1
+    + bonusWords * 0.08
+    + particles * 0.05
+    + verbs * 0.04
+    + (predicated ? 0.10 : 0)
+    + (idiom ? 0.15 : 0);
 
+  // 評価。述語つきは最低でも「名文」相当にする。
   let grade = 'plain';
-  if (idiom && content >= 4) grade = 'great';
-  else if (idiom) grade = 'idiom';
-  else if (content >= 4) grade = 'idiom';
+  if (idiom && (content >= 4 || predicated)) grade = 'great';
+  else if (idiom || content >= 4 || predicated) grade = 'idiom';
 
   return {
     valid: true,
@@ -286,6 +309,9 @@ export function evaluate(words) {
     text: joined,
     segments: segs,
     content,
+    verbs,
+    aux,
+    predicated,
     grade,
     gradeInfo: GRADES[grade],
     element,

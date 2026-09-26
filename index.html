@@ -27,7 +27,12 @@
           <div class="bar-fill" id="xpFill"></div>
           <span class="bar-text" id="xpText">Lv 1</span>
         </div>
+        <div class="bar bar-sta" title="スタミナ。スペースを押している間だけ消費する。">
+          <div class="bar-fill" id="staFill"></div>
+          <span class="bar-text" id="staText">100</span>
+        </div>
         <div class="hud-stats" id="hudStats"></div>
+        <div class="hud-self" id="hudSelf" hidden></div>
       </div>
 
       <div class="hud-col hud-center">
@@ -192,49 +197,63 @@
       </header>
       <div class="howto-body">
         <section>
-          <h3>1. 文を作って武器にする</h3>
+        <section>
+          <h3>1. 文がそのまま武器の名前になる</h3>
           <p>
-            各武器には<strong>核語</strong>が 1 つ決まっていて、ほかに<strong>枠</strong>がある。
-            枠に語を並べると、核語再加上えて「文」になる。武器 1 つにつき 3〜5 枠。
+            武器には<strong>枠</strong>がある。枠に語を並べると、それがそのまま
+            <strong>武器名</strong> になる。武器レベルに応じて <strong>4 から 7 枠</strong>。
           </p>
           <ul class="howto-list">
-            <li><b class="ok">成立</b> … 剣＋「火」「の」「球」→<code>力火の球</code> 効果発動</li>
-            <li><b class="ok">熟語</b> …「火」＋「球」→<code>火球</code> 追加ボーナス发动</li>
+            <li><b class="ok">成立</b> …「刃」+「利」→ <code>利刃</code></li>
+            <li><b class="ok">積み重ねる</b> …「爆裂」+「無双」+「雷」+「剣」→ <code>爆裂無双雷剣</code></li>
+            <li><b class="ok">熟語</b> …「火」+「球」→ <code>火球</code> で追加ボーナス</li>
             <li><b class="ng">不成文</b> … 実質語が 2 つ足りない / 助詞だけ / 分割できない → <strong>その武器は無効</strong></li>
           </ul>
           <p>
             成立条件は「語が辞書で完全に分割できて、<strong>実質語（助詞でない語）を 2 つ以上</strong>含むこと」。
+            長い文ほど<strong>文の力</strong>が上がり、熟語を maid するとさらに伸びる。
           </p>
         </section>
         <section>
-          <h3>助詞（文語）も引ける</h3>
+          <h3>2. 語の種類</h3>
+          <ul class="howto-list">
+            <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
+            <li><b>形態</b> … 剣・弾・矢・球・爆弾・雷・環・壁・光線など。<strong>攻撃の形を決める</strong>。</li>
+            <li><b>効果</b> … 巨大・貫通・分裂・散弾など。数値を上げる。</li>
+            <li><b>動詞</b> … 燃える・貫く・凍るなど。1 枚で 1 つの動作になる。</li>
+            <li><b>助詞</b> … の・は・をなど。<code>火の弾</code> のように文を読める形にする。</li>
+            <li><b>助動詞</b> … <code>する</code> など。述語になり文の骨組みがそろう。</li>
+            <li><b>自身</b> … 頑強・疾走など。プレイヤーに効く。</li>
+          </ul>
+        </section>
+        <section>
+          <h3>3. プレイヤー自身も文にする</h3>
           <p>
-            <code>の</code> <code>は</code> <code>を</code> <code>に</code> <code>と</code> などの
-            <strong>助詞</strong>も語袋から引ける。語袋では点線枠で表示される。
-            実質語には数えないので、それだけでは文が成立しない。ただし
-            <code>火の弾</code> のように<strong>読める文</strong>を作れる。
-            長い文ほど「文の力」が上がる。
+            言葉鍛冶の一番上に<strong>自身の枠</strong>がある。
+            「頑強」+「疾走」+「人」で <code>頑強疾走人</code> のように称号になり、
+            文の力が<strong>攻撃と防御</strong>に効く。
           </p>
         </section>
-
         <section>
-          <h3>2. 戦闘中はいつでも組み替えられる</h3>
+          <h3>4. 戦闘中はいつでも組み替えられる</h3>
           <p>
-            <kbd>Q</kbd> で言葉鍛冶を開く。開いている間は時間が止まるので、
-            敵の（税を）見てから並び替えられる。戦闘中でも組み替え可能。
+            <kbd>Q</kbd> で言葉鍛冶を開く。開いている間だけ時間が止まるので、
+            戦況を見てから並び替えられる。
           </p>
         </section>
         <section>
-          <h3>3. クリア報酬</h3>
+          <h3>5. クリア報酬</h3>
           <p>
             ステージを終えると<strong>ことば</strong>・<strong>武器</strong>・
-            <strong>自身の強化</strong>から選べる。武器レベルを 3 / 6 にすると枠が 1 つずつ増える。
+            <strong>自身の強化</strong>から選べる。
+            武器レベルを 2 / 4 / 6 で上げると枠が 1 つずつ増える。
           </p>
         </section>
         <section>
           <h3>操作</h3>
           <ul class="howto-list">
             <li><kbd>WASD</kbd> / <kbd>矢印</kbd> … 移動</li>
+            <li><kbd>スペース</kbd> … <strong>押しっぱなしでダッシュ</strong>（スタミナを消費）</li>
             <li><kbd>Q</kbd> … 言葉鍛冶の開閉</li>
             <li><kbd>Esc</kbd> … 一時停止 / 閉じる</li>
             <li>タッチ … 画面を長押ししてからドラッグで移動</li>
@@ -242,6 +261,7 @@
           </ul>
         </section>
       </div>
+
     </div>
   </div>
 

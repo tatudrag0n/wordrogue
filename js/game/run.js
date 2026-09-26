@@ -19,6 +19,12 @@ import {
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
 } from './entities.js';
 
+// ダッシュ。1 秒あたりの消費量と回復量。
+export const DASH_COST = 34;           // 押している間、毎秒 34 消費
+export const DASH_MULT = 3.1;           // 移動速度の 3.1 倍
+export const STAMINA_REGEN = 26;        // 回復は毎秒 26
+export const DASH_RECOVER_DELAY = 0.28; // ダッシュをやめてから回復が始まるまでの秒数
+
 export class Run {
   /**
    * @param {object} opt
@@ -48,6 +54,11 @@ export class Run {
       face: -Math.PI / 2,
       invuln: 0, flash: 0, anim: 0,
       shield: 0,
+      // スタミナとダッシュ
+      stamina: 100, maxStamina: 100,
+      dashing: false, dashCd: 0, dashTrail: [],
+      // プレイヤー自身の文
+      selfSlots: new Array(opt.selfSlots ?? 4).fill(null),
       stats: { ...BASE_PLAYER },
       alive: true,
     };
@@ -66,9 +77,10 @@ export class Run {
     }
     if (!this.weapons.length) this.weapons.push(new WeaponInst('sword', 1));
 
-    // 各武器の最初の 1 語だけ埋めて、開始直後から文を成立させる。
+    // 各武器の開始時の 2 語。核語は無いので 2 語ないと文にならない。
     for (const wi of this.weapons) {
       if (wi.def.startWord) wi.setSlot(0, makeWord(wi.def.startWord));
+      if (wi.def.startWord2) wi.setSlot(1, makeWord(wi.def.startWord2));
     }
 
     // 語袋に語を渡す。セーブの恒久語 → 抽選の順。
@@ -79,6 +91,13 @@ export class Run {
       if (w) this.addWord(w, true);
     }
     for (const w of (opt.extraWords || [])) this.addWord(makeWord(w.text), true, true);
+
+    // プレイヤー自身の文。最初は何も入れない。
+    for (const t of (opt.selfWords || [])) {
+      const idx = this.player.selfSlots.indexOf(null);
+      if (idx < 0) break;
+      this.player.selfSlots[idx] = makeWord(t);
+    }
 
     // ── ワールド ──
     this.t = 0;
@@ -120,7 +139,7 @@ export class Run {
   // 能力
   // ───────────────────────────────────────────────────────────────────────────
   refreshStats(full = false) {
-    const s = resolvePlayerStats(this.pouch, this.save?.d.meta || {});
+    const s = resolvePlayerStats(this.pouch, this.player.selfSlots, this.save?.d.meta || {});
     const p = this.player;
     const ratio = p.maxHp > 0 ? clamp(p.hp / p.maxHp, 0, 1) : 1;
     p.stats = s;
@@ -176,12 +195,15 @@ export class Run {
     return null;
   }
 
-  /** 語袋へ戻す。置き場があれば入れる。 */
+  /**
+   * 語袋へ戻す。置き場があれば入れる。
+   */
   toPouch(word) {
     const loc = this.findWord(word);
     if (!loc) return false;
     const free = this.pouch.indexOf(null);
     if (loc.wi) loc.wi.setSlot(loc.index, null);
+    else if (loc.self !== undefined) this.player.selfSlots[loc.index] = null;
     else this.pouch[loc.index] = null;
     if (free >= 0) this.pouch[free] = word;
     this.refreshStats();
@@ -189,17 +211,26 @@ export class Run {
   }
 
   /**
-   * 語を武器のスロットに入れる。置き換え 或者 は語袋へ戻す。
-   * _words 既に別の場所にある場合はその場所から取り除く。
+   * 語袋と全武器のスロットを検索する。
+   * @returns {{where:string, index:number, wi:object|null, self?:number}|null}
    */
-  placeWord(wi, slotIndex, word) {
+  findWordAnywhere(word) {
+    const loc = this.findWord(word);
+    if (loc) return loc;
+    const i = this.player.selfSlots.indexOf(word);
+    if (i >= 0) return { where: 'self', index: i, wi: null };
+    return null;
+  }
+
+  /** 語袋・武器・自身のうちどれかへ装着する。 */
+  placeWordAnywhere(wi, slotIndex, word) {
     if (!word) return false;
     const prev = wi.slots[slotIndex] || null;
-    // 既にある場所から移除。
-    const loc = this.findWord(word);
+    const loc = this.findWordAnywhere(word);
     if (loc) {
       if (loc.wi === wi && loc.index === slotIndex) return true;
       if (loc.wi) loc.wi.setSlot(loc.index, null);
+      else if (loc.where === 'self') this.player.selfSlots[loc.index] = null;
       else this.pouch[loc.index] = null;
     }
     wi.setSlot(slotIndex, word);
@@ -210,6 +241,36 @@ export class Run {
     }
     this.refreshStats();
     return true;
+  }
+
+  /** プレイヤーの文に語を入れる。 */
+  placeSelfWord(index, word) {
+    const slots = this.player.selfSlots;
+    if (index < 0 || index >= slots.length) return false;
+    const prev = slots[index] || null;
+    const loc = this.findWordAnywhere(word);
+    if (loc) {
+      if (loc.where === 'self' && loc.index === index) return true;
+      if (loc.wi) loc.wi.setSlot(loc.index, null);
+      else if (loc.where === 'self') slots[loc.index] = null;
+      else this.pouch[loc.index] = null;
+    }
+    slots[index] = word || null;
+    if (prev && prev !== word) {
+      const free = this.pouch.indexOf(null);
+      if (free >= 0) this.pouch[free] = prev;
+    }
+    this.refreshStats();
+    return true;
+  }
+
+  /**
+  /**
+   * 語を武器のスロットに入れる。語袋か自身の文から取り除く。
+   */
+  placeWord(wi, slotIndex, word) {
+    if (!word) return false;
+    return this.placeWordAnywhere(wi, slotIndex, word);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -434,11 +495,54 @@ export class Run {
     p.anim += dt;
 
     const ax = input?.ax || 0, ay = input?.ay || 0;
-    p.vx += (ax * p.stats.spd - p.vx) * Math.min(1, 14 * dt);
-    p.vy += (ay * p.stats.spd - p.vy) * Math.min(1, 14 * dt);
+    const moving = Math.hypot(ax, ay) > 0.08;
+
+    // ── ダッシュ ──
+    // スペースを押している間だけ。スタミナを交会しながら加速する。
+    const wantDash = !!input?.dash && p.stamina > 1;
+    if (wantDash) {
+      p.stamina = Math.max(0, p.stamina - DASH_COST * dt);
+      p.dashCd = DASH_RECOVER_DELAY;
+      p.dashing = true;
+    } else {
+      p.dashing = false;
+    }
+    if (p.dashCd > 0) p.dashCd -= dt;
+    if (!p.dashing && p.dashCd <= 0) {
+      p.stamina = Math.min(p.maxStamina, p.stamina + STAMINA_REGEN * dt);
+    }
+
+    // ダッシュ中は入力方向へ大きく加速する。 standing はその場で缩む。
+    const dirX = moving ? ax : Math.cos(p.face);
+    const dirY = moving ? ay : Math.sin(p.face);
+    const spd = p.stats.spd * (p.dashing ? DASH_MULT : 1);
+    p.vx += (dirX * spd - p.vx) * Math.min(1, (p.dashing ? 26 : 14) * dt);
+    p.vy += (dirY * spd - p.vy) * Math.min(1, (p.dashing ? 26 : 14) * dt);
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    if (input?.moving) p.face = input.angle;
+    if (moving) p.face = input.angle;
+
+    // 残像。
+    if (p.dashing) {
+      p.dashTrail.push({ x: p.x, y: p.y, a: p.face, life: 0.22, maxLife: 0.22 });
+      if (p.dashTrail.length > 14) p.dashTrail.shift();
+    }
+    for (let i = p.dashTrail.length - 1; i >= 0; i--) {
+      p.dashTrail[i].life -= dt;
+      if (p.dashTrail[i].life <= 0) p.dashTrail.splice(i, 1);
+    }
+
+    // ダッシュ中は敵を弾き飛ばす。
+    if (p.dashing) {
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const rr = p.r + e.r + 10;
+        if (dist2(e.x, e.y, p.x, p.y) > rr * rr) continue;
+        const a = Math.atan2(e.y - p.y, e.x - p.x);
+        e.x += Math.cos(a) * 260 * dt;
+        e.y += Math.sin(a) * 260 * dt;
+      }
+    }
 
     if (p.stats.regen > 0 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.stats.regen * dt);
   }
@@ -473,8 +577,8 @@ export class Run {
       }
       const st = res.stats;
 
-      if (wi.def.kind === 'orbit') { this.orbitTick(wi, st, dt); continue; }
-      if (wi.def.kind === 'aura')  { this.auraTick(wi, st, dt); continue; }
+      if (st.kind === 'orbit') { this.orbitTick(wi, st, dt); continue; }
+      if (st.kind === 'aura')  { this.auraTick(wi, st, dt); continue; }
 
       wi.cd -= dt;
       if (wi.cd <= 0) {

@@ -14,32 +14,49 @@ const ELEMENT_WEIGHT = 3;
 
 let wUid = 0;
 
-/** 武器の核語 (空洞に最初から入っている語) のキャッシュ。 */
-const coreCache = new Map();
-function coreWordOf(defId) {
-  if (!coreCache.has(defId)) coreCache.set(defId, makeWord(WEAPONS[defId].core));
-  return coreCache.get(defId);
-}
-
-/** 形態語を描画用の形に対応させる。同じ形の語はまとめる。 */
-const FORM_SHAPE = {
-  矢: 'arrow', 針: 'arrow', 竜頭: 'arrow', 夾撃: 'arrow',
-  弾: 'shot', 乱打: 'shot',
-  刃: 'blade', 刀: 'blade', 太刀: 'blade', 大剣: 'blade', 爪: 'blade', 牙: 'blade', 鞭: 'blade',
-  球: 'orb', 塊: 'orb', 彗星: 'orb',
-  爆弾: 'bomb',
+/**
+ * 形態語を描画用の形と攻撃の種類に対応させる。
+ * 後ろにある形態語が優先される (「炎の球の矢」なら 矢)。
+ */
+const FORM_INFO = {
+  // 斬撃
+  剣: ['blade', 'slash'], 刃: ['blade', 'slash'], 刀: ['blade', 'slash'],
+  太刀: ['blade', 'slash'], 大剣: ['blade', 'slash'],
+  爪: ['blade', 'slash'], 牙: ['blade', 'slash'],
+  // 射撃
+  弾: ['shot', 'shot'], 矢: ['arrow', 'shot'], 針: ['arrow', 'shot'],
+  球: ['orb', 'shot'], 塊: ['orb', 'shot'], 竜頭: ['arrow', 'shot'],
+  夾撃: ['arrow', 'shot'], 乱打: ['shot', 'shot'], 殲滅: ['orb', 'shot'],
+  殲: ['arrow', 'shot'], 貫通: ['arrow', 'shot'], 複製: ['orb', 'shot'],
+  // 爆弾
+  爆弾: ['bomb', 'bomb'], 彗星: ['orb', 'bomb'],
+  // 連鎖
+  雷: ['shot', 'chain'], 雷神: ['shot', 'chain'],
+  // 軌道
+  環: ['blade', 'orbit'], 回転: ['blade', 'orbit'], 回転刃: ['blade', 'orbit'],
+  // 薙ぎ
+  鞭: ['blade', 'whip'], 嵐: ['orb', 'whip'],
+  // 城壁
+  壁: ['orb', 'aura'], 棘壁: ['orb', 'aura'],
+  // 光線
+  光線: ['arrow', 'beam'], 閃光: ['arrow', 'beam'], 反射: ['blade', 'beam'],
 };
 
 /**
- * 文面の中から形を決める。後ろにある形態語を優先する。
- * 例:「炎の球の矢」なら 矢 (arrow)。
+ * 文面の中から形と攻撃タイプを決める。
+ * @param {string[]} segments
+ * @returns {{shape:string|null, kind:string|null}}
  */
-function shapeOf(segments) {
+function formOf(segments) {
   let shape = null;
+  let kind = null;
   for (const s of segments) {
-    if (FORM_SHAPE[s]) shape = FORM_SHAPE[s];
+    const info = FORM_INFO[s];
+    if (!info) continue;
+    shape = info[0];
+    kind = info[1];
   }
-  return shape;
+  return { shape, kind };
 }
 
 export class WeaponInst {
@@ -90,19 +107,20 @@ export class WeaponInst {
     return true;
   }
 
-  /** 文面 (核語 + 埋めた語) の文字列。表示用。 */
-  get phraseText() {
-    return this.slots.map((s) => (s ? s.text : '＿')).join('');
+
+  /**
+   * 武器名。埋めた語をそのまま連結したもの。
+   * 「爆裂」「無双」「迅」「雷」「剣」なら「爆裂無双迅雷剣」になる。
+   */
+  get title() {
+    const t = this.slots.map((s) => (s ? s.text : '')).join('');
+    return t || this.def.name;
   }
 
-  /** 核語込みで文を評価し、，孟性を合算する。 */
+  /** 埋めた語だけで文を評価する。核語は無い。 */
   evaluate() {
-    const list = [coreWordOf(this.defId), ...this.slots.filter(Boolean)];
-    const r = evaluate(list);
-    r.withCore = true;
-    return r;
+    return evaluate(this.slots.filter(Boolean));
   }
-
   /**
    * 戦闘に使う最終ステータスを作る。
    * @param {object} ps プレイヤー能力
@@ -116,6 +134,7 @@ export class WeaponInst {
 
     const e = this.evaluate();
     const base = baseStatsForLevel(this.def, this.level);
+    const form = formOf(e.segments);
 
     const out = {
       active: e.valid,
@@ -126,6 +145,10 @@ export class WeaponInst {
       gradeInfo: e.gradeInfo,
       element: e.element,
       elementInfo: ELEMENTS[e.element] || ELEMENTS.none,
+      // 攻撃の種類は文中の形態語が決める。 無ければ武器の既定。
+      kind: form.kind || this.def.kind,
+      shape: form.shape,
+      title: this.title,
       text: this.slots.map((s) => (s ? s.text : '')).join(''),
       fullText: e.text,
       evalResult: e,
@@ -190,7 +213,8 @@ export class WeaponInst {
     // 弾・分裂・フィールドが参照する属性。
     st.el = e.element;
     // 描画用の形。形態語が鍵になる。
-    st.shape = shapeOf(e.segments);
+    st.shape = form.shape;
+    st.kind = out.kind;
 
     // 概算 DPS (UI の比較用)。
     const multi = Math.max(1, st.count) * (1 + st.split * 0.4) * (1 + st.pierce * 0.25)

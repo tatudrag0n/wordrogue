@@ -216,15 +216,23 @@ await sleep(400);
 ok(await evalJs('!document.getElementById("forge").hidden'), '言葉鍛冶が開いた');
 ok(await evalJs('window.__wordrogue.run.paused === true'), '時間が止まった');
 const rows = await evalJs('document.querySelectorAll("#forgeWeapons .wrow").length');
-ok(rows === 2, `武器行の数: ${rows}`);
+ok(rows === 3, `行の数: ${rows} (自身 1 + 武器 2)`);
+const selfRow = await evalJs('!!document.querySelector("#forgeWeapons .wrow-self")');
+ok(selfRow, 'プレイヤー自身の文の行が無い');
 const slots = await evalJs('document.querySelectorAll("#forgeWeapons .slot").length');
-ok(slots === 6, `枠の数: ${slots} (武器 2 つ x Lv1 の 3 枠 = 6)`);
+ok(slots === 12, `枠の数: ${slots} (自身 4 + 武器 2 x 4 = 12)`);
 const sent = await evalJs('document.querySelectorAll("#forgeWeapons .sentence").length');
-ok(sent === 2, `文面表示の数: ${sent}`);
+ok(sent === 3, `文面表示の数: ${sent}`);
 const sentText = await evalJs(
   '[...document.querySelectorAll("#forgeWeapons .sn-text")].map(n => n.textContent).join(" | ")');
-ok(/^[^|]+\|/.test(sentText) || sentText.includes('|'), `文面 nonempty: ${sentText}`);
+ok(sentText.includes('|'), `文面 nonempty: ${sentText}`);
 console.log(`    文面: ${sentText}`);
+const coreGone = await evalJs('document.querySelectorAll("#forgeWeapons .sn-core").length');
+ok(coreGone === 0, `核語の表示が残っている: ${coreGone}`);
+
+// スタミナ_present か。
+const hasStamina = await evalJs('!!document.getElementById("staFill")');
+ok(hasStamina, 'スタミナバーが無い');
 const pwords = await evalJs('document.querySelectorAll("#forgePouch .pword:not(.empty)").length');
 ok(pwords > 0, `語袋の語: ${pwords}`);
 
@@ -257,6 +265,74 @@ sec('鍛冶を閉じると時間が再開する');
 await evalJs('document.getElementById("forgeBack").click()');
 await sleep(300);
 ok(await evalJs('window.__wordrogue.run.paused === false'), '時間が再開した');
+
+sec('ダッシュでスタミナが消費される');
+{
+  await evalJs('document.getElementById("forgeBack").click()');
+  await sleep(300);
+  const sta0 = await evalJs('window.__wordrogue.run.player.stamina');
+  // スペースを押した状態にして移動させる。
+  await evalJs(`(() => {
+    const app = window.__wordrogue;
+    app.input.keys.add(' ');
+    app.input.keys.add('d');
+  })()`);
+  await sleep(700);
+  const mid = await evalJs(`({
+    sta: window.__wordrogue.run.player.stamina,
+    dashing: window.__wordrogue.run.player.dashing,
+    speed: Math.hypot(window.__wordrogue.run.player.vx, window.__wordrogue.run.player.vy),
+    base: window.__wordrogue.run.player.stats.spd,
+    trail: window.__wordrogue.run.player.dashTrail.length,
+    width: document.getElementById("staFill").style.width,
+  })`);
+  await evalJs(`(() => {
+    const app = window.__wordrogue;
+    app.input.keys.delete(' ');
+    app.input.keys.delete('d');
+  })()`);
+  ok(mid.sta < sta0, `スタミナが減っていない: ${sta0} -> ${mid.sta}`);
+  ok(mid.dashing === true, 'ダッシュ状態になっていない');
+  ok(mid.speed > mid.base * 1.5, `ダッシュの速さが足りない: ${mid.speed.toFixed(0)} (基準 ${mid.base})`);
+  ok(mid.trail > 0, '残像が出ていない');
+  ok(/%$/.test(mid.width) && parseFloat(mid.width) < 100, `バーが減っていない: ${mid.width}`);
+  console.log(`    スタミナ ${sta0.toFixed(0)} -> ${mid.sta.toFixed(0)} / 速度 ${mid.speed.toFixed(0)} (基準 ${mid.base}) / 残像 ${mid.trail}`);
+
+  // 離すと回復する。
+  await sleep(900);
+  const sta1 = await evalJs('window.__wordrogue.run.player.stamina');
+  ok(sta1 > mid.sta, `回復しない: ${mid.sta.toFixed(0)} -> ${sta1.toFixed(0)}`);
+}
+
+sec('プレイヤー自身の文で称号ができる');
+{
+  const res = await evalJs(`(async () => {
+    const m = await import(new URL('js/data/words.js', document.baseURI).href);
+    const run = window.__wordrogue.run;
+    const p = run.player;
+    p.selfSlots.fill(null);
+    p.selfSlots[0] = m.makeWord('頑強');
+    p.selfSlots[1] = m.makeWord('疾走');
+    p.selfSlots[2] = m.makeWord('人');
+    run.refreshStats();
+    return {
+      title: p.stats.selfTitle,
+      valid: p.stats.selfValid,
+      power: p.stats.selfPower,
+      atk: p.stats.atkMul,
+      armor: p.stats.armor,
+      hudHidden: document.getElementById("hudSelf").hidden,
+    };
+  })()`);
+  ok(res.title === '頑強疾走人', `称号が「${res.title}」`);
+  ok(res.valid === true, '自身の文が不成文');
+  ok(res.power > 1, `文の力が上がっていない: ${res.power}`);
+  ok(res.armor > 0, `装甲が乗っていない: ${res.armor}`);
+  await sleep(200);
+  const shown = await evalJs('document.getElementById("hudSelf").textContent');
+  ok(shown === '頑強疾走人', `HUD に称号が出ていない: ${shown}`);
+  console.log(`    称号「${res.title}」 文の力 x${res.power.toFixed(2)} / 装甲 ${res.armor.toFixed(2)}`);
+}
 
 sec('ステージクリアと報酬');
 const cleared = await evalJs(`(async () => {

@@ -70,7 +70,6 @@ add('雪中送炭',     '雪中送炭',     '回復と凍結',              { re
 add('虎穴に入虎子', '虎穴に入虎子', '大胆不敵',                { crit: 0.20, lifesteal: 0.08, dmg: 8, atkMul: 0.06 });
 add('流れ星',       '流れ星',       '流れ星の矢',              { speed: 150, pierce: 5, homing: 0.4, dmg: 6 });
 add('秘孔と死角',   '秘孔と死角',   '会心OKEの极み',      { crit: 0.45, critDmg: 1.2, dmg: 4 });
-add('無双',         '無双',         '誰も勝てない',            { atkMul: 0.20, dmg: 10, crit: 0.10, rate: 0.6 });
 add('蒼穹',         '蒼穹',         '天からの一撃',            { area: 30, speed: 90, pierce: 5, count: 3 });
 add('地獄',         '地獄',         '炎と毒と氷',              { burn: 8, poison: 6, area: 30, explode: 30 });
 add('蒼炎',         '蒼炎',         '蒼の炎',                  { burn: 8, chill: 0.20, area: 20, pierce: 3 });

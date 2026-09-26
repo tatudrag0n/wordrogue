@@ -12,6 +12,9 @@ export class Hud {
     this.hpText = $('#hpText');
     this.xpFill = $('#xpFill');
     this.xpText = $('#xpText');
+    this.staFill = $('#staFill');
+    this.staText = $('#staText');
+    this.hudSelf = $('#hudSelf');
     this.hudStats = $('#hudStats');
     this.hudStage = $('#hudStage');
     this.hudTimer = $('#hudTimer');
@@ -51,6 +54,26 @@ export class Hud {
     // 経験値
     this.xpFill.style.width = `${clamp(p.xp / p.xpNext, 0, 1) * 100}%`;
     this.xpText.textContent = `Lv ${p.level}`;
+
+    // スタミナ
+    const staPct = clamp(p.stamina / p.maxStamina, 0, 1) * 100;
+    this.staFill.style.width = `${staPct}%`;
+    this.staText.textContent = p.dashing ? 'ダッシュ中' : `${Math.ceil(p.stamina)}`;
+    this.staFill.classList.toggle('dashing', p.dashing);
+    this.staFill.classList.toggle('empty', p.stamina < 12);
+
+    // プレイヤー自身の文 (称号)。
+    const selfTitle = p.stats.selfTitle || '';
+    if (selfTitle) {
+      this.hudSelf.hidden = false;
+      this.hudSelf.textContent = selfTitle;
+      this.hudSelf.classList.toggle('invalid', p.stats.selfValid === false);
+      this.hudSelf.title = p.stats.selfValid
+        ? `自身の文「${selfTitle}」— 文の力が攻撃と防御に効く`
+        : `自身の文「${selfTitle}」— 不成文。実質語を 2 つ以上並べよう`;
+    } else {
+      this.hudSelf.hidden = true;
+    }
 
     // 能力
     const s = p.stats;
@@ -120,12 +143,18 @@ export class Hud {
         + (res.active && res.grade === 'great' ? ' great' : '')
         + (res.active && res.grade === 'idiom' ? ' idiom' : '');
       node.querySelector('.wchip-lv').textContent = `Lv${wi.level}`;
+      // 武器名はそのまま文面。
       node.querySelector('.wchip-txt').textContent = res.active
-        ? `${wi.name} ${res.fullText}`
-        : `${wi.name} ${res.reasonText}`;
+        ? wi.title
+        : `${wi.title || wi.def.name} — ${res.reasonText}`;
       node.title = res.active
-        ? `${res.gradeInfo.name}「${res.fullText}」 — 威力 ${res.stats.dmg.toFixed(0)}`
+        ? `${res.gradeInfo.name}「${res.fullText}」 — 威力 ${res.stats.dmg.toFixed(0)} / ${KIND_LABEL[res.kind] || res.kind}`
         : `不成文: ${res.reasonText}`;
     }
   }
 }
+
+const KIND_LABEL = {
+  slash: '斬撃', shot: '射撃', bomb: '爆弾', chain: '連鎖',
+  orbit: '軌道', whip: '薙ぎ', aura: '城壁', beam: '光線',
+};

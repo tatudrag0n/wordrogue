@@ -21,7 +21,8 @@ const cdOf = (rate) => 1 / Math.max(0.05, rate);
 export function fireWeapon(run, wi, res) {
   const st = res.stats;
   const p = run.player;
-  const kind = wi.def.kind;
+  // 攻撃の種類は文中の形態語が決めている (無ければ武器の既定)。
+  const kind = res.kind || wi.def.kind;
 
   wi.flash = 1;
   wi.phase += 0.6;

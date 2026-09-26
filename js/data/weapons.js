@@ -2,7 +2,7 @@
 // ワードローグ — 武器定義
 //
 // 武器そのものは弱く、文で強化する前提。
-// 核語 (core) が 1 つ最初から埋め込まれ、実質語がもう 1 つ以上並ぶと発動する。
+// 枠に並べる語だけで文になる。核語は無い。
 //   例 剣 + 「炎」        -> 「剣炎」  成立 (花火的斬撃)
 //       剣 + 「火」「の」  -> 「剣火」  1 実質語 -> 不成立
 //
@@ -28,70 +28,70 @@ export const WEAPONS = {
     desc: '扇形を薙ぎ払う。近接の基本。',
     base: { dmg: 9, rate: 1.5, range: 92, arc: 1.9, size: 1, crit: 0.05 },
     grow: { dmg: 3.2, rate: 0.1, range: 4, arc: 0.05 },
-    core: '力', startWord: '刃', maxLevel: 8, startSlots: 3, unlock: null,
+    startWord: '刃', startWord2: '利', maxLevel: 8, startSlots: 4, unlock: null,
   },
   gun: {
     id: 'gun', name: '銃', kind: 'shot', glyph: '銃',
     desc: '最も近い敵へ自動で撃つ。',
     base: { dmg: 6, rate: 2.0, speed: 330, count: 1, size: 1, crit: 0.05, spread: 0 },
     grow: { dmg: 2.1, rate: 0.22, speed: 12, count: 0.34 },
-    core: '心', startWord: '弾', maxLevel: 8, startSlots: 3, unlock: null,
+    startWord: '弾', startWord2: '速', maxLevel: 8, startSlots: 4, unlock: null,
   },
   arrow: {
     id: 'arrow', name: '矢', kind: 'shot', glyph: '矢',
     desc: '貫通して飛ぶ。素直に強い。',
     base: { dmg: 8, rate: 1.1, speed: 420, pierce: 2, size: 1, crit: 0.08, homing: 0 },
     grow: { dmg: 2.8, rate: 0.1, pierce: 0.34, speed: 10 },
-    core: '感', startWord: '矢', maxLevel: 8, startSlots: 3, unlock: { stage: 1 },
+    startWord: '矢', startWord2: '貫', maxLevel: 8, startSlots: 4, unlock: { stage: 1 },
   },
   bomb: {
     id: 'bomb', name: '爆弾', kind: 'bomb', glyph: '爆',
     desc: '投げて爆発させる。範囲と炎上。',
     base: { dmg: 14, rate: 0.55, speed: 210, explode: 30, area: 26, size: 1.1, count: 1, knock: 50 },
     grow: { dmg: 4.6, rate: 0.06, explode: 8, area: 5 },
-    core: '力', startWord: '爆', maxLevel: 8, startSlots: 3, unlock: { stage: 1 },
+    startWord: '炎', startWord2: '弾', maxLevel: 8, startSlots: 4, unlock: { stage: 1 },
   },
   orbit: {
     id: 'orbit', name: '回転刃', kind: 'orbit', glyph: '環',
     desc: 'アドレスのまわりに回る刃。',
     base: { dmg: 7, orbit: 2, size: 1, crit: 0.04, rate: 0.5 },
     grow: { dmg: 2.4, orbit: 0.34, size: 0.05 },
-    core: '縛', startWord: '刃', maxLevel: 8, startSlots: 3, unlock: { stage: 2 },
+    startWord: '環', startWord2: '刃', maxLevel: 8, startSlots: 4, unlock: { stage: 2 },
   },
   thunder: {
     id: 'thunder', name: '雷', kind: 'chain', glyph: '雷',
     desc: '敵から敵へ連鎖する稲光。',
     base: { dmg: 11, rate: 1.1, chain: 3, shock: 0.10, size: 1, crit: 0.05 },
     grow: { dmg: 3.6, chain: 0.34, rate: 0.1 },
-    core: '技', startWord: '電', maxLevel: 8, startSlots: 3, unlock: { stage: 2 },
+    startWord: '雷', startWord2: '連鎖', maxLevel: 8, startSlots: 4, unlock: { stage: 2 },
   },
   whip: {
     id: 'whip', name: '鞭', kind: 'whip', glyph: '鞭',
     desc: '周囲を薙ぐ。近接の範囲攻撃。',
     base: { dmg: 10, rate: 1.25, range: 130, area: 10, size: 1, knock: 60, crit: 0.05 },
     grow: { dmg: 3.4, rate: 0.1, range: 7, area: 2 },
-    core: '心', startWord: '鞭', maxLevel: 8, startSlots: 3, unlock: { stage: 3 },
+    startWord: '鞭', startWord2: '強', maxLevel: 8, startSlots: 4, unlock: { stage: 3 },
   },
   aura: {
     id: 'aura', name: '棘壁', kind: 'aura', glyph: '壁',
     desc: '体温を纏った腐蚀の城壁。触れると傷つく。',
     base: { dmg: 4, rate: 1.0, range: 92, size: 1, slowImmune: 0, regen: 0 },
     grow: { dmg: 1.6, range: 7, rate: 0.1 },
-    core: '守', startWord: '棘', maxLevel: 8, startSlots: 3, unlock: { stage: 3 },
+    startWord: '毒', startWord2: '壁', maxLevel: 8, startSlots: 4, unlock: { stage: 3 },
   },
   boomerang: {
     id: 'boomerang', name: '環刃', kind: 'boomerang', glyph: '還',
     desc: '飛んで戻ってくる刃。貫通する。',
     base: { dmg: 10, rate: 0.9, speed: 300, pierce: 4, bounce: 2, size: 1, crit: 0.06 },
     grow: { dmg: 3.4, rate: 0.1, pierce: 0.34, bounce: 0.3 },
-    core: '感', startWord: '刃', maxLevel: 8, startSlots: 3, unlock: { stage: 4 },
+    startWord: '刃', startWord2: '貫', maxLevel: 8, startSlots: 4, unlock: { stage: 4 },
   },
   beam: {
     id: 'beam', name: '光線', kind: 'beam', glyph: '光',
     desc: '一直線を貫く光。装甲も切り裂く。',
     base: { dmg: 16, rate: 0.7, range: 460, pierce: 99, size: 1, crit: 0.1, speed: 900 },
     grow: { dmg: 5.2, rate: 0.08, range: 20 },
-    core: '技', startWord: '光線', maxLevel: 8, startSlots: 3, unlock: { stage: 5 },
+    startWord: '閃', startWord2: '電', maxLevel: 8, startSlots: 4, unlock: { stage: 5 },
   },
 };
 
@@ -99,7 +99,7 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
 
 /** 武器の現在のスロット数を求める。Lv3 と Lv6 で 1 つずつ増える。 */
 export function slotsForLevel(def, level) {
-  return def.startSlots + (level >= 3 ? 1 : 0) + (level >= 6 ? 1 : 0);
+  return def.startSlots + (level >= 2 ? 1 : 0) + (level >= 4 ? 1 : 0) + (level >= 6 ? 1 : 0);
 }
 
 /** 武器レベルに応じた基礎値を、核語込みで計算する。 */

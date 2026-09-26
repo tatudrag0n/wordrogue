@@ -132,6 +132,9 @@ export class Input {
   get moving() { return Math.hypot(this.ax, this.ay) > 0.08; }
   get angle() { return Math.atan2(this.ay, this.ax); }
 
+  /** ダッシュ (スペースを押している間)。 */
+  get dash() { return this.keys.has(' ') || this.keys.has('space'); }
+
   down(...ks) { return ks.some((k) => this.keys.has(k)); }
   hit(k) { return this.pressed.has(k); }
 

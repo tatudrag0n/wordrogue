@@ -78,6 +78,8 @@ export class Forge {
     const list = this.listEl;
     clear(list);
 
+    list.append(this.renderSelfRow());
+
     for (const wi of this.run.weapons) {
       const res = wi.resolve(this.run.player.stats);
       const row = el('div', {
@@ -86,9 +88,9 @@ export class Forge {
 
       // 見出し
       const head = el('div', { class: 'wrow-head' },
-        el('span', { class: 'wrow-name' }, wi.def.name),
-        el('span', { class: 'wrow-core', title: '核語 (最初から埋まっている)' }, wi.def.core),
+        el('span', { class: 'wrow-name' }, wi.title || wi.def.name),
         el('span', { class: 'wrow-lv' }, `Lv ${wi.level} / ${wi.def.maxLevel}`),
+        el('span', { class: 'wrow-kind' }, KIND_LABEL[res.active ? res.kind : 'none'] || ''),
         el('span', {
           class: `wrow-grade grade-${res.grade}`,
         }, res.active ? res.gradeInfo.name : '不成文'),
@@ -132,29 +134,23 @@ export class Forge {
   }
 
   /**
-   * 文面を表示する。核語と枠の語を分けて、色で区別する。
-   * こうすると「文を組み立てている」ことがひと目で分かる。
+   * 文面を表示する。枠の語を区切って連結した結果と、その分割結果。
+   * 助詞と動詞は色が変わるので、どれが骨組みでどれが中身かが分かる。
    */
   renderSentence(wi, res) {
     const wrap = el('div', { class: 'sentence' });
-
-    // 核語
-    wrap.append(el('span', { class: 'sn-core', title: '核語 (武器に固定)' }, wi.def.core));
 
     const parts = [];
     wi.slots.forEach((w, i) => {
       if (i > 0) parts.push(el('span', { class: 'sn-plus' }, '+'));
       parts.push(w
-        ? el('span', {
-          class: 'sn-w' + (PARTICLES.has(w.text) ? ' sn-gram' : ''),
-          title: WORDS[w.text] ? CATEGORIES[WORDS[w.text].cat]?.name : '',
-        }, w.text)
+        ? el('span', { class: `sn-w ${catClass(w)}`, title: WORDS[w.text]?.cat || '' }, w.text)
         : el('span', { class: 'sn-empty' }, '＿'));
     });
     wrap.append(el('span', { class: 'sn-parts' }, parts));
 
     // 連結した結果。
-    const joined = [wi.def.core, ...wi.slots.filter(Boolean).map((w) => w.text)].join('');
+    const joined = wi.slots.filter(Boolean).map((w) => w.text).join('');
     const right = el('span', { class: 'sn-res' },
       el('span', { class: 'sn-eq' }, '= '),
       el('b', { class: 'sn-text' }, joined || '—'),
@@ -162,12 +158,101 @@ export class Forge {
     if (res.active) {
       right.append(el('span', { class: 'sn-seg' },
         res.evalResult.segments.map((s) => el('i', {
-          class: PARTICLES.has(s) ? 'sg sg-gram' : 'sg',
+          class: `sg ${catClass({ text: s })}`,
         }, s))));
+      if (res.evalResult.predicated) {
+        right.append(el('span', { class: 'sn-pred' }, '述語'));
+      }
     }
     wrap.append(right);
     return wrap;
   }
+
+  /**
+   * プレイヤー自身の文。「頑強疾走人」のような称号を作る。
+   */
+  renderSelfRow() {
+    const p = this.run.player;
+    const ev = evaluate(p.selfSlots.filter(Boolean));
+    const row = el('div', { class: 'wrow wrow-self' + (ev.valid ? ' ' + ev.grade : ' broken') });
+
+    row.append(el('div', { class: 'wrow-head' },
+      el('span', { class: 'wrow-name' }, '自身'),
+      el('span', { class: 'wrow-kind' }, '称号'),
+      el('span', { class: 'wrow-grade grade-' + (ev.valid ? ev.grade : 'broken') },
+        ev.valid ? ev.gradeInfo.name : '不成文'),
+    ));
+
+    if (!ev.valid && p.selfSlots.some(Boolean)) {
+      row.append(el('div', { class: 'wrow-why' },
+        ev.reasonText + ' — 自身強化の語を 2 つ以上並べると文になる。'));
+    }
+
+    const slots = el('div', { class: 'slots' });
+    p.selfSlots.forEach((word, i) => {
+      const isArmed = this.armed && word && this.armed === word;
+      const cls = 'slot'
+        + (word ? ' filled' : '')
+        + (this.armed ? ' drop' : '')
+        + (isArmed ? ' armed' : '');
+      const node = el('div', { class: cls, title: word ? word.text + ' を戻す' : '空の枠' },
+        word ? el('span', {}, word.text) : el('span', { class: 'empty-mark' }, '＿'));
+      node.addEventListener('click', () => this.onSelfSlotClick(i));
+      slots.append(node);
+      if (i < p.selfSlots.length - 1) slots.append(el('span', { class: 'slot-plus' }, '+'));
+    });
+    row.append(slots);
+
+    // 文面。
+    const joined = p.selfSlots.filter(Boolean).map((w) => w.text).join('');
+    const right = el('span', { class: 'sn-res' },
+      el('span', { class: 'sn-eq' }, '= '),
+      el('b', { class: 'sn-text' }, joined || '—'),
+    );
+    if (ev.valid) {
+      right.append(el('span', { class: 'sn-seg' },
+        ev.segments.map((s) => el('i', { class: 'sg ' + catClass({ text: s }) }, s))));
+    }
+    row.append(el('div', { class: 'sentence' }, right));
+
+    // 乗っている自身の効果。
+    const fx = [];
+    for (const w of p.selfSlots) {
+      if (!w || !w.player) continue;
+      for (const [k, v] of Object.entries(w.player)) {
+        fx.push((PS_LABEL[k] || k) + (v > 0 ? '+' : '') + (Math.round(v * 100) / 100));
+      }
+    }
+    if (fx.length) {
+      row.append(el('div', { class: 'wrow-stats' },
+        fx.map((t) => el('span', { class: 'stat up' }, t))));
+    }
+    if (ev.valid) {
+      row.append(el('div', { class: 'wrow-stats' },
+        el('span', { class: 'stat idom' }, '文の力 x' + p.stats.selfPower.toFixed(2))));
+    }
+    return row;
+  }
+
+  onSelfSlotClick(i) {
+    const p = this.run.player;
+    if (this.armed) {
+      const w = this.armed;
+      this.armed = null;
+      this.run.placeSelfWord(i, w);
+      this.opt.audio?.worn?.({ active: true });
+      this.opt.onChange?.();
+      this.render();
+      return;
+    }
+    if (p.selfSlots[i]) {
+      this.run.toPouch(p.selfSlots[i]);
+      this.opt.audio?.tap?.();
+      this.opt.onChange?.();
+      this.render();
+    }
+  }
+
 
   renderStats(res) {
     const wrap = el('div', { class: 'wrow-stats' });
@@ -338,6 +423,22 @@ export class Forge {
 }
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
+
+/** 語の種類から CSS クラスを作る。助詞と動詞を区別する。 */
+function catClass(w) {
+  const info = WORDS[w?.text];
+  if (!info) return 'sn-x';
+  if (info.cat === 'grammar' || info.cat === 'aux') return 'sn-gram';
+  if (info.cat === 'verb') return 'sn-verb';
+  if (info.cat === 'buff') return 'sn-buff';
+  return 'sn-n';
+}
+
+/** 攻撃の種類の日本語名。 */
+const KIND_LABEL = {
+  slash: '斬撃', shot: '射撃', bomb: '爆弾', chain: '連鎖',
+  orbit: '軌道', whip: '薙ぎ', aura: '城壁', beam: '光線', none: '',
+};
 
 const FX_LABEL = {
   dmg: '威力', rate: '攻撃/秒', speed: '速さ', count: '数', pierce: '貫通',

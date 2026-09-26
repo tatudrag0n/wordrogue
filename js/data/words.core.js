@@ -29,8 +29,10 @@ export const CATEGORIES = {
   element:  { name: '属性', color: '#ffb347', weight: 30 },
   form:     { name: '形態', color: '#7ad7ff', weight: 26 },
   modifier: { name: '効果', color: '#9dff5c', weight: 24 },
+  verb:     { name: '動詞', color: '#ff8fab', weight: 18 },
   buff:     { name: '自身', color: '#b47bff', weight: 12 },
   grammar:  { name: '文語', color: '#c8b6ff', weight: 8 },
+  aux:      { name: '助動詞', color: '#8ab4ff', weight: 7 },
 };
 
 const RAW_ELEMENT = `
@@ -163,6 +165,7 @@ const RAW_MODIFIER = `
 緩       modifier  -  rate-0.5  dmg+5  area+10
 鋭       modifier  -  dmg+6  crit+0.05
 鋭利     modifier  -  dmg+7  crit+0.06
+利       modifier  -  dmg+5  crit+0.03
 強       modifier  -  dmg+8
 激       modifier  -  dmg+12
 破壊     modifier  -  dmg+10  area+8
@@ -319,7 +322,7 @@ const RAW_EXTRA = `
 百     modifier  -  count+5
 千     modifier  -  count+7  spread+0.2
 万     modifier  -  count+9  spread+0.3
-人     modifier  -  count+1  dmg-1
+人       buff  -  atk+0.03  spd+0.02
 鳥     modifier  -  speed+40  count+1
 馬     modifier  -  speed+60
 虎     modifier  -  crit+0.08  dmg+6
@@ -397,6 +400,58 @@ const RAW_EXTRA = `
 色     modifier  -  count+3  atkMul+0.04
 `;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 動詞: これ 1 枚で 1 つの動作になる。「燃える」「貫く」など。
+// 文の述語としても使えるので、「爆発」+「する」で「爆発する」になる。
+// ─────────────────────────────────────────────────────────────────────────────
+const RAW_VERB = `
+爆ぜさせる  verb  -  dmg+4  explode+30
+爆裂      verb  -  dmg+5  explode+34  area+8
+爆轟      verb  -  dmg+6  explode+38  area+12  knock+60
+迅雷      verb  -  dmg+5  speed+80  pierce+3  crit+0.1
+迅捷      verb  -  dmg+2  rate+0.8  speed+40
+無双      verb  -  dmg+8  atkMul+0.08  crit+0.1
+凍えつく  verb  -  dmg+4  chill+0.32  freeze+0.25
+炸裂      verb  -  dmg+5  explode+32  area+6
+破裂      verb  -  dmg+4  explode+26  area+8
+燃える    verb  -  dmg+3  burn+4
+燃やす    verb  -  dmg+4  burn+5  area+6
+焦げる    verb  -  dmg+2  burn+3  poison+1
+凍る      verb  -  dmg+3  chill+0.24
+溶ける    verb  -  dmg+2  chill+0.16  size-0.10
+融ける    verb  -  dmg+1  chill+0.12  regen+0.3
+沸く      verb  -  dmg+1  regen+1.2
+蒸す      verb  -  dmg+2  burn+3  area+8
+貫く      verb  -  dmg+5  pierce+4
+射る      verb  -  dmg+3  speed+60
+斬る      verb  -  dmg+8  crit+0.08
+砕く      verb  -  dmg+6  knock+40
+殴る      verb  -  dmg+6  rate+0.3
+渦巻く    verb  -  dmg+5  orbit+2
+散る      verb  -  dmg+2  count+3  spread+0.4
+伸びる    verb  -  dmg+2  size+0.30
+縮む      verb  -  dmg+1  speed+50  size-0.15
+走る      verb  -  dmg+1  speed+55
+跳ぶ      verb  -  dmg+2  homing+0.35
+響く      verb  -  dmg+4  chain+3
+裂ける    verb  -  dmg+3  split+3
+吸う      verb  -  dmg+1  lifesteal+0.05  magnet+0.30
+吐く      verb  -  dmg+3  explode+14
+這う      verb  -  dmg+1  speed+25  size+0.15
+跳ね回る  verb  -  dmg+4  orbit+1  bounce+3
+沸騰      verb  -  dmg+2  area+14  burn+2
+`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 助動詞: 述語のマーカー。実質語には数えないが、文を「文」にする。
+// ─────────────────────────────────────────────────────────────────────────────
+const RAW_AUX = `
+する      aux  -  dmg+1
+なり      aux  -  dmg+1
+べし      aux  -  dmg+1  crit+0.02
+`;
+
 export const RAW_TABLES = [
-  RAW_ELEMENT, RAW_FORM, RAW_MODIFIER, RAW_BUFF, RAW_GRAMMAR, RAW_CORE, RAW_EXTRA,
+  RAW_ELEMENT, RAW_FORM, RAW_MODIFIER, RAW_VERB, RAW_BUFF,
+  RAW_GRAMMAR, RAW_AUX, RAW_CORE, RAW_EXTRA,
 ];

@@ -218,7 +218,13 @@ ok(await evalJs('window.__wordrogue.run.paused === true'), '時間が止まっ�
 const rows = await evalJs('document.querySelectorAll("#forgeWeapons .wrow").length');
 ok(rows === 2, `武器行の数: ${rows}`);
 const slots = await evalJs('document.querySelectorAll("#forgeWeapons .slot").length');
-ok(slots === 4, `枠の数: ${slots}`);
+ok(slots === 6, `枠の数: ${slots} (武器 2 つ x Lv1 の 3 枠 = 6)`);
+const sent = await evalJs('document.querySelectorAll("#forgeWeapons .sentence").length');
+ok(sent === 2, `文面表示の数: ${sent}`);
+const sentText = await evalJs(
+  '[...document.querySelectorAll("#forgeWeapons .sn-text")].map(n => n.textContent).join(" | ")');
+ok(/^[^|]+\|/.test(sentText) || sentText.includes('|'), `文面 nonempty: ${sentText}`);
+console.log(`    文面: ${sentText}`);
 const pwords = await evalJs('document.querySelectorAll("#forgePouch .pword:not(.empty)").length');
 ok(pwords > 0, `語袋の語: ${pwords}`);
 

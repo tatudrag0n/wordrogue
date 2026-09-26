@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { $, el, clear } from '../core/util.js';
-import { WORDS, CATEGORIES, PARTICLES, makeWord } from '../data/words.js';
+import { WORDS, CATEGORIES, PARTICLES, makeWord, DRAWABLE_ALL } from '../data/words.js';
 import { WEAPONS, slotsForLevel } from '../data/weapons.js';
 import { WeaponInst } from '../game/weapon.js';
 
@@ -214,19 +214,19 @@ export function rollRewards(run, save, opts = {}) {
   return out.slice(0, poolSize);
 }
 
-/** 重み付き抽選で語を引く。 */
+/** 重み付き抽選で語を引く。助詞 (文語) も候補に入る。 */
 function pickWord(rand) {
-  // 同じ重み付けの語サブセットを並べ替えて選ぶ。
-  const table = Object.keys(WORDS).filter((w) => {
-    const c = WORDS[w].cat;
-    return c === 'element' || c === 'form' || c === 'modifier' || c === 'buff';
-  });
+  const table = DRAWABLE_ALL;
   if (!table.length) return null;
   // 属性語と形態語が多めに混ざるよう重みを付ける。
   const weighted = [];
   for (const w of table) {
     const c = WORDS[w].cat;
-    const n = c === 'element' ? 3 : c === 'form' ? 3 : c === 'modifier' ? 4 : 1;
+    const n = c === 'element' ? 3
+      : c === 'form' ? 3
+      : c === 'modifier' ? 4
+      : c === 'grammar' ? 1
+      : 1;
     for (let i = 0; i < n; i++) weighted.push(w);
   }
   return weighted[rand.int(weighted.length)];

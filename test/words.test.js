@@ -1,5 +1,6 @@
 // 語辞書と文判定の単体テスト。  node test/words.test.js
-import { WORDS, DRAWABLE, PARTICLES, segment, evaluate, makeWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS } from '../js/data/words.js';
+import { WORDS, DRAWABLE, DRAWABLE_ALL, PARTICLES, segment, evaluate, makeWord, drawWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS } from '../js/data/words.js';
+import { makeRng } from '../js/core/util.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => {
@@ -118,6 +119,64 @@ sec('熟語はすべて到達可能であること');
     ok(!!p && !!p.fx && Object.keys(p.fx).length > 0, `熟語「${key}」に効果が無い`);
     ok(!!p.name && !!p.desc, `熟語「${key}」の説明が無い`);
     ok(p.phrase === key, `熟語「${key}」の phrase が一致しない`);
+  }
+}
+
+sec('助詞 (文語) も語袋から引ける');
+{
+  ok(DRAWABLE_ALL.length > DRAWABLE.length, 'DRAWABLE_ALL に助詞が含まれていない');
+  const grammarInPool = DRAWABLE_ALL.filter((w) => WORDS[w].cat === 'grammar');
+  ok(grammarInPool.length >= 40, `語袋に入る助詞が少ない: ${grammarInPool.length}`);
+  ok(!DRAWABLE.includes('の'), 'DRAWABLE (助詞なし) に助詞が混じっている');
+  ok(grammarInPool.includes('の') && grammarInPool.includes('は') && grammarInPool.includes('を'),
+    '基本の助詞が引けない');
+
+  // 実際に引けるか。 보조詞も ': 少しは引かれるはず。
+  const seen = new Map();
+  for (let i = 0; i < 4000; i++) {
+    const w = drawWord(makeRng(i * 2654435761 % 4294967296));
+    if (w) seen.set(w.cat, (seen.get(w.cat) || 0) + 1);
+  }
+  ok(seen.get('grammar') > 0, `4000 回引いても助詞が出ない: ${JSON.stringify([...seen])}`);
+  const total = [...seen.values()].reduce((a, b) => a + b, 0);
+  const ratio = seen.get('grammar') / total;
+  ok(ratio > 0.03, `助詞の比重が高すぎる: ${(ratio * 100).toFixed(1)}%`);
+  ok(ratio < 0.20, `助詞の比重が高すぎる: ${(ratio * 100).toFixed(1)}%`);
+  console.log(`  4000 回の抽選: 助詞 ${(ratio * 100).toFixed(1)}% / 実質語 ${(100 - ratio * 100).toFixed(1)}%`);
+}
+
+sec('助詞は文を成立させない');
+{
+  const E2 = (...ws) => evaluate(ws.map((w) => (typeof w === 'string' ? { text: w } : w)));
+  let r = E2('の', 'は', 'を');
+  ok(!r.valid, '助詞だけの文が成立している');
+  r = E2('火', 'の', 'の', 'の', 'の');
+  ok(!r.valid, '実質語 1 つに助詞を足しても成立している');
+  r = E2('火', 'の', '球');
+  ok(r.valid, '「火の球」が不成立');
+  ok(r.segments.length === 3, `分割数 ${r.segments.length}`);
+  // 助詞を足すと文の力が上がる。
+  const short = E2('火', '球');
+  const long = E2('火', 'の', '弾', 'の', '球');
+  ok(long.fx.power > short.fx.power, `文の力: ${short.fx.power} -> ${long.fx.power}`);
+  console.log(`  文の力 「火球」=${short.fx.power.toFixed(2)} / 「火の弾の球」=${long.fx.power.toFixed(2)}`);
+}
+
+sec('文が実際に読める形，作れること');
+{
+  const E2 = (...ws) => evaluate(ws.map((w) => (typeof w === 'string' ? { text: w } : w)));
+  const cases = [
+    [['力', '刃', '火', 'の', '球'], true],
+    [['力', '火', 'の', '玉'], true],     // 熟語「火の玉」
+    [['心', '弾', '雷', 'の', '矢'], true],
+    [['力', '刃', 'の'], true],           // 実質語 2 つなので成立
+    [['力', 'の', '刃'], true],           // 並べ替えても成立
+    [['力', 'の', 'は'], false],          // 実質語 1 つだけ
+    [['力'], false],
+  ];
+  for (const [ws, want] of cases) {
+    const r = E2(...ws);
+    ok(r.valid === want, `「${ws.join('')}」valid=${r.valid} (期待 ${want})`);
   }
 }
 

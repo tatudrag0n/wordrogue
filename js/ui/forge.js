@@ -122,10 +122,51 @@ export class Forge {
       });
       row.append(slots);
 
+      // 文面。核語 + 枠の語が連結したもの。
+      row.append(this.renderSentence(wi, res));
+
       // 性能
       row.append(this.renderStats(res));
       list.append(row);
     }
+  }
+
+  /**
+   * 文面を表示する。核語と枠の語を分けて、色で区別する。
+   * こうすると「文を組み立てている」ことがひと目で分かる。
+   */
+  renderSentence(wi, res) {
+    const wrap = el('div', { class: 'sentence' });
+
+    // 核語
+    wrap.append(el('span', { class: 'sn-core', title: '核語 (武器に固定)' }, wi.def.core));
+
+    const parts = [];
+    wi.slots.forEach((w, i) => {
+      if (i > 0) parts.push(el('span', { class: 'sn-plus' }, '+'));
+      parts.push(w
+        ? el('span', {
+          class: 'sn-w' + (PARTICLES.has(w.text) ? ' sn-gram' : ''),
+          title: WORDS[w.text] ? CATEGORIES[WORDS[w.text].cat]?.name : '',
+        }, w.text)
+        : el('span', { class: 'sn-empty' }, '＿'));
+    });
+    wrap.append(el('span', { class: 'sn-parts' }, parts));
+
+    // 連結した結果。
+    const joined = [wi.def.core, ...wi.slots.filter(Boolean).map((w) => w.text)].join('');
+    const right = el('span', { class: 'sn-res' },
+      el('span', { class: 'sn-eq' }, '= '),
+      el('b', { class: 'sn-text' }, joined || '—'),
+    );
+    if (res.active) {
+      right.append(el('span', { class: 'sn-seg' },
+        res.evalResult.segments.map((s) => el('i', {
+          class: PARTICLES.has(s) ? 'sg sg-gram' : 'sg',
+        }, s))));
+    }
+    wrap.append(right);
+    return wrap;
   }
 
   renderStats(res) {

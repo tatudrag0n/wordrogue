@@ -285,6 +285,13 @@ const RAW_GRAMMAR = `
 て        grammar  -  dmg+1
 よ        grammar  -  dmg+1
 な        grammar  -  dmg+1
+のみ      grammar  -  dmg+1  crit+0.01
+つつ      grammar  -  dmg+1  duration+0.3
+ごとに    grammar  -  dmg+1  count+1
+しか      grammar  -  dmg+2
+および    grammar  -  dmg+1  pierce+1
+ほど以上  grammar  -  dmg+1  size+0.05
+てから    grammar  -  dmg+1  rate+0.15
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────

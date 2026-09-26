@@ -75,6 +75,16 @@ export const DRAWABLE = Object.keys(WORDS).filter((w) => {
   return c === 'element' || c === 'form' || c === 'modifier' || c === 'buff';
 });
 
+/**
+ * 語袋から引ける語。助詞 (文語) も含む。
+ * 助詞は「火の弾」のように文を読める形にするため必要。
+ * 出unix도는低めにして、 substantive 語を薄めaffeDensity。
+ */
+export const DRAWABLE_ALL = Object.keys(WORDS).filter((w) => {
+  const c = WORDS[w].cat;
+  return c === 'element' || c === 'form' || c === 'modifier' || c === 'buff' || c === 'grammar';
+});
+
 /** 助詞・文語。分割はするが、それだけでは文にならない。 */
 export const PARTICLES = new Set(
   Object.keys(WORDS).filter((w) => WORDS[w].cat === 'grammar'),
@@ -257,9 +267,12 @@ export function evaluate(words) {
     }
   }
 
-  // 文の長さに応じた「文の力」。GUARD。
+  // 文の長さに応じた「文の力」。
+  // 実質語 1 つに 8%、助詞 1 つに 5%、熟語に 15%。
+  // 長い・読みやすい文ほど強くなるようにする。
   const bonusWords = Math.max(0, content - 1);
-  fx.power = 1 + bonusWords * 0.08 + (idiom ? 0.15 : 0) + (segs.length - content) * 0.02;
+  const particles = segs.length - content;
+  fx.power = 1 + bonusWords * 0.08 + particles * 0.05 + (idiom ? 0.15 : 0);
 
   let grade = 'plain';
   if (idiom && content >= 4) grade = 'great';
@@ -302,16 +315,20 @@ export function possibleCompounds(available, limit = 16) {
   return out.slice(0, limit);
 }
 
-/** 語袋から重み付き抽選で語を引く。 */
-export function drawWord(rng, opts = {}) {  const cat = opts.cat;
-  const pool = cat ? WORDS_BY_CAT[cat] : DRAWABLE;
+/**
+ * 語袋から重み付き抽選で語を引く。
+ * 助詞も引けるが、比重は少し下げてある。
+ */
+export function drawWord(rng, opts = {}) {
+  const cat = opts.cat;
+  const pool = cat ? WORDS_BY_CAT[cat] : DRAWABLE_ALL;
   if (!pool || !pool.length) return null;
 
   // 重み付き抽選。種別ごとの重みを読む。
   const weights = pool.map((w) => {
     const c = CATEGORIES[WORDS[w].cat];
     const base = c ? c.weight : 10;
-    return opts.rareOk || WORDS[w].cat !== 'buff' ? base : base;
+    return WORDS[w].cat === 'grammar' ? base * 2.5 : base;
   });
   const total = weights.reduce((a, b) => a + b, 0);
   let r = rng() * total;

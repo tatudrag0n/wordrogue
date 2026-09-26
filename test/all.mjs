@@ -5,10 +5,42 @@
 //   全部まとめて:  npm test
 //   ブラウザテストだけ:  npm run test:browser
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import { join, extname, normalize } from 'node:path';
+import { readFile, readdir, stat } from 'node:fs/promises';
+import { join, extname, normalize, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+
+/** js/ と test/ の全ファイルを構文検査する。書き損じの早期検出用。 */
+async function collect(dir, out = []) {
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) await collect(p, out);
+    else if (/\.(js|mjs)$/.test(e.name)) out.push(p);
+  }
+  return out;
+}
+
+const files = [
+  ...(await collect(join(ROOT, 'js'))),
+  ...(await collect(join(ROOT, 'test'))),
+];
+let syntaxBad = 0;
+for (const f of files) {
+  const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
+  if (r.status !== 0) {
+    syntaxBad++;
+    console.log(`\x1b[31m構文エラー\x1b[0m ${f.replace(ROOT, '')}`);
+    console.log((r.stderr || '').split('\n').slice(0, 4).join('\n'));
+  }
+}
+console.log(`== 構文検査 ==\n  ${files.length} ファイル / 不正 ${syntaxBad}`);
+if (syntaxBad) {
+  console.log('\n=== 失敗したテストがあります ===');
+  process.exit(1);
+}
 
 const PORT = Number(process.env.PORT || 8099);
 const startServer = process.env.NO_SERVE !== '1';
@@ -62,7 +94,7 @@ failed += await run('test/words.test.js');
 failed += await run('test/sim.test.js');
 
 if (startServer) {
-  const server = await serve(process.cwd(), PORT);
+  const server = await serve(ROOT, PORT);
   try {
     failed += await run('test/browser.test.js');
   } finally {

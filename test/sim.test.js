@@ -298,7 +298,7 @@ sec('形態語が弾の形に反映される');
 
   // レベルを上げると枠が増えて複数形にできる。
   wi.levelUp(); wi.levelUp();
-  ok(wi.slots.length === 3, `Lv3 で枠が 3 になる: ${wi.slots.length}`);
+  ok(wi.slots.length === 4, `Lv3 で枠が 4 になる: ${wi.slots.length}`);
   wi.setSlot(0, makeWord('火'));
   wi.setSlot(1, makeWord('の'));
   wi.setSlot(2, makeWord('矢'));
@@ -362,6 +362,64 @@ sec('開始時の語袋に語が入っていること');
     if (wi.resolve(r.player.stats).active) { found = true; break; }
   }
   ok(found, '語袋のどの語でも既存の枠と合わせて文にできない');
+
+  // 語袋に 2 語以上入る。1 語では 文の組み立て方に幅が出ないため。
+  ok(filled >= 9, `語袋が少なすぎる: ${filled} (10 語のはず)`);
+  console.log(`  語袋: ${r.pouch.filter(Boolean).map((w) => w.text).join(' ')}`);
+}
+
+sec('武器 1 つにつき複数語を並べられる');
+{
+  const r = newRun(1, ['sword', 'gun']);
+  const wi = r.weapons[0];
+  console.log(`  剣の枠: ${wi.slots.length} 個 (Lv1)`);
+  ok(wi.slots.length >= 3, `Lv1 の枠が少なすぎる: ${wi.slots.length}`);
+  // 開始時に 1 個埋まっているので、自由に使えるのは 2 個以上。
+  const free = wi.slots.filter((s) => !s).length;
+  ok(free >= 2, `自由に使える枠が少なすぎる: ${free}`);
+
+  // レベルを上げると枠が増える。
+  const counts = [];
+  for (let lv = 1; lv <= 8; lv++) {
+    wi.level = lv; wi.resizeSlots();
+    counts.push(wi.slots.length);
+  }
+  console.log(`  Lv1〜8 の枠数: ${counts.join(' → ')}`);
+  ok(counts[0] === 3, `Lv1 が 3 枠でない: ${counts[0]}`);
+  ok(counts[7] === 5, `Lv8 が 5 枠でない: ${counts[7]}`);
+  for (let i = 1; i < counts.length; i++) {
+    ok(counts[i] >= counts[i - 1], 'レベルを上げると枠が減っている');
+  }
+
+  // 実際に「火の球」のような文を、Lv1 の枠で組めるか。
+  wi.level = 1; wi.resizeSlots();
+  wi.setSlot(0, makeWord('刃'));
+  wi.setSlot(1, makeWord('火'));
+  wi.setSlot(2, makeWord('球'));
+  const res = wi.resolve(r.player.stats);
+  const ev = res.evalResult;
+  ok(res.valid, `Lv1 の 3 枠で「刃火球」が成立しない: ${res.reasonText}`);
+  ok(res.fullText === '力刃火球', `文面 ${res.fullText}`);
+  ok(ev.content === 4, `実質語数 ${ev.content}`);
+  ok(!!ev.idiom, `熟語「火球」が乗らない: ${ev.idiom}`);
+  console.log(`  Lv1 の 3 枠 → 「${res.fullText}」(${res.gradeInfo.name} / 熟語 ${ev.idiom.name})`);
+
+  // 助詞は文の力を上げる。同じ実質語の並びで比較する。
+  wi.level = 6; wi.resizeSlots();
+  const set = (...ws) => {
+    wi.slots.fill(null);
+    ws.forEach((w, i) => wi.setSlot(i, makeWord(w)));
+    return wi.resolve(r.player.stats);
+  };
+  const plain = set('刃', '火', '弾', '球');
+  const gram = set('刃', '火', '弾', 'の', '球');
+  ok(plain.valid && gram.valid, '比較用の文が成立していない');
+  ok(gram.evalResult.fx.power > plain.evalResult.fx.power,
+    `助詞で文の力が上がらない: ${plain.evalResult.fx.power} -> ${gram.evalResult.fx.power}`);
+  // 助詞は分割に効くので、成立は崩れない。
+  ok(gram.evalResult.content === plain.evalResult.content, '助詞が実質語に数えられている');
+  console.log(`  助詞を足す → 「${plain.fullText}」${plain.evalResult.fx.power.toFixed(2)}`
+    + ` → 「${gram.fullText}」${gram.evalResult.fx.power.toFixed(2)}`);
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

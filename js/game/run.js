@@ -73,7 +73,7 @@ export class Run {
 
     // 語袋に語を渡す。セーブの恒久語 → 抽選の順。
     for (const w of (opt.startingWords || [])) this.addWord(makeWord(w), true);
-    const fill = opt.pouchFill ?? 8;
+    const fill = opt.pouchFill ?? 10;
     for (let i = this.pouch.filter(Boolean).length; i < fill; i++) {
       const w = drawWord(this.rand);
       if (w) this.addWord(w, true);

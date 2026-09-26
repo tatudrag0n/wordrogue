@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0a0d14">
+<meta name="description" content="言葉を組み合わせて武装する 2D ローグライク。 combina 語で作った文が成立しなければ、武器は無効になる。">
+<title>ワードローグ — Wordrogue</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
+</head>
+<body>
+
+<div id="app">
+  <canvas id="game" aria-label="ゲーム画面"></canvas>
+
+  <!-- ═══ HUD ═══════════════════════════════════════════════════════════ -->
+  <div id="hud" class="layer hud" hidden>
+    <div class="hud-top">
+      <div class="hud-col hud-left">
+        <div class="bar bar-hp">
+          <div class="bar-fill" id="hpFill"></div>
+          <div class="bar-shield" id="shieldFill"></div>
+          <span class="bar-text" id="hpText">100 / 100</span>
+        </div>
+        <div class="bar bar-xp">
+          <div class="bar-fill" id="xpFill"></div>
+          <span class="bar-text" id="xpText">Lv 1</span>
+        </div>
+        <div class="hud-stats" id="hudStats"></div>
+      </div>
+
+      <div class="hud-col hud-center">
+        <div class="hud-stage" id="hudStage">村の外れ</div>
+        <div class="hud-timer" id="hudTimer">1:00</div>
+        <div class="hud-boss" id="hudBoss" hidden>
+          <span class="boss-name" id="bossName"></span>
+          <div class="bar bar-boss"><div class="bar-fill" id="bossFill"></div></div>
+        </div>
+      </div>
+
+      <div class="hud-col hud-right">
+        <div class="hud-num"><b id="hudScore">0</b><span>スコア</span></div>
+        <div class="hud-num"><b id="hudKills">0</b><span>討伐</span></div>
+        <div class="hud-btns">
+          <button class="btn btn-icon" id="btnForge" title="言葉鍛冶 (Q)">語</button>
+          <button class="btn btn-icon" id="btnPause" title="一時停止 (Esc)">❚❚</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud-hint" id="hudHint" hidden></div>
+
+    <div class="hud-weapons" id="hudWeapons"></div>
+
+    <div class="hud-paused" id="hudPaused" hidden>
+      <div class="paused-inner">
+        <div class="paused-title">一時停止</div>
+        <div class="paused-hint">Q … 言葉鍛冶　/　Esc … 再開</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 言葉鍛冶 ════════════════════════════════════════════════════════ -->
+  <div id="forge" class="layer screen" hidden>
+    <div class="panel panel-forge">
+      <header class="panel-head">
+        <h2>言葉鍛冶</h2>
+        <p class="panel-sub">
+          語を武器の枠に並べる。<strong>文が成立しなければその武器は無効になる。</strong>
+        </p>
+        <button class="btn btn-close" id="forgeClose" title="閉じる (Q / Esc)">✕</button>
+      </header>
+
+      <div class="forge-body">
+        <section class="forge-weapons" id="forgeWeapons"></section>
+
+        <section class="forge-side">
+          <div class="forge-side-head">
+            <h3>語袋</h3>
+            <span class="muted" id="pouchCount">0 / 0</span>
+          </div>
+          <div class="pouch" id="forgePouch"></div>
+
+          <div class="forge-actions">
+            <button class="btn" id="btnReroll">
+              語を引き直す <span class="muted">(クールダウン中)</span>
+            </button>
+            <button class="btn btn-ghost" id="btnForgeHint">文のヒント</button>
+          </div>
+
+          <div class="forge-hint" id="forgeHint" hidden></div>
+
+          <div class="forge-detail" id="forgeDetail"></div>
+        </section>
+      </div>
+
+      <footer class="panel-foot">
+        <span class="muted">
+          操作: 語をクリック → 枠をクリック で装着。枠クリックで語袋へ戻す。
+        </span>
+        <button class="btn btn-primary" id="forgeBack">戦闘へ戻る</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ═══ タイトル ═══════════════════════════════════════════════════════ -->
+  <div id="title" class="layer screen" hidden>
+    <div class="title-wrap">
+      <h1 class="title-main">ワード<span>ローグ</span></h1>
+      <p class="title-tag">言葉を組んで、武器にする。</p>
+
+      <div class="title-menu">
+        <button class="btn btn-primary btn-lg" id="btnStart">はじめる</button>
+        <button class="btn" id="btnStages">ステージ選択</button>
+        <button class="btn" id="btnHowto">遊び方</button>
+        <button class="btn" id="btnSettings">設定</button>
+      </div>
+
+      <div class="title-record">
+        <div><b id="recBest">0</b><span>最高スコア</span></div>
+        <div><b id="recClear">0</b><span>クリア数</span></div>
+        <div><b id="recKills">0</b><span>総討伐</span></div>
+        <div><b id="recRuns">0</b><span>プレイ回数</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ ステージ選択 ═══════════════════════════════════════════════════ -->
+  <div id="stages" class="layer screen" hidden>
+    <div class="panel panel-stages">
+      <header class="panel-head">
+        <h2>ステージ選択</h2>
+        <button class="btn btn-close" data-close="stages">✕</button>
+      </header>
+      <div class="stage-list" id="stageList"></div>
+    </div>
+  </div>
+
+  <!-- ═══ 武器選択 ═══════════════════════════════════════════════════════ -->
+  <div id="loadout" class="layer screen" hidden>
+    <div class="panel">
+      <header class="panel-head">
+        <h2 id="loadoutTitle">武器を選べ</h2>
+        <p class="panel-sub" id="loadoutSub">最大 4 つまで。武器ごとに核語が決まっている。</p>
+      </header>
+      <div class="loadout-list" id="loadoutList"></div>
+      <footer class="panel-foot">
+        <span class="muted" id="loadoutCount">0 / 4</span>
+        <button class="btn btn-primary" id="loadoutGo" disabled>この構成で開始</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ═══ 報酬 ═══════════════════════════════════════════════════════════ -->
+  <div id="reward" class="layer screen" hidden>
+    <div class="panel panel-reward">
+      <header class="panel-head">
+        <h2 id="rewardTitle">クリア報酬</h2>
+        <p class="panel-sub" id="rewardSub">1 つ選べ。</p>
+      </header>
+      <div class="reward-list" id="rewardList"></div>
+      <div class="reward-swap" id="rewardSwap" hidden>
+        <p class="muted">語袋が満杯だ。捨てる語を選べ。</p>
+        <div class="swap-list" id="swapList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 結算 ═══════════════════════════════════════════════════════════ -->
+  <div id="result" class="layer screen" hidden>
+    <div class="panel panel-result">
+      <header class="panel-head">
+        <h2 id="resultTitle">ステージクリア</h2>
+        <p class="panel-sub" id="resultSub"></p>
+      </header>
+      <div class="result-stats" id="resultStats"></div>
+      <footer class="panel-foot">
+        <button class="btn" id="resultRetry">もう一度</button>
+        <button class="btn" id="resultStages">ステージ選択</button>
+        <button class="btn btn-primary" id="resultNext">次のステージ</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ═══ 遊び方 ═════════════════════════════════════════════════════════ -->
+  <div id="howto" class="layer screen" hidden>
+    <div class="panel panel-howto">
+      <header class="panel-head">
+        <h2>遊び方</h2>
+        <button class="btn btn-close" data-close="howto">✕</button>
+      </header>
+      <div class="howto-body">
+        <section>
+          <h3>1. 文を作って武器にする</h3>
+          <p>
+            各武器には<strong>核語</strong>が 1 つ決まっていて、ほかに<strong>枠</strong>がある。
+            枠に語を並べると、核語再加上えて「文」になる。
+          </p>
+          <ul class="howto-list">
+            <li><b class="ok">成立</b> … 「剣」＋「火」「の」「球」→<code>力火の球</code> 効果発動</li>
+            <li><b class="ok">熟語</b> … 「火」＋「球」→<code>火球</code> 追加ボーナス发动</li>
+            <li><b class="ng">不成文</b> … 語が足りない / 助詞だけ / 分割できない → <strong>その武器は無効</strong></li>
+          </ul>
+          <p class="muted">
+            成立条件は「語が辞書で完全に分割できて、実質語が 2 つ以上あること」。
+            助詞 (<code>の・は・を・に</code> など) も引けるので「火の弾」のような文も作れる。
+          </p>
+        </section>
+        <section>
+          <h3>2. 戦闘中はいつでも組み替えられる</h3>
+          <p>
+            <kbd>Q</kbd> で言葉鍛冶を開く。開いている間は時間が止まるので、
+            敵の（税を）見てから並び替えられる。戦闘中でも組み替え可能。
+          </p>
+        </section>
+        <section>
+          <h3>3. クリア報酬</h3>
+          <p>
+            ステージを終えると<strong>ことば</strong>・<strong>武器</strong>・
+            <strong>自身の強化</strong>から選べる。武器レベルを 3 / 6 にすると枠が 1 つずつ増える。
+          </p>
+        </section>
+        <section>
+          <h3>操作</h3>
+          <ul class="howto-list">
+            <li><kbd>WASD</kbd> / <kbd>矢印</kbd> … 移動</li>
+            <li><kbd>Q</kbd> … 言葉鍛冶の開閉</li>
+            <li><kbd>Esc</kbd> … 一時停止 / 閉じる</li>
+            <li>タッチ … 画面を長押ししてからドラッグで移動</li>
+            <li>武器は<strong>自動で攻撃する</strong>。攻撃の向きは自動で選ぶ</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 設定 ═══════════════════════════════════════════════════════════ -->
+  <div id="settings" class="layer screen" hidden>
+    <div class="panel panel-settings">
+      <header class="panel-head">
+        <h2>設定</h2>
+        <button class="btn btn-close" data-close="settings">✕</button>
+      </header>
+      <div class="settings-body">
+        <label class="set-row">
+          <span>音量</span>
+          <input type="range" id="setVolume" min="0" max="100" step="1">
+          <b id="setVolumeVal">50</b>
+        </label>
+        <label class="set-row">
+          <span>画面振動</span>
+          <input type="checkbox" id="setShake" checked>
+        </label>
+        <label class="set-row">
+          <span>ダメージ数値</span>
+          <input type="checkbox" id="setDamage" checked>
+        </label>
+        <label class="set-row set-row-danger">
+          <span>記録を消去</span>
+          <button class="btn btn-danger" id="btnWipe">消去する</button>
+        </label>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<noscript>
+  <p style="color:#fff;padding:2rem;font-family:sans-serif">
+    このゲームは JavaScript を必要とします。ブラウザで JavaScript を有効にしてください。
+  </p>
+</noscript>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

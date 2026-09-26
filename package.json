@@ -1,0 +1,17 @@
+{
+  "name": "wordrogue",
+  "version": "1.0.0",
+  "private": true,
+  "description": "言葉を組み合わせて武装する 2D ローグライク (Vampire Survivors 風)。文が成立しなければ武器は無効になる。",
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes serve -l 8099 .",
+    "test": "node test/all.mjs",
+    "test:words": "node test/words.test.js",
+    "test:sim": "node test/sim.test.js",
+    "test:browser": "node test/browser.test.js",
+    "shot": "node test/shot.mjs"
+  },
+  "keywords": ["game", "roguelike", "canvas", "no-dependencies"],
+  "license": "MIT"
+}

@@ -1,0 +1,18 @@
+# 依存パッケージ
+node_modules/
+package-lock.json
+
+# スクリーンショット (npm run shot で生成)
+shot-*.png
+*.png.tmp
+
+# OS / エディタ
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# ログ
+*.log
+npm-debug.log*

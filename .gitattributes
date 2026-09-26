@@ -1,0 +1,15 @@
+# 改行コードを LF に統一する。
+# Pages のデプロイ内容とローカル差分を一致させるため。
+* text=auto eol=lf
+
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.md   text eol=lf
+
+# バイナリ扱い。
+*.png  binary
+*.ico  binary

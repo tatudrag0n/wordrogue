@@ -81,7 +81,7 @@ ok(r.fx.dmg > 0, `dmg=${r.fx.dmg}`);
 ok(typeof r.fx.power === 'number' && r.fx.power > 1, `power=${r.fx.power}`);
 
 sec('長文');
-const long = ['炎', '巨大', '分裂', '回転', '導', '弾', '矢'];
+const long = ['炎', '巨大', '分裂', '回転', '誘導', '弾', '矢'];
 r = E(...long);
 ok(r.valid, `長文が不成立: ${r.reasonText}`);
 ok(r.content >= 6, `実効語数 ${r.content}`);
@@ -145,7 +145,7 @@ sec('接続詞も語彙から引ける');
   ok(seen.get('connect') > 0, `4000 回引いても接続詞が出ない: ${JSON.stringify([...seen])}`);
   const total = [...seen.values()].reduce((a, b) => a + b, 0);
   const ratio = seen.get('connect') / total;
-  ok(ratio > 0.03, `接続詞の比重が高すぎる: ${(ratio * 100).toFixed(1)}%`);
+  ok(ratio > 0.03, `接続詞の比重が低すぎる: ${(ratio * 100).toFixed(1)}%`);
   ok(ratio < 0.20, `接続詞の比重が高すぎる: ${(ratio * 100).toFixed(1)}%`);
   console.log(`  4000 回の抽選: 接続詞 ${(ratio * 100).toFixed(1)}% / 実質語 ${(100 - ratio * 100).toFixed(1)}%`);
 }
@@ -190,8 +190,8 @@ sec('接続詞の規則 (仕様書の例)');
   ok(r.compounds.length === 0, `例1 に合成がある: ${r.compounds.map((c) => c.text)}`);
   ok(r.segments.join('/') === '爆裂/無双/無敵/疾風/剣', `例1 の分割 ${r.segments.join('/')}`);
 
-  // 例2 … 律スル風ノ海神弓
-  r = E2('律', 'スル', '風', 'ノ', '海', '神', '弓');
+  // 例2 … 律スル風ノ海潮神弓
+  r = E2('律', 'スル', '風', 'ノ', '海潮', '神', '弓');
   ok(r.valid, `例2 が不成立: ${r.reasonText}`);
   ok(r.compounds.map((c) => c.text).join(',') === '律スル,風ノ',
     `例2 の合成 ${r.compounds.map((c) => c.text).join(',')}`);
@@ -205,7 +205,7 @@ sec('接続詞の規則 (仕様書の例)');
   ok(r.conn.floats.join(',') === 'ノ', `例3 の浮遊 ${r.conn.floats.join(',')}`);
 
   // NG1 … ノが 2 回。
-  r = E2('風', 'ノ', '海', 'ノ', '銃');
+  r = E2('風', 'ノ', '海潮', 'ノ', '銃');
   ok(!r.valid, 'NG1 が成立してしまった');
   ok(r.reason === 'dupconn', `NG1 の理由 ${r.reason}`);
 

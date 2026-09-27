@@ -113,6 +113,49 @@ if (syntaxBad) {
   }
 }
 
+// 画面や README に出ている例が、実装と矛盾しないこと。
+// 前回「刃」+「利」-> 刃利剣 や「迅」のように、辞書に無い語を書いていた。
+{
+  const { WORDS, PHRASE_BONUS, segment } = await import(new URL('../js/data/words.js', import.meta.url));
+  const { WEAPONS } = await import(new URL('../js/data/weapons.js', import.meta.url));
+  const { SELF_TAIL } = await import(new URL('../js/game/stats.js', import.meta.url));
+  const PHRASE_KEYS = new Set(Object.keys(PHRASE_BONUS));
+  // 文の例に現れるので、語とみなしてよいやつ。
+  const TAILS = new Set([SELF_TAIL, ...Object.values(WEAPONS).map((w) => w.tail)]);
+  const STARTERS = new Set(Object.values(WEAPONS)
+    .flatMap((w) => [w.startWord, w.startWord2]).filter(Boolean));
+
+  const problems = [];
+  for (const f of ['README.md', 'index.html']) {
+    const text = await readFile(join(ROOT, f), 'utf8');
+    for (const line of text.split('\n')) {
+      // 例の行 … <code> を含む行にある 「語」 だけが語を名乗る。
+      if (!line.includes('<code>') && !line.includes('| `')) continue;
+      for (const g of line.matchAll(/「([^」]+)」/g)) {
+        const w = g[1];
+        if (WORDS[w] || TAILS.has(w) || STARTERS.has(w)) continue;
+        // 文の断片や熟語は segment が効けば正当例。
+        if (PHRASE_KEYS.has(w) || segment(w)?.length) continue;
+        problems.push(`${f}: 「${w}」`);
+      }
+      // テーブルや <code> の中の語そのもの。
+      for (const g of line.matchAll(/<code>([^<]+)<\/code>|`([^`]+)`/g)) {
+        const w = (g[1] || g[2] || '').trim();
+        if (!/^[぀-ヿ一-鿿]{1,5}$/.test(w)) continue;
+        if (WORDS[w] || TAILS.has(w) || STARTERS.has(w)) continue;
+        if (PHRASE_KEYS.has(w) || segment(w)?.length) continue;
+        problems.push(`${f}: \`${w}\``);
+      }
+    }
+  }
+  console.log(`== 例の整合性 ==\n  辞書に無い語 ${problems.length}`);
+  for (const p of problems) console.log(`\x1b[33m  ${p}\x1b[0m`);
+  if (problems.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
 const PORT = Number(process.env.PORT || 8099);
 const startServer = process.env.NO_SERVE !== '1';
 

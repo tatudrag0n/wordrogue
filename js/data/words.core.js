@@ -39,16 +39,14 @@ const RAW_ELEMENT = `
 炎     element fire    dmg+3  burn+1
 熱     element fire    dmg+1  burn+1  area+4
 灼熱   element fire    dmg+4  burn+3
-爆     element fire    dmg+3  explode+12
 火傷   element fire    dmg+1  burn+3.5
-熔     element fire    dmg+3  burn+2  area+6
+溶鋼         element fire    dmg+3  burn+2  area+6
 業火   element fire    dmg+5  burn+4  explode+14
 氷     element ice     dmg+2  chill+0.10
 氷結   element ice     dmg+3  chill+0.18
-冷     element ice     dmg+1  chill+0.08
+寒冷         element ice     dmg+1  chill+0.08
 凍結   element ice     dmg+3  chill+0.24  area+6
 雪     element ice     dmg+2  chill+0.12  count+1
-凍     element ice     dmg+1  chill+0.16
 雷     element thunder dmg+3  shock+0.12
 電     element thunder dmg+2  shock+0.10
 電撃   element thunder dmg+4  shock+0.20  chain+1
@@ -59,59 +57,56 @@ const RAW_ELEMENT = `
 毒     element poison  dmg+1  poison+2
 猛毒   element poison  dmg+3  poison+5
 毒液   element poison  dmg+2  poison+3  area+4
-腐     element poison  dmg+2  poison+2.5
+腐蝕         element poison  dmg+2  poison+2.5
 毒霧   element poison  dmg+2  poison+3.5  area+10
 百花   element poison  dmg+3  poison+5  count+3  area+8
 光     element light   dmg+3  crit+0.03
 聖     element light   dmg+3  pierce+1
 神聖   element light   dmg+4  pierce+2  crit+0.04
-輝     element light   dmg+2  area+6  crit+0.02
+輝光         element light   dmg+2  area+6  crit+0.02
 光線   element light   dmg+4  pierce+4  speed+60
 神     element light   dmg+5  lifesteal+0.02
 陽     element light   dmg+2  regen+0.5  area+6
-闇     element dark    dmg+3  crit+0.05
+闇影         element dark    dmg+3  crit+0.05
 暗     element dark    dmg+2  crit+0.04  homing+0.10
-影     element dark    dmg+2  crit+0.03  homing+0.14
+追影         element dark    dmg+2  crit+0.03  homing+0.14
 黒     element dark    dmg+3  pierce+2
 闇黒   element dark    dmg+5  pierce+3  crit+0.04
 死     element dark    dmg+3  lifesteal+0.03
 黒魔   element dark    dmg+4  crit+0.07  lifesteal+0.03
-土     element earth   dmg+2  size+0.15  speed-10
-岩     element earth   dmg+4  speed-20  size+0.25  knock+30
+厚土         element earth   dmg+2  size+0.15  speed-10
+巨岩         element earth   dmg+4  speed-20  size+0.25  knock+30
 石     element earth   dmg+3  speed-10  size+0.15
 大地   element earth   dmg+5  area+12  speed-25
-砂     element earth   dmg+2  count+2  size-0.05
+砂塵         element earth   dmg+2  count+2  size-0.05
 重力   element earth   dmg+3  knock+60  speed-20  area+8
 落石   element earth   dmg+6  explode+14  size+0.30  speed-15
 風     element wind    dmg+1  speed+45  homing+0.08
 疾風   element wind    dmg+2  speed+70  count+1
 嵐     element wind    dmg+3  area+14  speed+40  knock+40
-旋     element wind    dmg+2  speed+35
 突破   element wind    dmg+3  pierce+5  speed+60
 旋風   element wind    dmg+4  area+18  rate+0.6  orbit+1
-草     element nature  dmg+1  poison+1.5  regen+0.3
+毒草         element nature  dmg+1  poison+1.5  regen+0.3
 花     element nature  dmg+1  regen+0.8  lifesteal+0.01
-樹     element nature  dmg+2  regen+1.2  area+6
-苔     element nature  dmg+1  poison+1  chill+0.05
-棘     element nature  dmg+2  pierce+3  poison+1
-根     element nature  dmg+2  regen+0.6  speed-5
+巨樹         element nature  dmg+2  regen+1.2  area+6
+青苔         element nature  dmg+1  poison+1  chill+0.05
+荆棘         element nature  dmg+2  pierce+3  poison+1
+深根         element nature  dmg+2  regen+0.6  speed-5
 鉄     element steel   dmg+3  speed+10  size+0.10
 鋼     element steel   dmg+4  pierce+2  size+0.12
 刃物   element steel   dmg+4  crit+0.05
 鉄壁   element steel   dmg+1  shield+12  size+0.10
 鋼鉄   element steel   dmg+5  pierce+3  armor+1
 血     element blood   dmg+3  lifesteal+0.04
-紅     element blood   dmg+2  lifesteal+0.03  speed+15
 呪     element blood   dmg+3  poison+2  homing+0.10
-瘴     element blood   dmg+2  poison+4  area+10
+毒瘴         element blood   dmg+2  poison+4  area+10
 紅蓮   element blood   dmg+5  burn+5  lifesteal+0.05  area+12
-水     element water   dmg+2  chill+0.06  count+1
-海     element water   dmg+3  knock+35  area+10
+流水         element water   dmg+2  chill+0.06  count+1
+海潮         element water   dmg+3  knock+35  area+10
 波     element water   dmg+3  knock+45  pierce+2
-泡     element water   dmg+1  chill+0.08  count+2
+泡沫         element water   dmg+1  chill+0.08  count+2
 怒涛   element water   dmg+4  knock+70  area+14
 金     element gold    dmg+2  magnet+0.25
-宝     element gold    dmg+2  magnet+0.35  crit+0.02
 財宝   element gold    dmg+3  magnet+0.60
 黄金   element gold    dmg+4  magnet+0.50  atkMul+0.04
 `;
@@ -123,15 +118,15 @@ const RAW_FORM = `
 弾       form  -  dmg+6  count+1
 矢       form  -  dmg+5  speed+90  pierce+1
 剣       form  -  dmg+8  size+0.20
-刀       form  -  dmg+7  crit+0.04  speed+40
+短刀           form  -  dmg+7  crit+0.04  speed+40
 太刀     form  -  dmg+9  arc+0.5  size+0.30
 大剣     form  -  dmg+11  speed-10  size+0.35  knock+30
 針       form  -  dmg+3  speed+130  count+2  pierce+1
 球       form  -  dmg+6  area+6  size+0.15
-塊       form  -  dmg+8  speed-25  size+0.30  knock+25
+岩塊           form  -  dmg+8  speed-25  size+0.30  knock+25
 刃       form  -  dmg+5  speed+60  pierce+2
-爪       form  -  dmg+4  count+2  speed+25
-牙       form  -  dmg+6  size+0.10  crit+0.03
+利爪           form  -  dmg+4  count+2  speed+25
+尖牙           form  -  dmg+6  size+0.10  crit+0.03
 環       form  -  orbit+1  count+2  dmg+5
 回転     form  -  orbit+1  dmg+6  rate+0.3
 回転刃   form  -  orbit+2  dmg+6  size+0.05
@@ -145,7 +140,6 @@ const RAW_FORM = `
 彗星     form  -  dmg+9  explode+20  size+0.35  area+16  speed-20
 夾撃     form  -  dmg+5  count+2  spread+0.9  speed+20
 乱打     form  -  dmg+4  count+3  spread+0.7  rate+0.5
-殲       form  -  dmg+9  pierce+3  knock+20
 壁       form  -  dmg+6  shield+18  area+10
 棘壁     form  -  dmg+5  area+14  slowImmune+1
 銃       form  -  dmg+7  count+1  speed+40
@@ -165,20 +159,18 @@ const RAW_MODIFIER = `
 迅足       modifier  -  rate+0.6
 疾速       modifier  -  rate+0.4  speed+35
 緩徐       modifier  -  rate-0.5  dmg+5  area+10
-鋭       modifier  -  dmg+6  crit+0.05
 鋭利     modifier  -  dmg+7  crit+0.06
 剛利       modifier  -  dmg+5  crit+0.03
 強力       modifier  -  dmg+8
 激昂       modifier  -  dmg+12
 破壊     modifier  -  dmg+10  area+8
 執念     modifier  -  dmg+7  rate+0.2
-多       modifier  -  count+2  spread+0.18
+多重           modifier  -  count+2  spread+0.18
 多数     modifier  -  count+4  spread+0.16
 散弾     modifier  -  count+3  spread+0.42
 分裂     modifier  -  split+3
 貫徹       modifier  -  pierce+2
 追尾     modifier  -  homing+0.35
-導       modifier  -  homing+0.55  speed+20
 誘導     modifier  -  homing+0.70  speed+15
 爆発     modifier  -  explode+38  size+0.10
 連鎖     modifier  -  chain+3
@@ -198,7 +190,7 @@ const RAW_MODIFIER = `
 軽装     modifier  -  speed+45  size-0.15  rate+0.3
 磁力     modifier  -  magnet+0.5
 引力     modifier  -  magnet+0.9  size+0.05
-絆       modifier  -  count+1  rate+0.2  dmg+3
+絆縛           modifier  -  count+1  rate+0.2  dmg+3
 加速     modifier  -  rate+0.8  speed+30
 減速     modifier  -  chill+0.20
 毒化     modifier  -  poison+4
@@ -219,23 +211,22 @@ const RAW_MODIFIER = `
 // 自身強化語: 語彙に置いてある間、プレイヤーに常時効く
 // ─────────────────────────────────────────────────────────────────────────────
 const RAW_BUFF = `
-頑       buff  -  hp+12
+頑健           buff  -  hp+12
 頑強     buff  -  hp+25  armor+1
-健       buff  -  hp+20  regen+0.3
+強健           buff  -  hp+20  regen+0.3
 巨躯     buff  -  size+0.15  hp+10
 小柄     buff  -  size-0.12  spd+0.06  atk-0.02
 疾走     buff  -  spd+0.12
 韋駄天   buff  -  spd+0.18  atk+0.06
-鎧       buff  -  armor+1  hp+8
-堅       buff  -  armor+1  hp+12
+鎧甲           buff  -  armor+1  hp+8
+堅守           buff  -  armor+1  hp+12
 盾       buff  -  armor+2  shield+20
-冠       buff  -  atk+0.10  crit+0.04
 王冠     buff  -  atk+0.16  hp+12  luck+0.06
 宝玉     buff  -  atk+0.14  spd+0.06
 指輪     buff  -  atk+0.09  crit+0.05
 護符     buff  -  hp+15  regen+0.4
-薬       buff  -  regen+0.5  hp+6
-癒       buff  -  regen+0.8
+霊薬           buff  -  regen+0.5  hp+6
+治癒           buff  -  regen+0.8
 砂金     buff  -  luck+0.12  magnet+0.2
 賢者     buff  -  atk+0.10  xp+0.10
 水晶     buff  -  atk+0.12
@@ -274,9 +265,9 @@ const RAW_EXTRA = `
 潮流   element  water   dmg+4  speed+50
 呪イ   element  dark    dmg+3  poison+1
 伝説   modifier  -  dmg+6  crit+0.05
-固     modifier  -  dmg+4  armor+2
-硬     modifier  -  dmg+5  armor+3
-早     modifier  -  dmg+3  rate+0.35
+堅固         modifier  -  dmg+4  armor+2
+剛硬         modifier  -  dmg+5  armor+3
+迅早         modifier  -  dmg+3  rate+0.35
 呪縛   element  dark    dmg+3  chain+2
 回避   modifier  -  dmg+3  speed+60  crit+0.03
 思考   modifier  -  dmg+5  crit+0.04
@@ -284,11 +275,10 @@ const RAW_EXTRA = `
 浸食   modifier  -  dmg+5  burn+2
 改造   modifier  -  dmg+6  pierce+3
 催眠   element  dark    dmg+3  chill+2
-失     modifier  -  dmg+3  pierce+2
+失落         modifier  -  dmg+3  pierce+2
 荘厳   modifier  -  dmg+5  area+12  armor+2
-断     modifier  -  dmg+5  pierce+4
-穿     modifier  -  dmg+5  pierce+6
-別     modifier  -  dmg+3  split+2
+断続         modifier  -  dmg+5  pierce+4
+貫穿         modifier  -  dmg+5  pierce+6
 無敵   modifier  -  dmg+9  crit+0.06
 天下   modifier  -  dmg+7  size+0.20  area+10
 

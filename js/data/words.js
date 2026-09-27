@@ -376,10 +376,13 @@ export function drawWord(rng, opts = {}) {
   if (!pool || !pool.length) return null;
 
   // 重み付き抽選。種別ごとの重みを読む。
+  // 接続詞は文を成立させる要なので 2.2 倍する。語彙の 1 文字語が減っても
+  // 出る確率が下がり続けないようにしている。
+  const CONNECT_BONUS = 2.2;
   const weights = pool.map((w) => {
     const c = CATEGORIES[WORDS[w].cat];
     const base = c ? c.weight : 10;
-    return WORDS[w].cat === 'connect' ? base * 1.6 : base;
+    return WORDS[w].cat === 'connect' ? base * CONNECT_BONUS : base;
   });
   const total = weights.reduce((a, b) => a + b, 0);
   let r = rng() * total;

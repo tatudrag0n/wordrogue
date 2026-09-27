@@ -83,7 +83,7 @@ export const WEAPONS = {
     desc: '体温を纏った腐蚀の城壁。触れると傷つく。',
     base: { dmg: 4, rate: 1.0, range: 92, size: 1, slowImmune: 0, regen: 0 },
     grow: { dmg: 1.6, range: 7, rate: 0.1 },
-    startWord: '毒', startWord2: '堅', maxLevel: 8, startSlots: 4, unlock: { stage: 3 },
+    startWord: '毒', startWord2: '堅守', maxLevel: 8, startSlots: 4, unlock: { stage: 3 },
   },
   boomerang: {
     id: 'boomerang', name: '環刃', kind: 'boomerang', glyph: '還', tail: '環刃',

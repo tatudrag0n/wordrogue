@@ -646,7 +646,7 @@ sec('語彙が満杯なら 3 択は「捨てる」を求める');
   const fullRun = () => {
     const r = newRun(1);
     // 語が重ならないように別々の語で埋める (文字列比較が曖昧くならないように)。
-    const fill = ['火', '氷', '雷', '毒', '土', '風', '光', '闇', '水', '鋼', '巨', '速'];
+    const fill = ['火', '氷', '雷', '毒', '厚土', '風', '光', '闇影', '流水', '鋼', '巨岩', '速'];
     let k = 0;
     while (r.lexiconFreeCount > 0) r.addWord(makeWord(fill[k++ % fill.length]), true);
     return r;
@@ -806,7 +806,7 @@ sec('語彙が満杯なら語を消さない');
   const wi = r.weapons[0];
   const free = r.lexiconFreeCount;
   // 語彙を埋める。
-  const filler = ['火', '水', '風', '雷', '刃', '槍', '盾', '靴', '冠', '鎖', '環', '光'];
+  const filler = ['火', '流水', '風', '雷', '刃', '短刀', '盾', '剛硬', '王冠', '鋼', '環', '光'];
   for (let k = 0; k < free; k++) r.giveWord(makeWord(filler[k % filler.length]), true);
   ok(r.lexiconFull, '満杯になっていない');
   ok(r.lexicon.every(Boolean), '語彙に空きが残っている');

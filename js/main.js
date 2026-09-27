@@ -151,12 +151,20 @@ function startRun(weaponIds) {
 
 function onRunEnd(cleared) {
   app.hud.setPaused(false);
+  // 書庫の通貨「墨」。クリア報酬と、文を崩した敵の数で入る。
+  // 崩した敵は行動が止まるぶん強いので報在场を厚く取っている。
+  const broken = app.run.brokenCount || 0;
+  const ink = (cleared ? 20 + app.run.stage.id * 12 : broken * 2)
+    + Math.floor(broken / 2);
   app.save.recordRun({
     score: app.run.score,
     kills: app.run.kills,
     stageId: app.run.stage.id,
     cleared,
+    broken,
+    ink,
   });
+  app.lastInk = ink;
 
   if (!cleared) {
     app.mode = 'result';

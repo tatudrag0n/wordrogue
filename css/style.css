@@ -1085,6 +1085,63 @@ code {
 .howto-list { margin: 0; padding-left: 20px; font-size: .87rem; color: var(--fg-dim); }
 .howto-list li { margin: 3px 0; }
 
+/* ══ 書庫 ══════════════════════════════════════════════════════════════ */
+
+.panel-archive { width: min(720px, 100%); }
+.archive-ink {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: none;
+  padding: 10px 12px;
+  background: #0b0f18;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+}
+.archive-ink-label { font-size: .9rem; color: var(--accent); font-weight: 700; }
+.archive-ink b { font-family: var(--mono); font-size: 1.4rem; color: var(--accent); }
+.archive-ink-note { font-size: .76rem; color: var(--fg-mute); margin-left: auto; }
+.archive-ink-note strong { color: var(--fg-dim); }
+
+.archive-body { overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.archive-body h3 { margin: 0 0 8px; font-size: .95rem; color: var(--accent); letter-spacing: .04em; }
+.archive-note { margin: 0 0 8px; font-size: .78rem; color: var(--fg-dim); }
+.archive-list { display: flex; flex-direction: column; gap: 5px; }
+
+.up-row {
+  display: grid;
+  grid-template-columns: 4.2rem 3.4rem 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #0b0f18;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+}
+.up-row.can { border-color: rgba(255, 212, 59, .4); }
+.up-name { font-size: .88rem; font-weight: 700; }
+.up-lv { font-family: var(--mono); font-size: .76rem; color: var(--fg-mute); }
+.up-desc { font-size: .76rem; color: var(--fg-dim); }
+.up-buy { font-size: .78rem; padding: 6px 11px; }
+.up-buy.off { opacity: .45; cursor: not-allowed; }
+
+.archive-words { display: flex; gap: 6px; flex-wrap: wrap; }
+.shop-word {
+  background: #0b0f18;
+  border: 1.5px solid;
+  border-radius: var(--r-s);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: .88rem;
+  font-weight: 700;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.shop-word:hover { background: #161e2e; }
+.shop-word.can { box-shadow: 0 0 0 2px rgba(255, 212, 59, .22); }
+.shop-word.owned { opacity: .55; cursor: default; color: var(--ok); }
+
 /* ══ 辞書 ══════════════════════════════════════════════════════════════ */
 
 .panel-dict { width: min(780px, 100%); }
@@ -1178,6 +1235,8 @@ code {
   .panel-forge { height: 100%; }
   .forge-weapons { max-height: 44vh; }
   .lexicon { grid-template-columns: repeat(5, 1fr); min-height: 110px; }
+  .up-row { grid-template-columns: 3.6rem 3rem 1fr auto; }
+  .archive-ink-note { display: none; }
   .dict-row { grid-template-columns: 3.2rem 1fr; }
   .dict-cat { justify-self: start; }
   .dict-fx, .dict-tags { grid-column: 2; }

@@ -137,6 +137,74 @@ sec('タイトル画面');
 ok(await evalJs('!document.getElementById("title").hidden'), 'タイトルが表示されている');
 ok(await evalJs('document.getElementById("btnStart") !== null'), '開始ボタンがある');
 
+sec('書庫で墨を使い、恒久強化と語を買える');
+{
+  await evalJs('window.__wordrogue.menus.show("archive")');
+  await sleep(250);
+  const a = await evalJs(`(() => ({
+    hidden: document.getElementById('archive').hidden,
+    ink: document.getElementById('archiveInk').textContent,
+    up: document.querySelectorAll('#archiveUpgrades .up-row').length,
+    words: document.querySelectorAll('#archiveWords .shop-word').length,
+  }))()`);
+  ok(!a.hidden, '書庫が開いていない');
+  ok(a.up === 6, `恒久強化の行数: ${a.up} (6 のはず)`);
+  ok(a.words >= 3, `恒久の語の数: ${a.words}`);
+
+  // 墨充分的Gyros 買会有所。
+  const buy = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    app.save.data.ink = 5000;
+    app.menus.renderArchive();
+    const ink0 = app.save.ink;
+    const row = document.querySelector('#archiveUpgrades .up-row');
+    row.querySelector('.up-buy').click();
+    const lv = app.save.metaLevel('hp');
+    const spent = ink0 - app.save.ink;
+    // 語も買う。
+    const w0 = document.querySelector('#archiveWords .shop-word:not(.owned)');
+    const text = w0.textContent.split(' ')[0];
+    const inkBeforeWord = app.save.ink;
+    w0.click();
+    return {
+      lv, spent, text,
+      owned: app.save.hasStartingWord(text),
+      ink: app.save.ink,
+      wordCost: inkBeforeWord - app.save.ink,
+      metaHp: app.save.metaValue('hp'),
+    };
+  })()`);
+  ok(buy.lv === 1, `強化の段階が上がっていない: ${buy.lv}`);
+  ok(buy.spent > 0, `墨が減っていない: ${buy.spent}`);
+  ok(buy.metaHp > 0, `強化の最終値が 0: ${buy.metaHp}`);
+  ok(buy.owned, `語を買っても入っていない: ${buy.text}`);
+  ok(buy.wordCost > 0, `語を買っても墨が減っていない: ${buy.wordCost}`);
+  console.log(`    書庫: 強化を 1 段階 / 「${buy.text}」を ${buy.wordCost} 墨で購入`);
+
+  // 買えない 提高。保険。
+  const no = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    app.save.data.ink = 0;
+    app.menus.renderArchive();
+    const btn = [...document.querySelectorAll('#archiveUpgrades .up-buy')][1];
+    const off = btn.classList.contains('off');
+    const lv0 = Object.keys(app.save.d.meta).length;
+    btn.click();
+    return { off, lv0, ink: app.save.ink };
+  })()`);
+  ok(no.off, '買えないのにボタンが有効');
+  ok(no.ink === 0, `買えないのに墨が減った: ${no.ink}`);
+}
+await evalJs('window.__wordrogue.menus.show("title")');
+await sleep(150);
+
+sec('タイトル画面の記録に「文を崩した数」が出る');
+{
+  const rec = await evalJs('document.getElementById("recBroken") ? document.getElementById("recBroken").textContent : null');
+  ok(rec !== null, '記録に「文を崩した数」が無い');
+  ok(/^[\d,.k]+$/i.test(rec), `数が表示されていない: ${rec}`);
+}
+
 sec('ステージ選択へ');
 await evalJs('document.getElementById("btnStart").click()');
 await sleep(300);

@@ -136,6 +136,7 @@
         <button class="btn btn-primary btn-lg" id="btnStart">はじめる</button>
         <button class="btn" id="btnStages">ステージ選択</button>
         <button class="btn" id="btnHowto">遊び方</button>
+        <button class="btn" id="btnArchive">書庫</button>
         <button class="btn" id="btnDict">辞書</button>
         <button class="btn" id="btnSettings">設定</button>
       </div>
@@ -145,6 +146,7 @@
         <div><b id="recClear">0</b><span>クリア数</span></div>
         <div><b id="recKills">0</b><span>総討伐</span></div>
         <div><b id="recRuns">0</b><span>プレイ回数</span></div>
+        <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
     </div>
   </div>
@@ -390,6 +392,24 @@
       </p>
       </section>
 
+      <section>
+<h3>15. 書庫 — 走った分が、次の走りに残る</h3>
+      <p>
+      ステージをクリアすると<strong>墨</strong>が手に入る。
+      <strong>敵の文を崩す</strong>ときにも貯まる（行動が止まるぶん強いので刻み多く）。
+      累計がタイトル画面に<strong>「文を崩した数」</strong>として出る。
+      </p>
+      <p>
+      書庫では<strong>恒久強化</strong>と<strong>恒久の語</strong>が買える。
+      </p>
+      <ul class="howto-list">
+      <li>恒久強化 … 体力 / 攻撃 / 装甲 / 経験値 / 引き寄せ / 会心。各 6 〜 10 段階</li>
+      <li>段階を上げるほど<strong>値段が上がる</strong>。使い切りはできない</li>
+      <li>恒久の語 … 買った語は<strong>毎回ランの最初から語彙に入る</strong></li>
+      <li>どれも次のランに持ち越す。死んでも失わない</li>
+      </ul>
+      </section>
+
         <section>
           <h3>操作</h3>
           <ul class="howto-list">
@@ -405,6 +425,34 @@
         </section>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ═══ 書庫 ═══════════════════════════════════════════════════════════ -->
+  <div id="archive" class="layer screen" hidden>
+    <div class="panel panel-archive">
+      <header class="panel-head">
+        <h2>書庫</h2>
+        <button class="btn btn-close" data-close="archive">✕</button>
+      </header>
+
+      <div class="archive-ink">
+        <span class="archive-ink-label">墨</span>
+        <b id="archiveInk">0</b>
+        <span class="archive-ink-note">ステージクリアと、敵の<strong>文を崩す</strong>と貯まる</span>
+      </div>
+
+      <div class="archive-body">
+        <section>
+          <h3>恒久強化</h3>
+          <div class="archive-list" id="archiveUpgrades"></div>
+        </section>
+        <section>
+          <h3>恒久の語</h3>
+          <p class="archive-note">買った語は、毎回ランの最初から語彙に入る。</p>
+          <div class="archive-words" id="archiveWords"></div>
+        </section>
+      </div>
     </div>
   </div>
 

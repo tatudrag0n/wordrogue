@@ -9,6 +9,7 @@ import { makePickup, makeEnemy } from '../js/game/entities.js';
 import { damage } from '../js/game/combat.js';
 import { SELF_TAIL, resolvePlayerStats } from '../js/game/stats.js';
 import { STAGES } from '../js/data/stages.js';
+import { Save, META_UPGRADES, SHOP_WORDS } from '../js/core/save.js';
 import { makeRng } from '../js/core/util.js';
 
 let pass = 0, fail = 0;
@@ -35,8 +36,11 @@ function freshSave() {
 }
 
 function newRun(stageId, weaponIds, sv) {
+  const save = sv || freshSave();
   return new Run({
-    stageId, audio, save: sv || freshSave(), weaponIds,
+    stageId, audio, save, weaponIds,
+    // 本番 (main.js) と同じく、恒久の語を渡す。
+    startingWords: save.d.startingWords || [],
     rng: makeRng(stageId * 7919 + 13),
   });
 }
@@ -1160,6 +1164,102 @@ sec('熟語か述語なら、一撃で 2 語斬る');
   ok(e.broken, '3 語 -> 1 語 で崩れていない');
   console.log(`  ${ENEMIES.boss_slime.name}「${ENEMIES.boss_slime.words.join('')}」`
     + ` → 熟語 1 撃で 2 斬り → 「${e.words.join('')}」${e.broken ? ' (崩れた)' : ''}`);
+}
+
+sec('書庫の墨で恒久強化を買える');
+{
+  const save = new Save();
+  save.reset();
+  ok(save.ink === 0, `最初から墨がある: ${save.ink}`);
+
+  // 買えない。
+  let r = save.buyMeta('hp');
+  ok(!r.ok && r.reason === 'ink', `墨がないのに買えた: ${r.reason}`);
+  ok(save.metaLevel('hp') === 0, '買えなかったのに段階上がった');
+
+  // enough .put って買う。
+  save.addInk(1000);
+  ok(save.ink === 1000, `墨が入らない: ${save.ink}`);
+
+  const before = save.ink;
+  r = save.buyMeta('hp');
+  ok(r.ok, `買えない: ${r.reason}`);
+  ok(save.ink < before, `墨が減っていない: ${before} -> ${save.ink}`);
+  ok(save.metaLevel('hp') === 1, `段階が 1 でない: ${save.metaLevel('hp')}`);
+
+  // 段階ごとに高くなる。
+  const c1 = save.metaCost('hp');
+  save.buyMeta('hp');
+  const c2 = save.metaCost('hp');
+  ok(c2 > c1, `段階を上げても値段が変わらない: ${c1} -> ${c2}`);
+  ok(save.metaLevel('hp') === 2, `段階が 2 でない: ${save.metaLevel('hp')}`);
+
+  // 上限まで/debug 買えて、それ以上は買えない。
+  let lv = save.metaLevel('hp');
+  while (save.metaCost('hp') !== null) {
+    save.addInk(10000);
+    save.buyMeta('hp');
+    lv++;
+    if (lv > 50) break;
+  }
+  ok(save.metaLevel('hp') === META_UPGRADES.hp.max, `上限を守らない: ${save.metaLevel('hp')}`);
+  r = save.buyMeta('hp');
+  ok(!r.ok && r.reason === 'max', `上限を越して買えた: ${r.reason}`);
+
+  console.log(`  体力 ${save.metaLevel('hp')} 段階 (最終値 ${save.metaValue('hp')}) / 上限 ${META_UPGRADES.hp.max}`);
+}
+
+sec('買った恒久強化がプレイヤーに効く');
+{
+  const save = new Save();
+  save.reset();
+  save.addInk(100000);
+  save.buyMeta('hp');
+  save.buyMeta('hp');
+  save.buyMeta('atk');
+  save.buyMeta('armor');
+  save.buyMeta('crit');
+  save.buyMeta('magnet');
+  save.buyMeta('xp');
+
+  const plain = resolvePlayerStats([], [], {});
+  const buffed = resolvePlayerStats([], [], save.d.meta);
+  ok(buffed.maxHp > plain.maxHp, `体力が上がっていない: ${plain.maxHp} -> ${buffed.maxHp}`);
+  ok(buffed.atkMul > plain.atkMul, `攻撃が上がっていない: ${plain.atkMul} -> ${buffed.atkMul}`);
+  ok(buffed.armor > plain.armor, `装甲が上がっていない`);
+  ok(buffed.crit > plain.crit, `会心が上がっていない`);
+  ok(buffed.magnet > plain.magnet, `引き寄せが上がっていない`);
+  ok(buffed.xpMul > plain.xpMul, `経験値が上がっていない`);
+  console.log(`  体力 ${plain.maxHp}->${buffed.maxHp} / 攻撃 x${plain.atkMul.toFixed(2)}->x${buffed.atkMul.toFixed(2)}`
+    + ` / 装甲 ${plain.armor}->${buffed.armor} / 会心 ${(plain.crit * 100).toFixed(0)}%->${(buffed.crit * 100).toFixed(0)}%`);
+
+  // ランにも反映される。
+  const r = newRun(1, undefined, save);
+  ok(r.player.maxHp === buffed.maxHp, `ランに体力が反映されない: ${r.player.maxHp} != ${buffed.maxHp}`);
+}
+
+sec('買った恒久の語が次のランの語彙に入る');
+{
+  const save = new Save();
+  save.reset();
+  save.addInk(1000);
+  const w = SHOP_WORDS[0];
+  const r = save.buyWord(w.text);
+  ok(r.ok, `買えない: ${r.reason}`);
+  ok(save.hasStartingWord(w.text), '買っても入っていない');
+  const r2 = save.buyWord(w.text);
+  ok(!r2.ok && r2.reason === 'owned', `2 回買えてしまった: ${r2.reason}`);
+
+  const run = newRun(1, undefined, save);
+  const inLex = run.lexicon.some((x) => x && x.text === w.text);
+  ok(inLex, `ランの語彙に入っていない: ${run.lexicon.map((x) => x && x.text).join(' ')}`);
+  // 語彙の空きを全部埋めても入れる。
+  const r3 = newRun(1, undefined, save);
+  while (r3.lexicon.includes(null)) r3.addWord(makeWord('剣'), true);
+  ok(!r3.addWord(makeWord('鋼')), '満杯なのに追加できた');
+  r3.giveWord(makeWord(w.text));
+  ok(r3.lexicon.some((x) => x && x.text === w.text), '満杯で語が入らない');
+  console.log(`  「${w.text}」を買って次のランの語彙に入る`);
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

@@ -8,6 +8,7 @@ import { ENEMIES } from '../data/enemies.js';
 import { WEAPONS, startingWeaponsFor, slotsForLevel, KIND_LABEL } from '../data/weapons.js';
 import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
+import { META_UPGRADES, SHOP_WORDS } from '../core/save.js';
 
 export class Menus {
   /** @param {{save:object, audio:object}} opt */
@@ -33,6 +34,10 @@ export class Menus {
     this.howto = $('#howto');
     this.settings = $('#settings');
     this.dict = $('#dict');
+    this.archive = $('#archive');
+    this.archiveInk = $('#archiveInk');
+    this.archiveUpgrades = $('#archiveUpgrades');
+    this.archiveWords = $('#archiveWords');
 
     /** 辞書。検索語と絞り込みカテゴリ。 */
     this.dictQuery = '';
@@ -53,6 +58,7 @@ export class Menus {
     $('#btnStart').addEventListener('click', () => { tap(); this.showStages(); });
     $('#btnStages').addEventListener('click', () => { tap(); this.showStages(); });
     $('#btnHowto').addEventListener('click', () => { tap(); this.show('howto'); });
+    $('#btnArchive').addEventListener('click', () => { tap(); this.show('archive'); });
     $('#btnDict').addEventListener('click', () => { tap(); this.show('dict'); });
     $('#btnSettings').addEventListener('click', () => { tap(); this.show('settings'); });
 
@@ -86,7 +92,7 @@ export class Menus {
   }
 
   hideAll() {
-    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict']) {
+    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'archive']) {
       this[k].hidden = true;
     }
   }
@@ -103,6 +109,58 @@ export class Menus {
     if (name === 'title') this.renderTitle();
     if (name === 'settings') this.renderSettings();
     if (name === 'dict') this.renderDict();
+    if (name === 'archive') this.renderArchive();
+  }
+
+  // ── 書庫 (恒久進行) ──────────────────────────────────────────────────────
+  renderArchive() {
+    const save = this.save;
+    this.archiveInk.textContent = String(save.ink);
+
+    clear(this.archiveUpgrades);
+    for (const [key, u] of Object.entries(META_UPGRADES)) {
+      const lv = save.metaLevel(key);
+      const cost = save.metaCost(key);
+      const maxed = cost === null;
+      const can = !maxed && save.ink >= cost;
+      const row = el('div', { class: 'up-row' + (can ? ' can' : '') },
+        el('span', { class: 'up-name' }, u.name),
+        el('span', { class: 'up-lv' }, `${lv} / ${u.max}`),
+        el('span', { class: 'up-desc' }, u.desc),
+        el('button', {
+          class: 'btn up-buy' + (can ? '' : ' off'),
+        }, maxed ? '最大' : `${cost} 墨`),
+      );
+      if (!maxed) {
+        row.querySelector('.up-buy').addEventListener('click', () => {
+          const r = this.save.buyMeta(key);
+          if (r.ok) this.audio?.phrase?.();
+          else this.audio?.broken?.();
+          this.renderArchive();
+        });
+      }
+      this.archiveUpgrades.append(row);
+    }
+
+    clear(this.archiveWords);
+    for (const w of SHOP_WORDS) {
+      const owned = save.hasStartingWord(w.text);
+      const can = !owned && save.ink >= w.cost;
+      const word = WORDS[w.text];
+      const b = el('button', {
+        class: 'shop-word' + (owned ? ' owned' : '') + (can ? ' can' : ''),
+        style: { borderColor: (CATEGORIES[word?.cat] || {}).color || '#8ab4ff' },
+        title: `${w.text} [${(CATEGORIES[word?.cat] || {}).name || '?'}]`,
+      }, owned ? `${w.text} ✓` : `${w.text}  ${w.cost}`);
+      b.addEventListener('click', () => {
+        if (owned) return;
+        const r = this.save.buyWord(w.text);
+        if (r.ok) this.audio?.phrase?.();
+        else this.audio?.broken?.();
+        this.renderArchive();
+      });
+      this.archiveWords.append(b);
+    }
   }
 
   // ── タイトル ────────────────────────────────────────────────────────────
@@ -112,6 +170,8 @@ export class Menus {
     $('#recClear').textContent = String(d.clearedStages.length);
     $('#recKills').textContent = fmtNum(d.totalKills);
     $('#recRuns').textContent = String(d.totalRuns);
+    const broken = $('#recBroken');
+    if (broken) broken.textContent = fmtNum(d.totalBroken || 0);
   }
 
   // ── ステージ選択 ────────────────────────────────────────────────────────

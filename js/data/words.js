@@ -71,6 +71,10 @@ for (const table of RAW_TABLES) {
 /** 分割判定に使う語集合。 */
 const DICT = new Set(Object.keys(WORDS));
 
+/** 語にかな (平仮名・片仮名) が含まれるか。 */
+const KANA_RE = /[ぁ-んァ-ヶー]/;
+export function hasKana(text) { return KANA_RE.test(text); }
+
 /** 語彙から引ける語だけ (接続詞と動詞を除く)。 */
 export const DRAWABLE = Object.keys(WORDS).filter((w) => {
   const c = WORDS[w].cat;
@@ -92,6 +96,16 @@ export const DRAWABLE_ALL = Object.keys(WORDS).filter((w) => {
 export const CONNECTOR_SET = new Set(
   Object.keys(WORDS).filter((w) => WORDS[w].cat === 'connect'),
 );
+
+/**
+ * 開始時に放进語彙する語。漢字だけで、短いもの。
+ * 漢字だけの武器をリズムよく並べるための土台にする。
+ */
+export const SIMPLE_POOL = Object.keys(WORDS).filter((w) => {
+  const c = WORDS[w].cat;
+  if (c !== 'element' && c !== 'form' && c !== 'modifier' && c !== 'buff') return false;
+  return !KANA_RE.test(w) && w.length <= 2;
+});
 
 /** 種別ごとの語配列。 */
 export const WORDS_BY_CAT = {
@@ -376,13 +390,18 @@ export function drawWord(rng, opts = {}) {
   if (!pool || !pool.length) return null;
 
   // 重み付き抽選。種別ごとの重みを読む。
-  // 接続詞は文を成立させる要なので 2.2 倍する。語彙の 1 文字語が減っても
-  // 出る確率が下がり続けないようにしている。
-  const CONNECT_BONUS = 2.2;
+  // 接続詞は 14 倍する。語彙が増えても出る確率が下がり続けないようにするためで、
+  // 実際に引いた接続詞が 10% 前后になるように調整している。
+  // かなを含む語 (動詞) は漢字だけの武器を作りやすくするため 1/4 に抑える。
+  const CONNECT_BONUS = 14;
+  const KANA_PENALTY = 0.25;
   const weights = pool.map((w) => {
-    const c = CATEGORIES[WORDS[w].cat];
+    const word = WORDS[w];
+    const c = CATEGORIES[word.cat];
     const base = c ? c.weight : 10;
-    return WORDS[w].cat === 'connect' ? base * CONNECT_BONUS : base;
+    let k = word.cat === 'connect' ? base * CONNECT_BONUS : base;
+    if (hasKana(w)) k *= KANA_PENALTY;
+    return k;
   });
   const total = weights.reduce((a, b) => a + b, 0);
   let r = rng() * total;
@@ -391,6 +410,21 @@ export function drawWord(rng, opts = {}) {
     if (r <= 0) return makeWord(pool[i]);
   }
   return makeWord(pool[pool.length - 1]);
+}
+
+/**
+ * 開始時に使う語を引く。漢字だけで短い語だけから。
+ * 1 語ずつ重複を避けて取る。
+ * @param {Function} rng
+ * @returns {object|null}
+ */
+export function drawSimple(rng, used = new Set()) {
+  if (!SIMPLE_POOL.length) return null;
+  for (let tries = 0; tries < 24; tries++) {
+    const w = SIMPLE_POOL[Math.floor(rng() * SIMPLE_POOL.length)];
+    if (!used.has(w)) { used.add(w); return makeWord(w); }
+  }
+  return null;
 }
 
 /** 文の成立・不成文の判定結果を文章化する (ログ用)。 */

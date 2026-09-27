@@ -6,6 +6,7 @@
 //   ブラウザテストだけ:  npm run test:browser
 
 import { spawn, spawnSync } from 'node:child_process';
+import { makeRng } from '../js/core/util.js';
 import { createServer } from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, extname, normalize, dirname } from 'node:path';
@@ -215,6 +216,64 @@ if (syntaxBad) {
   console.log(`== ステージ ==\n  ${STAGES.length} 面 / 敵 ${Object.keys(ENEMIES).length} 種 / 問題 ${all.length}`);
   for (const p of all) console.log(`\x1b[31m  ${p}\x1b[0m`);
   if (all.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
+// 接続詞の結合元が正しく读到こと。
+// CONNECT_SOURCES は「1 語 = 1 接続詞」の object なので、同じ語を 2 回書くと
+// 後ろので上書きされる (強 が ク でも イ でも 結べるのに イ だけ残った、之类)。
+// ここでは「配列になっているか」と「結合できる組の数」で 그것を検出する。
+{
+  const { CONNECTORS, CONNECT_SOURCES } = await import(new URL('../js/data/words.connect.js', import.meta.url));
+  const { WORDS, DRAWABLE_ALL, drawWord } = await import(new URL('../js/data/words.js', import.meta.url));
+
+  // 定義にDuplicate なキーがないか (静かに上書きされる)。
+  const src = await readFile(join(ROOT, 'js/data/words.connect.js'), 'utf8');
+  const body = src.slice(src.indexOf('export const CONNECT_SOURCES = {'));
+  const keys = [...body.matchAll(/^\s{2}([\p{Script=Han}]+):/gmu)].map((m) => m[1]);
+  const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
+  const unknown = keys.filter((k) => !WORDS[k]);
+  const badConn = Object.values(CONNECT_SOURCES)
+    .flatMap((v) => [].concat(v))
+    .filter((c) => !CONNECTORS[c]);
+
+  // 結合できる (語 x 接続詞) の組が十分あるか。
+  let pairs = 0;
+  for (const w of DRAWABLE_ALL) {
+    const v = CONNECT_SOURCES[w];
+    if (!v) continue;
+    for (const c of [].concat(v)) if (CONNECTORS[c]) pairs++;
+  }
+  const words_ = Object.keys(CONNECT_SOURCES).length;
+  const rate = pairs / (DRAWABLE_ALL.length * Object.keys(CONNECTORS).length);
+
+  // 接続詞の出る確率。語が増えても下がり続けないように watched している。
+  let conn = 0, total = 0;
+  for (let i = 0; i < 6000; i++) {
+    const w = drawWord(makeRng(i * 2654435761 % 4294967296));
+    if (!w) continue;
+    total++;
+    if (WORDS[w.text].cat === 'connect') conn++;
+  }
+  const drawRate = conn / Math.max(1, total);
+
+  console.log(`== 接続詞 ==\n  接続詞 ${Object.keys(CONNECTORS).length} 種類`
+    + ` / 結合元 ${words_} 語 / 結合できる組 ${pairs} (${(rate * 100).toFixed(1)}%)`
+    + `\n  抽選に混ざる割合 ${(drawRate * 100).toFixed(1)}%`
+    + `\n  重複キー ${new Set(dup).size} / 語に無い ${unknown.length} / 接続詞に無い ${new Set(badConn).size}`);
+  for (const d of new Set(dup)) console.log(`\x1b[31m  キーが重複: ${d}\x1b[0m`);
+  for (const u of unknown) console.log(`\x1b[31m  辞書に無い結合元: ${u}\x1b[0m`);
+  for (const b of new Set(badConn)) console.log(`\x1b[31m  接続詞に無い: ${b}\x1b[0m`);
+
+  // 下限: 結合元が 100 語を下回ると「引いても宙に浮く」が増える。
+  if (words_ < 100) console.log(`\x1b[31m  結合元が ${words_} 語しかない。很高的aes 語が宙に浮く。\x1b[0m`);
+  if (drawRate < 0.06) console.log(`\x1b[31m  接続詞の出る確率が低い: ${(drawRate * 100).toFixed(1)}%\x1b[0m`);
+  if (drawRate > 0.20) console.log(`\x1b[31m  接続詞が出すぎ: ${(drawRate * 100).toFixed(1)}%\x1b[0m`);
+
+  if (dup.length || unknown.length || badConn.length || words_ < 100
+      || drawRate < 0.06 || drawRate > 0.20) {
     console.log('\n=== 失敗したテストがあります ===');
     process.exit(1);
   }

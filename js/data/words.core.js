@@ -109,6 +109,11 @@ const RAW_ELEMENT = `
 金     element gold    dmg+2  magnet+0.25
 財宝   element gold    dmg+3  magnet+0.60
 黄金   element gold    dmg+4  magnet+0.50  atkMul+0.04
+
+岩    element earth   dmg+2  size+0.10  speed-5
+影    element dark    dmg+1  crit+0.02  homing+0.10
+水    element water   dmg+2  chill+0.06
+塊    element earth   dmg+5  speed-20  size+0.25  knock+20
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,6 +150,9 @@ const RAW_FORM = `
 銃       form  -  dmg+7  count+1  speed+40
 弓       form  -  dmg+5  speed+110  pierce+1
 環刃     form  -  dmg+8  pierce+2  bounce+2
+
+牙    form     -      dmg+6  crit+0.03
+爪    form     -      dmg+4  count+2  speed+20
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -205,6 +213,27 @@ const RAW_MODIFIER = `
 重圧     modifier  -  knock+90  size+0.2  speed-10
 瞬発     modifier  -  rate+1.4  dmg-3
 秘匿     modifier  -  crit+0.10  homing+0.3  speed+10
+
+強    modifier -      dmg+4
+張    modifier -      dmg+3  size+0.10
+高    modifier -      crit+0.05
+深    modifier -      dmg+3  pierce+1
+遠    modifier -      range+30
+広    modifier -      area+8
+重    modifier -      dmg+5  knock+25
+硬    modifier -      armor+2  dmg+2
+柔    modifier -      speed+18
+鋭    modifier -      crit+0.05  speed+15
+巧    modifier -      dmg+3  rate+0.15
+穏    modifier -      speed+10  armor+1
+明    modifier -      pierce+2  crit+0.02
+早    modifier -      rate+0.30
+遅    modifier -      rate-0.20
+近    modifier -      range-20
+長    modifier -      range+25
+短    modifier -      range-15
+多    modifier -      count+2  spread+0.18
+少    modifier -      count-1
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -237,6 +266,14 @@ const RAW_BUFF = `
 成長     buff  -  xp+0.20  atk+0.05
 韻人     buff  -  atk+0.07  crit+0.03
 御       buff  -  armor+1  hp+10  shield+12
+
+頑    buff     -      hp+12
+健    buff     -      hp+20  regen+0.3
+鎧    buff     -      armor+1  hp+8
+堅    buff     -      armor+1  hp+12
+冠    buff     -      atk+0.10  crit+0.04
+薬    buff     -      regen+0.5  hp+6
+癒    buff     -      regen+0.8
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -415,12 +452,18 @@ const RAW_VERB = `
 const RAW_CONNECT = `
 サレタ   connect  -  dmg+2
 ワレタ   connect  -  dmg+2  armor+0.02
+ラレタ   connect  -  dmg+2  rate+0.10
+ク       connect  -  dmg+3  crit+0.02
+ナ       connect  -  dmg+2  area+4
 スル     connect  -  dmg+3  rate+0.15
 セシ     connect  -  dmg+3  rate+0.10
+リ       connect  -  dmg+2  spread+0.12
 ノ       connect  -  dmg+1  size+0.05
 イ       connect  -  dmg+2  crit+0.01
-ナ       connect  -  dmg+2  area+4
 ツ       connect  -  dmg+2  rate+0.10
+ニ       connect  -  dmg+1  homing+0.10
+ヲ       connect  -  dmg+2  knock+12
+ヘ       connect  -  dmg+1  speed+22
 `;
 
 export const RAW_TABLES = [

@@ -217,8 +217,12 @@ export class Hud {
         ? '語彙が満杯 — 捨てることばを選んで'
         : '捨てることばを選んだ — 新しいことばを選んで';
       clear(this.choiceForgetList);
+      // 候補と同じ語は選べない。捨てたのに同じ語进来是两来访者取胜事になる。
+      const cand = new Set(c.words.map((w) => w.text));
+      let shown = 0;
       run.lexicon.forEach((w, i) => {
-        if (!w) return;
+        if (!w || cand.has(w.text)) return;
+        shown++;
         const node = el('button', {
           class: 'choice-card forget' + (this.forgetIndex === i ? ' gone' : ''),
           type: 'button',
@@ -231,6 +235,10 @@ export class Hud {
         });
         this.choiceForgetList.append(node);
       });
+      if (!shown) {
+        this.choiceForgetList.append(el('span', { class: 'choice-note' },
+          '捨てる語がない (全部候補と同じ)'));
+      }
     } else {
       this.choiceTitle.textContent = 'ことばを 1 つ選んで';
     }

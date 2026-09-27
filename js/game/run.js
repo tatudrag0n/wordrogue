@@ -9,7 +9,7 @@
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { getStage } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { makeWord, drawWord, ELEMENTS } from '../data/words.js';
+import { makeWord, drawWord, drawSimple, ELEMENTS } from '../data/words.js';
 import { WEAPONS, startingWeaponsFor } from '../data/weapons.js';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { WeaponInst } from './weapon.js';
@@ -104,9 +104,10 @@ export class Run {
 
     // 語彙に語を渡す。セーブの恒久語 → 抽選の順。
     for (const w of (opt.startingWords || [])) this.addWord(makeWord(w), true);
+    // 開始時は漢字だけの短い語。漢字だけの武器を組み立てる土台にする。
     const fill = opt.lexiconFill ?? 10;
     for (let i = this.lexicon.filter(Boolean).length; i < fill; i++) {
-      const w = drawWord(this.rand);
+      const w = drawSimple(this.rand);
       if (w) this.addWord(w, true);
     }
     for (const w of (opt.extraWords || [])) this.addWord(makeWord(w.text), true, true);
@@ -312,6 +313,11 @@ export class Run {
       }
       const victim = this.lexicon[discardIndex];
       if (!victim) return false;
+      // 捨てる語が候補と同じなら、捨てたのに同じ語が入る.nvimになるので止める。
+      if (choice.words.some((w) => w.text === victim.text)) {
+        this.pushHint(`「${victim.text}」は候補と同じなので選べない`);
+        return false;
+      }
       this.lexicon[discardIndex] = null;
       word.t = ++this.wordSeq;
       this.lexicon[discardIndex] = word;

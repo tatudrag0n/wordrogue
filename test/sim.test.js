@@ -664,11 +664,24 @@ sec('語彙が満杯なら 3 択は「捨てる」を求める');
   r.grantLevelWords(2);
   const c = r.pendingChoices[0];
   const before = r.lexicon.map((w) => (w ? w.text : null));
-  const target = before[3];
-  ok(r.chooseWord(c.id, 0, 3), '捨てる語を指定しても入らない');
+  // 候補と同じ語は選べない (捨てたのに同じ語が入ってしまう)。
+  const candText = new Set(c.words.map((w) => w.text));
+  const same = r.lexicon.findIndex((w, i) => w && candText.has(w.text) && i !== 3);
+  if (same >= 0) {
+    const n0 = before.filter((t) => t === before[same]).length;
+    ok(!r.chooseWord(c.id, 0, same), `候補と同じ語「${before[same]}」を捨てられてしまった`);
+    ok(before.filter((t) => t === before[same]).length === n0, '選べなかったのに語が減った');
+  }
+  const pick = r.lexicon.findIndex((w, i) => w && !candText.has(w.text));
+  ok(pick >= 0, '捨てられる語がない');
+  const target = before[pick];
+  ok(r.chooseWord(c.id, 0, pick), '捨てる語を指定しても入らない');
   const after = r.lexicon.map((w) => (w ? w.text : null));
-  ok(after[3] === c.words[0].text, `新しい語が 3 番目に入らない: ${after[3]}`);
-  ok(!after.includes(target), `捨てる語が残った: ${target}`);
+  ok(after[pick] === c.words[0].text, `新しい語が ${pick} 番目に入らない: ${after[pick]}`);
+  // 同じ語が別の枠にもあるので「残ったか」ではなく「1 つ減ったか」で見る。
+  const nTarget = after.filter((t) => t === target).length;
+  const nBefore = before.filter((t) => t === target).length;
+  ok(nTarget === nBefore - 1, `捨てる語が減っていない: ${nBefore} -> ${nTarget} (${target})`);
   ok(after.filter(Boolean).length === before.filter(Boolean).length,
     `数が変わる: ${before.filter(Boolean).length} -> ${after.filter(Boolean).length}`);
   console.log(`  満杯の 3 択: 「${target}」を捨てて「${c.words[0].text}」瞪着入れた`);

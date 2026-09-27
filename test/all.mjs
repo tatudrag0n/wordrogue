@@ -156,6 +156,70 @@ if (syntaxBad) {
   }
 }
 
+// 末尾語 -> 攻撃タイプの表 (FORM_INFO) が辞書に追従していること。
+// ここが古くなると、末尾語を摆いた武器が攻撃しなくなる。
+{
+  const { WORDS } = await import(new URL('../js/data/words.js', import.meta.url));
+  const { WEAPONS, KIND_LABEL } = await import(new URL('../js/data/weapons.js', import.meta.url));
+  const src = await readFile(join(ROOT, 'js/game/weapon.js'), 'utf8');
+  const body = src.slice(src.indexOf('const FORM_INFO'));
+  const entries = [...body.matchAll(/([\p{Script=Han}]+):\s*\['(\w+)',\s*'(\w+)'\]/gu)]
+    .map((m) => ({ text: m[1], shape: m[2], kind: m[3] }));
+
+  const dead = entries.filter((e) => !WORDS[e.text]);
+  const noLabel = [...new Set(entries.map((e) => e.kind))].filter((k) => !KIND_LABEL[k]);
+  const known = new Set(entries.map((e) => e.text));
+  const noInfo = Object.values(WEAPONS).map((w) => w.tail).filter((t) => !known.has(t));
+
+  console.log(`== 末尾語表 ==\n  ${entries.length} 語 / 辞書に無い ${dead.length} / 攻撃名なし ${noLabel.length} / 末尾語医薬品なし ${noInfo.length}`);
+  if (dead.length) console.log('  辞書に無い: ' + dead.map((e) => e.text).join(' '));
+  if (noLabel.length) console.log('  攻撃名なし: ' + noLabel.join(' '));
+  if (noInfo.length) console.log('  未登録: ' + noInfo.join(' '));
+  if (dead.length || noLabel.length || noInfo.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
+// ステージのウェーブが実在する敵を指していること。
+//  bosses も、解放される武器のステージ番号も範囲内であること。
+{
+  const { STAGES } = await import(new URL('../js/data/stages.js', import.meta.url));
+  const { ENEMIES, BOSS_IDS } = await import(new URL('../js/data/enemies.js', import.meta.url));
+  const { WEAPONS } = await import(new URL('../js/data/weapons.js', import.meta.url));
+
+  const maxStage = STAGES.length;
+  const unknown = [];
+  for (const s of STAGES) {
+    for (const w of s.waves) {
+      for (const [id, n] of w.list) {
+        if (!ENEMIES[id]) unknown.push(`${s.name}: 敵「${id}」が無い`);
+        else if (!Number.isInteger(n) || n <= 0) unknown.push(`${s.name}: 敵「${id}」の数が不正 (${n})`);
+      }
+      if (w.at < 0 || w.at > s.time) unknown.push(`${s.name}: ウェーブ時刻 ${w.at} が範囲外`);
+    }
+    if (s.boss && !BOSS_IDS.includes(s.boss)) unknown.push(`${s.name}: ボス「${s.boss}」が無い`);
+    if (!s.waves.length) unknown.push(`${s.name}: ウェーブが空`);
+  }
+  const badUnlock = Object.values(WEAPONS)
+    .filter((w) => w.unlock && (w.unlock.stage < 1 || w.unlock.stage > maxStage))
+    .map((w) => `${w.name}: 解放ステージ ${w.unlock.stage} が範囲外`);
+
+  // 武器が 1 つも無いステージがあると、中間が飛ばされる。
+  const covered = new Set(Object.values(WEAPONS).map((w) => (w.unlock ? w.unlock.stage : 1)));
+  for (let i = 1; i <= maxStage; i++) {
+    if (!covered.has(i)) unknown.push(`ステージ ${i}: 解放される武器が無い`);
+  }
+
+  const all = [...unknown, ...badUnlock];
+  console.log(`== ステージ ==\n  ${STAGES.length} 面 / 敵 ${Object.keys(ENEMIES).length} 種 / 問題 ${all.length}`);
+  for (const p of all) console.log(`\x1b[31m  ${p}\x1b[0m`);
+  if (all.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
 const PORT = Number(process.env.PORT || 8099);
 const startServer = process.env.NO_SERVE !== '1';
 

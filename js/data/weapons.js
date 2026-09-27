@@ -99,6 +99,70 @@ export const WEAPONS = {
     grow: { dmg: 5.2, rate: 0.08, range: 20 },
     startWord: '閃', startWord2: '電', maxLevel: 8, startSlots: 4, unlock: { stage: 5 },
   },
+  // ── 追加分。末尾語が違えば攻撃も形も違になる。──
+  tachi: {
+    id: 'tachi', name: '太刀', kind: 'slash', glyph: '太', tail: '太刀',
+    desc: '大きく振る。扇が広く、一振りで複数を薙ぐ。',
+    base: { dmg: 15, rate: 0.75, range: 112, arc: 2.9, size: 1.15, crit: 0.06 },
+    grow: { dmg: 4.6, rate: 0.06, range: 5, arc: 0.08 },
+    startWord: '炎', startWord2: '灼熱', maxLevel: 8, startSlots: 4, unlock: { stage: 3 },
+  },
+  needle: {
+    id: 'needle', name: '針', kind: 'shot', glyph: '針', tail: '針',
+    desc: '細くて速い。連射で削り、貫通する。',
+    base: { dmg: 4, rate: 4.0, speed: 540, count: 2, pierce: 1, size: 0.7, crit: 0.06, spread: 0.05 },
+    grow: { dmg: 1.3, rate: 0.28, count: 0.2, pierce: 0.2 },
+    startWord: '毒', startWord2: '腐蝕', maxLevel: 8, startSlots: 4, unlock: { stage: 3 },
+  },
+  boulder: {
+    id: 'boulder', name: '岩塊', kind: 'bomb', glyph: '岩', tail: '岩塊',
+    desc: '重い。ゆっくり飛んで、敵を吹き飛ばす。',
+    base: { dmg: 20, rate: 0.42, speed: 150, explode: 34, area: 34, size: 1.4, count: 1, knock: 80 },
+    grow: { dmg: 6.2, rate: 0.04, explode: 9, area: 6 },
+    startWord: '厚土', startWord2: '巨岩', maxLevel: 8, startSlots: 4, unlock: { stage: 4 },
+  },
+  claw: {
+    id: 'claw', name: '利爪', kind: 'whip', glyph: '爪', tail: '利爪',
+    desc: '短く速い。近くを連続で薙ぐ。',
+    base: { dmg: 7, rate: 2.6, range: 100, area: 6, size: 0.9, crit: 0.08, knock: 20 },
+    grow: { dmg: 2.3, rate: 0.16, range: 4 },
+    startWord: '血', startWord2: '紅蓮', maxLevel: 8, startSlots: 4, unlock: { stage: 5 },
+  },
+  dragon: {
+    id: 'dragon', name: '竜頭', kind: 'shot', glyph: '竜', tail: '竜頭',
+    desc: '長い。遠くを串刺しにする。',
+    base: { dmg: 13, rate: 0.85, speed: 460, pierce: 5, size: 1.2, crit: 0.12 },
+    grow: { dmg: 4.0, rate: 0.07, pierce: 0.5, speed: 14 },
+    startWord: '業火', startWord2: '爆裂', maxLevel: 8, startSlots: 4, unlock: { stage: 6 },
+  },
+  clone: {
+    id: 'clone', name: '複製', kind: 'shot', glyph: '複', tail: '複製',
+    desc: '命中した弾が分裂する。',
+    base: { dmg: 8, rate: 1.0, speed: 300, count: 2, split: 2, size: 1, crit: 0.05, spread: 0.2 },
+    grow: { dmg: 2.7, rate: 0.1, split: 0.3, count: 0.25 },
+    startWord: '追影', startWord2: '分裂', maxLevel: 8, startSlots: 4, unlock: { stage: 6 },
+  },
+  greatblade: {
+    id: 'greatblade', name: '大剣', kind: 'whip', glyph: '大', tail: '大剣',
+    desc: '重い一振り。遠くまで薙ぎ、敵を吹き飛ばす。',
+    base: { dmg: 18, rate: 0.6, range: 168, area: 18, size: 1.2, knock: 110, crit: 0.06 },
+    grow: { dmg: 5.6, rate: 0.05, range: 9, area: 2 },
+    startWord: '鋼', startWord2: '剛硬', maxLevel: 8, startSlots: 4, unlock: { stage: 7 },
+  },
+  flank: {
+    id: 'flank', name: '夾撃', kind: 'shot', glyph: '夾', tail: '夾撃',
+    desc: '左右から同時に撃つ。',
+    base: { dmg: 9, rate: 1.3, speed: 340, count: 2, spread: 0.9, size: 1, crit: 0.05 },
+    grow: { dmg: 3.0, rate: 0.1, count: 0.24, spread: 0.04 },
+    startWord: '風', startWord2: '旋風', maxLevel: 8, startSlots: 4, unlock: { stage: 8 },
+  },
+  flurry: {
+    id: 'flurry', name: '乱打', kind: 'shot', glyph: '乱', tail: '乱打',
+    desc: '散らばった弾を連射する。数で押す。',
+    base: { dmg: 6, rate: 2.4, speed: 380, count: 3, spread: 0.7, size: 0.9, crit: 0.04 },
+    grow: { dmg: 2.0, rate: 0.2, count: 0.28 },
+    startWord: '迅早', startWord2: '多重', maxLevel: 8, startSlots: 4, unlock: { stage: 9 },
+  },
 };
 
 export const WEAPON_IDS = Object.keys(WEAPONS);
@@ -107,7 +171,7 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
 export const KIND_LABEL = {
   slash: '斬撃', shot: '射撃', bomb: '爆弾', chain: '連鎖',
   orbit: '軌道', whip: '薙ぎ', aura: '城壁', beam: '光線',
-  boomerang: '還刃', none: '',
+  boomerang: '還刃', pierce: '貫通', none: '',
 };
 
 /** 武器の現在のスロット数を求める。Lv2 / Lv4 / Lv6 で 1 つずつ増える。 */

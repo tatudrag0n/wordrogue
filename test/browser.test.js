@@ -142,7 +142,7 @@ await evalJs('document.getElementById("btnStart").click()');
 await sleep(300);
 ok(await evalJs('!document.getElementById("stages").hidden'), 'ステージ選択が開いた');
 const stageCards = await evalJs('document.querySelectorAll("#stageList .stage-card").length');
-ok(stageCards === 6, `ステージカード数: ${stageCards}`);
+ok(stageCards === 9, `ステージカード数: ${stageCards}`);
 
 sec('武器選択へ');
 await evalJs('document.querySelectorAll("#stageList .stage-card")[0].click()');

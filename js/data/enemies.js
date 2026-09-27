@@ -57,6 +57,21 @@ export const ENEMIES = {
     hp: 210, speed: 32, dmg: 24, r: 26, xp: 12, color: '#8a8a95', heavy: 2,
     armor: 2,
   },
+  // ── 語書庫 以降 ──────────────────────────────────────────────────────────
+  brush: {
+    id: 'brush', name: '筆', ai: 'erratic',
+    hp: 14, speed: 98, dmg: 6, r: 8, xp: 2, color: '#e8dcc0', wing: 0.4,
+  },
+  inkfiend: {
+    id: 'inkfiend', name: '墨鬼', ai: 'shooter',
+    hp: 40, speed: 50, dmg: 10, r: 12, xp: 5, color: '#4a3f6a',
+    keep: 240, shot: { speed: 190, dmg: 10, cd: 2.6 },
+  },
+  rhymer: {
+    id: 'rhymer', name: '韻獣', ai: 'charger',
+    hp: 70, speed: 60, dmg: 16, r: 16, xp: 8, color: '#c0a0e0',
+    charge: { range: 240, speed: 380, time: 0.6, cd: 2.2 },
+  },
 
   // ── ボス ────────────────────────────────────────────────────────────────
   boss_slime: {
@@ -82,6 +97,18 @@ export const ENEMIES = {
     hp: 26000, speed: 58, dmg: 44, r: 52, xp: 900, color: '#b03030', heavy: 3,
     patterns: ['charge', 'ring', 'breath', 'summon', 'slam', 'drain'],
     arena: 400,
+  },
+  boss_scribe: {
+    id: 'boss_scribe', name: '筆王', ai: 'boss', boss: 1,
+    hp: 44000, speed: 66, dmg: 52, r: 48, xp: 1800, color: '#d8c890', heavy: 3,
+    patterns: ['ring', 'summon', 'breath', 'charge', 'slam'],
+    arena: 420,
+  },
+  boss_word: {
+    id: 'boss_word', name: '詞獣', ai: 'boss', boss: 1,
+    hp: 96000, speed: 62, dmg: 64, r: 56, xp: 4000, color: '#f0e0ff', heavy: 3,
+    patterns: ['ring', 'breath', 'summon', 'charge', 'slam', 'drain'],
+    arena: 450,
   },
 };
 

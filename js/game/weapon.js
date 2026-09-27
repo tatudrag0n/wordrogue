@@ -23,14 +23,14 @@ let wUid = 0;
  */
 const FORM_INFO = {
   // 斬撃
-  剣: ['blade', 'slash'], 刃: ['blade', 'slash'], 刀: ['blade', 'slash'],
+  剣: ['blade', 'slash'], 刃: ['blade', 'slash'], 短刀: ['blade', 'slash'],
   太刀: ['blade', 'slash'], 大剣: ['blade', 'slash'],
-  爪: ['blade', 'slash'], 牙: ['blade', 'slash'],
+  利爪: ['blade', 'slash'], 尖牙: ['blade', 'slash'],
   // 射撃
   弾: ['shot', 'shot'], 矢: ['arrow', 'shot'], 針: ['arrow', 'shot'],
-  球: ['orb', 'shot'], 塊: ['orb', 'shot'], 竜頭: ['arrow', 'shot'],
+  球: ['orb', 'shot'], 岩塊: ['orb', 'shot'], 竜頭: ['arrow', 'shot'],
   夾撃: ['arrow', 'shot'], 乱打: ['shot', 'shot'], 殲滅: ['orb', 'shot'],
-  殲: ['arrow', 'shot'], 貫通: ['arrow', 'shot'], 複製: ['orb', 'shot'],
+  貫通: ['arrow', 'shot'], 複製: ['orb', 'shot'],
   銃: ['shot', 'shot'], 弓: ['arrow', 'shot'],
   // 爆弾
   爆弾: ['bomb', 'bomb'], 彗星: ['orb', 'bomb'],
@@ -45,7 +45,11 @@ const FORM_INFO = {
   // 城壁
   壁: ['orb', 'aura'], 棘壁: ['orb', 'aura'],
   // 光線
-  光線: ['arrow', 'beam'], 閃光: ['arrow', 'beam'], 反射: ['blade', 'beam'],
+  光線: ['arrow', 'beam'], 反射: ['blade', 'beam'],
+  // 追加武器の末尾語
+  太刀: ['blade', 'slash'], 針: ['arrow', 'shot'], 岩塊: ['orb', 'bomb'],
+  利爪: ['blade', 'whip'], 竜頭: ['arrow', 'shot'], 複製: ['orb', 'shot'],
+  大剣: ['blade', 'whip'], 夾撃: ['arrow', 'shot'], 乱打: ['shot', 'shot'],
 };
 
 /**

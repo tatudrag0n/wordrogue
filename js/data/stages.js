@@ -88,6 +88,45 @@ export const STAGES = [
     ],
     reward: 4,
   },
+  {
+    id: 7, name: '語書庫', time: 105, boss: 'boss_scribe',
+    color: '#2a2620', ground: '#1c1913', accent: '#e8d8a0',
+    intro: '使われなかったことばが積まれている。',
+    waves: [
+      { at: 0,  list: [['brush', 20], ['skeleton', 14]] },
+      { at: 16, list: [['inkfiend', 10], ['wraith', 16]] },
+      { at: 32, list: [['rhymer', 10], ['brush', 30], ['shooter', 10]] },
+      { at: 50, list: [['golem', 6], ['inkfiend', 14]] },
+      { at: 70, list: [['rhymer', 18], ['wraith', 24], ['brush', 40]] },
+    ],
+    reward: 4,
+  },
+  {
+    id: 8, name: '韻律の塔', time: 110, boss: 'boss_scribe',
+    color: '#202a34', ground: '#151d24', accent: '#80c0e0',
+    intro: '上へ上へ。同じ音が何千も重なっている。',
+    waves: [
+      { at: 0,  list: [['rhymer', 16], ['inkfiend', 12]] },
+      { at: 16, list: [['brush', 40], ['shooter', 16]] },
+      { at: 34, list: [['rhymer', 22], ['wraith', 20], ['inkfiend', 16]] },
+      { at: 54, list: [['golem', 9], ['rhymer', 24]] },
+      { at: 76, list: [['ghost', 30], ['brush', 50], ['shooter', 22]] },
+    ],
+    reward: 5,
+  },
+  {
+    id: 9, name: '言葉の根源', time: 120, boss: 'boss_word',
+    color: '#332a3a', ground: '#221b28', accent: '#f0d0ff',
+    intro: '最初の語が、そこから生まれている。',
+    waves: [
+      { at: 0,  list: [['rhymer', 20], ['inkfiend', 18], ['brush', 40]] },
+      { at: 18, list: [['golem', 10], ['wraith', 26]] },
+      { at: 36, list: [['rhymer', 28], ['ghost', 30], ['shooter', 20]] },
+      { at: 58, list: [['golem', 14], ['inkfiend', 24], ['rhymer', 30]] },
+      { at: 80, list: [['ghost', 40], ['brush', 70], ['rhymer', 40], ['shooter', 26]] },
+    ],
+    reward: 6,
+  },
 ];
 
 export const STAGE_IDS = STAGES.map((s) => s.id);

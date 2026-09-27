@@ -208,6 +208,15 @@ export class WeaponInst {
     st.xpMul = (fx.xpMul || 0) + ps.xpMul;
     st.power = 1;
 
+    // 文の新闻中心。敵の文を斬る量と確率に使う。
+    //   成立なら 1 語、熟語があれば +1、述語 (接続詞の合成) があれば +1。
+    //   文越好いほど、斬る量も確率も上がる。
+    st.grade = e.grade;
+    st.idiom = e.idiom ? 1 : 0;
+    st.predicated = e.predicated ? 1 : 0;
+    st.cutPower = 1 + st.idiom + st.predicated;
+    st.cutChance = 0.15 * st.cutPower * (1 + (e.idiom ? 0.5 : 0)) * (1 + (e.predicated ? 0.5 : 0));
+
     // 範囲系の下限と上限。
     st.size = clamp(st.size ?? 1, 0.3, 4);
     st.area = Math.max(0, st.area || 0);

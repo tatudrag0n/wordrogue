@@ -637,6 +637,44 @@ sec('プレイヤー自身の文で称号ができる');
   console.log(`    並べ替え → 「${tail.a}」→「${tail.b}」 末尾は人固定`);
 }
 
+sec('敵の文が表示される');
+{
+  const r = await evalJs(`(async () => {
+    const m = await import(new URL('js/game/entities.js', document.baseURI).href);
+    const app = window.__wordrogue;
+    const run = app.run;
+    // 敵が 1 体はいてほしい。足りなければ作る。
+    const e = m.makeEnemy('wraith', run.player.x + 60, run.player.y - 40);
+    e.spawned = 1;
+    run.enemies.push(e);
+    const before = e.words.join('');
+    // 描画して例外が出ないか見る。
+    let err = null;
+    try { app.renderer.drawEnemySentence(e, run); } catch (ex) { err = ex.message; }
+    return { before, hasWords: e.words.length >= 2, err };
+  })()`);
+  ok(r.hasWords, '敵が文を持っていない');
+  ok(!r.err, `文の描画で例外: ${r.err}`);
+
+  // 崩れた敵の描画も通る。
+  const b = await evalJs(`(async () => {
+    const m = await import(new URL('js/game/entities.js', document.baseURI).href);
+    const app = window.__wordrogue;
+    const run = app.run;
+    const e = m.makeEnemy('golem', run.player.x + 60, run.player.y - 40);
+    e.spawned = 1;
+    e.words = e.words.slice(0, 1);
+    e.broken = true;
+    run.enemies.push(e);
+    let err = null;
+    try { app.renderer.drawEnemySentence(e, run); } catch (ex) { err = ex.message; }
+    e.dead = true;
+    return { err, text: e.words.join('') };
+  })()`);
+  ok(!b.err, `不成文の描画で例外: ${b.err}`);
+  console.log(`    敵の文「${r.before}」/ 崩れた文「${b.text}」`);
+}
+
 sec('描画で例外が出てもプレイヤーが消えない');
 {
   // 鉱物系 (土・金・鉄) の弾はすべて同じ描画経路を通る。

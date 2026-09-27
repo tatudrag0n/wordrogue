@@ -4,7 +4,7 @@
 // 外部画像ファイルを一切使わない。全部その場で描く。
 // ============================================================================
 
-import { TAU, clamp, lerp } from '../core/util.js';
+import { TAU, clamp, lerp, dist2 } from '../core/util.js';
 import { ELEMENTS } from '../data/words.js';
 
 export class Renderer {
@@ -389,8 +389,55 @@ export class Renderer {
         g.fillStyle = '#ff4d6d';
         g.fillRect(e.x - w / 2, e.y - e.r - 14, w * clamp(e.hp / e.maxHp, 0, 1), 4);
       }
+
+      this.drawEnemySentence(e, run);
     }
     g.globalAlpha = 1;
+  }
+
+  /**
+   * 敵が持つ文を頭の上に描く。斬られるたびに短くなっていく。
+   * 崩れた敵は「不成文」と出る。
+   */
+  drawEnemySentence(e, run) {
+    if (!e.words || !e.words.length) return;
+    // 近い敵とボスだけ描く。全部描くと画面が読めなくなる。
+    // dist2 は二乗距離なので、しきい値も二乗で比べる。
+    const near = dist2(e.x, e.y, run.player.x, run.player.y) <= 280 * 280;
+    if (!near && !e.boss) return;
+
+    const g = this.ctx;
+    const text = e.words.join('');
+    const size = e.boss ? 16 : 13;
+    const font = (px) => `700 ${px}px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif`;
+    g.save();
+    // canvas の font に var() は書けない。実体名を直接入れる。
+    g.font = font(size);
+    g.textAlign = 'center';
+    g.textBaseline = 'bottom';
+    const y = e.y - e.r - (e.boss ? 22 : 16);
+
+    // 影。どの背景でも読めるようにする。
+    g.lineWidth = 4;
+    g.strokeStyle = 'rgba(0,0,0,.85)';
+    g.lineJoin = 'round';
+    g.strokeText(text, e.x, y);
+
+    if (e.broken) {
+      g.fillStyle = '#ff5470';
+      g.fillText(text, e.x, y);
+      g.font = font(size - 1);
+      const tag = '不成文';
+      const ty = y - size - 4;
+      g.lineWidth = 3.5;
+      g.strokeText(tag, e.x, ty);
+      g.fillText(tag, e.x, ty);
+    } else {
+      // 斬った直後は黄色く光らせる。
+      g.fillStyle = e.cutFlash > 0.02 ? '#ffd43b' : '#eef3fb';
+      g.fillText(text, e.x, y);
+    }
+    g.restore();
   }
 
   drawBullets(run) {

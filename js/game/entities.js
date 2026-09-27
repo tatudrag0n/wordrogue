@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { TAU, clamp, dist2, angleDiff } from '../core/util.js';
-import { ENEMIES } from '../data/enemies.js';
+import { ENEMIES, enemyWords, enemySentence } from '../data/enemies.js';
 import { ELEMENTS } from '../data/words.js';
 
 let eUid = 0;
@@ -33,6 +33,10 @@ export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1) {
     stun: 0,
     // 描画
     face: 0, wob: Math.random() * TAU, flash: 0,
+    // 敵が持つ文。プレイヤーの文から語を斬り落とす。
+    words: enemyWords(d),
+    broken: false,
+    cutFlash: 0,
     // AI
     t: Math.random() * 2,
     atkCd: 0, charging: 0, cdLeft: (d.charge?.cd || 2) * Math.random(),
@@ -40,6 +44,40 @@ export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1) {
     dead: false,
     spawned: 0,
   };
+}
+
+/**
+ * 敵の文を現在まで評価した結果。语的表は変わらないので lazy に計算。
+ * @param {object} e 敵
+ */
+export function enemyEval(e) {
+  if (!e._sent) e._sent = enemySentence(e.def, e.words);
+  return e._sent;
+}
+
+/**
+ * 敵の文から語を斬る。前から取る (文が崩れていく)。
+ * 実質語が 2 つを下回ると崩れる。
+ * @param {object} e 敵
+ * @param {number} n 斬る語数
+ * @returns {{cut:number, broken:boolean, text:string}}
+ */
+export function cutEnemyWords(e, n) {
+  if (!e.words || e.broken || n <= 0) return { cut: 0, broken: !!e.broken, text: '' };
+  let cut = 0;
+  for (let k = 0; k < n && e.words.length > 1; k++) {
+    e.words.pop();
+    cut++;
+    // 崩れるまで斬る。崩れたところで止める。
+    if (!enemySentence(e.def, e.words).valid) break;
+  }
+  e._sent = null;
+  const r = enemyEval(e);
+  if (!r.valid && !e.broken) {
+    e.broken = true;
+    e.cutFlash = 1;
+  }
+  return { cut, broken: e.broken, text: e.words.join('') };
 }
 
 export function makeBullet(o) {
@@ -147,6 +185,7 @@ export function updateEnemy(en, w, dt) {
   en.t += dt;
   en.wob += dt * 6;
   if (en.flash > 0) en.flash = Math.max(0, en.flash - dt * 4);
+  if (en.cutFlash > 0) en.cutFlash = Math.max(0, en.cutFlash - dt * 2.2);
 
   // 状態異常を 時間経過させる。
   tickStatus(en, dt);
@@ -165,6 +204,10 @@ export function updateEnemy(en, w, dt) {
   const ai = en.def.ai;
 
   if (!frozen) {
+    // 文が崩れた敵は動けない。 palabra のない体は威胁にならない。
+    if (en.broken) {
+      mvx = 0; mvy = 0;
+    } else {
     switch (ai) {
       case 'erratic': {
         const s = Math.sin(en.t * 4 + en.wob * 0.1) * 0.55;
@@ -217,6 +260,7 @@ export function updateEnemy(en, w, dt) {
         break;
       default:
         mvx = dx; mvy = dy;
+    }
     }
   }
 
@@ -278,6 +322,13 @@ function bossMove(en, w, dt, dx, dy, d) {
   }
 
   if (en.atkCd <= 0) {
+    // 文が崩れていれば攻撃パターンを封じられる。ただし動くし接触ダメージも残る。
+    if (en.broken) {
+      en.atkCd = 1.2;
+      en.x += dx * en.speed * 0.6 * dt;
+      en.y += dy * en.speed * 0.6 * dt;
+      return;
+    }
     const pats = en.def.patterns;
     const pat = pats[en.patIdx % pats.length];
     en.patIdx = (en.patIdx || 0) + 1;

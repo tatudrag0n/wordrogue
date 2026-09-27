@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
-import { makeBullet, makeField, ensureHitSet, hitsEnemy } from './entities.js';
+import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
 import { ELEMENTS } from '../data/words.js';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
@@ -245,6 +245,45 @@ function doAura(run, wi, st, el) {
 const rollCrit = (st) => rng() < (st.crit || 0);
 
 /**
+ * 武器の文で敵の文を斬る。
+ *   斬る量は 成立 1 語、熟語 +1、述語 +1。確率は文の良し悪しで変わる。
+ *   毎回斬るとボスでも数秒で崩れてしまうので、確率を賭ける。
+ *   ボスは文が長いぶん斬りにくい (0.3 倍にする)。
+ * 崩れた敵は止まる。ボスは攻撃パターンだけが落ちる。
+ * @param {object} e 敵
+ * @param {object} st 武器ステータス
+ * @param {object} run
+ */
+function cutByWeapon(e, st, run) {
+  if (!e.words || e.broken) return;
+  const power = st.cutPower || 0;
+  if (power <= 0) return;
+  const chance = (st.cutChance || 0) * (e.boss ? 0.3 : 1);
+  if (chance <= 0 || rng() >= chance) return;
+
+  const r = cutEnemyWords(e, power);
+  if (r.cut > 0) {
+    e.cutFlash = 1;
+    run.dmgTexts.push({
+      x: e.x, y: e.y - e.r - 12, v: 0, crit: false,
+      life: 0.7, maxLife: 0.7, vy: -30, text: `−${r.text}`,
+      color: '#ffd43b',
+    });
+  }
+  if (r.broken) {
+    // 崩れた。止める。
+    // ただしボスは倒れない。接触ダメージは残して、攻撃パターンだけ落とす。
+    e.atkCd = 99;
+    e.charging = 0;
+    if (!e.boss) {
+      e.dmg = 0;
+      e.speed = e.def.speed * 0.4;
+    }
+    run.brokenCount = (run.brokenCount || 0) + 1;
+  }
+}
+
+/**
  * 敵にダメージを与える。文の効果がすべてここで効く。
  * @param {object} e 敵
  * @param {object} st 武器ステータス
@@ -258,8 +297,15 @@ export function damage(run, e, st, opt = {}) {
   if (crit) dmg *= (st.critDmg || 1.5);
   dmg = Math.max(1, Math.round(dmg));
 
+  // 文が崩れた敵は脆い。斬る方が楽になる。
+  // ボスは倒れない。止まるのは攻撃パターンだけ。
+  if (e.broken) dmg = Math.max(1, Math.round(dmg * (e.boss ? 1.5 : 2.5)));
+
   e.hp -= dmg;
   e.flash = 1;
+
+  // 敵の文を斬る。プレイヤーの文がよいほど多く斬れる。
+  if (!opt.noCut) cutByWeapon(e, st, run);
 
   // 状態異常。
   const el = opt.element || 'none';

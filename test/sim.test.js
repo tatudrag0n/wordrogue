@@ -1,10 +1,12 @@
 // ヘッドレスで 1 ステージを最後まで回すテスト。  node test/sim.test.js
 // DOM を使わないので Node でそのまま実行できる。
 import { Run, PICKUP_VMAX, PICKUP_MAGNET } from '../js/game/run.js';
-import { makeWord, WORDS } from '../js/data/words.js';
+import { makeWord, WORDS, evaluate } from '../js/data/words.js';
 import { WEAPONS } from '../js/data/weapons.js';
+import { ENEMIES } from '../js/data/enemies.js';
 import { WeaponInst } from '../js/game/weapon.js';
-import { makePickup } from '../js/game/entities.js';
+import { makePickup, makeEnemy } from '../js/game/entities.js';
+import { damage } from '../js/game/combat.js';
 import { SELF_TAIL, resolvePlayerStats } from '../js/game/stats.js';
 import { STAGES } from '../js/data/stages.js';
 import { makeRng } from '../js/core/util.js';
@@ -1055,6 +1057,109 @@ sec('武器 1 つにつき複数語を並べられる');
   ok(gram.evalResult.content === plain.evalResult.content, '助詞が実質語に数えられている');
   console.log(`  助詞を足す → 「${plain.fullText}」${plain.evalResult.fx.power.toFixed(2)}`
     + ` → 「${gram.fullText}」${gram.evalResult.fx.power.toFixed(2)}`);
+}
+
+sec('敵は文でできている');
+{
+  // 全敵の文が、辞書だけで閉じる文になっていること。
+  for (const [id, def] of Object.entries(ENEMIES)) {
+    const words = def.words || [];
+    ok(words.length >= 2, `${def.name}: 文が短い (${words.length})`);
+    const missing = words.filter((w) => !WORDS[w]);
+    ok(missing.length === 0, `${def.name}: 辞書に無い語 ${missing.join(',')}`);
+    const r = evaluate(words.map((text) => ({ text })));
+    ok(r.valid, `${def.name}: 文が成立しない (${r.reasonText})`);
+  }
+  // ボスの文は長い。 harder には時間がかかるように。
+  const bossWords = ENEMIES.boss_word.words.length;
+  ok(bossWords >= 4, `ボスの文が短すぎる: ${bossWords}`);
+  console.log(`  敵 ${Object.keys(ENEMIES).length} 種 / 最終ボスの文 ${bossWords} 語`);
+}
+
+sec('武器の文で敵の文を斬れる');
+{
+  const r = newRun(1);
+  const wi = r.weapons[0];
+  wi.slots.fill(null);
+  const PS = r.player.stats;
+
+  // 実在する語だけで組む。
+  const set = (...ws) => {
+    wi.slots.fill(null);
+    ws.forEach((w, i) => wi.setSlot(i, makeWord(w)));
+    return wi.resolve(PS);
+  };
+
+  // 不成文の武器は斬れない。
+  const broken = set('刃');
+  ok(!broken.valid, '刃だけでは不成文にならない');
+  ok(!broken.stats.cutPower, `不成文が斬れる: cutPower=${broken.stats.cutPower}`);
+
+  // ふつうの成立文は 1 語。
+  const plain = set('刃', '必殺', '電', '弾');
+  ok(plain.valid, '比較用の文が成立しない');
+  ok(plain.stats.cutPower === 1, `成立文の斬り数が 1 でない: ${plain.stats.cutPower}`);
+
+  // 熟語があれば +1。
+  const idiom = set('刃', '必殺', '火', '球');
+  ok(idiom.valid && idiom.evalResult.idiom, `熟語が成立しない: ${idiom.fullText}`);
+  ok(idiom.stats.cutPower === 2, `熟語文の斬り数が 2 でない: ${idiom.stats.cutPower}`);
+
+  // 述語 (接続詞の合成) があれば +1。
+  const gram = set('刃', '律', 'スル', '弾');
+  ok(gram.valid, `述語の文が成立しない: ${gram.fullText}`);
+  ok(gram.evalResult.predicated, `述語になっていない: ${gram.fullText}`);
+  ok(gram.stats.cutPower === 2, `述語文の斬り数が 2 でない: ${gram.stats.cutPower}`);
+
+  // 斬る量だけでなく、確率も文で変わる。
+  const chance = (res) => res.stats.cutChance;
+  ok(chance(plain) < chance(idiom), `熟 ought to 確率も上げる: ${chance(plain)} -> ${chance(idiom)}`);
+  ok(chance(plain) < chance(gram), `述 ought to 確率も上げる: ${chance(plain)} -> ${chance(gram)}`);
+  ok(!broken.stats.cutChance, `不成文に確率がある: ${chance(broken)}`);
+  // 1 割を切るのは少し寂しい。
+  ok(chance(plain) >= 0.1, `成立文の確率が低すぎる: ${chance(plain)}`);
+  console.log(`  斬る量 成立 ${plain.stats.cutPower} / 熟語 ${idiom.stats.cutPower}`
+    + ` / 述語 ${gram.stats.cutPower}`);
+  console.log(`  確率   成立 ${(chance(plain) * 100).toFixed(0)}%`
+    + ` / 熟語 ${(chance(idiom) * 100).toFixed(0)}% / 述語 ${(chance(gram) * 100).toFixed(0)}%`);
+
+  // 斬る。敵の文が短くなる。確率を 1 にして必ず斬らせる。
+  const e = makeEnemy('goblin', 0, 0);
+  const before = e.words.join('');
+  plain.stats.cutChance = 10;   // 必ず斩らせる
+  damage(r, e, plain.stats, {});
+  ok(e.words.length === 1, `1 文で 1 語斬れていない: ${e.words.join('')}`);
+  ok(e.broken === true, '文が崩れていない');
+  console.log(`  「${before}」→ 成立文で 1 斬り → 「${e.words.join('')}」${e.broken ? ' (崩れた)' : ''}`);
+
+  // 崩れた敵は無力。
+  ok(e.dmg === 0, `崩れた敵がダメージを返す: ${e.dmg}`);
+  ok(e.speed < e.def.speed, '崩れた敵が動く');
+}
+
+sec('熟語か述語なら、一撃で 2 語斬る');
+{
+  const r = newRun(1);
+  const wi = r.weapons[0];
+  const PS = r.player.stats;
+  const set = (...ws) => {
+    wi.slots.fill(null);
+    ws.forEach((w, i) => wi.setSlot(i, makeWord(w)));
+    return wi.resolve(PS);
+  };
+  const strong = set('刃', '必殺', '火', '球');
+  ok(strong.stats.cutPower === 2, `斬り数が 2 でない: ${strong.stats.cutPower}`);
+
+  // 3 語の敵を 1 撃で 2 語斬れる。
+  const e = makeEnemy('boss_slime', 0, 0);
+  ok(e.words.length === 3, `敵の文が 3 語でない: ${e.words.length}`);
+  // ボスは 0.3 倍。即使概率很低也会失败。把 cutChance 设为 10 で必斩。
+  strong.stats.cutChance = 10;
+  damage(r, e, strong.stats, {});
+  ok(e.words.length === 1, `2 語斬れていない: ${e.words.join('')}`);
+  ok(e.broken, '3 語 -> 1 語 で崩れていない');
+  console.log(`  ${ENEMIES.boss_slime.name}「${ENEMIES.boss_slime.words.join('')}」`
+    + ` → 熟語 1 撃で 2 斬り → 「${e.words.join('')}」${e.broken ? ' (崩れた)' : ''}`);
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

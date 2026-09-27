@@ -370,16 +370,20 @@ await sleep(350);
     const lex = [...document.querySelectorAll('#forgeLexicon .pword:not(.empty)')];
     const slot0 = document.querySelectorAll('#forgeWeapons .wrow')[1].querySelector('.slot');
     return {
-      draggables: document.querySelectorAll('#forge [draggable="true"]').length,
+      // HTML5 の draggable は使ってない。pointer で自前実装する。
+      html5: document.querySelectorAll('#forge [draggable="true"]').length,
       lexicon: lex.length,
-      slotDraggable: slot0.draggable,
-      slotFilled: slot0.classList.contains('filled'),
-      tailDraggable: [...document.querySelectorAll('#forge .slot-tail')].some(n => n.draggable),
+      // 語彙の語と枠が、ドロップ先として data-place を持つこと。
+      lexiconPlace: lex.filter(n => n.dataset.place).length,
+      slotPlace: !!slot0.dataset.place,
+      tailPlace: [...document.querySelectorAll('#forge .slot-tail')].some(n => n.dataset.place),
     };
   })()`);
-  ok(dnd.draggables > 0, `draggable が設定されていない: ${dnd.draggables}`);
-  ok(!dnd.tailDraggable, '末尾語がドラッグできるようになっている');
-  console.log(`    draggable 要素 ${dnd.draggables} 個 / 語彙 ${dnd.lexicon} 語`);
+  ok(dnd.html5 === 0, `HTML5 の draggable が残っている: ${dnd.html5} 個 (タップを奪う)`);
+  ok(dnd.lexicon === dnd.lexiconPlace, `語彙の語に data-place が無い: ${dnd.lexiconPlace} / ${dnd.lexicon}`);
+  ok(dnd.slotPlace, '枠に data-place が無い');
+  ok(!dnd.tailPlace, '末尾語がドロップ先になっている');
+  console.log(`    語彙 ${dnd.lexicon} 語すべてに data-place / 末尾語は対象外`);
 }
 
 sec('ドラッグで語を枠へ入れ、枠どうしで入れ替えられること');
@@ -521,6 +525,14 @@ sec('語彙が満杯のときの 3 択は「捨てる」を求める');
 
 sec('辞書は戦闘中から開け、閉じると時間が戻る');
 {
+  // 戦闘中から。鍛冶が開いたままだと「閉じたら鍛冶へ戻る」側に寄るので、
+  // 明示的に戦闘モードへ戻しておく。
+  await evalJs(`(() => {
+    const app = window.__wordrogue;
+    if (!document.getElementById('forge').hidden) app.forge.close();
+    app.mode = 'play';
+    app.run.paused = false;
+  })()`);
   await evalJs('document.getElementById("btnDictInGame").click()');
   await sleep(300);
   const d0 = await evalJs(`({
@@ -616,6 +628,134 @@ sec('辞書メニューが開き、検索とカテゴリ絞り込みが効くこ
   ok(await evalJs('window.__wordrogue.run.paused === false'), '閉じても時間が止まったまま');
   ok(await evalJs('document.getElementById("dictSearch").value === ""'), '検索語が残っている');
 }
+
+sec('タップで語を選べる (HTML5 drag をやめた理由)');
+{
+  // .click() を直接呼ぶとイベントを通らないので、本物のタップを再現する。
+  // HTML5 の draggable 元素的_DEF だと、実機ではタップが native drag に
+  // 奪われて click が出ず、語を選べなくなる。それを放置してはいけない。
+  const t = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    const tap = (node) => {
+      const r = node.getBoundingClientRect();
+      const o = {
+        bubbles: true, cancelable: true, composed: true,
+        clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+        pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0,
+      };
+      node.dispatchEvent(new PointerEvent('pointerdown', o));
+      node.dispatchEvent(new PointerEvent('pointerup', o));
+      node.dispatchEvent(new MouseEvent('click', o));
+    };
+    const draggable = [...document.querySelectorAll('#forge [data-place], #forgeLexicon .pword')]
+      .filter(n => n.draggable).length;
+
+    const word = document.querySelector('#forgeLexicon .pword:not(.empty)');
+    // 個数バッジ (×3) が入っているので、本体の span だけ読む。
+    const text = word.querySelector('span').textContent.trim();
+    tap(word);
+    const armed = forge.armed ? forge.armed.text : null;
+    const highlighted = document.querySelectorAll('#forgeLexicon .pword.armed').length;
+
+    const row = document.querySelectorAll('#forgeWeapons .wrow')[1];
+    const slots = row.querySelectorAll('.slot');
+    let empty = -1;
+    for (let i = 0; i < slots.length; i++) if (!slots[i].classList.contains('filled')) { empty = i; break; }
+    if (armed && empty >= 0) tap(slots[empty]);
+    const got = run.weapons[0].slots[empty] && run.weapons[0].slots[empty].text;
+    return { draggable, text, armed, highlighted, got, ok: got === text, stick: app.input.stick.active };
+  })()`);
+  ok(t.draggable === 0, `draggable が残っている: ${t.draggable} 個 (タップを奪う)`);
+  ok(t.armed === t.text, `タップで語を選べない: armed=${t.armed} / ${t.text}`);
+  ok(t.highlighted === 1, `選んだ語が光っていない: ${t.highlighted}`);
+  ok(t.ok, `タップした語が枠に入らない: ${t.got}`);
+  ok(!t.stick, 'タップが移動スティックに取られた');
+  console.log(`    タップで「${t.text}」を選んで枠に入れる`);
+}
+
+sec('pointer でドラッグできる');
+{
+  const d = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    // 辞書などが上に開いていると座標の当たり判定を吸ってしまうので閉じる。
+    app.menus.hideAll();
+    if (document.getElementById('forge').hidden) document.getElementById('btnForge').click();
+    // 結果が変わらないよう、枠を全部空にしてから 0 番へ入れる。
+    const wi = run.weapons[0];
+    wi.slots.fill(null);
+    wi.resolve(run.player.stats);
+    forge.render();
+    const word = document.querySelector('#forgeLexicon .pword:not(.empty)');
+    const text = word.querySelector('span').textContent.trim();
+    const from = word.getBoundingClientRect();
+    // 末尾語 (slot-tail) は枠ではないので除外する。
+    const row = document.querySelectorAll('#forgeWeapons .wrow')[1];
+    const slots = row.querySelectorAll('.slot:not(.slot-tail)');
+    const to = slots[0].getBoundingClientRect();
+    const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2;
+    const x1 = to.left + to.width / 2, y1 = to.top + to.height / 2;
+    const ev = (type, x, y) => word.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, clientX: x, clientY: y,
+      pointerId: 2, pointerType: 'mouse', isPrimary: true, button: 0,
+    }));
+    ev('pointerdown', x0, y0);
+    ev('pointermove', x0 + 20, y0 + 20);
+    ev('pointermove', x1, y1);
+    const hot = forge.dropAt(x1, y1);
+    ev('pointerup', x1, y1);
+    const got = wi.slots[0] && wi.slots[0].text;
+    return { text, got, ok: got === text, dragFrom: forge.dragFrom, hot: !!hot };
+  })()`);
+  ok(d.hot, 'ドロップ先を判別できない');
+  ok(d.ok, `ドラッグで語が入らない: ${d.got} (狙いは ${d.text})`);
+  ok(!d.dragFrom, 'ドラッグの後に dragFrom が残った');
+  console.log(`    ドラッグで「${d.text}」を枠へ`);
+}
+
+sec('言葉鍛冶の上から辞書を引ける');
+{
+  const d = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    // 状態に左右されないよう、閉じてから開き直す。
+    if (!document.getElementById('forge').hidden) {
+      document.getElementById('forgeBack').click();
+    }
+    document.getElementById('btnForge').click();
+    const before = { mode: app.mode, forgeOpen: !document.getElementById('forge').hidden };
+    document.getElementById('btnForgeDict').click();
+    const opened = {
+      dict: !document.getElementById('dict').hidden,
+      mode: app.mode,
+      // 鍛冶を閉じていないこと。語を組み立てた状態が保たれること。
+      forgeStillOpen: !document.getElementById('forge').hidden,
+      paused: app.run.paused,
+    };
+    document.querySelector('[data-close="dict"]').click();
+    return {
+      before, opened,
+      closed: {
+        dict: !document.getElementById('dict').hidden,
+        mode: app.mode,
+        forgeStillOpen: !document.getElementById('forge').hidden,
+        paused: app.run.paused,
+      },
+    };
+  })()`);
+  ok(d.before.forgeOpen, '鍛冶が開いていない');
+  ok(d.opened.dict, '辞書が開かない');
+  ok(d.opened.forgeStillOpen, '辞書で鍛冶が閉じてしまった (語を選び直すことになる)');
+  ok(d.opened.paused, '時間が止まっていない');
+  ok(!d.closed.dict, '辞書が閉じない');
+  ok(d.closed.mode === 'forge', `閉じても鍛冶に戻らない: ${d.closed.mode}`);
+  ok(d.closed.forgeStillOpen, '閉じたら鍛冶が消えた');
+  console.log(`    鍛冶 → 辞書 → 鍛冶 に戻る (${d.closed.mode})`);
+}
+await evalJs('document.getElementById("forgeBack").click()');
+await sleep(200);
 
 sec('ダッシュでスタミナが消費される');
 {

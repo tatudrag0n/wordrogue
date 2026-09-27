@@ -15,6 +15,17 @@ import { KIND_LABEL } from '../data/weapons.js';
 import { SELF_TAIL } from '../game/stats.js';
 import { keyStats } from '../game/weapon.js';
 
+/**
+ * 置き場到现在の内容でキーを作る。描き直しても同じキーになるので、
+ * ドロップ先の data-place は安定する。
+ * @param {{kind:string,index:number,wi?:object}} place
+ */
+function placeKey(place) {
+  if (place.kind === 'lexicon') return `L${place.index}`;
+  if (place.kind === 'self') return `S${place.index}`;
+  return `W${place.wIdx ?? '?'}_${place.index}`;
+}
+
 export class Forge {
   /**
    * @param {object} run
@@ -40,6 +51,11 @@ export class Forge {
 
     /** ドラッグ中の置き場。{kind, index, wi} */
     this.dragFrom = null;
+    /** data-place のキー -> 置き場。描き直すごとに作り直す。 */
+    this.placeById = new Map();
+    this._hotId = '';
+    /** ドラッグ直後。click を 1 回捨てる。 */
+    this.suppressClick = false;
 
     $('#forgeClose').addEventListener('click', () => this.close());
     $('#forgeBack').addEventListener('click', () => this.close());
@@ -82,6 +98,9 @@ export class Forge {
 
   /** 画面を再描画する。 */
   render() {
+    // ドロップ先の 表は描画ごとに作り直す。
+    this.placeById.clear();
+    this._hotId = '';
     this.renderWeapons();
     this.renderLexicon();
     this.renderDetail();
@@ -97,7 +116,7 @@ export class Forge {
 
     list.append(this.renderSelfRow());
 
-    for (const wi of this.run.weapons) {
+    for (const [n, wi] of this.run.weapons.entries()) {
       const res = wi.resolve(this.run.player.stats);
       const row = el('div', {
         class: 'wrow' + (res.active ? ` ${res.grade}` : ' broken'),
@@ -128,7 +147,7 @@ export class Forge {
       }
 
       row.append(this.renderSlots(
-        { slots: wi.slots, tail: wi.tail, kind: 'slot', wi },
+        { slots: wi.slots, tail: wi.tail, kind: 'slot', wi, wIdx: n },
         (i) => this.onSlotClick(wi, i)));
       row.append(this.renderSentence(wi, res));
       row.append(this.renderStats(res));
@@ -139,7 +158,7 @@ export class Forge {
   /**
    * 枠を並べる。onClick(i) でクリックを処理する。
    * 末尾語は枠の外に固定で付くので、触れない (ドラッグも受けない)。
-   * @param {{slots:Array, tail?:string, kind?:string, wi?:object}} wi
+   * @param {{slots:Array, tail?:string, kind?:string, wi?:object, wIdx?:number}} wi
    * @param {(i:number)=>void} onClick
    */
   renderSlots(wi, onClick) {
@@ -156,7 +175,7 @@ export class Forge {
           ? el('span', {}, word.text)
           : el('span', { class: 'empty-mark' }, '＿'));
       node.addEventListener('click', () => onClick(i));
-      const place = { kind, index: i, wi: wi.wi };
+      const place = { kind, index: i, wi: wi.wi, wIdx: wi.wIdx };
       if (word) this.makeDraggable(node, place);
       this.makeDropTarget(node, place);
       slots.append(node);
@@ -315,8 +334,11 @@ export class Forge {
       const n = counts.get(w.text);
       if (n > 1) node.append(el('span', { class: 'pword-n' }, `×${n}`));
       node.addEventListener('click', () => this.onLexiconClick(w));
-      if (!this.forgetMode) this.makeDraggable(node, { kind: 'lexicon', index: i });
-      else this.makeDropTarget(node, { kind: 'lexicon', index: i });
+      const place = { kind: 'lexicon', index: i };
+      // 語彙は「ドラッグ元」でもある。枠から語を戻すときの目標になる。
+      this.makeDropTarget(node, place);
+      // 「忘れる」モードではドラッグ元にしない (捨てるのが目的なので)。
+      if (!this.forgetMode) this.makeDraggable(node, place);
       box.append(node);
     }
 
@@ -401,6 +423,7 @@ export class Forge {
 
   /** 語彙の語をクリック。選ぶか、忘れるモードなら捨てる。 */
   onLexiconClick(word) {
+    if (this.suppressClick) return;
     this.opt.audio?.tap?.();
     if (this.forgetMode) {
       const gone = this.run.forgetWord(word);
@@ -417,52 +440,102 @@ export class Forge {
 
   // ───────────────────────────────────────────────────────────────────────────
   // ドラッグで移動・入れ替え
+  //
+  // Pointer Events で自前実装する。HTML5 の drag & drop はタップ端末で
+  // 動かない。draggable な要素をタップすると click ではなく native drag が
+  // 始まって、語を選べなくなる。pointer ならマウスとタッチで同じ動き。
+  // 少し動くまでドラッグ開始しないので、いつものタップは普通の選択になる。
   // ───────────────────────────────────────────────────────────────────────────
 
+  /** ドラッグ開始とみなす移動量 (px)。 */
+  static get DRAG_SLOP() { return 7; }
+
   /**
-   * ドラッグを始める要素につける。置き場の中身を this.dragFrom に覚えておく。
+   * ドラッグを始める要素につける。
+   * @param {HTMLElement} node
    * @param {{kind:string,index:number,wi?:object}} place
    */
   makeDraggable(node, place) {
-    node.draggable = true;
-    node.addEventListener('dragstart', (ev) => {
-      this.dragFrom = place;
-      this.armed = null;
-      node.classList.add('dragging');
-      try {
-        ev.dataTransfer.effectAllowed = 'move';
-        // Firefox はデータが無いと dragstart を起こさないので必ず入れる。
-        ev.dataTransfer.setData('text/plain', place.kind);
-      } catch {}
-    });
-    node.addEventListener('dragend', () => {
-      node.classList.remove('dragging');
-      this.dragFrom = null;
-      this.clearDropMarks();
+    // HTML5 の drag は使わない。残しておくとタップを奪うので明示的に切る。
+    node.draggable = false;
+    node.addEventListener('dragstart', (ev) => ev.preventDefault());
+
+    node.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== undefined && ev.button > 0) return;
+      const sx = ev.clientX, sy = ev.clientY;
+      let dragging = false;
+
+      const onMove = (e) => {
+        if (!dragging) {
+          if (Math.hypot(e.clientX - sx, e.clientY - sy) < Forge.DRAG_SLOP) return;
+          dragging = true;
+          this.dragFrom = place;
+          // この瞬間に render() してはいけない。DOM が作り直され、
+          // pointerup が届かない。選択状態だけ直接落とす。
+          this.armed = null;
+          for (const n of this.root.querySelectorAll('.armed')) n.classList.remove('armed');
+          this.clearDropMarks();
+        }
+        e.preventDefault();
+        this.markDropAt(e.clientX, e.clientY);
+      };
+
+      const finish = (e) => {
+        node.removeEventListener('pointermove', onMove);
+        node.removeEventListener('pointerup', finish);
+        node.removeEventListener('pointercancel', finish);
+        this.clearDropMarks();
+        if (!dragging) return;
+        // ドラッグ直後の click は捨てる (誤って選択されるのを防ぐ)。
+        this.suppressClick = true;
+        setTimeout(() => { this.suppressClick = false; }, 0);
+        const from = this.dragFrom;
+        const to = this.dropAt(e.clientX, e.clientY);
+        this.dragFrom = null;
+        if (from && to) this.dropOnto(from, to);
+        else this.render();
+      };
+
+      node.addEventListener('pointermove', onMove);
+      node.addEventListener('pointerup', finish);
+      node.addEventListener('pointercancel', finish);
     });
   }
 
-  /** ドロップ先につける。 */
+  /**
+   * ドロップ先につける。座標から探し出せるよう data-place を振る。
+   * 置き場の「内容」でキーを作るので、描き直しても同じ id になる。
+   * @param {HTMLElement} node
+   * @param {{kind:string,index:number,wi?:object}} place
+   */
   makeDropTarget(node, place) {
-    node.addEventListener('dragover', (ev) => {
-      if (!this.dragFrom) return;
-      ev.preventDefault();
-      try { ev.dataTransfer.dropEffect = 'move'; } catch {}
-      node.classList.add('drop-hot');
-    });
-    node.addEventListener('dragleave', () => node.classList.remove('drop-hot'));
-    node.addEventListener('drop', (ev) => {
-      ev.preventDefault();
-      node.classList.remove('drop-hot');
-      const from = this.dragFrom;
-      this.dragFrom = null;
-      if (!from) return;
-      this.dropOnto(from, place);
-    });
+    const key = placeKey(place);
+    node.dataset.place = key;
+    this.placeById.set(key, place);
+  }
+
+  /** 座標の下にあるドロップ先。 */
+  dropAt(x, y) {
+    const host = document.elementFromPoint(x, y)?.closest('[data-place]');
+    if (!host) return null;
+    return this.placeById.get(host.dataset.place) || null;
+  }
+
+  /** 座標の下にあるドロップ先を光らせる。 */
+  markDropAt(x, y) {
+    const host = document.elementFromPoint(x, y)?.closest('[data-place]');
+    const id = host ? host.dataset.place : '';
+    if (id === this._hotId) return;
+    this.clearDropMarks();
+    this._hotId = id;
+    if (!id) return;
+    const node = this.root.querySelector(`[data-place="${CSS.escape(id)}"]`);
+    if (node) node.classList.add('drop-hot');
   }
 
   clearDropMarks() {
     for (const n of this.root.querySelectorAll('.drop-hot')) n.classList.remove('drop-hot');
+    this._hotId = '';
   }
 
   /**
@@ -532,6 +605,7 @@ export class Forge {
   }
 
   onSlotClick(wi, index) {
+    if (this.suppressClick) return;
     if (this.armed) {
       const w = this.armed;
       this.armed = null;
@@ -553,6 +627,7 @@ export class Forge {
   }
 
   onSelfSlotClick(i) {
+    if (this.suppressClick) return;
     const p = this.run.player;
     if (this.armed) {
       const w = this.armed;

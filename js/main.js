@@ -61,6 +61,7 @@ function boot() {
 
   // 入力
   $('#btnForge').addEventListener('click', () => toggleForge());
+  $('#btnForgeDict').addEventListener('click', () => toggleDict());
   $('#btnDictInGame').addEventListener('click', () => toggleDict());
   $('#btnPause').addEventListener('click', () => togglePause());
   window.addEventListener('keydown', onKey);
@@ -226,19 +227,31 @@ function togglePause() {
 }
 
 /**
- * 辞書を開閉する。戦闘中でも開ける。開いている間は時間を止める。
- * 言葉鍛冶を開いているときは先に閉じる (2 枚同時に出さない)。
+ * 辞書を開閉する。戦闘中でも、言葉鍛冶の上からでも開ける。
+ *
+ * 言葉鍛冶を開いているときは「閉じずに上に重ねる」。
+ * 語を組み立てている最中に語を引きたくなる。鍛冶を閉じてから開き直すと
+ * 選び直すことになる。閉じるときは元の画面 (鍛冶) に戻る。
  */
 function toggleDict() {
   if (app.mode === 'dict') {
+    // どこから開いたかを覚えているので、元の画面へ戻す。
+    const from = app.dictFrom || 'play';
     app.menus.hide('dict');
-    app.run.paused = false;
-    app.hud.setPaused(false);
-    app.mode = 'play';
+    app.dictFrom = null;
+    if (from === 'forge') {
+      app.mode = 'forge';
+      app.run.paused = true;
+      app.hud.setPaused(true);
+    } else {
+      app.mode = 'play';
+      app.run.paused = false;
+      app.hud.setPaused(false);
+    }
     return;
   }
   if (app.mode !== 'play' && app.mode !== 'forge') return;
-  if (app.mode === 'forge') toggleForge();
+  app.dictFrom = app.mode;
   app.menus.show('dict');
   app.run.paused = true;
   app.hud.setPaused(true);
@@ -260,6 +273,8 @@ function onKey(e) {
 
   if (app.mode === 'forge') {
     if (k === 'q' || k === 'escape') { e.preventDefault(); toggleForge(); return; }
+    // 鍛冶の上からでも辞書は引ける。閉じるだけで、鍛冶は残る。
+    if (k === 'd') { e.preventDefault(); toggleDict(); return; }
     return;
   }
 

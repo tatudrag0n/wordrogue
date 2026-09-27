@@ -54,8 +54,15 @@ export class Forge {
     /** data-place のキー -> 置き場。描き直すごとに作り直す。 */
     this.placeById = new Map();
     this._hotId = '';
-    /** ドラッグ直後。click を 1 回捨てる。 */
+    /** ドラッグした直後。タップの誤発火を防ぐ。 */
     this.suppressClick = false;
+    /**
+     * ノード -> pointerdown を 시작한位置。タップ判定の基点。
+     * インスタンスで 1 個持ちだと、隣のノードで始めたジェスチャの
+     * pointerup が古い基点と比べる羽目になって、語を勝手に動かす。
+     * @type {WeakMap<HTMLElement, {x:number,y:number}>}
+     */
+    this.downAt = new WeakMap();
 
     $('#forgeClose').addEventListener('click', () => this.close());
     $('#forgeBack').addEventListener('click', () => this.close());
@@ -98,9 +105,11 @@ export class Forge {
 
   /** 画面を再描画する。 */
   render() {
-    // ドロップ先の 表は描画ごとに作り直す。
+    // ドロップ先の表は描画ごとに作り直す。
     this.placeById.clear();
     this._hotId = '';
+    // suppressClick と downAt はここでは触らない。ドラッグ終了で立てた
+    // suppressClick を render() が消すと、移動先のタップで語が動く。
     this.renderWeapons();
     this.renderLexicon();
     this.renderDetail();
@@ -174,9 +183,10 @@ export class Forge {
         word
           ? el('span', {}, word.text)
           : el('span', { class: 'empty-mark' }, '＿'));
-      node.addEventListener('click', () => onClick(i));
       const place = { kind, index: i, wi: wi.wi, wIdx: wi.wIdx };
-      if (word) this.makeDraggable(node, place);
+      // 入ってる語は「タップで選択 + ドラッグで移動」、空の枠はタップのみ。
+      if (word) this.makeDraggable(node, place, () => onClick(i));
+      else this.makeTappable(node, () => onClick(i));
       this.makeDropTarget(node, place);
       slots.append(node);
       if (i < wi.slots.length - 1) slots.append(el('span', { class: 'slot-plus' }, '+'));
@@ -313,14 +323,15 @@ export class Forge {
       if (w) counts.set(w.text, (counts.get(w.text) || 0) + 1);
     }
 
-    for (const w of this.run.lexicon) {
+    // 走査の添字を使う。indexOf だと同じ語が複数あるとき全部が
+    // 先頭の添字に寄って、ドラッグの drop 先がおかしくなる。
+    for (const [i, w] of this.run.lexicon.entries()) {
       if (!w) {
         box.append(el('div', { class: 'pword empty' }, ''));
         continue;
       }
       const cat = CATEGORIES[w.cat] || CATEGORIES.modifier;
       const conn = CONNECTOR_SET.has(w.text);
-      const i = this.run.lexicon.indexOf(w);
       const node = el('div', {
         class: 'pword'
           + (this.armed === w ? ' armed' : '')
@@ -333,12 +344,12 @@ export class Forge {
       }, el('span', {}, w.text));
       const n = counts.get(w.text);
       if (n > 1) node.append(el('span', { class: 'pword-n' }, `×${n}`));
-      node.addEventListener('click', () => this.onLexiconClick(w));
       const place = { kind: 'lexicon', index: i };
       // 語彙は「ドラッグ元」でもある。枠から語を戻すときの目標になる。
       this.makeDropTarget(node, place);
       // 「忘れる」モードではドラッグ元にしない (捨てるのが目的なので)。
-      if (!this.forgetMode) this.makeDraggable(node, place);
+      if (this.forgetMode) this.makeTappable(node, () => this.onLexiconClick(w));
+      else this.makeDraggable(node, place, () => this.onLexiconClick(w));
       box.append(node);
     }
 
@@ -451,11 +462,50 @@ export class Forge {
   static get DRAG_SLOP() { return 7; }
 
   /**
-   * ドラッグを始める要素につける。
+   * タップで選べるようにする。
+   *
+   * click には頼らない。ブラウザが click を出さないことがあり
+   * (touch-action / スクロール / preventDefault / native drag)、
+   * そのたびに「クリックしても反応しない」になる。pointerup は
+   * 確実に届くので、選択はそこで行う。
+   *
+   * @param {HTMLElement} node
+   * @param {() => void} onTap
+   */
+  makeTappable(node, onTap) {
+    // タップ判定の基点。pointerdown で記録する。
+    node.addEventListener('pointerdown', (ev) => {
+      this.downAt.set(node, { x: ev.clientX, y: ev.clientY });
+    }, true);
+    node.addEventListener('pointerup', (ev) => {
+      // ドラッグ中や、直前のドラッグの余韻なら選ばない。
+      if (this.suppressClick || this.dragFrom) return;
+      // 自分で pointerdown を始めていないノードでは選ばない。
+      // ドラッグの開始ノード以外で始まったジェスチャと区別する。
+      const d = this.downAt.get(node);
+      if (!d) return;
+      this.downAt.delete(node);
+      if (Math.abs(ev.clientX - d.x) > Forge.DRAG_SLOP) return;
+      if (Math.abs(ev.clientY - d.y) > Forge.DRAG_SLOP) return;
+      ev.stopPropagation();
+      onTap();
+    });
+    // ジェスチャが中断されたら基点は残さない。
+    node.addEventListener('pointercancel', () => this.downAt.delete(node));
+  }
+
+  /**
+   * ドラッグを始める要素につける。タップでの選択も兼ねる。
+   * makeTappable とは併用しない。選択は pointerup の finish で行う。
+   *
+   * pointermove / pointerup は window で受ける。開始ノードで受けておくと、
+   * 指の先にセルが来ている間に離すと pointerup がそのセルに飛んで
+   * finish が起きない。つまり実機ではドロップが確定しない。
    * @param {HTMLElement} node
    * @param {{kind:string,index:number,wi?:object}} place
+   * @param {() => void} [onTap] タップしたとき (ドラッグしなかったとき) に呼ぶ
    */
-  makeDraggable(node, place) {
+  makeDraggable(node, place, onTap) {
     // HTML5 の drag は使わない。残しておくとタップを奪うので明示的に切る。
     node.draggable = false;
     node.addEventListener('dragstart', (ev) => ev.preventDefault());
@@ -463,9 +513,11 @@ export class Forge {
     node.addEventListener('pointerdown', (ev) => {
       if (ev.button !== undefined && ev.button > 0) return;
       const sx = ev.clientX, sy = ev.clientY;
+      const pid = ev.pointerId;
       let dragging = false;
 
       const onMove = (e) => {
+        if (e.pointerId !== pid) return;
         if (!dragging) {
           if (Math.hypot(e.clientX - sx, e.clientY - sy) < Forge.DRAG_SLOP) return;
           dragging = true;
@@ -480,25 +532,42 @@ export class Forge {
         this.markDropAt(e.clientX, e.clientY);
       };
 
+      const detach = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', finish);
+        window.removeEventListener('pointercancel', cancel);
+      };
       const finish = (e) => {
-        node.removeEventListener('pointermove', onMove);
-        node.removeEventListener('pointerup', finish);
-        node.removeEventListener('pointercancel', finish);
+        if (e.pointerId !== pid) return;
+        detach();
         this.clearDropMarks();
-        if (!dragging) return;
-        // ドラッグ直後の click は捨てる (誤って選択されるのを防ぐ)。
-        this.suppressClick = true;
-        setTimeout(() => { this.suppressClick = false; }, 0);
+        if (!dragging) {
+          // 動かさなかった = タップ。click ではなく pointerup で選ぶ。
+          if (onTap) onTap();
+          return;
+        }
         const from = this.dragFrom;
         const to = this.dropAt(e.clientX, e.clientY);
         this.dragFrom = null;
+        // ドラッグ終了直後のタップで二重に動かさない。
+        this.suppressClick = true;
+        setTimeout(() => { this.suppressClick = false; }, 0);
         if (from && to) this.dropOnto(from, to);
         else this.render();
       };
+      // ブラウザや OS にジェスチャを奪われたときは何もしない。
+      // dropOnto を呼ぶと、意図しないのに語が動く。
+      const cancel = (e) => {
+        if (e.pointerId !== pid) return;
+        detach();
+        this.clearDropMarks();
+        this.dragFrom = null;
+        this.render();
+      };
 
-      node.addEventListener('pointermove', onMove);
-      node.addEventListener('pointerup', finish);
-      node.addEventListener('pointercancel', finish);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', finish);
+      window.addEventListener('pointercancel', cancel);
     });
   }
 

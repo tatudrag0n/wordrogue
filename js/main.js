@@ -266,20 +266,18 @@ function onKey(e) {
 
   if (app.mode === 'play') {
     if (k === 'q' || k === 'tab') { e.preventDefault(); toggleForge(); return; }
-    if (k === 'd') { e.preventDefault(); toggleDict(); return; }
     if (k === 'escape') { e.preventDefault(); togglePause(); return; }
     return;
   }
 
   if (app.mode === 'forge') {
     if (k === 'q' || k === 'escape') { e.preventDefault(); toggleForge(); return; }
-    // 鍛冶の上からでも辞書は引ける。閉じるだけで、鍛冶は残る。
-    if (k === 'd') { e.preventDefault(); toggleDict(); return; }
     return;
   }
 
   if (app.mode === 'dict') {
-    if (k === 'd' || k === 'escape') { e.preventDefault(); toggleDict(); return; }
+    // 辞書はボタンと ✕ だけで開く。キーに割り当てない。
+    if (k === 'escape') { e.preventDefault(); toggleDict(); return; }
     return;
   }
 

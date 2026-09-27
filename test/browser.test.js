@@ -452,11 +452,16 @@ sec('語彙が満杯ならドラッグで語を消さないこと');
     forge.dropOnto(forge.dragFrom, { kind: 'slot', wi, index: 0 });
     const afterSwap = wi.slots[0] && wi.slots[0].text;
 
-    // 埋まったセル <-> 埋まった枠。語は失われない。
+    // 埋められたセル <-> 埋まった枠。語は失われない。
     const lexText = run.lexicon[0].text;
     forge.dragFrom = { kind: 'lexicon', index: 0 };
     forge.dropOnto(forge.dragFrom, { kind: 'slot', wi, index: 0 });
     const exchanged = wi.slots[0] && wi.slots[0].text;
+
+    // dropOnto を直接叩いたのでドラッグ状態は手で戻す。
+    // 残すと次のテストのタップが「ドラッグ中」として弾かれる。
+    forge.dragFrom = null;
+    forge.suppressClick = false;
 
     return { full: run.lexiconFull, before, afterSwap, exchanged, lexText };
   })()`);
@@ -471,22 +476,44 @@ sec('「忘れる」で語彙の空きを作れること');
     const app = window.__wordrogue;
     const forge = app.forge;
     const run = app.run;
-    const before = run.lexiconFreeCount;
+    // 満杯かどうかに関係なく「空きが 1 つ増える」ことを見る。
+    // 前のテストが語彙を満杯にしてしまっているので、空きを 1 つ作る。
+    // 描画し直すので、forge が開いていて語彙が空でないことを先に整える。
+    if (document.getElementById('forge').hidden) document.getElementById('btnForge').click();
     forge.forgetMode = false;
+    while (run.lexiconFull) {
+      const i = run.lexicon.findIndex(Boolean);
+      run.forgetWord(run.lexicon[i]);
+    }
+    forge.render();
+    const before = run.lexiconFreeCount;
     forge.toggleForget();
     const on = forge.forgetMode;
     const btnOn = document.getElementById('btnForgeForget').classList.contains('on');
     const target = run.lexicon.findIndex(w => w);
     const word = run.lexicon[target];
-    // 語彙の語をクリック = 忘れる。
-    document.querySelectorAll('#forgeLexicon .pword:not(.empty)')[target].click();
+    // 語彙の語をタップ = 忘れる。click ではなく pointerup で動くのでそちらを使う。
+    // 語彙のセルは run.lexicon と同じ順に並ぶ (空きセルも .pword.empty で入る)。
+    // よって埋め込み済みセルの配列で引かず、全セルの target 番目が対象。
+    const cell = document.querySelectorAll('#forgeLexicon .pword')[target];
+    if (cell.classList.contains('empty')) throw new Error('対象セルが空きだった: ' + target);
+    const r = cell.getBoundingClientRect();
+    const o = {
+      bubbles: true, cancelable: true,
+      clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+      pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0,
+    };
+    cell.dispatchEvent(new PointerEvent('pointerdown', o));
+    cell.dispatchEvent(new PointerEvent('pointerup', o));
     const after = run.lexiconFreeCount;
     // 同じ語が複数あってもよいので、身分 (オブジェクト) で確かめる。
-    const gone = !run.lexicon.includes(word);
+    const gone = run.lexicon.indexOf(word) < 0;
+    const modeAfter = forge.forgetMode;
     forge.toggleForget();
-    return { before, after, on, btnOn, gone, text: word.text, off: !forge.forgetMode };
+    return { before, after, on, btnOn, gone, text: word.text, off: !forge.forgetMode, modeAfter };
   })()`);
   ok(forget.on, '忘れるモードにならない');
+  ok(forget.modeAfter === true, `忘れたあとも忘れるモードのはず: ${forget.modeAfter}`);
   ok(forget.btnOn, '忘れるボタンが光らない');
   ok(forget.after === forget.before + 1, `空きが増えていない: ${forget.before} -> ${forget.after}`);
   ok(forget.gone, `「${forget.text}」がまだある`);
@@ -632,7 +659,7 @@ sec('辞書メニューが開き、検索とカテゴリ絞り込みが効くこ
 sec('タップで語を選べる (HTML5 drag をやめた理由)');
 {
   // .click() を直接呼ぶとイベントを通らないので、本物のタップを再現する。
-  // HTML5 の draggable 元素的_DEF だと、実機ではタップが native drag に
+  // HTML5 の draggable 要素だと、実機ではタップが native drag に
   // 奪われて click が出ず、語を選べなくなる。それを放置してはいけない。
   const t = await evalJs(`(() => {
     const app = window.__wordrogue;
@@ -714,6 +741,87 @@ sec('pointer でドラッグできる');
   ok(d.ok, `ドラッグで語が入らない: ${d.got} (狙いは ${d.text})`);
   ok(!d.dragFrom, 'ドラッグの後に dragFrom が残った');
   console.log(`    ドラッグで「${d.text}」を枠へ`);
+}
+
+sec('指がセルの上で離어도ドロップが確定する');
+{
+  // 実機では語の上で離さない。指は枠のセル上に来ている。
+  // テストがソースノードで pointerup を投げていると、
+  // 「ソースに pointerup が来ない」実機の挙動を再現していなかった。
+  // window で受けていない実装だと、このテストで語が入らないままになる。
+  const d = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    app.menus.hideAll();
+    if (document.getElementById('forge').hidden) document.getElementById('btnForge').click();
+    const wi = run.weapons[0];
+    wi.slots.fill(null);
+    wi.resolve(run.player.stats);
+    forge.render();
+
+    const word = document.querySelector('#forgeLexicon .pword:not(.empty)');
+    const text = word.querySelector('span').textContent.trim();
+    const row = document.querySelectorAll('#forgeWeapons .wrow')[1];
+    const slot = row.querySelectorAll('.slot:not(.slot-tail)')[0];
+    const from = word.getBoundingClientRect();
+    const to = slot.getBoundingClientRect();
+    const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2;
+    const x1 = to.left + to.width / 2, y1 = to.top + to.height / 2;
+    const o = (x, y) => ({
+      bubbles: true, cancelable: true, clientX: x, clientY: y,
+      pointerId: 7, pointerType: 'touch', isPrimary: true, button: 0,
+    });
+    word.dispatchEvent(new PointerEvent('pointerdown', o(x0, y0)));
+    word.dispatchEvent(new PointerEvent('pointermove', o(x0 + 20, y0 + 20)));
+    word.dispatchEvent(new PointerEvent('pointermove', o(x1, y1)));
+    // pointerup はスロットに飛ばす。ソースには届かない。
+    slot.dispatchEvent(new PointerEvent('pointerup', o(x1, y1)));
+    const got = wi.slots[0] && wi.slots[0].text;
+    return { text, got, ok: got === text, dragFrom: forge.dragFrom };
+  })()`);
+  ok(d.ok, `セル上で離しても語が入らない: ${d.got} (狙いは ${d.text})`);
+  ok(!d.dragFrom, 'ドラッグの後に dragFrom が残った');
+  console.log(`    セル上で離しても「${d.text}」が入った`);
+}
+
+sec('pointercancel では語が動かない');
+{
+  // OS やブラウザにジェスチャを奪われたとき。dropOnto まで進んでしまうと
+  // 意図しないのに語が枠に入る。やられないようにしておく。
+  const d = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    app.menus.hideAll();
+    if (document.getElementById('forge').hidden) document.getElementById('btnForge').click();
+    const wi = run.weapons[0];
+    wi.slots.fill(null);
+    wi.resolve(run.player.stats);
+    forge.render();
+
+    const word = document.querySelector('#forgeLexicon .pword:not(.empty)');
+    const text = word.querySelector('span').textContent.trim();
+    const row = document.querySelectorAll('#forgeWeapons .wrow')[1];
+    const slot = row.querySelectorAll('.slot:not(.slot-tail)')[0];
+    const from = word.getBoundingClientRect();
+    const to = slot.getBoundingClientRect();
+    const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2;
+    const x1 = to.left + to.width / 2, y1 = to.top + to.height / 2;
+    const o = (x, y) => ({
+      bubbles: true, cancelable: true, clientX: x, clientY: y,
+      pointerId: 8, pointerType: 'touch', isPrimary: true, button: 0,
+    });
+    word.dispatchEvent(new PointerEvent('pointerdown', o(x0, y0)));
+    word.dispatchEvent(new PointerEvent('pointermove', o(x0 + 20, y0 + 20)));
+    word.dispatchEvent(new PointerEvent('pointermove', o(x1, y1)));
+    slot.dispatchEvent(new PointerEvent('pointercancel', o(x1, y1)));
+    const got = wi.slots[0] && wi.slots[0].text;
+    return { text, got, ok: got == null, dragFrom: forge.dragFrom };
+  })()`);
+  ok(d.ok, `pointercancel で語が枠へ入ってしまう: ${d.got}`);
+  ok(!d.dragFrom, 'pointercancel の後に dragFrom が残った');
+  console.log('    pointercancel では語が入らない');
 }
 
 sec('言葉鍛冶の上から辞書を引ける');

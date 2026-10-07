@@ -123,8 +123,8 @@ export class Input {
     const len = Math.hypot(x, y);
     if (len > 1) { x /= len; y /= len; }
 
-    // ゲームパッド
-    const pad = navigator.getGamepads?.()[0];
+    // ゲームパッド (navigator はブラウザにしか無い。Node では undefined になる)
+    const pad = globalThis.navigator?.getGamepads?.()[0];
     if (pad && len === 0) {
       const dz = 0.24;
       let gx = pad.axes[0] || 0, gy = pad.axes[1] || 0;

@@ -30,6 +30,7 @@ export class Hud {
     this.bossName = $('#bossName');
     this.bossFill = $('#bossFill');
     this.hudPaused = $('#hudPaused');
+    this.btnDash = $('#btnDash');
 
     // 3 択
     this.choiceBox = $('#hudChoice');
@@ -52,6 +53,60 @@ export class Hud {
   show(on) { this.root.hidden = !on; }
 
   setPaused(on) { this.hudPaused.hidden = !on; }
+
+  /**
+   * ダッシュボタン。タッチ端末だけ表示する。
+   * 画面を長押しする操作は移動しかできないので、
+   * ダッシュは別の指で押せるようにしておく。
+   * @param {Input} input
+   */
+  bindDash(input) {
+    const show = () => {
+      // ダッシュボタンと 3 択がぶつからないよう、CSS 側で 3 択をずらす。
+      document.body.classList.add('touch');
+      this.wireDash(input);
+    };
+    // ホバーできない = タッチ (スマホ / タブレット) とみなす。
+    if (window.matchMedia?.('(hover: none) and (pointer: coarse)')?.matches) {
+      show();
+      return;
+    }
+    // タッチ機能のついた PC は、初めて指で触ったときに出す。
+    // 実タップまで出さない。待つのは 1 回だけ。
+    if ((navigator.maxTouchPoints || 0) > 0) {
+      window.addEventListener('touchstart', show, { once: true, passive: true });
+    }
+  }
+
+  /**
+   * ダッシュボタンの実処理。表示の判断とは分けてあるので、
+   * テストから直接呼べる。
+   * @param {Input} input
+   */
+  wireDash(input) {
+    const b = this.btnDash;
+    if (!b || this._dashBound) return;
+    this._dashBound = true;
+    b.hidden = false;
+
+    const down = (e) => {
+      // 画面側の長押し (スティック) と同じにならないようにする。
+      e.preventDefault();
+      e.stopPropagation();
+      input.setTouchDash(true);
+      b.classList.add('on');
+      b.setPointerCapture?.(e.pointerId);
+    };
+    const up = () => {
+      input.setTouchDash(false);
+      b.classList.remove('on');
+    };
+    b.addEventListener('pointerdown', down);
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('pointerleave', up);
+    b.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
 
   /**
    * @param {object} run
@@ -80,6 +135,7 @@ export class Hud {
     this.staText.textContent = p.dashing ? 'ダッシュ中' : `${Math.ceil(p.stamina)}`;
     this.staFill.classList.toggle('dashing', p.dashing);
     this.staFill.classList.toggle('empty', p.stamina < 12);
+    if (this.btnDash) this.btnDash.classList.toggle('empty', p.stamina < 12);
 
     // プレイヤー自身の文 (称号)。
     const selfTitle = p.stats.selfTitle || '';

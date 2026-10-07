@@ -5,10 +5,10 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, startingWeaponsFor, slotsForLevel, KIND_LABEL } from '../data/weapons.js';
+import { WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
 import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { META_UPGRADES, SHOP_WORDS } from '../core/save.js';
+import { META_UPGRADES } from '../core/save.js';
 
 export class Menus {
   /** @param {{save:object, audio:object}} opt */
@@ -42,6 +42,8 @@ export class Menus {
     /** 辞書。検索語と絞り込みカテゴリ。 */
     this.dictQuery = '';
     this.dictCat = 'all';
+    /** タブを開く前に見えていた画面。バツで戻る先。 */
+    this._tabFrom = null;
 
     /** @type {number[]} 選択中のステージ */
     this.picked = [];
@@ -75,12 +77,19 @@ export class Menus {
       b.addEventListener('click', () => {
         tap();
         // ゲーム中の辞書は main.js が時間を戻すので、そちらに任せる。
+        // 閉じたあと main.toggleDict が hide() を呼ぶので、
+        // タイトル系の戻し先は hide('dict') 側で復元する。
         if (b.dataset.close === 'dict' && this.cb.onCloseDict) {
           this.cb.onCloseDict();
           return;
         }
+        // タイトル系画面 (タイトル/ステージ/編成/結果) の上に開いた
+        // タブ (遊び方/書庫/辞書/設定) は、閉じたら元の画面へ戻す。
+        const back = this._tabFrom;
+        this._tabFrom = null;
         this.hide(b.dataset.close);
-        if (this.stages.hidden && this.title.hidden === false) this.show('title');
+        if (back) this[back].hidden = false;
+        else this.show('title');
       });
     }
 
@@ -100,10 +109,25 @@ export class Menus {
   /** 辞書を閉じる。ゲーム中は main.js 側で時間を戻す。 */
   hide(name) {
     this[name].hidden = true;
-    if (name === 'dict') this.dictSearch.value = '';
+    if (name === 'dict') {
+      this.dictSearch.value = '';
+      this.dictQuery = '';
+      // タブの下に開いていた画面 (タイトル/ステージ/編成/結果) を戻す。
+      const back = this._tabFrom;
+      this._tabFrom = null;
+      if (back && back !== name) this[back].hidden = false;
+    }
   }
 
   show(name) {
+    // タブ系 (遊び方/書庫/辞書/設定) を開くときは、下に見えている画面を覚える。
+    if (['howto', 'archive', 'dict', 'settings'].includes(name)) {
+      const base = ['title', 'stages', 'loadout', 'result']
+        .find((k) => !this[k].hidden);
+      this._tabFrom = base || null;
+    } else {
+      this._tabFrom = null;
+    }
     this.hideAll();
     this[name].hidden = false;
     if (name === 'title') this.renderTitle();
@@ -129,7 +153,7 @@ export class Menus {
         el('span', { class: 'up-desc' }, u.desc),
         el('button', {
           class: 'btn up-buy' + (can ? '' : ' off'),
-        }, maxed ? '最大' : `${cost} 墨`),
+        }, maxed ? '最大' : `${cost} 言玉`),
       );
       if (!maxed) {
         row.querySelector('.up-buy').addEventListener('click', () => {
@@ -143,24 +167,9 @@ export class Menus {
     }
 
     clear(this.archiveWords);
-    for (const w of SHOP_WORDS) {
-      const owned = save.hasStartingWord(w.text);
-      const can = !owned && save.ink >= w.cost;
-      const word = WORDS[w.text];
-      const b = el('button', {
-        class: 'shop-word' + (owned ? ' owned' : '') + (can ? ' can' : ''),
-        style: { borderColor: (CATEGORIES[word?.cat] || {}).color || '#8ab4ff' },
-        title: `${w.text} [${(CATEGORIES[word?.cat] || {}).name || '?'}]`,
-      }, owned ? `${w.text} ✓` : `${w.text}  ${w.cost}`);
-      b.addEventListener('click', () => {
-        if (owned) return;
-        const r = this.save.buyWord(w.text);
-        if (r.ok) this.audio?.phrase?.();
-        else this.audio?.broken?.();
-        this.renderArchive();
-      });
-      this.archiveWords.append(b);
-    }
+    this.archiveWords.append(el('p', { class: 'muted' },
+      '恒久の語は廃止。言玉は「語彙」の枠を買うか、恒久強化に使う。'
+      + '語彙の枠は最大 30 個まで広げる。'));
   }
 
   // ── タイトル ────────────────────────────────────────────────────────────
@@ -176,6 +185,7 @@ export class Menus {
 
   // ── ステージ選択 ────────────────────────────────────────────────────────
   showStages() {
+    this._tabFrom = null;
     this.renderStages();
     this.hideAll();
     this.stages.hidden = false;
@@ -213,15 +223,15 @@ export class Menus {
 
   // ── 武器選択 ────────────────────────────────────────────────────────────
   showLoadout(stageId) {
+    this._tabFrom = null;
     this.stageId = stageId;
-    this.picked = this.save.d.unlockedWeapons
-      .filter((id) => WEAPONS[id])
-      .slice(0, 2);
-    if (!this.picked.length) this.picked = ['sword', 'gun'];
+    const unlocked = this.save.d.unlockedWeapons.filter((id) => WEAPONS[id]);
+    this.picked = (unlocked.length ? unlocked : ['sword']).slice(0, 1);
 
     const st = STAGES.find((s) => s.id === stageId);
     this.loadoutTitle.textContent = `第 ${stageId} 戦・${st.name}`;
-    this.loadoutSub.textContent = '武器を 1〜4 つ選べ。武器ごとに末尾の語が決まっている。';
+    this.loadoutSub.textContent = '武器は 1 つだけ。文は 10 文字まで。'
+      + '戦闘中に武器語を得ると、文を 3 つまで増やせる。';
 
     this.renderLoadout();
     this.hideAll();
@@ -248,7 +258,7 @@ export class Menus {
           el('span', {}, d.name),
           el('span', { class: 'lo-kind' }, KIND_LABEL[d.kind] || d.kind)),
         el('div', { class: 'lo-core' },
-          `枠 ${slotsForLevel(d, 1)}・開始「${d.startWord}${d.startWord2}」・末尾「${d.tail}」`),
+          `開始「${d.startWord}${d.startWord2}」・文 10 文字`),
         el('div', { class: 'lo-desc' },
           lockedByProgress ? `第 ${d.unlock.stage} 戦で解放される` : (usable ? d.desc : '使用不可')),
       );
@@ -261,19 +271,19 @@ export class Menus {
       list.append(card);
     }
 
-    this.loadoutCount.textContent = `${this.picked.length} / 4`;
+    this.loadoutCount.textContent = `${this.picked.length} / 1`;
     this.loadoutGo.disabled = this.picked.length === 0;
   }
 
   togglePick(id) {
     const i = this.picked.indexOf(id);
     if (i >= 0) this.picked.splice(i, 1);
-    else if (this.picked.length < 4) this.picked.push(id);
+    else if (this.picked.length < 1) this.picked.push(id);
     this.renderLoadout();
   }
 
   // ── 結算 ────────────────────────────────────────────────────────────────
-  showResult({ cleared, run, save, isLast }) {
+  showResult({ cleared, run, save, isLast, ink = 0 }) {
     const st = run.stage;
     this.resultTitle.textContent = cleared ? 'ステージクリア' : '力尽きた';
     this.resultTitle.style.color = cleared ? 'var(--accent)' : 'var(--ng)';
@@ -284,6 +294,7 @@ export class Menus {
     const d = save.d;
     const rows = [
       ['スコア', fmtNum(run.score), true],
+      ['言玉', `+${fmtNum(ink)}（所持 ${fmtNum(d.ink)}）`, ink > 0],
       ['討伐数', fmtNum(run.kills)],
       ['到達レベル', `Lv ${run.player.level}`],
       ['与ダメージ', fmtNum(run.dmgDealt)],
@@ -297,8 +308,9 @@ export class Menus {
         el('span', {}, k), el('b', {}, v)));
     }
 
-    this.resultNext.hidden = !cleared || isLast;
-    this.resultNext.textContent = isLast ? '全ステージ制覇' : '次のステージ';
+    // クリアしたら必ず「ホームへ」。次のステージはホームから選ぶ。
+    this.resultNext.hidden = !cleared;
+    this.resultNext.textContent = 'ホームへ';
     this.hideAll();
     this.result.hidden = false;
   }
@@ -310,9 +322,12 @@ export class Menus {
   }
 
   buildDictTabs() {
+    // 形態語は辞書に載せないので「形態」タブも出さない。
     const cats = [
       ['all', `すべて`, '#8ab4ff'],
-      ...Object.entries(CATEGORIES).map(([k, v]) => [k, v.name, v.color]),
+      ...Object.entries(CATEGORIES)
+        .filter(([k]) => k !== 'form')
+        .map(([k, v]) => [k, v.name, v.color]),
     ];
     clear(this.dictTabs);
     for (const [key, label, color] of cats) {
@@ -351,7 +366,8 @@ export class Menus {
   }
 
   renderDictList() {
-    const all = Object.values(WORDS);
+    // 形態語 (剣・銃・環 …) は武器の末尾語で、語彙から引けない。辞書にも載せない。
+    const all = Object.values(WORDS).filter((w) => w.cat !== 'form');
     const q = this.dictQuery;
     const rows = all.filter((w) => {
       if (this.dictCat !== 'all' && w.cat !== this.dictCat) return false;

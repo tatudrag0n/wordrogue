@@ -78,7 +78,7 @@ if (syntaxBad) {
   const kinds = new Set(Object.values(WEAPONS).map((d) => d.kind));
   const missing = [...kinds].filter((k) => !KIND_LABEL[k]);
   const notJa = [...kinds].filter((k) => KIND_LABEL[k] && !/[぀-ヿ一-鿿]/.test(KIND_LABEL[k]));
-  console.log(`== 攻撃种別のラベル ==\n  ${kinds.size} 種類 / 日本語なし ${missing.length} / ラベル無し ${notJa.length}`);
+  console.log(`== 攻撃種別のラベル ==\n  ${kinds.size} 種類 / 日本語なし ${missing.length} / ラベル無し ${notJa.length}`);
   if (missing.length) console.log('  ' + missing.join(', '));
   if (missing.length || notJa.length) {
     console.log('\n=== 失敗したテストがあります ===');
@@ -125,6 +125,17 @@ if (syntaxBad) {
   const TAILS = new Set([SELF_TAIL, ...Object.values(WEAPONS).map((w) => w.tail)]);
   const STARTERS = new Set(Object.values(WEAPONS)
     .flatMap((w) => [w.startWord, w.startWord2]).filter(Boolean));
+  // 記号。枠のあいだ (接続詞の位置) を示すもので、語ではない。
+  const MARKS = new Set(['・', '＿', '·', '+']);
+
+  // 文の例かどうか。
+  // 説明文ではな形容詞の連体形を「〜な」（自然な日本語）で書くが、
+  // ゲームが作る文面は接続詞の `な` / `かな` になる。
+  //   妙な刃 = 妙 + な + 刃 / 静かな刃 = 静 + かな + 刃
+  // どちらも同じ文なので、「な」を な / かな に置き換えた分割が通るなら例として認める。
+  const segOf = (w) => segment(w)
+    || segment(w.replace(/な/g, 'な'))
+    || segment(w.replace(/な/g, 'かな'));
 
   const problems = [];
   for (const f of ['README.md', 'index.html']) {
@@ -132,19 +143,24 @@ if (syntaxBad) {
     for (const line of text.split('\n')) {
       // 例の行 … <code> を含む行にある 「語」 だけが語を名乗る。
       if (!line.includes('<code>') && !line.includes('| `')) continue;
+      // 「不成立」と書いた行はわざと壊した例 (`業火を剛剣`) なので検査しない。
+      if (line.includes('不成立') || line.includes('NG')) continue;
       for (const g of line.matchAll(/「([^」]+)」/g)) {
         const w = g[1];
+        // 接続詞の意味の説明 (「〜に」など) は語ではない。
+        if (w.startsWith('〜')) continue;
         if (WORDS[w] || TAILS.has(w) || STARTERS.has(w)) continue;
         // 文の断片や熟語は segment が効けば正当例。
-        if (PHRASE_KEYS.has(w) || segment(w)?.length) continue;
+        if (PHRASE_KEYS.has(w) || segOf(w)?.length) continue;
         problems.push(`${f}: 「${w}」`);
       }
       // テーブルや <code> の中の語そのもの。
       for (const g of line.matchAll(/<code>([^<]+)<\/code>|`([^`]+)`/g)) {
         const w = (g[1] || g[2] || '').trim();
         if (!/^[぀-ヿ一-鿿]{1,5}$/.test(w)) continue;
+        if (MARKS.has(w)) continue;
         if (WORDS[w] || TAILS.has(w) || STARTERS.has(w)) continue;
-        if (PHRASE_KEYS.has(w) || segment(w)?.length) continue;
+        if (PHRASE_KEYS.has(w) || segOf(w)?.length) continue;
         problems.push(`${f}: \`${w}\``);
       }
     }
@@ -157,26 +173,25 @@ if (syntaxBad) {
   }
 }
 
-// 末尾語 -> 攻撃タイプの表 (FORM_INFO) が辞書に追従していること。
-// ここが古くなると、末尾語を摆いた武器が攻撃しなくなる。
+// 武器語 -> 攻撃タイプの表 (FORM_SHAPE) が辞書に追従していること。
+// ここが古くなると、武器語を置いた武器が攻撃しなくなる。
 {
-  const { WORDS } = await import(new URL('../js/data/words.js', import.meta.url));
-  const { WEAPONS, KIND_LABEL } = await import(new URL('../js/data/weapons.js', import.meta.url));
-  const src = await readFile(join(ROOT, 'js/game/weapon.js'), 'utf8');
-  const body = src.slice(src.indexOf('const FORM_INFO'));
-  const entries = [...body.matchAll(/([\p{Script=Han}]+):\s*\['(\w+)',\s*'(\w+)'\]/gu)]
-    .map((m) => ({ text: m[1], shape: m[2], kind: m[3] }));
+  const { WORDS, WORDS_BY_CAT } = await import(new URL('../js/data/words.js', import.meta.url));
+  const { FORM_SHAPE, KIND_LABEL } = await import(new URL('../js/data/weapons.js', import.meta.url));
+  const entries = Object.entries(FORM_SHAPE).map(([text, v]) => ({ text, shape: v[0], kind: v[1] }));
 
   const dead = entries.filter((e) => !WORDS[e.text]);
+  const notForm = entries.filter((e) => WORDS[e.text] && WORDS[e.text].cat !== 'form');
   const noLabel = [...new Set(entries.map((e) => e.kind))].filter((k) => !KIND_LABEL[k]);
   const known = new Set(entries.map((e) => e.text));
-  const noInfo = Object.values(WEAPONS).map((w) => w.tail).filter((t) => !known.has(t));
+  const noInfo = WORDS_BY_CAT.form.filter((t) => !known.has(t));
 
-  console.log(`== 末尾語表 ==\n  ${entries.length} 語 / 辞書に無い ${dead.length} / 攻撃名なし ${noLabel.length} / 末尾語医薬品なし ${noInfo.length}`);
+  console.log(`== 武器語表 ==\n  ${entries.length} 語 / 辞書に無い ${dead.length} / 攻撃名なし ${noLabel.length} / 未登録 ${noInfo.length}`);
   if (dead.length) console.log('  辞書に無い: ' + dead.map((e) => e.text).join(' '));
+  if (notForm.length) console.log('  武器語でない: ' + notForm.map((e) => e.text).join(' '));
   if (noLabel.length) console.log('  攻撃名なし: ' + noLabel.join(' '));
   if (noInfo.length) console.log('  未登録: ' + noInfo.join(' '));
-  if (dead.length || noLabel.length || noInfo.length) {
+  if (dead.length || notForm.length || noLabel.length || noInfo.length) {
     console.log('\n=== 失敗したテストがあります ===');
     process.exit(1);
   }
@@ -221,35 +236,58 @@ if (syntaxBad) {
   }
 }
 
-// 接続詞の結合元が正しく读到こと。
-// CONNECT_SOURCES は「1 語 = 1 接続詞」の object なので、同じ語を 2 回書くと
-// 後ろので上書きされる (強 が ク でも イ でも 結べるのに イ だけ残った、之类)。
-// ここでは「配列になっているか」と「結合できる組の数」で 그것を検出する。
+// 接続詞の文法。
+//   ・どの語も、自分の品詞に合う接続詞を 1 つ以上持つ (行き止まりが無い)
+//   ・接続詞は枠を潰さない (「語 + 接続詞」が 1 語に潰れない)
+//   ・述語になる接続詞は全部連体形。「〜を」は目的語を取る。
 {
-  const { CONNECTORS, CONNECT_SOURCES } = await import(new URL('../js/data/words.connect.js', import.meta.url));
-  const { WORDS, DRAWABLE_ALL, drawWord } = await import(new URL('../js/data/words.js', import.meta.url));
+  const {
+    CONNECTORS, canConnect, isAdnominal, PREDICATE_CONNECTORS,
+    NON_ADNOMINAL_CONNECTORS,
+  } = await import(new URL('../js/data/words.connect.js', import.meta.url));
+  const { WORDS, CONNECTOR_SET, segment, drawWord } = await import(new URL('../js/data/words.js', import.meta.url));
 
-  // 定義にDuplicate なキーがないか (静かに上書きされる)。
-  const src = await readFile(join(ROOT, 'js/data/words.connect.js'), 'utf8');
-  const body = src.slice(src.indexOf('export const CONNECT_SOURCES = {'));
-  const keys = [...body.matchAll(/^\s{2}([\p{Script=Han}]+):/gmu)].map((m) => m[1]);
-  const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
-  const unknown = keys.filter((k) => !WORDS[k]);
-  const badConn = Object.values(CONNECT_SOURCES)
-    .flatMap((v) => [].concat(v))
-    .filter((c) => !CONNECTORS[c]);
+  const connNames = Object.keys(CONNECTORS);
+  const content = Object.keys(WORDS).filter((w) => !CONNECTOR_SET.has(w));
 
-  // 結合できる (語 x 接続詞) の組が十分あるか。
-  let pairs = 0;
-  for (const w of DRAWABLE_ALL) {
-    const v = CONNECT_SOURCES[w];
-    if (!v) continue;
-    for (const c of [].concat(v)) if (CONNECTORS[c]) pairs++;
+  // どの語も、自分の品詞に合う接続詞を 1 つ以上持つ。
+  const deadEnd = [];
+  // 「語 + 接続詞」が 1 語に潰れないこと (合成語にならず、辞書の別の語に食われる)。
+  const collapsed = [];
+  let bindable = 0;
+  for (const w of content) {
+    const mine = connNames.filter((c) => canConnect(WORDS[w], c));
+    bindable += mine.length;
+    if (!mine.length) deadEnd.push(`${w}(${WORDS[w].pos})`);
+    for (const c of mine) {
+      const segs = segment(w + c);
+      if (!segs || segs.length !== 2 || segs[0] !== w || segs[1] !== c) {
+        collapsed.push(`${w}+${c} -> ${segs ? segs.join('/') : 'null'}`);
+      }
+    }
   }
-  const words_ = Object.keys(CONNECT_SOURCES).length;
-  const rate = pairs / (DRAWABLE_ALL.length * Object.keys(CONNECTORS).length);
+  const pairs = content.length * connNames.length;
 
-  // 接続詞の出る確率。語が増えても下がり続けないように watched している。
+  // 接続詞の形が日本語として破綻していないこと。
+  //   名詞を修飾できないのは「連用形・続用形」だけのはず。
+  //   「な」は な形容詞 の連体形「〜な」なので名詞を修飾できる。
+  const shapeErrors = [];
+  // 名詞を修飾しない形。連用形 (く・にの連用「静かに」) と続用形 (せし・り)。
+  const NOT_ADN = ['く', 'せし', 'り'];
+  for (const c of NOT_ADN) {
+    if (!NON_ADNOMINAL_CONNECTORS.has(c)) shapeErrors.push(`${c}: 名詞を修飾できるはず`);
+  }
+  for (const c of NON_ADNOMINAL_CONNECTORS) {
+    if (!NOT_ADN.includes(c)) shapeErrors.push(`${c}: 連用形・断定形・続用形ではない`);
+    if (isAdnominal(c)) shapeErrors.push(`${c}: 連体形なのに非連体`);
+  }
+  // 述語のうち、連体形でもあるもの (「〜された」「〜る」「〜する」) は末尾語を修飾できる。
+  for (const c of ['された', 'われた', 'られた', 'る', 'する']) {
+    if (!PREDICATE_CONNECTORS.has(c)) shapeErrors.push(`${c}: 述語に入れていない`);
+    if (!isAdnominal(c)) shapeErrors.push(`${c}: 連体形でない`);
+  }
+
+  // 接続詞は 3 択の抽選に出ない。鍛冶下部の接続詞プールから無限に置く。
   let conn = 0, total = 0;
   for (let i = 0; i < 6000; i++) {
     const w = drawWord(makeRng(i * 2654435761 % 4294967296));
@@ -259,21 +297,120 @@ if (syntaxBad) {
   }
   const drawRate = conn / Math.max(1, total);
 
-  console.log(`== 接続詞 ==\n  接続詞 ${Object.keys(CONNECTORS).length} 種類`
-    + ` / 結合元 ${words_} 語 / 結合できる組 ${pairs} (${(rate * 100).toFixed(1)}%)`
-    + `\n  抽選に混ざる割合 ${(drawRate * 100).toFixed(1)}%`
-    + `\n  重複キー ${new Set(dup).size} / 語に無い ${unknown.length} / 接続詞に無い ${new Set(badConn).size}`);
-  for (const d of new Set(dup)) console.log(`\x1b[31m  キーが重複: ${d}\x1b[0m`);
-  for (const u of unknown) console.log(`\x1b[31m  辞書に無い結合元: ${u}\x1b[0m`);
-  for (const b of new Set(badConn)) console.log(`\x1b[31m  接続詞に無い: ${b}\x1b[0m`);
+  console.log(`== 接続詞 ==\n  接続詞 ${connNames.length} 種類 / 実質語 ${content.length} 語`
+    + ` / 結合できる組 ${bindable} (${((bindable / pairs) * 100).toFixed(1)}%)`
+    + `\n  抽選に混ざる割合 ${(drawRate * 100).toFixed(1)}% (プールから無限)`
+    + `\n  合成に潰れる ${collapsed.length} / 行き止まり ${deadEnd.length} / 形の誤り ${shapeErrors.length}`);
+  for (const x of deadEnd.slice(0, 20)) console.log(`\x1b[31m  どの接続詞も結べない: ${x}\x1b[0m`);
+  for (const x of collapsed.slice(0, 20)) console.log(`\x1b[31m  1 語に潰れる: ${x}\x1b[0m`);
+  for (const x of shapeErrors.slice(0, 20)) console.log(`\x1b[31m  形が誤り: ${x}\x1b[0m`);
 
-  // 下限: 結合元が 100 語を下回ると「引いても宙に浮く」が増える。
-  if (words_ < 100) console.log(`\x1b[31m  結合元が ${words_} 語しかない。很高的aes 語が宙に浮く。\x1b[0m`);
-  if (drawRate < 0.06) console.log(`\x1b[31m  接続詞の出る確率が低い: ${(drawRate * 100).toFixed(1)}%\x1b[0m`);
-  if (drawRate > 0.20) console.log(`\x1b[31m  接続詞が出すぎ: ${(drawRate * 100).toFixed(1)}%\x1b[0m`);
+  if (drawRate > 0) console.log(`\x1b[31m  抽選に接続詞が混ざっている: ${(drawRate * 100).toFixed(1)}%\x1b[0m`);
 
-  if (dup.length || unknown.length || badConn.length || words_ < 100
-      || drawRate < 0.06 || drawRate > 0.20) {
+  if (collapsed.length || deadEnd.length || shapeErrors.length || drawRate > 0) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
+// 語彙は 1 文字の漢字だけ。かなも 2 字以上の語も入れない。
+//
+// 2 漢字のな形容詞 (滑らか 適切 確実…) も入れない。
+// 「静かな」「確かな」「滑らかな」は 1 漢字語 + 接続詞 かな で作る。
+//   静 + かな = 静かな刃 / 確 + かな = 確かな刃 / 滑 + かな = 滑かな刃
+// 接続詞はひらがな。実質語にはかなも 2 文字も現れない (接続詞は別に数える)。
+{
+  const { WORDS, CONNECTOR_SET } = await import(new URL('../js/data/words.js', import.meta.url));
+  const KANA = /[ぁ-んァ-ヶー]/;
+  const long = [];
+  const kana = [];
+  for (const w of Object.keys(WORDS)) {
+    if (CONNECTOR_SET.has(w)) continue;      // 接続詞はひらがな (された かな など)
+    if (KANA.test(w)) kana.push(w);
+    if (w.length > 1) long.push(w);
+  }
+  console.log(`== 語彙 ==\n  実質語 ${Object.keys(WORDS).length - CONNECTOR_SET.size} 語`
+    + ` / かな ${kana.length} / 2 字以上 ${long.length}`);
+  for (const w of kana.slice(0, 20)) console.log(`\x1b[31m  かなの語: ${w}\x1b[0m`);
+  for (const w of long.slice(0, 20)) console.log(`\x1b[31m  2 字以上: ${w}\x1b[0m`);
+
+  if (kana.length || long.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
+// 1 文字の語は「単独で日本語の語になる」ものだけ。
+//
+// 以前は熟語の部品 (袈・裟・以・攻・一・千・角…) を語として置いていたため、
+// 語彙に引かれると「袈刺青硬剣」のような意味の無い名前になっていた。
+// 部品は辞書に置かず、熟語は中身のある語だけで組む。
+{
+  const { WORDS, ADJ_STEMS, NA_ADJ_STEMS, segment } = await import(new URL('../js/data/words.js', import.meta.url));
+  const { PHRASE_BONUS } = await import(new URL('../js/data/words.phrase.js', import.meta.url));
+
+  // 単独で 1 文字の語として許すもの。形容語幹 (「〜い」「〜な」になる) か、
+  // 立派な名詞。1 文字の語を足すときはこのリストにも足すこと。
+  const OK_ONE = new Set([
+    // 属性 (全部 1 文字の漢字)
+    '火', '炎', '焔', '創', '炭', '烈', '煙', '灰',
+    '氷', '雪', '霜', '冬',
+    '電', '震', '磁',
+    '毒', '液', '蝕', '霧', '菌', '瘴',
+    '聖', '神', '輝', '耀', '陽', '霞', '皓', '青', '白', '赤',
+    '闇', '暗', '黒', '夜', '死', '魔', '影', '漆',
+    '土', '砂', '塵', '地', '陸', '崖', '原',
+    '風', '嵐', '突', '旋', '疾', '翔',
+    '草', '樹', '苔', '芽', '緑', '根', '花',
+    '鉄', '鋼', '銀', '錬', '峰', '嶺', '鉱',
+    '血', '呪', '蓮', '紅',
+    '水', '波', '流', '泡', '淵', '露', '潮', '浪',
+    '金', '財', '宝',
+    // 武器語 (形を表す語)
+    '刃', '剣', '刀', '斧', '槍', '矛', '戈', '牙', '爪',
+    '弾', '銃', '玉', '矢', '針', '弓', '球', '珠', '還', '光', '雷',
+    '塊', '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾',
+    // 効果語 (体言のもの)
+    // 「巨」は体言として許可する。な形容詞は「巨大」であって「巨」ではない。
+    //   「巨な」は日本語に無いので `巨` はな形容の語幹表に入れず、接続詞は の・に・へ・を だけ。
+    //   単独でも名詞（きょ = 大きいもの）だし、接尾語としても使う（巨刃 / 巨剛）。
+    //   「続」「穿」「回」と同じ扱い。巨 + 大 + 刃 と並べれば「巨大な刃」になる。
+    '冷', '宏', '巨', '心', '圧', '律', '斉', '引', '導', '徹', '執', '瞬', '会',
+    '必', '急', '反', '退', '衰', '合', '再', '回', '続', '減', '特', '囲',
+    '捷', '衆', '昂', '威', '打', '防', '程', '撃', '連', '固', '湧', '潤',
+    '発', '穢', '優', '護', '結', '穿', '通',
+    // 効果語 (接頭語・接尾語として使う語。な形容詞ではない)
+    //
+    //   これらは「X な」が日本語に無いので `NA_ADJ_STEMS` には置かない。
+    //   静な ✗ (静か) / 剛な ✗ (剛刃) / 豪な ✗ (豪快) / 滑な ✗ (滑らか)
+    //   名詞・接尾語として扱い、接続詞は の・に・へ・を にする。
+    //   1 文字でも日本語の成分語として実際に使われるので許可する。
+    //   「袈」「裟」のような熟語の部品だけの語ではない (静寂 / 剛硬鋼 / 豪快 …)。
+    '静', '穏', '無', '厳', '敵', '奇', '豪', '雅', '華', '麗', '精', '密',
+    '真', '素', '正', '賢', '酷', '確', '活', '端', '滑', '準', '霊', '適',
+    '剛', '壮', '清',
+    // 自身
+    '人', '頑', '健', '躯', '柄', '走', '鎧', '甲', '王', '戒', '符', '薬',
+    '癒', '晶', '書', '察', '永', '楽', '幸',
+    // 核語
+    '志', '力', '巧', '守', '感', '智',
+  ]);
+
+  // 動詞 (「斬」「貫」) と接続詞は 1 文字が普通なので対象外。
+  // -fragment な体言・効果語だけを調べた。
+  const NOUNISH = new Set(['element', 'form', 'modifier', 'buff']);
+  const stray = Object.keys(WORDS).filter((w) => w.length === 1
+    && NOUNISH.has(WORDS[w].cat)
+    && !ADJ_STEMS.has(w) && !NA_ADJ_STEMS.has(w) && !OK_ONE.has(w));
+
+  // 熟語は「辞書にある語だけで」完全に分割できること。
+  const broken = Object.keys(PHRASE_BONUS).filter((k) => !segment(k));
+
+  console.log(`== 1 文字の語 ==\n  許可して無い ${stray.length} / 作れない熟語 ${broken.length}`);
+  for (const w of stray) console.log(`\x1b[31m  1 文字の断片: ${w}\x1b[0m`);
+  for (const k of broken) console.log(`\x1b[31m  熟語が組めない: ${k}\x1b[0m`);
+
+  if (stray.length || broken.length) {
     console.log('\n=== 失敗したテストがあります ===');
     process.exit(1);
   }
@@ -329,6 +466,7 @@ let failed = 0;
 
 failed += await run('test/words.test.js');
 failed += await run('test/sim.test.js');
+failed += await run('test/forge.drag.test.js');
 
 if (startServer) {
   const server = await serve(ROOT, PORT);

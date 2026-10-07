@@ -4,78 +4,39 @@
 // ここが「文が成立していなければその武器は無効化される」の実装。
 // 解決結果が active=false なら、combat 側は撃たない。
 //
-// 武器名は「枠の語を連結したもの + 末尾語 (tail)」になる。
-// 末尾語は枠の外に固定で付くので、並べ替えても attack の型は変わらない。
+// 武器は「自由に並べた文」です。枠に嵌めない。
+//   語彙から語をドラッグして文の中に落とす。並べ替えてもよい。
+//   語の横 (直後) には接続詞が付く。語をタップすると切り替わる。
+//   文は 10 文字まで。
+//
+// 攻撃の型は「文の中の武器語 (剣・弾・環…)」が決める。
+// 武器語は自動で付かない。戦闘中のレベルアップで語として得る。
+// 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, slotsForLevel } from '../data/weapons.js';
-import { evaluate, makeWord, ELEMENTS } from '../data/words.js';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE } from '../data/weapons.js';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES } from '../data/words.js';
 import { clamp } from '../core/util.js';
+import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
-/** 文の中で属性の重みを強めるための中央テーブル。 */
-const ELEMENT_WEIGHT = 3;
+/** 武器語 (形態語) かどうか。 */
+const isForm = (text) => WORDS[text]?.cat === 'form';
 
 let wUid = 0;
 
-/**
- * 末尾語を描画用の形と攻撃の種類に対応させる。
- * 武器の tail だけがここを通るので、名前と攻撃が必ず一致する。
- */
-const FORM_INFO = {
-  // 斬撃
-  剣: ['blade', 'slash'], 刃: ['blade', 'slash'], 短刀: ['blade', 'slash'],
-  太刀: ['blade', 'slash'], 大剣: ['blade', 'slash'],
-  利爪: ['blade', 'slash'], 尖牙: ['blade', 'slash'],
-  // 射撃
-  弾: ['shot', 'shot'], 矢: ['arrow', 'shot'], 針: ['arrow', 'shot'],
-  球: ['orb', 'shot'], 岩塊: ['orb', 'shot'], 竜頭: ['arrow', 'shot'],
-  夾撃: ['arrow', 'shot'], 乱打: ['shot', 'shot'], 殲滅: ['orb', 'shot'],
-  貫通: ['arrow', 'shot'], 複製: ['orb', 'shot'],
-  銃: ['shot', 'shot'], 弓: ['arrow', 'shot'],
-  // 爆弾
-  爆弾: ['bomb', 'bomb'], 彗星: ['orb', 'bomb'],
-  // 連鎖
-  雷: ['shot', 'chain'], 雷神: ['shot', 'chain'],
-  // 軌道
-  環: ['blade', 'orbit'], 回転: ['blade', 'orbit'], 回転刃: ['blade', 'orbit'],
-  // 環刃 (戻る刃)
-  環刃: ['blade', 'boomerang'],
-  // 薙ぎ
-  鞭: ['blade', 'whip'], 嵐: ['orb', 'whip'],
-  // 城壁
-  壁: ['orb', 'aura'], 棘壁: ['orb', 'aura'],
-  // 光線
-  光線: ['arrow', 'beam'], 反射: ['blade', 'beam'],
-  // 追加武器の末尾語
-  太刀: ['blade', 'slash'], 針: ['arrow', 'shot'], 岩塊: ['orb', 'bomb'],
-  利爪: ['blade', 'whip'], 竜頭: ['arrow', 'shot'], 複製: ['orb', 'shot'],
-  大剣: ['blade', 'whip'], 夾撃: ['arrow', 'shot'], 乱打: ['shot', 'shot'],
-};
-
-/**
- * 末尾語から形と攻撃タイプを決める。
- * @param {string} tail
- * @returns {{shape:string|null, kind:string|null}}
- */
-function formOf(tail) {
-  const info = FORM_INFO[tail];
-  if (!info) return { shape: null, kind: null };
-  return { shape: info[0], kind: info[1] };
-}
-
 export class WeaponInst {
   /**
-   * @param {string} defId
+   * @param {string} defId 武器の定義 ID。'form:剣' のような武器語由来の ID も可。
    * @param {number} level
    */
   constructor(defId, level = 1) {
     this.uid = ++wUid;
     this.defId = defId;
-    this.def = WEAPONS[defId];
+    this.def = lookupDef(defId);
     if (!this.def) throw new Error(`未知の武器: ${defId}`);
     this.level = level;
-    /** @type {Array<object|null>} スロット。空のままでもよい。 */
-    this.slots = new Array(slotsForLevel(this.def, level)).fill(null);
+    /** @type {Sentence} 自由に並べた文。 */
+    this.sentence = new Sentence({ maxLen: MAX_SENTENCE_LEN });
     this.cd = 0;
     this.phase = 0;         // 攻撃ごとの描画用 位相
     this.aim = 0;           // 照準角
@@ -86,77 +47,118 @@ export class WeaponInst {
   }
 
   get name() { return this.def.name; }
-  get filled() { return this.slots.filter(Boolean); }
+  get filled() { return this.sentence.words; }
 
-  /**
-   * 武器名の末尾に固定で付く語。枠の外なので外せない。
-   * ここが攻撃の種類も決める (「剣」なら必ず斬撃)。
-   */
-  get tail() { return this.def.tail || this.def.name; }
-  /** 末尾語をインスタンスとして作る。評価のときに文の最後に加える。 */
-  get tailWord() { return makeWord(this.tail); }
-
-  /** 現在のスロット数を.level から再計算する。レベル上昇時に呼ぶ。 */
-  resizeSlots() {
-    const want = slotsForLevel(this.def, this.level);
-    while (this.slots.length < want) this.slots.push(null);
-    if (this.slots.length > want) this.slots.length = want;
-    this._sig = null;
-  }
-
-  /** スロットに語を入れる。null で外す。 */
+  // ── 旧スロット API の互換。内部は自由配置。 ────────────────────────────────
+  get slots() { return this.sentence.words; }
+  get connects() { return this.sentence.conns; }
+  /** 語を index に置く。空いていれば挿入、すでにあれば置き換える。 */
   setSlot(i, word) {
-    if (i < 0 || i >= this.slots.length) return false;
-    this.slots[i] = word || null;
+    if (!word) return this.sentence.removeAt(i).ok;
+    if (i >= this.sentence.count) return this.sentence.push(word).ok;
+    if (this.sentence.entries[i].word === word) return true;
+    // 長さは「その語の文字数の差だけ」見る。
+    const old = this.sentence.entries[i].word.text;
+    const d = word.text.length - old.length;
+    if (this.sentence.len + d > this.sentence.maxLen) return false;
+    this.sentence.entries[i].word = word;
     this._sig = null;
     return true;
   }
+  /** 語の直後 (i) に接続詞を置く。 */
+  setConnect(i, word) {
+    const text = word ? word.text : null;
+    const r = this.sentence.setConnAt(i, text);
+    if (r.ok) this._sig = null;
+    return r.ok;
+  }
+  /** 枠数は自由配置になったので何もしない (残互換)。 */
+  resizeSlots() { this._sig = null; }
+
+  /**
+   * 文の中の武器語 (末尾から見て最初に見つかったもの)。
+   * 攻撃の型はこれが決める。無いなら null。
+   */
+  get tail() {
+    const ws = this.sentence.words;
+    for (let i = ws.length - 1; i >= 0; i--) {
+      if (isForm(ws[i].text)) return ws[i].text;
+    }
+    return null;
+  }
+  get tailWord() { return this.tail ? makeWord(this.tail) : null; }
+
+  /** 文の並び (evaluate に渡す配列)。 */
+  get segments() { return this.sentence.segments(); }
 
   levelUp() {
     if (this.level >= this.def.maxLevel) return false;
     this.level++;
-    this.resizeSlots();
+    this._sig = null;
     return true;
   }
 
-
-  /**
-   * 武器名。埋めた語をそのまま連結したもの + 末尾語。
-   * 「爆裂」「無双」「迅」+ 剣なら「爆裂無双迅剣」になる。
-   */
+  /** 武器名。文そのもの。 */
   get title() {
-    const t = this.slots.map((s) => (s ? s.text : '')).join('') + this.tail;
+    const t = this.sentence.text;
     return t || this.def.name;
   }
 
-  /** 文面。枠の語と末尾語を並べたもの。 */
-  get fullText() {
-    return this.slots.map((s) => (s ? s.text : '')).join('') + this.tail;
+  /** 文面。 */
+  get fullText() { return this.sentence.text; }
+
+  /**
+   * 文の中に 2 つ以上の武器語が並んでいないか。
+   * 「刃剣」「弾矢」は日本語に無い並びなので落とす。
+   * @returns {string[]|null}  並んでいた 2 語
+   */
+  adjacentForms() {
+    const ws = this.sentence.words;
+    for (let i = 0; i + 1 < ws.length; i++) {
+      if (isForm(ws[i].text) && isForm(ws[i + 1].text)) return [ws[i].text, ws[i + 1].text];
+    }
+    return null;
   }
 
   /**
-   * 埋めた語と末尾語をまとめて文として評価する。
-   * 末尾語はプレイヤーが置いた語ではないので、実質語の要求を 1 つ増やす。
-   * 枠の語だけで実質語を 2 つ以上置けば文になる。
+   * 並べた語・接続詞を文として評価する。
+   * 武器語はプレイヤーが置いた語なので、実質語の要求は 2 つでよい。
+   * 武器語は文のどこに置いてもよいので「末尾語」として扱わない。
+   * (直前の語が武器語を修飾できるかの判定は下の adjacentForms で行う)
    */
   evaluate() {
-    return evaluate([...this.slots.filter(Boolean), this.tailWord], { minContent: 3 });
+    const e = this.sentence.evaluate({ minContent: 2 });
+    if (!e.valid) return e;
+    const pair = this.adjacentForms();
+    if (pair) {
+      return {
+        ...e,
+        valid: false,
+        reason: 'tailform',
+        reasonText: `武器語「${pair[0]}」と「${pair[1]}」が並んでいない。`
+          + `形を表す語どうしは隣り合えないので、語を 1 つ挟むこと。`,
+        grade: 'broken',
+        gradeInfo: GRADES.broken,
+      };
+    }
+    return e;
   }
+
   /**
    * 戦闘に使う最終ステータスを作る。
    * @param {object} ps プレイヤー能力
-   * @returns {{active:boolean, reason:string, reasonText:string, grade:string,
-   *   gradeInfo:object, element:string, elementInfo:object, stats:object,
-   *   evalResult:object, text:string, dps:number}}
    */
   resolve(ps) {
-    const sig = this.level + '|' + this.slots.map((s) => (s ? s.uid : '-')).join(',');
+    const sig = this.level + '|' + this.sentence.sig();
     if (this._sig === sig && this._cache) return this._cache;
 
     const e = this.evaluate();
     const base = baseStatsForLevel(this.def, this.level);
-    // 攻撃の種類は末尾語だけが決める。途中の形態語は効果だけ足す。
-    const form = formOf(this.tail);
+    // 攻撃の型は文の中の武器語が決める。無ければこの武器の既定。
+    const tail = this.tail;
+    const info = tail ? FORM_SHAPE[tail] : null;
+    const kind = (info && info[1]) || this.def.kind;
+    const shape = (info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade';
 
     const out = {
       active: e.valid,
@@ -167,9 +169,9 @@ export class WeaponInst {
       gradeInfo: e.gradeInfo,
       element: e.element,
       elementInfo: ELEMENTS[e.element] || ELEMENTS.none,
-      // 攻撃の種類は末尾語が決める。無ければ武器の既定。
-      kind: form.kind || this.def.kind,
-      shape: form.shape,
+      kind,
+      shape,
+      tail,
       title: this.title,
       text: this.fullText,
       fullText: e.text,
@@ -191,11 +193,7 @@ export class WeaponInst {
     // 文の効果を base に加算する。
     for (const [k, v] of Object.entries(fx)) {
       if (k === 'power' || k === 'atkMul' || k === 'xpMul' || k === 'hpMul' || k === 'slowImmune') continue;
-      if (k === 'split' || k === 'bounce' || k === 'chain' || k === 'count' || k === 'pierce' || k === 'orbit') {
-        st[k] = (st[k] || 0) + v;
-      } else {
-        st[k] = (st[k] || 0) + v;
-      }
+      st[k] = (st[k] || 0) + v;
     }
 
     // プレイヤー能力との合成。
@@ -209,8 +207,6 @@ export class WeaponInst {
     st.power = 1;
 
     // 文の新闻中心。敵の文を斬る量と確率に使う。
-    //   成立なら 1 語、熟語があれば +1、述語 (接続詞の合成) があれば +1。
-    //   文越好いほど、斬る量も確率も上がる。
     st.grade = e.grade;
     st.idiom = e.idiom ? 1 : 0;
     st.predicated = e.predicated ? 1 : 0;
@@ -243,9 +239,9 @@ export class WeaponInst {
     st.reflect = st.reflect || 0;
     // 弾・分裂・フィールドが参照する属性。
     st.el = e.element;
-    // 描画用の形。形態語が鍵になる。
-    st.shape = form.shape;
-    st.kind = out.kind;
+    // 描画用の形。
+    st.shape = shape;
+    st.kind = kind;
 
     // 概算 DPS (UI の比較用)。
     const multi = Math.max(1, st.count) * (1 + st.split * 0.4) * (1 + st.pierce * 0.25)

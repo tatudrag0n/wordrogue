@@ -21,6 +21,11 @@ export class Input {
     this.stick = { active: false, id: -1, ox: 0, oy: 0, x: 0, y: 0, dx: 0, dy: 0 };
     this.radius = 56;
 
+    // ダッシュボタン。タッチ端末だけ HUD が出す。
+    this.touchDash = false;
+    /** 指を離したあとの残り秒数。タップでもダッシュが効くようにする。 */
+    this.touchDashHold = 0;
+
     /** 押された瞬間だけ true になるフレームフラグ。UI 側で消費する。 */
     this.pressed = new Set();
 
@@ -52,7 +57,7 @@ export class Input {
     this.surface?.classList.remove('touching');
   }
 
-  /** pointer イベントでスティックを操作する。game が開始线条で呼ぶ。 */
+  /** pointer イベントでスティックを操作する。ゲーム開始時のループが呼ぶ。 */
   attachTouch() {
     const surf = this.surface;
     if (!surf) return;
@@ -100,7 +105,10 @@ export class Input {
   }
 
   /** ゲームループ先頭で呼ぶ。 */
-  update() {
+  update(dt = 1 / 60) {
+    if (this.touchDashHold > 0) {
+      this.touchDashHold = Math.max(0, this.touchDashHold - dt);
+    }
     let x = 0, y = 0;
     if (this.keys.has('a') || this.keys.has('arrowleft')) x -= 1;
     if (this.keys.has('d') || this.keys.has('arrowright')) x += 1;
@@ -132,8 +140,18 @@ export class Input {
   get moving() { return Math.hypot(this.ax, this.ay) > 0.08; }
   get angle() { return Math.atan2(this.ay, this.ax); }
 
-  /** ダッシュ (スペースを押している間)。 */
-  get dash() { return this.keys.has(' ') || this.keys.has('space'); }
+  /** ダッシュ (押している間)。スペースか画面の実ダッシュボタン。 */
+  get dash() {
+    return this.keys.has(' ') || this.keys.has('space')
+      || this.touchDash || this.touchDashHold > 0;
+  }
+
+  /** ダッシュボタンからの入力。押した間は true。 */
+  setTouchDash(on) {
+    this.touchDash = !!on;
+    // 指を離しても 0.2 秒ほどは続ける。タップでもダッシュが効くように。
+    if (!on) this.touchDashHold = 0.22;
+  }
 
   down(...ks) { return ks.some((k) => this.keys.has(k)); }
   hit(k) { return this.pressed.has(k); }

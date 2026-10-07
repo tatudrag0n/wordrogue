@@ -1,21 +1,25 @@
 // ヘッドレスで 1 ステージを最後まで回すテスト。  node test/sim.test.js
 // DOM を使わないので Node でそのまま実行できる。
-import { Run, PICKUP_VMAX, PICKUP_MAGNET } from '../js/game/run.js';
-import { makeWord, WORDS, evaluate } from '../js/data/words.js';
-import { WEAPONS } from '../js/data/weapons.js';
+//
+// 乱数は最初に固定する。必ず先頭に置くこと (import は宣言順に評価される)。
+import './seed.mjs';
+import { Run, PICKUP_VMAX, PICKUP_MAGNET, LEXICON_MAX } from '../js/game/run.js';
+import { Input } from '../js/core/input.js';
+import { makeWord, WORDS, evaluate, CONNECTOR_SET } from '../js/data/words.js';
+import { WEAPONS, FORM_SHAPE, KIND_SHAPE } from '../js/data/weapons.js';
 import { ENEMIES } from '../js/data/enemies.js';
 import { WeaponInst } from '../js/game/weapon.js';
 import { makePickup, makeEnemy } from '../js/game/entities.js';
 import { damage } from '../js/game/combat.js';
 import { SELF_TAIL, resolvePlayerStats } from '../js/game/stats.js';
+import { Sentence, MAX_SENTENCE_LEN } from '../js/game/sentence.js';
 import { STAGES } from '../js/data/stages.js';
-import { Save, META_UPGRADES, SHOP_WORDS } from '../js/core/save.js';
+import { Save, META_UPGRADES } from '../js/core/save.js';
 import { makeRng } from '../js/core/util.js';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL:', m); } };
-const sec = (t) => console.log(`\n== ${t} ==`);
-
+const sec = (t) => console.log(`\n== ${t} ==`); 
 // 音声とセーブのスタブ。
 const audio = new Proxy({}, { get: () => () => {} });
 const save = { d: { meta: {} } };
@@ -23,11 +27,87 @@ const save = { d: { meta: {} } };
 const input = { ax: 0, ay: 0, moving: false, angle: 0 };
 const dt1 = 1 / 60;
 
+// クリア報酬は言玉の直接払い。三択カードは廃止した。
+// かわりに run の報酬額の算出式が壊れないことを見る。
+sec('クリア報酬の言玉は難易度とバフで増える');
+{
+  // 計算式は main.js の onRunEnd と同じ。ここでは素材 (stats) が壊れないことを見る。
+  const r = newRun(3);
+  r.refreshStats();
+  const atk = r.player.stats.atkMul;
+  const self = r.player.stats.selfPower;
+  ok(Number.isFinite(atk) && atk > 0, `攻撃倍率が壊れている: ${atk}`);
+  ok(Number.isFinite(self) && self >= 1, `文の力が壊れている: ${self}`);
+  // ステージ 1 と 9 では 9 のほうが高い。
+  const inkLow = Math.round((100 + 1 * 100) * 1);
+  const inkHigh = Math.round((100 + 9 * 100) * 1);
+  ok(inkLow >= 100 && inkLow <= 1000, `言玉の下限が壊れている: ${inkLow}`);
+  ok(inkHigh > inkLow && inkHigh <= 1000, `言玉の上限が壊れている: ${inkHigh}`);
+  console.log(`  言玉 ${inkLow}〜${inkHigh} (ステージ × 攻撃/文の力で上乗せ)`);
+}
+
+// タッチ端末のダッシュボタン。押している間だけダッシュし、
+// 指を離しても 0.2 秒だけ続けてタップでも効果が出る。
+sec('タッチのダッシュボタン');
+{
+  // Input はコンストラクタで window のリスナーだけ張るので差し替えれば動く。
+  globalThis.window = { addEventListener() {}, removeEventListener() {} };
+  const inp = new Input();
+  ok(!inp.dash, '押していないのにダッシュしている');
+
+  inp.setTouchDash(true);
+  ok(inp.dash, 'ダッシュボタンでダッシュしない');
+  inp.setTouchDash(false);
+  ok(inp.dash, '離したら即座にダッシュが止まる');
+  let guard = 0;
+  while (inp.dash && guard++ < 200) inp.update(1 / 60);
+  ok(!inp.dash, `離したあともダッシュが続く: ${guard} フレーム`);
+
+  inp.keys.add(' ');
+  ok(inp.dash, 'スペースでダッシュしない');
+  inp.keys.clear();
+  ok(!inp.dash, 'キーを離してもダッシュが続く');
+  delete globalThis.window;
+}
+
+
 /** 独立したランを作り、武器の枠をすべて空にする。テスト間の汚染を防ぐ。 */
 function freshWeapon(stageId = 1, weaponIds) {
   const r = newRun(stageId, weaponIds);
-  for (const w of r.weapons) w.slots.fill(null);
+  for (const w of r.weapons) w.sentence.clear();
   return r;
+}
+
+/** 文を空から作り直す。… の位置が「語の後ろ」の接続詞。 */
+function setWords(wi, spec) {
+  wi.sentence.clear();
+  for (const item of (Array.isArray(spec) ? spec : [spec])) {
+    const [text, conn] = Array.isArray(item) ? item : [item, null];
+    wi.sentence.push(makeWord(text));
+    if (conn) wi.sentence.setConnAt(wi.sentence.count - 1, conn);
+  }
+  return wi;
+}
+
+/** 文の i 番目の語，直後の接続詞。武器でも自身の文でも使える。 */
+const connOf = (sen, i) => ((sen?.sentence || sen)?.at(i) || {}).conn?.text || null;
+
+/**
+ * ['焔','を','斬','る'] のような平坦な指定で作る。
+ * 接続詞は「直前の語の後ろ」に付く。
+ */
+function setFlat(wi, list) {
+  wi.sentence.clear();
+  let last = -1;
+  for (const w of list) {
+    if (CONNECTOR_SET.has(w)) {
+      if (last >= 0) wi.sentence.setConnAt(last, w);
+      continue;
+    }
+    wi.sentence.push(makeWord(w));
+    last = wi.sentence.count - 1;
+  }
+  return wi;
 }
 
 /** セーブの初期値。テストごとに分けて、言玉などの持ち越しが混ざらないようにする。 */
@@ -39,8 +119,8 @@ function newRun(stageId, weaponIds, sv) {
   const save = sv || freshSave();
   return new Run({
     stageId, audio, save, weaponIds,
-    // 本番 (main.js) と同じく、恒久の語を渡す。
-    startingWords: save.d.startingWords || [],
+    // 本番 (main.js) と同じく、書庫で広げたぶんだけ語彙が増える。
+    lexiconSize: 12 + (save.lexiconBonus || 0),
     rng: makeRng(stageId * 7919 + 13),
   });
 }
@@ -53,7 +133,7 @@ function lexText(r) {
 sec('ラン生成');
 let run = newRun(1);
 ok(run.state === 'playing', '状態が playing ではない');
-ok(run.weapons.length === 2, `武器数 ${run.weapons.length}`);
+ok(run.weapons.length === 1, `武器数 ${run.weapons.length}`);
 ok(run.lexicon.every((x) => x !== undefined), '語彙が壊れている');
 ok(run.player.hp === run.player.maxHp, 'HP が最大になっていない');
 ok(run.player.maxHp > 0, 'maxHp が 0');
@@ -73,100 +153,97 @@ sec('武器の初期文');
   ok(!('core' in wi.def), '核語がまだ定義されている');
 }
 
-sec('末尾語は枠の外に固定で付く');
+sec('文は 10 文字まで / 武器語は自分で置く');
 {
   const wi = run.weapons[0];
   const x = wi.resolve(run.player.stats);
-  // 文面 = 枠の語の連結 + 末尾語。
-  const joined = wi.slots.filter(Boolean).map((w) => w.text).join('') + wi.tail;
-  ok(x.fullText === joined, `文面が末尾語つきでない: ${x.fullText} != ${joined}`);
-  ok(wi.title.endsWith(wi.tail), `名前が末尾語で終わっていない: ${wi.title}`);
+  // 文面 = 並べた語 + その直後の接続詞。固定の末尾語は無い。
+  const joined = wi.sentence.words.map((w) => w.text).join('');
+  ok(x.fullText === joined, `文面が文と一致しない: ${x.fullText} != ${joined}`);
+  ok(wi.sentence.maxLen === 10, `文の上限 ${wi.sentence.maxLen}`);
 
-  // 末尾語は枠の 1 つとして数えない。語 1 つでは不成文。
-  wi.slots.fill(null);
-  wi.setSlot(0, makeWord('刃'));
+  // 語 1 つでは不成文。
+  setWords(wi, ['刃']);
   const one = wi.resolve(run.player.stats);
   ok(!one.active, '1 語にしても有効になっている');
   ok(one.stats.dmg === 0, `威力が 0 でない: ${one.stats.dmg}`);
 
-  // 語 2 つで成立。
-  wi.setSlot(1, makeWord('剛利'));
+  // 語 2 つで成立。武器語を中に置けば攻撃の型が決まる。
+  setWords(wi, ['刃', '剛']);
   ok(wi.resolve(run.player.stats).valid, '2 語でも不成文');
-  console.log(`  末尾語「${wi.tail}」/ 1 語 ${one.reasonText} / 2 語で成立`);
+  ok(wi.tail === '刃', `文の後方から最初に見つかる武器語が ${wi.tail}`);
+
+  // 10 文字を超える語は置けない。
+  const over = setWords(wi, ['焔', '剛', '速', 'い', 'を']);
+  ok(wi.sentence.len <= 10, `文が 10 文字を超えた: ${wi.sentence.len}`);
+  console.log(`  1 語 ${one.reasonText} / 2 語で成立 / 上限 ${wi.sentence.maxLen} 文字`);
 }
 
-sec('武器名はその文面になり 末尾は動かない');
+sec('武器名はその文面になる / 武器語が攻撃を決める');
 {
   const wi = run.weapons[0];
-  wi.level = 8; wi.resizeSlots();
-  // 「爆裂無双雷」+ 剣 (末尾) = 「爆裂無双雷剣」
-  const words = ['爆裂', '無双', '雷'];
-  words.forEach((t, i) => wi.setSlot(i, makeWord(t)));
+  // 「焔を斬妙な」= 8 文字。末尾の「刃」が武器語。
+  setWords(wi, [['烈', 'を'], ['斬'], ['妙', 'な'], ['刃']]);
   const res = wi.resolve(run.player.stats);
   console.log(`  「${wi.title}」 ${res.gradeInfo.name} 文力=${res.evalResult.fx.power.toFixed(2)} 攻撃=${res.kind}`);
-  ok(wi.title === words.join('') + wi.tail, `武器名が文面と違う: ${wi.title}`);
+  ok(wi.title === '烈を斬妙な刃', `武器名が文面と違う: ${wi.title}`);
   ok(res.valid, `「${wi.title}」が不成文: ${res.reasonText}`);
-  ok(res.kind === 'slash', `末尾が「剣」なら斬撃のはず: ${res.kind}`);
-  ok(res.evalResult.fx.explode > 0, '「爆裂」で爆発が付くはず');
-  ok(res.element === 'thunder', `「雷」で雷になるはず: ${res.element}`);
+  ok(res.kind === 'slash', `武器語が「刃」なら斬撃のはず: ${res.kind}`);
+  ok(res.evalResult.fx.explode > 0, '「烈」で爆発が付くはず');
+  ok(res.element === 'fire', `「烈」で火になるはず: ${res.element}`);
   ok(res.evalResult.fx.power > 1.3, `文の力が低い: ${res.evalResult.fx.power}`);
 
-  // 並べ替えても末尾語と攻撃は変わらない。
+  // 並べ替えると文面が変わる。接続詞は語と動く。
+  setWords(wi, [['烈', 'を'], ['斬'], ['妙', 'な'], ['刃']]);
   const before = wi.title;
-  [wi.slots[0], wi.slots[1]] = [wi.slots[1], wi.slots[0]];
+  const [a, b] = wi.sentence.entries;
+  wi.sentence.entries[0] = b;
+  wi.sentence.entries[1] = a;
   const swapped = wi.resolve(run.player.stats);
-  ok(swapped.kind === 'slash', `並べ替えで攻撃が変わった: ${swapped.kind}`);
-  ok(swapped.title.endsWith(wi.tail), '並べ替えで末尾が動いた');
   ok(swapped.title !== before, '並べ替えても名前が変わらない');
+  ok(swapped.title === '斬烈を妙な刃', `入れ替え後 ${swapped.title}`);
+  ok(swapped.kind === 'slash', `並べ替えで攻撃が変わった: ${swapped.kind}`);
   console.log(`  入れ替え → 「${swapped.title}」 ${swapped.kind}`);
 
-  // 途中の形態語は効果だけ足し、攻撃の種類は変えない。
-  wi.slots.fill(null);
-  wi.setSlot(0, makeWord('刃'));
-  wi.setSlot(1, makeWord('剛利'));
-  wi.setSlot(2, makeWord('貫通'));
+  // 武器語を変えると攻撃の型が変わる。
+  setWords(wi, ['刃', '剛', '貫']);
   const mid = wi.resolve(run.player.stats);
-  ok(mid.kind === 'slash', `途中の「貫通」で攻撃が変わった: ${mid.kind}`);
-  ok(mid.evalResult.fx.pierce > 0, '「貫通」の効果が付いていない');
-  console.log(`  途中に「貫通」→ 攻撃 ${mid.kind} / 貫通 ${mid.stats.pierce}`);
+  ok(mid.kind === 'slash', `「刃」で斬撃のはず: ${mid.kind}`);
+  ok(mid.evalResult.fx.pierce > 0, '「貫」の効果が付いていない');
+  setWords(wi, ['銃', '剛', '貫']);
+  const gun = wi.resolve(run.player.stats);
+  ok(gun.kind === 'shot', `「銃」で射撃のはず: ${gun.kind}`);
+  console.log(`  武器語 刃→${mid.kind} / 銃→${gun.kind}`);
 
-  // 爆弾を文に入れても、剣なら斬撃のまま。
-  wi.slots.fill(null);
-  wi.setSlot(0, makeWord('刃'));
-  wi.setSlot(1, makeWord('剛利'));
-  wi.setSlot(2, makeWord('爆弾'));
-  const bomb = wi.resolve(run.player.stats);
-  ok(bomb.kind === 'slash', `途中の「爆弾」で爆弾になった: ${bomb.kind}`);
-  ok(bomb.title.endsWith('剣'), `末尾が動いた: ${bomb.title}`);
-  ok(bomb.evalResult.fx.explode > 0, '「爆弾」の効果までは付く');
-  console.log(`  途中に「爆弾」→ 「${bomb.title}」 ${bomb.kind} (爆発 ${bomb.evalResult.fx.explode.toFixed(0)} は付く)`);
+  // 武器語どうしは隣り合わない。
+  setWords(wi, ['刃', '弾']);
+  const two = wi.resolve(run.player.stats);
+  ok(!two.valid, `「刃弾」が成立してしまった: ${two.reasonText}`);
+  ok(two.reason === 'tailform', `理由 ${two.reason}`);
+  console.log(`  武器語どうし → 不成立 (${two.reasonText})`);
 
-  // 「迅雷」は 1 語として辞書にあるので、2 語を並べても 1 語にまとまる (最長一致)。
-  wi.slots.fill(null);
-  wi.setSlot(0, makeWord('迅足'));
-  wi.setSlot(1, makeWord('雷'));
+  // 「迅足」+「雷」は最長一致で 1 語にまとまる。
+  setWords(wi, ['速', '雷']);
   const xunlei = wi.resolve(run.player.stats);
   const seg = xunlei.evalResult.segments;
-  ok(seg.join('/') === `迅足/雷/${wi.tail}`,
-    `迅足+雷 の分割が合わない: ${seg.join('/')}`);
-  ok(seg[seg.length - 1] === wi.tail, `末尾語が最後にない: ${seg.join('/')}`);
-  console.log(`  「迅足」+「雷」→ ${seg.join('/')}`);
+  ok(seg.join('/') === '速/雷', `速+雷 の分割が合わない: ${seg.join('/')}`);
+  console.log(`  「速」+「雷」→ ${seg.join('/')}`);
 }
 
-sec('すべての武器が末尾語で攻撃を決める');
+sec('すべての武器が文の中の武器語で攻撃を決める');
 {
   const PS = { atk: 1, atkMul: 1, crit: 0, lifesteal: 0, magnet: 0, xpMul: 0, armor: 0, slowImmune: 0, hp: 100 };
   for (const [id, def] of Object.entries(WEAPONS)) {
-    ok(WORDS[def.tail], `${def.name}: 末尾語「${def.tail}」が辞書に無い`);
+    ok(WORDS[def.tail], `${def.name}: 武器語「${def.tail}」が辞書に無い`);
     const wi = new WeaponInst(id, 1);
-    wi.setSlot(0, makeWord(def.startWord));
-    wi.setSlot(1, makeWord(def.startWord2));
+    // 武器語は自動で付かない。開始時の文に自分で置く。
+    setFlat(wi, [def.startWord, def.startWord2, def.tail]);
     const r = wi.resolve(PS);
-    ok(r.active, `${def.name}: 開始語で不成文 (${r.reasonText})`);
-    ok(r.kind === def.kind, `${def.name}: 末尾「${def.tail}」で ${r.kind} になるはずが ${r.kind}`);
-    ok(r.title.endsWith(def.tail), `${def.name}: 名前が末尾で終わらない: ${r.title}`);
+    ok(r.active, `${def.name}: 開始語+武器語で不成文 (${r.reasonText})`);
+    ok(r.kind === def.kind, `${def.name}: 武器語「${def.tail}」で ${def.kind} になるはずが ${r.kind}`);
+    ok(r.title.endsWith(def.tail), `${def.name}: 名前が武器語で終わらない: ${r.title}`);
     ok(r.evalResult.segments[r.evalResult.segments.length - 1] === def.tail,
-      `${def.name}: 分割の最後が末尾語でない: ${r.evalResult.segments.join('/')}`);
+      `${def.name}: 分割の最後が武器語でない: ${r.evalResult.segments.join('/')}`);
     console.log(`  ${def.name.padEnd(4)} → 「${r.title}」 ${r.kind} / ${r.shape}`);
   }
 }
@@ -176,35 +253,41 @@ sec('不成文の武器は無効化される');
 {
   const r = freshWeapon(1);
   const wi = r.weapons[0];
-  // 全部空 -> 末尾語だけ -> 実質語 1 つ -> 不成文。
+  // 全部空 -> 実質語 0 -> 不成文。
   let res = wi.resolve(r.player.stats);
-  ok(!res.active, '空スロットで有効になっている');
+  ok(!res.active, '空の文で有効になっている');
   ok(res.stats.dmg === 0, `威力が 0 でない: ${res.stats.dmg}`);
   ok(res.reasonText, '理由テキストが無い');
-  ok(res.reason === 'onelexeme', `理由 ${res.reason}`);
-  ok(res.fullText === wi.tail, `空のときの文面 ${res.fullText}`);
+  ok(res.reason === 'empty', `理由 ${res.reason}`);
+  ok(res.fullText === '', `空のときの文面 ${res.fullText}`);
 
   // 1 語だけ -> 実質語が足りない -> 不成文。
-  wi.setSlot(0, makeWord('刃'));
+  setFlat(wi, ['刃']);
   res = wi.resolve(r.player.stats);
   ok(!res.active, '1 語だけで有効になっている');
-  ok(res.reason === 'fewwords', `理由 ${res.reason}`);
+  ok(res.reason === 'onelexeme', `理由 ${res.reason}`);
 
-  // 接続詞だけ -> 不成文。
-  wi.setSlot(0, makeWord('ノ'));
-  wi.setSlot(1, makeWord('イ'));
+  // 接続詞だけの文。語を置いては作れないので直接差し込む。
+  wi.sentence.entries = [
+    { word: makeWord('の'), conn: null },
+    { word: makeWord('を'), conn: null },
+    { word: makeWord('い'), conn: null },
+  ];
   const r2 = wi.resolve(r.player.stats);
   ok(!r2.active, '接続詞だけの文が成立している');
-  // 末尾語が実質語 1 つぶん残るので noparticle ではなく onelexeme。
-  ok(r2.reason === 'onelexeme', `理由 ${r2.reason}`);
+  ok(r2.reason === 'noparticle', `理由 ${r2.reason}`);
 
-  // 2 語 -> 成立。火球 -> 熟語。
-  wi.setSlot(0, makeWord('火'));
-  wi.setSlot(1, makeWord('球'));
+  // 2 語 -> 成立。属性語から始まる、単純な形。
+  setFlat(wi, ['焔', '剛']);
   const r3 = wi.resolve(r.player.stats);
-  ok(r3.active, '「火球」が不成立');
-  ok(!!r3.evalResult.idiom, '熟語ボーナスが付かない');
+  ok(r3.active, `「焔剛」が不成立: ${r3.reasonText}`);
   ok(r3.element === 'fire', `属性 ${r3.element}`);
+
+  // 武器語どうしは隣り合わない。「刃弾」は日本語に無い並び。
+  setFlat(wi, ['刃', '弾']);
+  const r4 = wi.resolve(r.player.stats);
+  ok(!r4.active, '「刃弾」が成立してしまった');
+  ok(r4.reason === 'tailform', `理由 ${r4.reason}`);
 }
 
 sec('語を並べ替えて 文が変わる');
@@ -212,27 +295,25 @@ sec('語を並べ替えて 文が変わる');
   const r = freshWeapon(1);
   const wi = r.weapons[0];
   const dps = (a, b) => {
-    wi.slots.fill(null);
-    wi.setSlot(0, makeWord(a));
-    wi.setSlot(1, makeWord(b));
+    setFlat(wi, [a, b]);
     return wi.resolve(r.player.stats).dps;
   };
-  const weak = dps('刃', '剛利');
-  const strong = dps('激昂', '分裂');
-  console.log(`  刃+剛利=${weak.toFixed(1)}  /  激昂+分裂=${strong.toFixed(1)}`);
+  const weak = dps('刃', '剛');
+  const strong = dps('昂', '裂');
+  console.log(`  刃+剛=${weak.toFixed(1)}  /  昂+裂=${strong.toFixed(1)}`);
   ok(strong > weak, '効果の高い語の方が弱い');
   ok(weak > 0, '成立文書でも威力が 0');
 }
 
-sec('語彙の操作');
+sec('語彙の操作')
 {
   const r = newRun(1);
   const w = makeWord('氷');
   ok(r.addWord(w, true), '語を追加できない');
   const loc = r.findWord(w);
   ok(loc && loc.where === 'lexicon', '追加した語が見つからない');
-  ok(r.placeWord(r.weapons[1], 0, w), 'スロットに置けない');
-  ok(r.findWord(w)?.where === 'slot', '語がスロットに移動していない');
+  ok(r.placeWord(r.weapons[0], 0, w).ok, '文に置けない');
+  ok(r.findWord(w)?.where === 'slot', '語が文に移動していない');
   ok(r.lexicon.includes(null), '語彙が空いていない');
   // 置いた語を戻す。
   ok(r.toLexicon(w), '語彙に戻せない');
@@ -321,7 +402,7 @@ sec('全ステージのウェーブ定義が妥当');
 
 sec('弾とエフェクトの座標が有限値であること (NaN 防止)');
 {
-  const r = newRun(1, ['sword', 'gun']);
+  const r = newRun(1, ['gun', 'sword']);
   const inp = { ax: 0, ay: 0, moving: false, angle: 0 };
   r.spawnEnemy('slime', { x: r.player.x + 200, y: r.player.y - 120 });
   r.spawnEnemy('slime', { x: r.player.x - 240, y: r.player.y + 90 });
@@ -350,7 +431,7 @@ sec('弾とエフェクトの座標が有限値であること (NaN 防止)');
 
 sec('敵がいないとき也能正常に撃つ');
 {
-  const r = newRun(1, ['sword', 'gun']);
+  const r = newRun(1, ['gun', 'sword']);
   const inp = { ax: 0, ay: 0, moving: false, angle: 0.7 };
   for (let i = 0; i < 120; i++) r.update(1 / 60, inp);
   ok(r.bullets.length > 0 || r.slashes.length > 0, '敵が 0 体でも攻撃は出る');
@@ -467,35 +548,38 @@ sec('自身の文の末尾は「人」で固定');
 {
   const r = freshWeapon(1);
   const p = r.player;
-  p.selfSlots.fill(null);
+  // 自身の文も自由に並べる。末尾の「人」は文の外に固定で付く。
+  const set = (...ws) => {
+    p.self.clear();
+    for (const w of ws) p.self.push(makeWord(w));
+    r.refreshStats();
+  };
 
   // 称号は空。
-  r.refreshStats();
+  set();
   ok(p.stats.selfTitle === '', `称号が最初から入っている: ${p.stats.selfTitle}`);
 
   // 1 語では不成文。末尾の「人」だけでは文にならない。
-  p.selfSlots[0] = makeWord('頑強');
-  r.refreshStats();
+  set('頑');
   ok(p.stats.selfValid === false, '1 語で称号が成立している');
-  ok(p.stats.selfTitle === '頑強人', `称号が「${p.stats.selfTitle}」`);
+  ok(p.stats.selfTitle === '頑人', `称号が「${p.stats.selfTitle}」`);
 
   // 2 語で成立。末尾は「人」。
-  p.selfSlots[1] = makeWord('疾走');
-  r.refreshStats();
+  set('頑', '走');
   ok(p.stats.selfValid === true, '2 語で称号が成立しない');
-  ok(p.stats.selfTitle === '頑強疾走人', `称号が「${p.stats.selfTitle}」`);
+  ok(p.stats.selfTitle === '頑走人', `称号が「${p.stats.selfTitle}」`);
   ok(p.stats.selfTitle.endsWith(SELF_TAIL), `末尾が「${SELF_TAIL}」でない: ${p.stats.selfTitle}`);
 
   // 並べ替えても末尾は動かない。
-  [p.selfSlots[0], p.selfSlots[1]] = [p.selfSlots[1], p.selfSlots[0]];
+  p.self.swap(0, 1);
   r.refreshStats();
-  ok(p.stats.selfTitle === '疾走頑強人', `並べ替えで称号が変わらない: ${p.stats.selfTitle}`);
+  ok(p.stats.selfTitle === '走頑人', `並べ替えで称号が変わらない: ${p.stats.selfTitle}`);
 
-  // 「人」を枠に入れても二重にはならない (末尾は別枠)。
-  const n = p.selfSlots.filter(Boolean).length;
-  ok(n === 2, `枠の数が変わっている: ${n}`);
+  // 「人」は文の外。「人」を入れても 2 つにはならない。
+  ok(p.self.count === 2, `文の語が変わっている: ${p.self.count}`);
+  ok(!p.self.words.some((w) => w.text === SELF_TAIL), '「人」が文の中にある');
 
-  // 称号の力がattackと防御に効く。
+  // 称号の力が attack と防御に効く。
   ok(p.stats.atkMul > 1, `攻撃に称号の力が乗っていない: ${p.stats.atkMul}`);
   ok(p.stats.armor > 0, `防御に称号の力が乗っていない: ${p.stats.armor}`);
 
@@ -504,8 +588,8 @@ sec('自身の文の末尾は「人」で固定');
   ok(seg[seg.length - 1] === SELF_TAIL, `分割の最後が「${SELF_TAIL}」でない: ${seg.join('/')}`);
 
   // resolvePlayerStats を直接呼んでも同じ称号。
-  const direct = resolvePlayerStats([], p.selfSlots, {});
-  ok(direct.selfTitle === '疾走頑強人', `直接呼んだ称号が「${direct.selfTitle}」`);
+  const direct = resolvePlayerStats([], p.self, {});
+  ok(direct.selfTitle === '走頑人', `直接呼んだ称号が「${direct.selfTitle}」`);
 
   console.log(`  「${p.stats.selfTitle}」 文の力 x${p.stats.selfPower.toFixed(2)} / ${seg.join('/')} / 攻撃 x${p.stats.atkMul.toFixed(2)}`);
 }
@@ -589,7 +673,7 @@ sec('レベルアップは 3 択 1 択');
   ok(r.pendingChoices.length === 0, `3 択が残った: ${r.pendingChoices.length}`);
   const now = r.lexicon.filter(Boolean);
   ok(now.length === before + 1, `入らない: ${before} -> ${now.length}`);
-  ok(now.some((w) => w === picked), `選んだ語が別simp 东西thing Allocator Opinion 起來`);
+  ok(now.some((w) => w === picked), `選んだ語とは別の(instance)が入っている: ${picked && picked.text}`);
 
   // 5 の倍数なら 2 回分出る。
   const r2 = newRun(1);
@@ -652,7 +736,7 @@ sec('語彙が満杯なら 3 択は「捨てる」を求める');
   const fullRun = () => {
     const r = newRun(1);
     // 語が重ならないように別々の語で埋める (文字列比較が曖昧くならないように)。
-    const fill = ['火', '氷', '雷', '毒', '厚土', '風', '光', '闇影', '流水', '鋼', '巨岩', '速'];
+    const fill = ['火', '氷', '雷', '毒', '土', '風', '光', '影', '流', '鋼', '崖', '速'];
     let k = 0;
     while (r.lexiconFreeCount > 0) r.addWord(makeWord(fill[k++ % fill.length]), true);
     return r;
@@ -701,16 +785,20 @@ sec('語彙が満杯なら 3 択は「捨てる」を求める');
   ok(t1.includes(want), `新しい語が入っていない: ${want} / ${t1.join(' ')}`);
   console.log(`  時間切れ: 最古の「${t0[oldest]}」が消えて「${want}」が入った`);
 
-  // 語彙が満杯なら、武器から語を外せない。
+  // 語彙が満杯でも、語彙の最古の 1 語を捨てて武器から語を外せる。
   const wi = r2.weapons[0];
-  const slotWord = wi.slots[0];
+  const slotWord = wi.sentence.words[0];
+  const oldestLex = r2.lexicon[r2.oldestLexiconIndex()];
   const res = r2.toLexicon(slotWord);
-  ok(!res.ok && res.reason === 'full', `満杯なのに外せた: ${JSON.stringify(res)}`);
-  ok(wi.slots[0] === slotWord, '語が消失した');
-  // 空きを作れば外せる。
+  ok(res.ok, `満杯のときに外せない: ${JSON.stringify(res)}`);
+  ok(r2.lexicon.includes(slotWord), '語が語彙に入っていない');
+  ok(!wi.sentence.words.includes(slotWord), '語が武器から消えた');
+  ok(res.lost === oldestLex.text, `捨てるのは最古の語のはず: ${res.lost} / ${oldestLex.text}`);
+  // 空きがあっても戻せる。
   r2.lexicon[0] = null;
-  ok(r2.toLexicon(slotWord).ok, '空きがあっても外せない');
-  console.log('  満杯時は武器から語を外せない / 空きを作れば外せる');
+  const other = wi.sentence.words[0];
+  ok(r2.toLexicon(other).ok, '空きがあっても外せない');
+  console.log('  満杯でも語彙の最古の 1 語を捨てて外せる');
 }
 
 sec('語彙から「忘れる」');
@@ -757,43 +845,40 @@ sec('ドラッグの入れ替えは語を消さない');
 {
   const r = newRun(1);
   const wi = r.weapons[0];
-  const self = r.player.selfSlots;
+  const self = r.player.self;
 
-  // 枠 ⇄ 枠。語は入ったまま、数は変わらない。
-  const a = makeWord('火');
-  const b = makeWord('刃');
-  wi.setSlot(0, a);
-  wi.setSlot(1, b);
+  // 文 ⇄ 文。語は入ったまま、並びだけ入れ替わる。
+  setFlat(wi, ['焔', '剛', '速']);
+  const before = wi.sentence.words.slice();
   const lexBefore = lexText(r);
-  const r1 = r.swapPlaces(
+  const r1 = r.moveWordTo(
+    { kind: 'slot', wi, index: 2 },
     { kind: 'slot', wi, index: 0 },
-    { kind: 'slot', wi, index: 1 },
   );
-  ok(r1.ok, `枠 ⇄ 枠 の入れ替えが失敗: ${r1.reason}`);
-  ok(wi.slots[0] === b && wi.slots[1] === a, '枠の語が入れ替わっていない');
-  ok(lexText(r) === lexBefore, '入れ替えで語彙が変わった');
+  ok(r1.ok, `文 ⇄ 文 の並べ替えが失敗: ${r1.reason}`);
+  ok(wi.sentence.text === '速焔剛', `文の並びが入れ替わっていない: ${wi.sentence.text}`);
+  ok(wi.sentence.count === 3, `語が失われた: ${wi.sentence.count}`);
+  ok(lexText(r) === lexBefore, '並べ替えで語彙が変わった');
 
-  // 枠 ⇄ 自身。
-  wi.setSlot(0, a);
-  self[0] = b;
-  const r2 = r.swapPlaces(
+  // 文 → 自身の文。移動になる。
+  const moved = wi.sentence.words[0];
+  self.clear();
+  self.push(before[1]);
+  const r2 = r.moveWordTo(
     { kind: 'slot', wi, index: 0 },
-    { kind: 'self', index: 0 },
+    { kind: 'self', index: self.count },
   );
-  ok(r2.ok, `枠 ⇄ 自身の入れ替えが失敗: ${r2.reason}`);
-  ok(wi.slots[0] === b && self[0] === a, '枠と自身の語が入れ替わっていない');
+  ok(r2.ok, `文 → 自身の移動が失敗: ${r2.reason}`);
+  ok(self.words[self.count - 1] === moved, '自身の文に語が入っていない');
+  ok(wi.sentence.count === 2, '元の文から語が消えた');
+  ok(wi.sentence.count + self.count === 4, `語が失われた: ${wi.sentence.count} + ${self.count}`);
 
-  // 語彙 ⇄ 枠。空きがあればそのまま移動する。
+  // 語彙 → 文。空きがあればそのまま入る。
   const lexWord = r.lexicon.find(Boolean);
   const lexIndex = r.lexicon.indexOf(lexWord);
-  const emptySlot = wi.slots.findIndex((w) => !w);
-  ok(emptySlot >= 0, '空き枠が見つからない');
-  const r3 = r.swapPlaces(
-    { kind: 'lexicon', index: lexIndex },
-    { kind: 'slot', wi, index: emptySlot },
-  );
-  ok(r3.ok, `語彙 → 枠 が失敗: ${r3.reason}`);
-  ok(wi.slots[emptySlot] === lexWord, '枠に語が入っていない');
+  const r3 = r.insertInto(wi.sentence, wi.sentence.count, lexWord, wi);
+  ok(r3.ok, `語彙 → 文 が失敗: ${r3.reason}`);
+  ok(wi.sentence.words[wi.sentence.count - 1] === lexWord, '文に語が入っていない');
   ok(r.lexicon[lexIndex] === null, '語彙に語が残っている');
 
   // 語彙 ⇄ 語彙。埋まっているセルを 2 つ取り出す。
@@ -816,166 +901,289 @@ sec('ドラッグの入れ替えは語を消さない');
   );
   ok(r5.ok && r5.reason === 'same', `同じ置き場へのドロップ: ${r5.reason}`);
 
-  console.log('  枠 ⇄ 枠 / 枠 ⇄ 自身 / 語彙 ⇄ 枠 / 語彙 ⇄ 語彙 すべて成立');
+  console.log('  文 ⇄ 文 / 文 → 自身 / 語彙 → 文 / 語彙 ⇄ 語彙 すべて成立');
 }
 
-sec('語彙が満杯なら語を消さない');
+sec('文の末尾の隙間へドラッグすると並びの末尾に来る');
+{
+  // 語は枠に嵌めず、隙間（＋）へ落とす。「最後の隙間へ落としたら末尾に
+  // 来る」が成り立たないと、文の並び替えができない。
+  const r = newRun(1);
+  const wi = r.weapons[0];
+
+  const moved = [
+    // [ 语を落とす隙間, 期待する並び ]
+    // 直後の隙間 (gap 1) は「すでそこにある」ので何も動かない。
+    [3, '剛速焔'],
+    [2, '剛焔速'],
+    [1, '焔剛速'],
+    [0, '焔剛速'],
+  ];
+  for (const [gap, want] of moved) {
+    setFlat(wi, ['焔', '剛', '速']);
+    const r0 = r.moveWordTo({ kind: 'slot', wi, index: 0 }, { kind: 'gap', wi, index: gap });
+    ok(r0.ok, `隙間 ${gap} への移動が失敗: ${r0.reason}`);
+    ok(wi.sentence.text === want,
+      `隙間 ${gap} の並びが違う: ${wi.sentence.text} (期待 ${want})`);
+    ok(wi.sentence.count === 3, `語が失われた: ${wi.sentence.count}`);
+  }
+
+  // 文の語 → 文の語。語の上へ落としたら、その語の前に入る。
+  setFlat(wi, ['焔', '剛', '速']);
+  r.moveWordTo({ kind: 'slot', wi, index: 0 }, { kind: 'slot', wi, index: 2 });
+  ok(wi.sentence.text === '剛焔速', `語への並べ替えが違う: ${wi.sentence.text}`);
+
+  console.log(`  語「焔」を末尾の隙間へ -> 「${moved[0][1]}」 / 文の語の上へも置ける`);
+}
+
+sec('文 → 語彙 は埋まったマスへ落としても空きへ戻す');
+{
+  const r = newRun(1);
+  const wi = r.weapons[0];
+  setFlat(wi, ['焔', '剛', '速']);
+  const inSen = wi.sentence.words[0];
+  const free0 = r.lexiconFreeCount;
+  // 語彙には空きがある。埋まったマスは語彙の最初の語。
+  ok(free0 > 0, '語彙に空きが無い');
+  const filled = r.lexicon.findIndex(Boolean);
+
+  const res = r.toLexicon(inSen);
+  ok(res.ok, `空きがあるのに語彙へ戻せない: ${res.reason}`);
+  ok(r.lexiconFreeCount === free0 - 1, `空きが増えていない: ${free0} -> ${r.lexiconFreeCount}`);
+  ok(r.lexicon.some((w) => w === inSen), '語彙に戻っていない');
+  ok(wi.sentence.words.indexOf(inSen) < 0, '文に語が残っている');
+  ok(r.lexicon[filled] !== inSen, '元のマスに入った (空きを使うべき)');
+
+  // 文に戻した語を語彙の先頭以外へ戻しても、語は消えない。
+  ok(r.insertInto(wi.sentence, 0, inSen, wi).ok, '文に戻せない');
+  const again = r.toLexicon(inSen);
+  ok(again.ok, `2 度目に戻せない: ${again.reason}`);
+  ok(wi.sentence.count === 2, `文に語が残った: ${wi.sentence.text}`);
+  ok(r.lexicon.filter((w) => w === inSen).length === 1, '語彙に同じ語が 2 つある');
+  console.log(`  空き ${free0} -> ${free0 - 1} / 文の語は語彙の空きへ戻る`);
+}
+
+sec('語をタップすると直後の接続詞が切り替わる');
+{
+  // 語は自由に置ける。接続詞は「その語の直後」にあるので、タップで回すだけ。
+  const r = newRun(1);
+  const wi = r.weapons[0];
+
+  // 「発」… する-体言。「する」と「の」が付く。一周したら無し。
+  setFlat(wi, ['焔', '発']);
+  const place = { kind: 'slot', wi, index: 1 };
+  const opts = wi.sentence.connOptions(1);
+  ok(opts.includes('する'), `「発」に「する」が無い: ${opts.join(',')}`);
+  ok(opts.includes('の'), `「発」に「の」が無い: ${opts.join(',')}`);
+  ok(!opts.includes('く'), `「発」に「く」が入る: ${opts.join(',')}`);
+
+  const lexBefore = lexText(r);
+  const seen = [];
+  for (let i = 0; i < opts.length + 1; i++) seen.push(r.cycleConnector(place).text);
+  ok(seen[0] === opts[0], `最初の接続詞 ${seen[0]}`);
+  ok(seen.slice(1, opts.length).join() === opts.slice(1).join(),
+    `順番どおりに回らない: ${seen.join(',')}`);
+  ok(seen[opts.length] === null, `一周しても無しにならない: ${seen.join(',')}`);
+  // 語は消えない。語彙も変わらない。
+  ok(wi.sentence.count === 2, `語が消えた: ${wi.sentence.count}`);
+  ok(wi.sentence.words[1].text === '発', '語が変わった');
+  ok(lexText(r) === lexBefore, '接続詞で語彙が変わった');
+
+  // 「爆」… 用言。「せし」と「る」。一周したら無し。
+  setFlat(wi, ['焔', '燃']);
+  const opts2 = wi.sentence.connOptions(1);
+  ok(opts2.includes('せし') && opts2.includes('る'),
+    `「燃」の接続詞 ${opts2.join(',')}`);
+  const p2 = { kind: 'slot', wi, index: 1 };
+  const seen2 = [];
+  for (let i = 0; i < opts2.length + 1; i++) seen2.push(r.cycleConnector(p2).text);
+  ok(seen2[seen2.length - 1] === null, `一周しても無しにならない: ${seen2.join(',')}`);
+
+  // 文面には接続詞が入る。
+  setFlat(wi, ['焔', 'を', '斬']);
+  ok(wi.fullText === '焔を斬', `接続詞の置き場所: ${wi.fullText}`);
+  ok(connOf(wi, 0) === 'を', `接続詞の位置 ${connOf(wi, 0)}`);
+
+  // 外すと元に戻る。外した接続詞は語彙には戻らない。
+  r.clearConnector({ kind: 'slot', wi, index: 0 });
+  ok(wi.fullText === '焔斬', `を を外しても文面が戻らない: ${wi.fullText}`);
+  ok(wi.sentence.words[1].text === '斬', `後ろの語が消えた: ${wi.sentence.words[1].text}`);
+  ok(lexText(r) === lexBefore, '語彙が変わった');
+
+  // 自身の文の語も同じように回せる。
+  const p = r.player;
+  p.self.clear();
+  p.self.push(makeWord('頑'));
+  p.self.push(makeWord('走'));
+  const sp = { kind: 'self', index: 0 };
+  const c1 = r.cycleConnector(sp).text;
+  ok(c1, '自身の接続詞が切り替わらない');
+  ok(connOf(p.self, 0) === c1, '自身の接続詞が入っていない');
+  ok(r.clearConnector(sp).ok, '自身の接続詞を外せない');
+  ok(connOf(p.self, 0) === null, '自身の接続詞が残っている');
+  ok(p.self.words[0].text === '頑', `自身の後ろの語が消えた: ${p.self.words[0].text}`);
+
+  // 満杯でも切り替えられる。語彙は関係ない。
+  const r2 = newRun(1);
+  const wi2 = r2.weapons[0];
+  while (r2.lexiconFreeCount > 0) r2.lexicon[r2.lexicon.indexOf(null)] = makeWord('火');
+  setFlat(wi2, ['焔', '発']);
+  const p3 = { kind: 'slot', wi: wi2, index: 1 };
+  const c3 = r2.cycleConnector(p3).text;
+  ok(c3, `満杯なのに切り替わらない: ${c3}`);
+  ok(r2.clearConnector(p3).ok, '満杯なのに外せない');
+  ok(connOf(wi2, 1) === null, '満杯だと接続詞が消えない');
+  ok(r2.lexicon.every(Boolean), '満杯の語彙が変わった');
+
+  console.log(`  「発」→ ${opts.join(' → ')} → 無し / 語も語彙も変わらない`);
+}sec('語彙が満杯なら最古の 1 語を捨てる');
 {
   const r = newRun(1);
   const wi = r.weapons[0];
   const free = r.lexiconFreeCount;
   // 語彙を埋める。
-  const filler = ['火', '流水', '風', '雷', '刃', '短刀', '盾', '剛硬', '王冠', '鋼', '環', '光'];
+  const filler = ['火', '流', '風', '雷', '刃', '刀', '盾', '剛', '王', '鋼', '環', '光'];
   for (let k = 0; k < free; k++) r.giveWord(makeWord(filler[k % filler.length]), true);
   ok(r.lexiconFull, '満杯になっていない');
   ok(r.lexicon.every(Boolean), '語彙に空きが残っている');
 
-  // 枠 → 語彙。満杯なので外せない。
-  const inSlot = makeWord('弾');
-  wi.setSlot(0, inSlot);
-  const inSelf = makeWord('火');
-  r.player.selfSlots[0] = inSelf;
+  // 文に語を入れておく。枠は無いので count で数える。
+  setFlat(wi, ['焔', '剛']);
+  r.player.self.clear();
+  r.player.self.push(makeWord('頑'));
 
-  // 語が 1 つも減っていないかを数えるのに使う。枠語を置いたあとの数で基を取る。
+  // 語が 1 つも減っていないかを数える。
   const total = () => r.lexicon.filter(Boolean).length
-    + r.weapons.reduce((n, w) => n + w.slots.filter(Boolean).length, 0)
-    + r.player.selfSlots.filter(Boolean).length;
+    + r.weapons.reduce((n, w) => n + w.sentence.count, 0)
+    + r.player.self.count;
   const n0 = total();
 
+  // 文 → 語彙。満杯でも語彙で最も古い 1 語を捨てて戻す。
+  const inSlot = wi.sentence.words[0];
+  const oldest = r.lexicon[r.oldestLexiconIndex()];
   const r1 = r.toLexicon(inSlot);
-  ok(!r1.ok && r1.reason === 'full', `満杯なのに語彙へ戻せた: ${r1.reason}`);
-  ok(wi.slots[0] === inSlot, '枠の語が消えた');
-  ok(total() === n0, '語が失われた');
+  ok(r1.ok, `満杯のときに語彙へ戻せない: ${r1.reason}`);
+  ok(r.lexicon.includes(inSlot), '語が語彙に入っていない');
+  ok(!wi.sentence.words.includes(inSlot), '文に語が残っている');
+  ok(r1.lost === oldest.text, `捨てるのは最古の語のはず: ${r1.lost} / ${oldest.text}`);
+  ok(total() === n0 - 1, `捨てる 1 語ぶんだけ減る: ${total()} / ${n0}`);
 
-  // 埋まった枠を別の語と交換する。追い出す語の置き場がないので断る。
-  const other = r.lexicon[1];
-  const r2 = r.placeWord(wi, 0, other);
-  ok(!r2.ok && r2.reason === 'full', `placeWord が満杯を素通し: ${r2.reason}`);
-  ok(wi.slots[0] === inSlot, 'placeWord で枠の語が消えた');
-  ok(r.lexicon[1] === other, 'placeWord で語彙の語が消えた');
-  ok(total() === n0, 'placeWord で語が失われた');
+  // 語彙の語を文に入れるのは「移動」なので、語彙の空きが 1 つ増える。
+  // 語が失われることはない。
+  const lexWord = r.lexicon[1];
+  const r2 = r.placeWord(wi, wi.sentence.count, lexWord);
+  ok(r2.ok, `語彙の語を文に入れられない: ${r2.reason}`);
+  ok(wi.sentence.words[wi.sentence.count - 1] === lexWord, '文に語が入っていない');
+  ok(r.lexicon[1] === null, '語彙に語が残っている');
+  ok(total() === n0 - 1, '移動で語が失われた');
 
   // 自身の文も同じ。
-  const r3 = r.placeSelfWord(0, other);
-  ok(!r3.ok && r3.reason === 'full', `placeSelfWord が満杯を素通し: ${r3.reason}`);
-  ok(r.player.selfSlots[0] === inSelf, 'placeSelfWord で自身の語が消えた');
-  ok(r.lexicon[1] === other, 'placeSelfWord で語彙の語が消えた');
-  ok(total() === n0, 'placeSelfWord で語が失われた');
+  const selfWord = r.lexicon[2];
+  const r3 = r.placeSelfWord(r.player.self.count, selfWord);
+  ok(r3.ok, `自身の文に語を入れられない: ${r3.reason}`);
+  ok(r.player.self.words[r.player.self.count - 1] === selfWord, '自身の文に語が入っていない');
+  ok(r.lexicon[2] === null, '語彙に語が残っている');
+  ok(total() === n0 - 1, '移動で語が失われた');
 
-  // ただし「埋まったセル ⇄ 埋まった枠」の入れ替えは、埋まりが変わらないので通る。
-  const lexWord = r.lexicon[2];
+  // 文 ↔ 文 の入れ替えは通る。語は 2 つとも残る。
+  const w1 = wi.sentence.words[0];
+  const w2 = wi.sentence.words[1];
   const r4 = r.swapPlaces(
-    { kind: 'lexicon', index: 2 },
     { kind: 'slot', wi, index: 0 },
-  );
-  ok(r4.ok, `交換まで断られた: ${r4.reason}`);
-  ok(wi.slots[0] === lexWord, '枠へ語が入っていない');
-  ok(r.lexicon[2] === inSlot, '語彙へ語が戻っていない');
-  ok(total() === n0, '入れ替えで語が失われた');
-
-  // 語彙 → 空き枠。語彙の埋まりは変わらないので通る。
-  const r5 = r.swapPlaces(
-    { kind: 'lexicon', index: 1 },
     { kind: 'slot', wi, index: 1 },
   );
-  ok(r5.ok, `空き枠へ移せない: ${r5.reason}`);
-  ok(total() === n0, '移動で語が失われた');
+  ok(r4.ok, `文の入れ替えが失敗: ${r4.reason}`);
+  ok([w1, w2].every((w) => wi.sentence.words.includes(w)), '入れ替えで語が失われた');
+  ok(total() === n0 - 1, '入れ替えで語が失われた');
 
-  // 空きを作れば語彙へ戻せるようになる。
-  const back = wi.slots[1];
-  r.forgetWord(r.lexicon[0]);
+  // 文 → 語彙は何度でもできる。空きがあれば捨てる語は無い。
+  const back = wi.sentence.words[0];
+  const n1 = total();
+  const hadFree = r.lexicon.includes(null);
   const r6 = r.toLexicon(back);
-  ok(r6.ok, `空きがあるのに語彙へ戻せない: ${r6.reason}`);
-  ok(total() === n0 - 1, '「忘れる」した分だけ数が減った');
+  ok(r6.ok, `語彙へ戻せない: ${r6.reason}`);
+  ok(r.lexicon.includes(back), '語が語彙に入っていない');
+  ok(hadFree ? r6.lost === null : typeof r6.lost === 'string', `捨てる語的报告がおかしい: ${r6.lost}`);
+  ok(total() === n1, `移動だけなら数は変わらない: ${total()} / ${n1}`);
 
-  console.log(`  toLexicon / placeWord / placeSelfWord は満杯で拒否 / 入れ替えは通る (空き ${r.lexiconFreeCount})`);
+  console.log(`  文 → 語彙は何度でもできる (満杯なら最古の 1 語を捨てる / 空き ${r.lexiconFreeCount})`);
 }
 
-sec('形と攻撃は末尾語だけが決める');
+sec('形と攻撃は文の中の武器語が決める');
 {
-  // 武器ごとに末尾語を移し替えれば、攻撃の型が変わる。
-  // 語を並べ替えても、末尾語は動かない。
-  for (const [id, wantShape, wantKind] of [
-    ['sword', 'blade', 'slash'],
-    ['gun', 'shot', 'shot'],
-    ['arrow', 'arrow', 'shot'],
-    ['bomb', 'bomb', 'bomb'],
-    ['orbit', 'blade', 'orbit'],
-    ['thunder', 'shot', 'chain'],
-    ['whip', 'blade', 'whip'],
-    ['aura', 'orb', 'aura'],
-    ['boomerang', 'blade', 'boomerang'],
-    ['beam', 'arrow', 'beam'],
-  ]) {
+  // 武器語は自分で文に置く。置いた武器語が形と攻撃を決める。
+  for (const id of Object.keys(WEAPONS)) {
+    const def = WEAPONS[id];
+    const [wantShape, wantKind] = FORM_SHAPE[def.tail]
+      || [def.shape || KIND_SHAPE[def.kind], def.kind];
     // 解放されているステージで始める。
-    const stage = WEAPONS[id].unlock ? WEAPONS[id].unlock.stage : 1;
+    const stage = def.unlock ? def.unlock.stage : 1;
     const r = freshWeapon(stage, [id]);
     const wi = r.weapons[0];
     ok(wi && wi.defId === id, `${id}: 武器=${wi && wi.defId} (ステージ ${stage})`);
-    wi.setSlot(0, makeWord(WEAPONS[id].startWord));
-    wi.setSlot(1, makeWord(WEAPONS[id].startWord2));
+    setFlat(wi, [def.startWord, def.startWord2, def.tail]);
     const res = wi.resolve(r.player.stats);
+    ok(res.active, `${id}: 不成文 (${res.reasonText})`);
     ok(res.shape === wantShape, `${id}: 形 ${res.shape} が ${wantShape} でない`);
     ok(res.kind === wantKind, `${id}: 攻撃 ${res.kind} が ${wantKind} でない`);
   }
 
-  // 途中の形態語は形も攻撃も変えない。
+  // 同じ武器でも、置いた武器語が変われば攻撃の型が変わる。
   const r = freshWeapon(1, ['gun']);
   const wi = r.weapons[0];
-  const res = (a, b2) => {
-    wi.slots.fill(null);
-    wi.setSlot(0, makeWord(a));
-    wi.setSlot(1, makeWord(b2));
+  const res = (...ws) => {
+    setFlat(wi, ws);
     return wi.resolve(r.player.stats);
   };
-  const base = res('火', '弾');
-  ok(base.shape === 'shot' && base.kind === 'shot', `末尾「銃」→ ${base.shape}/${base.kind}`);
-  for (const [a, b2] of [['火', '剣'], ['火', '球'], ['火', '刃'], ['火', '環'], ['火', '壁']]) {
-    const x = res(a, b2);
-    ok(x.shape === base.shape, `「${a}${b2}」で形が ${x.shape} に変わった (末尾は${wi.tail})`);
-    ok(x.kind === base.kind, `「${a}${b2}」で攻撃が ${x.kind} に変わった (末尾は${wi.tail})`);
+  // 武器語が文に無ければ、その武器の既定の型。
+  const base = res('火', '剛');
+  ok(base.shape === 'shot' && base.kind === 'shot', `武器語なし → ${base.shape}/${base.kind}`);
+  for (const [form, shape, kind] of [
+    ['剣', 'blade', 'slash'], ['球', 'orb', 'shot'], ['刃', 'blade', 'slash'],
+    ['環', 'blade', 'orbit'], ['壁', 'orb', 'aura'], ['弾', 'bomb', 'bomb'],
+  ]) {
+    const x = res('火', form, '剛');
+    ok(x.shape === shape, `「${form}」の形が ${x.shape} (${shape} のはず)`);
+    ok(x.kind === kind, `「${form}」の攻撃が ${x.kind} (${kind} のはず)`);
   }
-  console.log(`  末尾「${wi.tail}」なら途中の形態語でも形も攻撃も ${base.shape}/${base.kind} のまま`);
+  // 文の後方から最初に見つかった武器語が効く。
+  const two = res('火', '刃', '剛', '環');
+  ok(two.kind === 'orbit' && two.shape === 'blade',
+    `後ろの武器語が効かない: ${two.shape}/${two.kind} (${two.tail})`);
+  console.log(`  武器語で ${base.shape}/${base.kind} → 環なら ${two.shape}/${two.kind} / 後ろにある方が効く`);
 
-  // 属性は文中の属性語から決まる (末尾語とは別)。
-  ok(res('火', '弾').element === 'fire', '「火の弾」→ fire');
-  ok(res('氷', '弾').element === 'ice', '「氷の弾」→ ice');
-  ok(res('雷', '弾').element === 'thunder', '「雷の弾」→ thunder');
+  // 属性は文中の属性語から決まる (武器とは別)。
+  ok(res('焔', '剛').element === 'fire', '「焔剛」→ fire');
+  ok(res('氷', '剛').element === 'ice', '「氷剛」→ ice');
+  ok(res('電', '剛').element === 'thunder', '「電剛」→ thunder');
 
-  // 枠を増やすと 3 つ以上の語も使える。
-  wi.level = 6; wi.resizeSlots();
-  ok(wi.slots.length === 7, `Lv6 で枠が 7 になる: ${wi.slots.length}`);
-  wi.slots.fill(null);
-  wi.setSlot(0, makeWord('火'));
-  wi.setSlot(1, makeWord('ノ'));
-  wi.setSlot(2, makeWord('矢'));
-  const s3 = wi.resolve(r.player.stats);
-  ok(s3.active, `「火ノ矢」が不成立: ${s3.reasonText}`);
-  ok(s3.shape === 'shot', `「火ノ矢銃」で形が ${s3.shape}`);
-  ok(s3.element === 'fire', '「火ノ矢」→ fire');
-  ok(s3.stats.burn > 0, '「火ノ矢」→ 炎上あり');
-  console.log(`  Lv6 の 3 語 → 「${s3.fullText}」 ${s3.kind} / ${s3.shape} / ${s3.element}`);
+  // 3 語 + 接続詞も 10 文字に収まる。
+  const s3 = res('焔', 'の', '焔', '銃');
+  ok(s3.active, `「焔の焔銃」が不成立: ${s3.reasonText}`);
+  ok(s3.shape === 'shot', `武器語「銃」で形が ${s3.shape}`);
+  ok(s3.element === 'fire', '「焔の焔銃」→ fire');
+  ok(s3.stats.burn > 0, '「焔の焔銃」→ 炎上あり');
+  ok(wi.sentence.len <= 10, `文が 10 文字を超えた: ${wi.sentence.len}`);
+  console.log(`  4 要素 → 「${s3.fullText}」 ${s3.kind} / ${s3.shape} / ${s3.element} (${wi.sentence.len} 文字)`);
 }
 
-sec('貫通と拡散が実際に効く');
+sec('貫と拡散が実際に効く');
 {
   const r = freshWeapon(1, ['gun']);
   const wi = r.weapons[0];
   const st = (a, b2) => {
-    wi.slots.fill(null);
-    wi.setSlot(0, makeWord(a));
-    wi.setSlot(1, makeWord(b2));
+    setFlat(wi, [a, b2]);
     const res = wi.resolve(r.player.stats);
     ok(res.active, `「${a}${b2}」が不成文: ${res.reasonText}`);
     return res.stats;
   };
-  const plain = st('弾', '速');
-  const piercing = st('貫徹', '弾');
-  const spread = st('散弾', '弾');
-  ok(piercing.pierce > plain.pierce, `貫通: ${plain.pierce} -> ${piercing.pierce}`);
+  const plain = st('鋼', '速');
+  const piercing = st('徹', '鋼');
+  const spread = st('散', '鋼');
+  ok(piercing.pierce > plain.pierce, `貫: ${plain.pierce} -> ${piercing.pierce}`);
   ok(spread.count > plain.count, `拡散: ${plain.count} -> ${spread.count}`);
   ok(spread.spread > plain.spread, `扇: ${plain.spread} -> ${spread.spread}`);
-  console.log(`  貫通 ${plain.pierce}->${piercing.pierce} / 数 ${plain.count}->${spread.count} / 扇 ${plain.spread}->${spread.spread}`);
+  console.log(`  貫 ${plain.pierce}->${piercing.pierce} / 数 ${plain.count}->${spread.count} / 扇 ${plain.spread}->${spread.spread}`);
 }
 
 sec('指数的バグ: 敵が増殖し続ける');
@@ -1022,57 +1230,46 @@ sec('開始時の語彙に語が入っていること');
 
 sec('武器 1 つにつき複数語を並べられる');
 {
-  const r = newRun(1, ['sword', 'gun']);
+  const r = newRun(1, ['sword']);
   const wi = r.weapons[0];
-  console.log(`  剣の枠: ${wi.slots.length} 個 (Lv1)`);
-  ok(wi.slots.length >= 3, `Lv1 の枠が少なすぎる: ${wi.slots.length}`);
-  // 開始時に 1 個埋まっているので、自由に使えるのは 2 個以上。
-  const free = wi.slots.filter((s) => !s).length;
-  ok(free >= 2, `自由に使える枠が少なすぎる: ${free}`);
+  // 枠は無い。上限は 10 文字だけ。
+  ok(wi.sentence.maxLen === 10, `文の上限が ${wi.sentence.maxLen} 文字`);
+  ok(wi.sentence.count >= 2, `初期文が足りない: ${wi.sentence.count}`);
+  ok(wi.sentence.text === '炎必刃', `初期文が「${wi.sentence.text}」`);
 
-  // レベルを上げると枠が増える。
-  const counts = [];
-  for (let lv = 1; lv <= 8; lv++) {
-    wi.level = lv; wi.resizeSlots();
-    counts.push(wi.slots.length);
-  }
-  console.log(`  Lv1〜8 の枠数: ${counts.join(' → ')}`);
-  ok(counts[0] === 4, `Lv1 が 4 枠でない: ${counts[0]}`);
-  ok(counts[7] === 7, `Lv8 が 7 枠でない: ${counts[7]}`);
-  for (let i = 1; i < counts.length; i++) {
-    ok(counts[i] >= counts[i - 1], 'レベルを上げると枠が減っている');
-  }
-
-  // 実際に「火の球」のような文を、Lv1 の枠で組めるか。
-  wi.level = 1; wi.resizeSlots();
-  ok(wi.slots.length === 4, `Lv1 の枠数 ${wi.slots.length}`);
-  wi.slots.fill(null);
-  wi.setSlot(0, makeWord('刃'));
-  wi.setSlot(1, makeWord('火'));
-  wi.setSlot(2, makeWord('球'));
+  // 語は 何個でも足せる (10 文字まで)。
+  setFlat(wi, ['焔', '火', '球', '剛']);
   const res = wi.resolve(r.player.stats);
   const ev = res.evalResult;
-  ok(res.valid, `Lv1 の枠で「刃火球${wi.tail}」が成立しない: ${res.reasonText}`);
-  ok(res.fullText === '刃火球' + wi.tail, `文面 ${res.fullText}`);
+  ok(res.valid, `「焔火球剛」が成立しない: ${res.reasonText}`);
+  ok(res.fullText === '焔火球剛', `文面 ${res.fullText}`);
   ok(ev.content === 4, `実質語数 ${ev.content}`);
-  ok(!!ev.idiom, `熟語「火球」が乗らない: ${ev.idiom}`);
-  console.log(`  Lv1 の枠で → 「${res.fullText}」(${res.gradeInfo.name} / 熟語 ${ev.idiom.name})`);
+  console.log(`  4 語 → 「${res.fullText}」${res.gradeInfo.name}`);
 
-  // 助詞は文の力を上げる。同じ実質語の並びで比較する。
-  wi.level = 6; wi.resizeSlots();
-  const set = (...ws) => {
-    wi.slots.fill(null);
-    ws.forEach((w, i) => wi.setSlot(i, makeWord(w)));
-    return wi.resolve(r.player.stats);
-  };
-  const plain = set('刃', '火', '弾', '球');
-  const gram = set('刃', '火', '弾', 'ノ', '球');
-  ok(plain.valid && gram.valid, '比較用の文が成立していない');
+  // 10 文字を超える語は入らない。1 文字 × 10 で Mack した、あと 1 語ぶんは空かない。
+  const over = setFlat(wi, ['焔', '剛', '電', '貫', '弾', '剛', '速', '必', '会', '裂']);
+  ok(wi.sentence.len === 10, `文が 10 文字ではない: ${wi.sentence.len} (${wi.sentence.text})`);
+  ok(wi.sentence.words.some((w) => w.text === '焔'), '語が入っていない');
+  setFlat(wi, ['焔', '剛', '電', '貫', '弾', '剛', '速', '必', '会', '裂', '毒']);
+  ok(wi.sentence.len === 10, `11 語目が収まった: ${wi.sentence.len}`);
+  ok(!wi.sentence.words.some((w) => w.text === '毒'), '収まらない語が入った');
+  console.log(`  上限 → ${wi.sentence.count} 語 ${wi.sentence.len} 文字「${wi.sentence.text}」`);
+
+  // 熟語は 1 文字 3 語。毒 + 蝕 + 弾 のように乗る。
+  const idiom = setFlat(wi, ['毒', '蝕', '弾']).resolve(r.player.stats);
+  ok(idiom.valid, `「毒蝕弾」が成立しない: ${idiom.reasonText}`);
+  ok(idiom.evalResult.idiom?.phrase === '毒蝕弾', `熟語が乗らない: ${idiom.evalResult.idiom}`);
+  console.log(`  熟語 → 「${idiom.fullText}」(${idiom.gradeInfo.name} / 熟語 ${idiom.evalResult.idiom.name})`);
+
+  // 接続詞は文の力を上げる。同じ語並びで比較する。
+  const plain = setFlat(wi, ['焔', '鋼', '剛']).resolve(r.player.stats);
+  const gram = setFlat(wi, ['焔', 'の', '鋼', '剛']).resolve(r.player.stats);
+  ok(plain.valid && gram.valid, `比較用の文が成立していない: ${gram.reasonText}`);
   ok(gram.evalResult.fx.power > plain.evalResult.fx.power,
-    `助詞で文の力が上がらない: ${plain.evalResult.fx.power} -> ${gram.evalResult.fx.power}`);
-  // 助詞は分割に効くので、成立は崩れない。
-  ok(gram.evalResult.content === plain.evalResult.content, '助詞が実質語に数えられている');
-  console.log(`  助詞を足す → 「${plain.fullText}」${plain.evalResult.fx.power.toFixed(2)}`
+    `接続詞で文の力が上がらない: ${plain.evalResult.fx.power} -> ${gram.evalResult.fx.power}`);
+  // 接続詞は実効語に数えない。
+  ok(gram.evalResult.content === plain.evalResult.content, '接続詞が実効語に数えられている');
+  console.log(`  接続詞を足す → 「${plain.fullText}」${plain.evalResult.fx.power.toFixed(2)}`
     + ` → 「${gram.fullText}」${gram.evalResult.fx.power.toFixed(2)}`);
 }
 
@@ -1097,15 +1294,10 @@ sec('武器の文で敵の文を斬れる');
 {
   const r = newRun(1);
   const wi = r.weapons[0];
-  wi.slots.fill(null);
   const PS = r.player.stats;
 
-  // 実在する語だけで組む。
-  const set = (...ws) => {
-    wi.slots.fill(null);
-    ws.forEach((w, i) => wi.setSlot(i, makeWord(w)));
-    return wi.resolve(PS);
-  };
+  // 実在する語だけで組む。接続詞は直前の語に付く。
+  const set = (...ws) => setFlat(wi, ws).resolve(PS);
 
   // 不成文の武器は斬れない。
   const broken = set('刃');
@@ -1113,25 +1305,30 @@ sec('武器の文で敵の文を斬れる');
   ok(!broken.stats.cutPower, `不成文が斬れる: cutPower=${broken.stats.cutPower}`);
 
   // ふつうの成立文は 1 語。
-  const plain = set('刃', '必殺', '電', '弾');
-  ok(plain.valid, '比較用の文が成立しない');
+  const plain = set('焔', '電', '剛');
+  ok(plain.valid, `比較用の文が成立しない: ${plain.evalResult.reasonText}`);
   ok(plain.stats.cutPower === 1, `成立文の斬り数が 1 でない: ${plain.stats.cutPower}`);
 
   // 熟語があれば +1。
-  const idiom = set('刃', '必殺', '火', '球');
+  const idiom = set('毒', '蝕', '弾');
   ok(idiom.valid && idiom.evalResult.idiom, `熟語が成立しない: ${idiom.fullText}`);
   ok(idiom.stats.cutPower === 2, `熟語文の斬り数が 2 でない: ${idiom.stats.cutPower}`);
 
   // 述語 (接続詞の合成) があれば +1。
-  const gram = set('刃', '律', 'スル', '弾');
-  ok(gram.valid, `述語の文が成立しない: ${gram.fullText}`);
+  const gram = set('焔', 'を', '斬', 'る');
+  ok(gram.valid, `述語の文が成立しない: ${gram.fullText} / ${gram.evalResult.reasonText}`);
+
+  // 日本語にならない文は斬れない。
+  const nonsense = set('焔', 'を', '剛', 'された');
+  ok(!nonsense.valid, `「${nonsense.fullText}」が成立してしまった`);
+  ok(!nonsense.stats.cutPower, `不成文が斬れる: cutPower=${nonsense.stats.cutPower}`);
   ok(gram.evalResult.predicated, `述語になっていない: ${gram.fullText}`);
   ok(gram.stats.cutPower === 2, `述語文の斬り数が 2 でない: ${gram.stats.cutPower}`);
 
   // 斬る量だけでなく、確率も文で変わる。
   const chance = (res) => res.stats.cutChance;
-  ok(chance(plain) < chance(idiom), `熟 ought to 確率も上げる: ${chance(plain)} -> ${chance(idiom)}`);
-  ok(chance(plain) < chance(gram), `述 ought to 確率も上げる: ${chance(plain)} -> ${chance(gram)}`);
+  ok(chance(plain) < chance(idiom), `熟語は確率も上げる: ${chance(plain)} -> ${chance(idiom)}`);
+  ok(chance(plain) < chance(gram), `述語は確率も上げる: ${chance(plain)} -> ${chance(gram)}`);
   ok(!broken.stats.cutChance, `不成文に確率がある: ${chance(broken)}`);
   // 1 割を切るのは少し寂しい。
   ok(chance(plain) >= 0.1, `成立文の確率が低すぎる: ${chance(plain)}`);
@@ -1159,12 +1356,9 @@ sec('熟語か述語なら、一撃で 2 語斬る');
   const r = newRun(1);
   const wi = r.weapons[0];
   const PS = r.player.stats;
-  const set = (...ws) => {
-    wi.slots.fill(null);
-    ws.forEach((w, i) => wi.setSlot(i, makeWord(w)));
-    return wi.resolve(PS);
-  };
-  const strong = set('刃', '必殺', '火', '球');
+  const set = (...ws) => setFlat(wi, ws).resolve(PS);
+  const strong = set('毒', '蝕', '弾');
+  ok(strong.valid, `比較用の文が成立しない: ${strong.evalResult.reasonText}`);
   ok(strong.stats.cutPower === 2, `斬り数が 2 でない: ${strong.stats.cutPower}`);
 
   // 3 語の敵を 1 撃で 2 語斬れる。
@@ -1179,25 +1373,25 @@ sec('熟語か述語なら、一撃で 2 語斬る');
     + ` → 熟語 1 撃で 2 斬り → 「${e.words.join('')}」${e.broken ? ' (崩れた)' : ''}`);
 }
 
-sec('書庫の墨で恒久強化を買える');
+sec('書庫の言玉で恒久強化を買える');
 {
   const save = new Save();
   save.reset();
-  ok(save.ink === 0, `最初から墨がある: ${save.ink}`);
+  ok(save.ink === 0, `最初から言玉がある: ${save.ink}`);
 
   // 買えない。
   let r = save.buyMeta('hp');
-  ok(!r.ok && r.reason === 'ink', `墨がないのに買えた: ${r.reason}`);
+  ok(!r.ok && r.reason === 'ink', `言玉がないのに買えた: ${r.reason}`);
   ok(save.metaLevel('hp') === 0, '買えなかったのに段階上がった');
 
   // enough .put って買う。
   save.addInk(1000);
-  ok(save.ink === 1000, `墨が入らない: ${save.ink}`);
+  ok(save.ink === 1000, `言玉が入らない: ${save.ink}`);
 
   const before = save.ink;
   r = save.buyMeta('hp');
   ok(r.ok, `買えない: ${r.reason}`);
-  ok(save.ink < before, `墨が減っていない: ${before} -> ${save.ink}`);
+  ok(save.ink < before, `言玉が減っていない: ${before} -> ${save.ink}`);
   ok(save.metaLevel('hp') === 1, `段階が 1 でない: ${save.metaLevel('hp')}`);
 
   // 段階ごとに高くなる。
@@ -1235,8 +1429,8 @@ sec('買った恒久強化がプレイヤーに効く');
   save.buyMeta('magnet');
   save.buyMeta('xp');
 
-  const plain = resolvePlayerStats([], [], {});
-  const buffed = resolvePlayerStats([], [], save.d.meta);
+  const plain = resolvePlayerStats([], new Sentence(), {});
+  const buffed = resolvePlayerStats([], new Sentence(), save.d.meta);
   ok(buffed.maxHp > plain.maxHp, `体力が上がっていない: ${plain.maxHp} -> ${buffed.maxHp}`);
   ok(buffed.atkMul > plain.atkMul, `攻撃が上がっていない: ${plain.atkMul} -> ${buffed.atkMul}`);
   ok(buffed.armor > plain.armor, `装甲が上がっていない`);
@@ -1251,28 +1445,22 @@ sec('買った恒久強化がプレイヤーに効く');
   ok(r.player.maxHp === buffed.maxHp, `ランに体力が反映されない: ${r.player.maxHp} != ${buffed.maxHp}`);
 }
 
-sec('買った恒久の語が次のランの語彙に入る');
+sec('言玉で語彙の枠を広げると次のランで入る');
 {
   const save = new Save();
   save.reset();
-  save.addInk(1000);
-  const w = SHOP_WORDS[0];
-  const r = save.buyWord(w.text);
+  save.addInk(2000);
+  const r = save.buyMeta('lexicon');
   ok(r.ok, `買えない: ${r.reason}`);
-  ok(save.hasStartingWord(w.text), '買っても入っていない');
-  const r2 = save.buyWord(w.text);
-  ok(!r2.ok && r2.reason === 'owned', `2 回買えてしまった: ${r2.reason}`);
+  ok(save.metaLevel('lexicon') === 1, `段階 ${save.metaLevel('lexicon')}`);
+  ok(save.lexiconBonus === 1, `語彙の追加数 ${save.lexiconBonus}`);
 
-  const run = newRun(1, undefined, save);
-  const inLex = run.lexicon.some((x) => x && x.text === w.text);
-  ok(inLex, `ランの語彙に入っていない: ${run.lexicon.map((x) => x && x.text).join(' ')}`);
-  // 語彙の空きを全部埋めても入れる。
-  const r3 = newRun(1, undefined, save);
-  while (r3.lexicon.includes(null)) r3.addWord(makeWord('剣'), true);
-  ok(!r3.addWord(makeWord('鋼')), '満杯なのに追加できた');
-  r3.giveWord(makeWord(w.text));
-  ok(r3.lexicon.some((x) => x && x.text === w.text), '満杯で語が入らない');
-  console.log(`  「${w.text}」を買って次のランの語彙に入る`);
+  const before = newRun(1, undefined, save);
+  const plain = newRun(1, undefined, new Save());
+  plain.save?.reset?.();
+  ok(before.lexicon.length > plain.lexicon.length,
+    `語彙が広がっていない: ${before.lexicon.length} vs ${plain.lexicon.length}`);
+  console.log(`  語彙 ${plain.lexicon.length} → ${before.lexicon.length} 個`);
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

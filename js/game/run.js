@@ -9,10 +9,14 @@
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { getStage } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { makeWord, drawWord, drawSimple, ELEMENTS } from '../data/words.js';
-import { WEAPONS, startingWeaponsFor } from '../data/weapons.js';
-import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
+import {
+  makeWord, drawWord, drawSimple, drawFormWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST, WORDS,
+} from '../data/words.js';
+import { isConnector } from '../data/words.connect.js';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm } from '../data/weapons.js';
+import { resolvePlayerStats, BASE_PLAYER, SELF_TAIL } from './stats.js';
 import { WeaponInst } from './weapon.js';
+import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 import { fireWeapon, damage as damageEnemy } from './combat.js';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
@@ -34,6 +38,9 @@ export const PICKUP_STEER = 9;       // 目標速度へ寄る速さ (大きい�
 export const WORD_CHOICES = 3;
 export const CHOICE_TIME = 7;         // 選べる秒数
 export const LEXICON_MAX = 30;        // 語彙の容量の上限 (言玉で拡張)
+
+/** レベルアップの 3 択に武器語 (剣・弾・銃…) が入る確率。他の語より低い。 */
+export const FORM_CHOICE_CHANCE = 0.22;
 
 export class Run {
   /**
@@ -60,6 +67,9 @@ export class Run {
     this.viewH = opt.viewH || 600;
     this.viewR = 480;
 
+    // プレイヤー自身の文。自由に並べた語。末尾の「人」は固定。
+    const selfSentence = new Sentence({ maxLen: MAX_SENTENCE_LEN, tail: SELF_TAIL });
+
     this.player = {
       x: 0, y: 0, vx: 0, vy: 0,
       r: 13,
@@ -72,7 +82,10 @@ export class Run {
       stamina: 100, maxStamina: 100,
       dashing: false, dashCd: 0, dashTrail: [],
       // プレイヤー自身の文
-      selfSlots: new Array(opt.selfSlots ?? 4).fill(null),
+      self: selfSentence,
+      // 旧スロット API の-read 互換。内部は自由配置。
+      get selfSlots() { return selfSentence.words; },
+      get selfConnects() { return selfSentence.conns; },
       stats: { ...BASE_PLAYER },
       alive: true,
     };
@@ -86,9 +99,10 @@ export class Run {
     this.pendingChoices = [];
 
     // ── 武器 ──
+    // 最初は 1 つだけ。戦闘中に武器語を得ると新しい文を作れる (最大 3 つ)。
     this.weapons = [];
     const avail = startingWeaponsFor(this.stage.id);
-    const wantIds = (opt.weaponIds && opt.weaponIds.length ? opt.weaponIds : ['sword', 'gun']).slice(0, 4);
+    const wantIds = (opt.weaponIds && opt.weaponIds.length ? opt.weaponIds : ['sword']).slice(0, 1);
     for (const id of wantIds) {
       if (!WEAPONS[id]) continue;
       if (!avail.includes(id)) continue;
@@ -96,14 +110,15 @@ export class Run {
     }
     if (!this.weapons.length) this.weapons.push(new WeaponInst('sword', 1));
 
-    // 各武器の開始時の 2 語。末尾語と合わせても文にならないので最低 2 語必要。
+    // 最初の武器の開始語。武器語も 1 つ入れておくので、最初から攻撃の形が決まる。
+    // 文はここから自由に組み替えられるので、入れ替えても外してもよい。
     for (const wi of this.weapons) {
-      if (wi.def.startWord) wi.setSlot(0, makeWord(wi.def.startWord));
-      if (wi.def.startWord2) wi.setSlot(1, makeWord(wi.def.startWord2));
+      if (wi.def.startWord) wi.sentence.push(makeWord(wi.def.startWord));
+      if (wi.def.startWord2) wi.sentence.push(makeWord(wi.def.startWord2));
+      if (wi.def.tail) wi.sentence.push(makeWord(wi.def.tail));
     }
 
-    // 語彙に語を渡す。セーブの恒久語 → 抽選の順。
-    for (const w of (opt.startingWords || [])) this.addWord(makeWord(w), true);
+    // 語彙に語を渡す。抽選の順。
     // 開始時は漢字だけの短い語。漢字だけの武器を組み立てる土台にする。
     const fill = opt.lexiconFill ?? 10;
     for (let i = this.lexicon.filter(Boolean).length; i < fill; i++) {
@@ -113,11 +128,7 @@ export class Run {
     for (const w of (opt.extraWords || [])) this.addWord(makeWord(w.text), true, true);
 
     // プレイヤー自身の文。最初は何も入れない。
-    for (const t of (opt.selfWords || [])) {
-      const idx = this.player.selfSlots.indexOf(null);
-      if (idx < 0) break;
-      this.player.selfSlots[idx] = makeWord(t);
-    }
+    for (const t of (opt.selfWords || [])) selfSentence.push(makeWord(t));
 
     // ── ワールド ──
     this.t = 0;
@@ -160,7 +171,7 @@ export class Run {
   // 能力
   // ───────────────────────────────────────────────────────────────────────────
   refreshStats(full = false) {
-    const s = resolvePlayerStats(this.lexicon, this.player.selfSlots, this.save?.d.meta || {});
+    const s = resolvePlayerStats(this.lexicon, this.player.self, this.save?.d.meta || {});
     const p = this.player;
     const ratio = p.maxHp > 0 ? clamp(p.hp / p.maxHp, 0, 1) : 1;
     p.stats = s;
@@ -239,33 +250,37 @@ export class Run {
 
   /**
    * レベルアップ。3 つの候補から 1 つを選べるようにする。
-   * 選ばれている間は combat を止めない (時間制限つき)。
+   * 接続詞は鍛冶の接続詞プールから無限に使えるので、ここでは出さない。
    */
   grantLevelWords(level) {
     const n = level % 5 === 0 ? 2 : 1;   // 5 の倍数のときは 2 回
     for (let i = 0; i < n; i++) this.offerWordChoices();
     // 自分自身の文にも入ることがある。
     if (level % 4 === 1) {
-      const free = this.player.selfSlots.indexOf(null);
-      if (free >= 0) {
-        const w = drawWord(this.rand, { cat: 'buff' });
-        if (w) {
-          w.t = ++this.wordSeq;
-          this.player.selfSlots[free] = w;
-          this.refreshStats();
-          this.pushHint(`自身の文に「${w.text}」を迎えた`);
-        }
+      const w = drawWord(this.rand, { cat: 'buff' });
+      // 自身の文も 10 文字まで。収まらないときは入らない。
+      if (w && this.player.self.push(w).ok) {
+        w.t = ++this.wordSeq;
+        this.refreshStats();
+        this.pushHint(`自身の文に「${w.text}」を迎えた`);
       }
     }
   }
 
   /**
    * 3 つの候補を作って、選んでもらう。
+   * 接続詞は出ない (語の横にあるので、文を作るとき、切り替えるだけ)。
+   * 武器語 (剣・弾・銃…) は他の語より低い確率で入る。
    * 選んでいる間も時間は止まらない。時間切れなら 1 番目を自動で取る。
    */
   offerWordChoices() {
     const pool = [];
     const seen = new Set();
+    // 武器語。第 1 の候補にだけ入れる (他の語より出にくいように)。
+    if (this.rand() < FORM_CHOICE_CHANCE) {
+      const fw = drawFormWord(this.rand, this.ownedFormWords());
+      if (fw) { pool.push(fw); seen.add(fw.text); }
+    }
     for (let i = 0; i < WORD_CHOICES * 3 && pool.length < WORD_CHOICES; i++) {
       const w = drawWord(this.rand);
       if (!w || seen.has(w.text)) continue;
@@ -279,6 +294,15 @@ export class Run {
       life: CHOICE_TIME,
     });
     this.onWordChoice?.(this.pendingChoices);
+  }
+
+  /** すでに入っている武器語。候補が重複しないように除外する。 */
+  ownedFormWords() {
+    const out = new Set();
+    for (const w of this.lexicon) if (w && w.cat === 'form') out.add(w.text);
+    for (const wi of this.weapons) for (const w of wi.sentence.words) if (w.cat === 'form') out.add(w.text);
+    for (const w of this.player.self.words) if (w.cat === 'form') out.add(w.text);
+    return out;
   }
 
   /**
@@ -308,6 +332,7 @@ export class Run {
         this.lexicon[drop] = word;
         this.refreshStats();
         this.pushHint(`「${word.text}」を手に入れた（「${lost.text}」は消えた）`);
+        this.absorbFormWord(word);
         this.onWordChoice?.(this.pendingChoices);
         return true;
       }
@@ -328,8 +353,30 @@ export class Run {
     }
 
     this.giveWord(word);
+    this.absorbFormWord(word);
     this.onWordChoice?.(this.pendingChoices);
     return true;
+  }
+
+  /**
+   * 武器語を得ると、新しい文を作れる。
+   * 武器は最大 3 つまで。3 つあれば語彙に置いたままになる。
+   * @returns {{ok:boolean, reason:string, wi?:object}}
+   */
+  absorbFormWord(word) {
+    if (!word || word.cat !== 'form') return { ok: false, reason: 'notform' };
+    if (this.weapons.length >= WEAPON_MAX) {
+      this.pushHint(`武器は ${WEAPON_MAX} つまで。新しい文は作れない`);
+      return { ok: false, reason: 'max' };
+    }
+    const loc = this.findWordAnywhere(word);
+    if (loc) this.clearPlace(loc);
+    const wi = new WeaponInst(`form:${word.text}`, 1);
+    wi.sentence.push(word);
+    this.weapons.push(wi);
+    this.refreshStats();
+    this.pushHint(`武器語「${word.text}」を得た — 新しい文「${wi.title}」`);
+    return { ok: true, reason: 'made', wi };
   }
 
   /**
@@ -380,18 +427,125 @@ export class Run {
     const i = this.lexicon.indexOf(word);
     if (i >= 0) return { where: 'lexicon', index: i, wi: null };
     for (const wi of this.weapons) {
-      const k = wi.slots.indexOf(word);
+      const k = wi.sentence.indexOf(word);
       if (k >= 0) return { where: 'slot', index: k, wi };
     }
     return null;
   }
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // 接続詞 (枠と枠のあいだ)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 文の置き場か。
+   * slot / self = 語が置かれている場所、gap / selfgap = 語を入れる隙間。
+   * 隙間も同じ文に属するので、並べ替えの移動先可以作为。
+   */
+  static isSenPlace(p) {
+    return !!p && (p.kind === 'slot' || p.kind === 'self'
+      || p.kind === 'gap' || p.kind === 'selfgap');
+  }
+
+  /** 文の語がある置き場か (隙間は含まない)。 */
+  static isWordPlace(p) {
+    return !!p && (p.kind === 'slot' || p.kind === 'self');
+  }
+
+  /** 置き場が属する文。武器の文か、プレイヤー自身の文か。 */
+  sentenceOf(place) {
+    if (!Run.isSenPlace(place)) return null;
+    if (!place.wi) return this.player.self;
+    return place.wi.sentence;
+  }
+
+  /** 置き場の語を取る。隙間に語は無いので null。 */
+  wordAtPlace(place) {
+    if (!Run.isWordPlace(place)) return null;
+    const sen = this.sentenceOf(place);
+    if (!sen) return null;
+    const e = sen.at(place.index);
+    return e ? e.word : null;
+  }
+
+  /** 置き場の接続詞を取る。語の直後に付いたもの。 */
+  connAt(place) {
+    if (!Run.isWordPlace(place)) return null;
+    const e = this.sentenceOf(place)?.at(place.index);
+    return e ? e.conn : null;
+  }
+
+  /** 置き場の直後に接続詞を置く。 */
+  setConnAt(place, word) {
+    if (!Run.isWordPlace(place)) return false;
+    const sen = this.sentenceOf(place);
+    if (!sen) return false;
+    const r = sen.setConnAt(place.index, word ? word.text : null);
+    if (!r.ok) return false;
+    if (place.wi) place.wi._sig = null;
+    this.refreshStats();
+    return true;
+  }
+
+  /**
+   * 接続詞を枠と枠のあいだに置く。
+   * 語彙や他の置き場にある同じ語は、先に外してから移す。
+   */
+  placeConnector(place, word) {
+    if (!word) return { ok: false, reason: 'noword' };
+    if (!Run.isWordPlace(place)) return { ok: false, reason: 'notconn' };
+    const sen = this.sentenceOf(place);
+    if (!sen) return { ok: false, reason: 'notconn' };
+    if (!isConnector(word.text)) return { ok: false, reason: 'notconnector' };
+    const r = sen.setConnAt(place.index, word.text);
+    if (r.ok && place.wi) place.wi._sig = null;
+    this.refreshStats();
+    return r;
+  }
+
+  /**
+   * 語の直後の接続詞を 1 つ進める。
+   * 使える接続詞を順に回り、一周したら「接続詞なし」になる。
+   * 語をタップしたときに呼ぶ。
+   */
+  cycleConnector(place) {
+    if (!Run.isWordPlace(place)) return { ok: false, text: null, reason: 'notconn' };
+    const sen = this.sentenceOf(place);
+    if (!sen) return { ok: false, text: null, reason: 'notconn' };
+    const r = sen.cycleConnAt(place.index);
+    if (place.wi) place.wi._sig = null;
+    this.refreshStats();
+    return r;
+  }
+
+  /** 接続詞を外す。語は消えない。 */
+  clearConnector(place) {
+    if (!Run.isWordPlace(place)) return { ok: false, reason: 'notconn' };
+    const sen = this.sentenceOf(place);
+    if (!sen) return { ok: false, reason: 'notconn' };
+    const e = sen.at(place.index);
+    if (!e || !e.conn) return { ok: false, reason: 'empty' };
+    e.conn = null;
+    if (place.wi) place.wi._sig = null;
+    this.refreshStats();
+    return { ok: true, reason: 'cleared' };
+  }
+
+  /** 置き場から語を取り除く (語彙へは戻さない)。 */
+  clearPlace(loc) {
+    if (!loc) return;
+    if (loc.where === 'lexicon') this.lexicon[loc.index] = null;
+    else if (loc.where === 'self') this.player.self.removeAt(loc.index);
+    else if (loc.wi) { loc.wi.sentence.removeAt(loc.index); loc.wi._sig = null; }
+  }
+
   /**
    * 語彙へ戻す。
    *
-   * 語彙が満杯のときは武器や自身から語を外せない。返回值 reason で理由を返す。
-   * 以前は空きがないのに外。結果として語が消えていた。
-   * @returns {{ok:boolean, reason:string}}
+   * 語彙が満杯でも、**語彙で最も古い 1 語を捨てて**空きを作る。
+   * 文から外せないと文を短くできないので、ここだけは必ず通す。
+   * `full` を返すのは語彙に 1 語も無いときだけ。
+   * @returns {{ok:boolean, reason:string, lost?:string|null}}
    */
   toLexicon(word) {
     const loc = this.findWordAnywhere(word);
@@ -399,16 +553,24 @@ export class Run {
     // もう語彙にあるなら何もしない。
     if (loc.where === 'lexicon') return { ok: true, reason: 'already' };
 
-    const free = this.lexicon.indexOf(null);
+    let free = this.lexicon.indexOf(null);
+    let lost = null;
     if (free < 0) {
-      this.pushHint('語彙が満杯。武器から語を外せない');
-      return { ok: false, reason: 'full' };
+      // 満杯。語彙で最も古い 1 語を捨てる (語を得るのと同じ規則)。
+      free = this.oldestLexiconIndex();
+      if (free < 0) {
+        this.pushHint('語彙が満杯。文から語を外せない');
+        return { ok: false, reason: 'full' };
+      }
+      lost = this.lexicon[free];
     }
-    if (loc.wi) loc.wi.setSlot(loc.index, null);
-    else if (loc.where === 'self') this.player.selfSlots[loc.index] = null;
+    this.clearPlace(loc);
     this.lexicon[free] = word;
     this.refreshStats();
-    return { ok: true, reason: 'moved' };
+    this.pushHint(lost
+      ? `「${word.text}」を語彙に戻した（「${lost.text}」は消えた）`
+      : `「${word.text}」を語彙に戻した`);
+    return { ok: true, reason: 'moved', lost: lost ? lost.text : null };
   }
 
   /**
@@ -418,75 +580,107 @@ export class Run {
   findWordAnywhere(word) {
     const loc = this.findWord(word);
     if (loc) return loc;
-    const i = this.player.selfSlots.indexOf(word);
+    const i = this.player.self.words.indexOf(word);
     if (i >= 0) return { where: 'self', index: i, wi: null };
     return null;
   }
 
   /** 語彙・武器・自身のうちどれかへ装着する。 */
   placeWordAnywhere(wi, slotIndex, word) {
-    if (!word) return { ok: false, reason: 'noword' };
-    if (slotIndex < 0 || slotIndex >= wi.slots.length) {
-      return { ok: false, reason: 'range' };
-    }
-    const prev = wi.slots[slotIndex] || null;
-    // 追い出す語の置き場がないなら動かさない。語を消さない。
-    if (prev && prev !== word && this.lexiconFreeCount <= 0) {
-      this.pushHint('語彙が満杯。「忘れる」で空きを作ると交換できる');
-      return { ok: false, reason: 'full' };
-    }
-    const loc = this.findWordAnywhere(word);
-    if (loc) {
-      if (loc.wi === wi && loc.index === slotIndex) return { ok: true, reason: 'same' };
-      if (loc.wi) loc.wi.setSlot(loc.index, null);
-      else if (loc.where === 'self') this.player.selfSlots[loc.index] = null;
-      else this.lexicon[loc.index] = null;
-    }
-    wi.setSlot(slotIndex, word);
-    // もともとあった語は、置き場があれば語彙へ戻す。
-    if (prev && prev !== word) this.lexicon[this.lexicon.indexOf(null)] = prev;
-    this.refreshStats();
-    return { ok: true, reason: 'placed' };
+    return this.insertInto(wi.sentence, slotIndex, word, wi);
   }
 
-  /** プレイヤーの文に語を入れる。 */
-  placeSelfWord(index, word) {
-    const slots = this.player.selfSlots;
-    if (index < 0 || index >= slots.length) return { ok: false, reason: 'range' };
-    const prev = slots[index] || null;
-    if (prev && prev !== word && this.lexiconFreeCount <= 0) {
-      this.pushHint('語彙が満杯。「忘れる」で空きを作ると交換できる');
-      return { ok: false, reason: 'full' };
+  /**
+   * 文の index の位置に語を差し込む。
+   * 語彙や他の文から取り除き、10 文字に収まるときだけ置く。
+   * @param {Sentence} sen
+   * @param {number} index
+   * @param {object} word
+   * @param {object} [wi] 武器の文なら、その武器 (キャッシュ用)
+   */
+  insertInto(sen, index, word, wi = null) {
+    if (!word) return { ok: false, reason: 'noword' };
+    if (isConnector(word.text)) return { ok: false, reason: 'notword' };
+    const at = Math.max(0, Math.min(index, sen.count));
+    if (!sen.fits(word.text, at)) {
+      this.pushHint(`文は ${sen.maxLen} 文字まで。空きがない`);
+      return { ok: false, reason: 'len' };
     }
     const loc = this.findWordAnywhere(word);
     if (loc) {
-      if (loc.where === 'self' && loc.index === index) return { ok: true, reason: 'same' };
-      if (loc.wi) loc.wi.setSlot(loc.index, null);
-      else if (loc.where === 'self') slots[loc.index] = null;
-      else this.lexicon[loc.index] = null;
+      const sameSen = (loc.where === 'self' && sen === this.player.self)
+        || (loc.where === 'slot' && loc.wi === wi);
+      if (sameSen && loc.index === at) return { ok: true, reason: 'same' };
+      this.clearPlace(loc);
     }
-    slots[index] = word || null;
-    if (prev && prev !== word) this.lexicon[this.lexicon.indexOf(null)] = prev;
+    const r = sen.insertAt(at, word);
+    if (!r.ok) return r;
+    if (wi) wi._sig = null;
     this.refreshStats();
     return { ok: true, reason: 'placed' };
   }
 
   /**
-   * 語を武器のスロットに入れる。語彙か自身の文から取り除く。
+   * 文の中の語を別の位置へ移す。文どうし、文と語彙の間。
+   *
+   * `to.index` はそのまま「挿入位置 (隙間)」として扱う。
+   * 文の内側の移動は拔出きのぶんを Sentence.moveTo が引き受けるので、
+   * ここで 1 を足し引きしてはいけない (二重になると並びがずれる)。
+   * @param {{kind:string,index:number,wi?:object}} from
+   * @param {{kind:string,index:number,wi?:object}} to
    */
+  moveWordTo(from, to) {
+    const word = this.wordAtPlace(from);
+    if (!word) return { ok: false, reason: 'empty' };
+    // 語彙へ戻す。落としたマスが埋まっていても、語彙の空きへ戻す。
+    if (to.kind === 'lexicon') return this.toLexicon(word);
+    const srcSen = this.sentenceOf(from);
+    const dstSen = this.sentenceOf(to);
+    if (!srcSen || !dstSen) return { ok: false, reason: 'range' };
+    const same = srcSen === dstSen;
+    if (!same && !dstSen.fits(word.text, to.index)) {
+      this.pushHint(`文は ${dstSen.maxLen} 文字まで。空きがない`);
+      return { ok: false, reason: 'len' };
+    }
+    if (same && to.index === from.index) return { ok: true, reason: 'same' };
+    const at = to.index;
+    if (same) {
+      const r = srcSen.moveTo(from.index, at);
+      if (r.ok && from.wi) from.wi._sig = null;
+      this.refreshStats();
+      return r;
+    }
+    srcSen.removeAt(from.index);
+    if (from.wi) from.wi._sig = null;
+    const r = dstSen.insertAt(Math.max(0, Math.min(at, dstSen.count)), word);
+    if (to.wi) to.wi._sig = null;
+    this.refreshStats();
+    return r.ok ? { ok: true, reason: 'moved' } : { ok: false, reason: 'len' };
+  }
+
+  /** プレイヤーの文に語を入れる。 */
+  placeSelfWord(index, word) {
+    return this.insertInto(this.player.self, index, word, null);
+  }
+
+  /** 語を武器の文に入れる。 */
   placeWord(wi, slotIndex, word) {
     if (!word) return { ok: false, reason: 'noword' };
     return this.placeWordAnywhere(wi, slotIndex, word);
   }
 
   /**
-   * 2 つの置き場を丸ごと入れ替える。ドラッグの入れ替えに使う。
+   * 2 つの置き場を入れ替える。ドラッグの入れ替えに使う。
    *
    * 置き場の種類:
-   *   { kind: 'lexicon', index }   語彙
-   *   { kind: 'slot', wi, index } 武器
-   *   { kind: 'self', index }     自身の文
+   *   { kind: 'lexicon', index }    語彙
+   *   { kind: 'slot', wi, index }  武器の文の語
+   *   { kind: 'gap', wi, index }   武器の文の隙間 (語を入れる位置)
+   *   { kind: 'self', index }      自身の文の語
+   *   { kind: 'selfgap', index }   自身の文の隙間
    *
+   * 文どうし (語 ↔ 隙間) は「並べ替え」として扱う。
+   * 文 → 語彙は moveWordTo が toLexicon に回すので、ここには来ない。
    * 語彙の空き数が増える入れ替えはしない (語が消えるため)。
    * @returns {{ok:boolean, reason:string}}
    */
@@ -496,15 +690,17 @@ export class Run {
       && (a.wi || null) === (b.wi || null);
     if (sameTarget) return { ok: true, reason: 'same' };
 
+    // 文どうし (語 ↔ 隙間) は「並べ替え」として扱う。
+    if (Run.isSenPlace(a) && Run.isSenPlace(b)) return this.moveWordTo(a, b);
+
     const get = (p) => {
       if (p.kind === 'lexicon') return this.lexicon[p.index] || null;
-      if (p.kind === 'self') return this.player.selfSlots[p.index] || null;
-      return p.wi.slots[p.index] || null;
+      return this.wordAtPlace(p);
     };
     const set = (p, w) => {
-      if (p.kind === 'lexicon') this.lexicon[p.index] = w;
-      else if (p.kind === 'self') this.player.selfSlots[p.index] = w;
-      else p.wi.setSlot(p.index, w);
+      if (p.kind === 'lexicon') { this.lexicon[p.index] = w; return; }
+      const sen = this.sentenceOf(p);
+      if (sen && sen.at(p.index)) sen.at(p.index).word = w;
     };
 
     const wa = get(a);
@@ -521,6 +717,8 @@ export class Run {
       this.pushHint('語彙が満杯。「忘れる」で空きを作ると入れ替えられる');
       return { ok: false, reason: 'full' };
     }
+    if (a.wi) a.wi._sig = null;
+    if (b.wi) b.wi._sig = null;
 
     set(a, wb);
     set(b, wa);
@@ -604,7 +802,8 @@ export class Run {
     const dmgScale = 1 + (st - 1) * 0.20;
 
     const pos = at || this.edgeSpawn(d.r + 24);
-    const e = makeEnemy(id, pos.x, pos.y, hpScale, dmgScale);
+    // 乱数はランのシード付き乱数から引く。再現性のため Math.random は使わない。
+    const e = makeEnemy(id, pos.x, pos.y, hpScale, dmgScale, this.rand);
     e.spawned = 0;
     if (d.boss) { e.atkCd = 2.4; e.patIdx = 0; e.ring = 0; e.spawned = 1; }
     this.enemies.push(e);

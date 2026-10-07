@@ -11,7 +11,7 @@ import { Renderer } from './ui/render.js';
 import { Hud } from './ui/hud.js';
 import { Forge } from './ui/forge.js';
 import { Menus } from './ui/menus.js';
-import { RewardScreen, rollRewards } from './ui/reward.js';
+
 import { STAGES } from './data/stages.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,10 +25,8 @@ const app = {
   hud: null,
   forge: null,
   menus: null,
-  reward: null,
   run: null,
-  mode: 'title',       // title | play | forge | reward | result
-  pendingRewards: 0,
+  mode: 'title',       // title | play | forge | dict | result
   last: 0,
   acc: 0,
 };
@@ -43,12 +41,9 @@ function boot() {
   app.input = new Input(canvas);
   app.input.attachTouch();
   app.hud = new Hud();
+  app.hud.bindDash(app.input);
   app.menus = new Menus({ save: app.save, audio: app.audio });
-  app.reward = new RewardScreen({
-    audio: app.audio,
-    lexicon: [],
-    onGive: (card) => card.apply?.(),
-  });
+  // クリア報酬は言玉の直接払い。三択の報酬画面は廃止した。
 
   // 音は最初のユーザ操作で鳴らす。
   const kick = () => {
@@ -79,11 +74,19 @@ function boot() {
   app.menus.cb = {
     onStart: (weaponIds) => startRun(weaponIds),
     onRetry: () => startRun(app.lastLoadout),
-    onStages: () => { app.mode = 'title'; app.menus.showStages(); },
-    onCloseDict: () => { if (app.mode === 'dict') toggleDict(); },
+    onStages: () => { app.mode = 'title'; app.hud.show(false); app.run = null; app.menus.showStages(); },
+    onCloseDict: () => {
+      if (app.mode === 'dict') toggleDict();   // 戦闘/鍛冶から開いた辞書を閉じる
+      else app.menus.hide('dict');             // タイトル系から開いたタブを閉じる
+    },
     onNext: () => {
-      const next = Math.min(STAGES.length, app.run.stage.id + 1);
-      app.menus.showLoadout(next);
+      // ステージクリア後は一旦ホームへ。次のステージはホームから選ぶ。
+      app.mode = 'title';
+      app.hud.show(false);
+      app.hud.setPaused(false);
+      app.forge?.close();
+      app.run = null;
+      app.menus.show('title');
     },
   };
 
@@ -97,14 +100,13 @@ function boot() {
 function startRun(weaponIds) {
   app.audio.resume();
   const stageId = app.menus.stageId || 1;
-  app.lastLoadout = (weaponIds || ['sword', 'gun']).slice();
+  app.lastLoadout = (weaponIds || ['sword']).slice(0, 1);
 
   const run = new Run({
     stageId,
     save: app.save,
     audio: app.audio,
     weaponIds: app.lastLoadout,
-    startingWords: app.save.d.startingWords,
     lexiconSize: 12,
   });
   run.shakeOn = app.save.setting('screenShake') !== false;
@@ -132,7 +134,6 @@ function startRun(weaponIds) {
 
   app.run = run;
   app.mode = 'play';
-  app.pendingRewards = STAGES.find((s) => s.id === stageId)?.reward ?? 2;
   app.menus.hideAll();
   app.hud.show(true);
   app.hud.setPaused(false);
@@ -152,11 +153,14 @@ function startRun(weaponIds) {
 
 function onRunEnd(cleared) {
   app.hud.setPaused(false);
-  // 書庫の通貨「墨」。クリア報酬と、文を崩した敵の数で入る。
-  // 崩した敵は行動が止まるぶん強いので報在场を厚く取っている。
+  // 書庫の通貨「言玉」。文を崩した敵の数で入り、クリアするとまとまって入る。
   const broken = app.run.brokenCount || 0;
-  const ink = (cleared ? 20 + app.run.stage.id * 12 : broken * 2)
-    + Math.floor(broken / 2);
+  // プレイヤーの強さ (恒久強化と自身の文) で報酬が上乗せされる。
+  const buff = 1 + (app.run.player.stats.atkMul - 1) * 0.5
+    + (app.run.player.stats.selfPower - 1);
+  const ink = cleared
+    ? Math.round((100 + app.run.stage.id * 100) * buff)
+    : Math.round((100 + broken * 15) * buff);
   app.save.recordRun({
     score: app.run.score,
     kills: app.run.kills,
@@ -167,38 +171,13 @@ function onRunEnd(cleared) {
   });
   app.lastInk = ink;
 
-  if (!cleared) {
-    app.mode = 'result';
-    app.menus.showResult({
-      cleared: false, run: app.run, save: app.save,
-      isLast: app.run.stage.id >= STAGES.length,
-    });
-    return;
-  }
-
-  // クリアしたら報酬を回数分選ぶ。
-  app.pendingRewards = STAGES.find((s) => s.id === app.run.stage.id)?.reward ?? 2;
-  showNextReward();
-}
-
-function showNextReward() {
-  const run = app.run;
-  if (app.pendingRewards <= 0) {
-    app.mode = 'result';
-    app.menus.showResult({
-      cleared: true, run, save: app.save,
-      isLast: run.stage.id >= STAGES.length,
-    });
-    return;
-  }
-  app.pendingRewards--;
-  app.mode = 'reward';
-  app.hud.show(false);
-  app.reward.lexicon = run.lexicon;
-  const cards = rollRewards(run, app.save, { count: 3 });
-  app.reward.show(cards, () => showNextReward(), {
-    title: 'クリア報酬',
-    sub: `あと ${app.pendingRewards + 1} 回選べます。`,
+  app.mode = 'result';
+  app.menus.showResult({
+    cleared,
+    run: app.run,
+    save: app.save,
+    ink,
+    isLast: app.run.stage.id >= STAGES.length,
   });
 }
 
@@ -250,12 +229,15 @@ function toggleDict() {
     }
     return;
   }
-  if (app.mode !== 'play' && app.mode !== 'forge') return;
-  app.dictFrom = app.mode;
+  // タイトル系画面 (タイトル/ステージ/編成/結果) からも開ける。
+  // 閉じるときは menus.hide('dict') が _tabFrom の画面を復元する。
   app.menus.show('dict');
-  app.run.paused = true;
-  app.hud.setPaused(true);
-  app.mode = 'dict';
+  if (app.mode === 'play' || app.mode === 'forge') {
+    app.dictFrom = app.mode;
+    app.run.paused = true;
+    app.hud.setPaused(true);
+    app.mode = 'dict';
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -301,7 +283,7 @@ function loop(now) {
   if (!(dt > 0)) dt = STEP;
   dt = Math.min(dt, 0.1);
 
-  app.input.update();
+  app.input.update(dt);
 
   const run = app.run;
 

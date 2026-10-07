@@ -10,7 +10,7 @@ import { ELEMENTS } from '../data/words.js';
 
 let eUid = 0;
 
-export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1) {
+export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1, rnd = Math.random) {
   const d = ENEMIES[id];
   return {
     kind: 'enemy',
@@ -32,22 +32,22 @@ export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1) {
     freeze: 0,
     stun: 0,
     // 描画
-    face: 0, wob: Math.random() * TAU, flash: 0,
+    face: 0, wob: rnd() * TAU, flash: 0,
     // 敵が持つ文。プレイヤーの文から語を斬り落とす。
     words: enemyWords(d),
     broken: false,
     cutFlash: 0,
     // AI
-    t: Math.random() * 2,
-    atkCd: 0, charging: 0, cdLeft: (d.charge?.cd || 2) * Math.random(),
-    phase: Math.random() * TAU,
+    t: rnd() * 2,
+    atkCd: 0, charging: 0, cdLeft: (d.charge?.cd || 2) * rnd(),
+    phase: rnd() * TAU,
     dead: false,
     spawned: 0,
   };
 }
 
 /**
- * 敵の文を現在まで評価した結果。语的表は変わらないので lazy に計算。
+ * 敵の文を現在まで評価した結果。語の表は変わらないので lazy に計算。
  * @param {object} e 敵
  */
 export function enemyEval(e) {

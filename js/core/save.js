@@ -16,16 +16,18 @@ const DEFAULTS = {
   totalKills: 0,
   totalRuns: 0,
   totalBroken: 0,     // 文を崩した敵の累計
-  ink: 0,              // 書庫の通貨「墨」
-  startingWords: [],  // 恒久的に手に入れた語 (リスポーン時に語彙に入る)
-  meta: {},            // 恒久強化 (hp / atk / xp / armor / magnet / crit)
+  ink: 0,              // 書庫の通貨「言玉」
+  meta: {},            // 恒久強化 (hp / atk / xp / armor / magnet / crit / lexicon)
   settings: { volume: 0.5, screenShake: true, showDamage: true },
   seenIntro: false,
 };
 
 /**
  * 書庫で買える恒久強化。stats.js の resolvePlayerStats がそのまま読む。
- * cost は 1 段階あたりの墨。max は買える上限。
+ * cost は 1 段階あたりの言玉。max は買える上限。
+ *
+ * lexicon は特別: 語彙の枠を 1 つ増やす強化。
+ * per=1 なので meta.lexicon がそのまま追加した個数になる。
  */
 export const META_UPGRADES = {
   hp: { name: '体力', desc: '最大体力が上がる', cost: 30, max: 10, per: 4 },
@@ -34,17 +36,8 @@ export const META_UPGRADES = {
   xp: { name: '経験値', desc: 'レベルが早く上がる', cost: 40, max: 8, per: 0.06 },
   magnet: { name: '引き寄せ', desc: '経験値を引き寄せる', cost: 25, max: 6, per: 0.2 },
   crit: { name: '会心', desc: '会心率が上がる', cost: 50, max: 8, per: 0.02 },
+  lexicon: { name: '語彙', desc: '手持ちの語を 1 つ多く持つ', cost: 90, max: 18, per: 1 },
 };
-
-/** 書庫で買える恒久の語。ラン開始時の語彙に入る。 */
-export const SHOP_WORDS = [
-  { text: '火', cost: 20 },
-  { text: '刃', cost: 20 },
-  { text: '必殺', cost: 40 },
-  { text: '業火', cost: 70 },
-  { text: '雷神', cost: 70 },
-  { text: '凍刃', cost: 90 },
-];
 
 function deepMerge(base, patch) {
   const out = Array.isArray(base) ? base.slice() : { ...base };
@@ -73,6 +66,8 @@ export class Save {
       this.available = false;
       this.data = { ...DEFAULTS };
     }
+    // 古いセーブに残っている「恒久の語」は読み飛ばす。
+    delete this.data.startingWords;
     return this.data;
   }
 
@@ -116,16 +111,6 @@ export class Save {
   }
   hasWeapon(id) { return this.data.unlockedWeapons.includes(id); }
 
-  addStartingWord(text) {
-    if (!this.data.startingWords.includes(text)) {
-      this.data.startingWords.push(text);
-      this.save();
-      return true;
-    }
-    return false;
-  }
-  hasStartingWord(text) { return this.data.startingWords.includes(text); }
-
   // ── 書庫 (恒久進行) ───────────────────────────────────────────────────────
   get ink() { return this.data.ink || 0; }
 
@@ -150,7 +135,7 @@ export class Save {
   /** 強化の最終値。stats.js がそのまま読む。 */
   metaValue(key) { return (this.data.meta || {})[key] || 0; }
 
-  /** 次の 1 段階を買うのに必要な墨。買えないなら null。 */
+  /** 次の 1 段階を買うのに必要な言玉。買えないなら null。 */
   metaCost(key) {
     const u = META_UPGRADES[key];
     if (!u) return null;
@@ -179,16 +164,8 @@ export class Save {
     return { ok: true, reason: '', level: lv };
   }
 
-  /** 書庫で語を買う。買えた語は次のランの語彙に入る。 */
-  buyWord(text) {
-    const w = SHOP_WORDS.find((x) => x.text === text);
-    if (!w) return { ok: false, reason: 'unknown' };
-    if (this.hasStartingWord(text)) return { ok: false, reason: 'owned' };
-    if (this.ink < w.cost) return { ok: false, reason: 'ink' };
-    this.data.ink -= w.cost;
-    this.addStartingWord(text);
-    return { ok: true, reason: '' };
-  }
+  /** 言玉で広げた語彙の枠の数 (追加した個数)。 */
+  get lexiconBonus() { return Math.round(this.metaValue('lexicon') || 0); }
 
   // ── 走者記録 ─────────────────────────────────────────────────────────────
   recordRun({ score, kills, stageId, cleared, broken = 0, ink = 0 }) {

@@ -4,11 +4,11 @@
 // 語彙の中の「自身強化語」と、プレイヤー自身の文、セーブの恒久強化から
 // 最終ステータスを作る。
 //
-// 自身の文は武器と同じく、末尾の語 (人) が枠の外に固定で付く。
+// 自身の文は自由に並べる。末尾の語 (人) だけが枠の外に固定で付く。
 // 語を並べ替えても末尾は動かないので、称号は必ず「○○人」になる。
 // ============================================================================
 
-import { WORDS, CONNECTOR_SET, evaluate, makeWord } from '../data/words.js';
+import { WORDS, CONNECTOR_SET, evaluate } from '../data/words.js';
 import { clamp } from '../core/util.js';
 
 /** プレイヤー自身の文の末尾語。枠の外に固定で付く。 */
@@ -44,11 +44,11 @@ const BUFF_KEYS = new Set([
 /**
  * 語彙と「自身の文」からプレイヤー能力を集計する。
  * @param {Array} lexicon 語彙
- * @param {Array<object>} selfSlots プレイヤーの文
+ * @param {Sentence} self プレイヤーの文 (自由に並べた語)
  * @param {Object} meta セーブ側の恒久強化
  * @returns {typeof BASE_PLAYER}
  */
-export function resolvePlayerStats(lexicon, selfSlots = [], meta = {}) {
+export function resolvePlayerStats(lexicon, self, meta = {}) {
   const s = { ...BASE_PLAYER };
   s.maxHp += meta.hp || 0;
   s.atkMul += meta.atk || 0;
@@ -68,11 +68,11 @@ export function resolvePlayerStats(lexicon, selfSlots = [], meta = {}) {
 
   // プレイヤー自身の文。末尾語 (人) も一緒に評価する。
   // 中の語が player を持っていれば足す。文が成立していれば文の力が半分だけ効く。
-  const selfFilled = selfSlots.filter(Boolean);
-  const selfAll = [...selfFilled, makeWord(SELF_TAIL)];
+  const selfFilled = self ? self.words : [];
+  const selfAll = self ? self.segments() : [];
   const selfTitle = selfAll.map((w) => w.text).join('');
   // 末尾語はプレイヤーが置いた語ではないので、実質語の要求を 1 つ増やす。
-  const ev = evaluate(selfAll, { minContent: 3 });
+  const ev = evaluate(selfAll, { minContent: 3, tail: SELF_TAIL });
   const selfValid = ev.valid;
   const selfPower = selfValid ? 1 + (ev.fx.power - 1) * 0.5 : 1;
   for (const w of selfFilled) {

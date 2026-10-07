@@ -20,6 +20,7 @@
   --great:     #ff6b8b;
   --fire:      #ff7a2f;
   --ice:       #7ad7ff;
+  --info:      #7ad7ff;
   --thunder:   #ffe14d;
   --poison:    #9dff5c;
   --dark:      #b47bff;
@@ -385,6 +386,8 @@ code {
   bottom: 96px;
   transform: translateX(-50%);
   z-index: 6;
+  /* HUD は .layer で pointer-events: none。3 択だけはクリックできるように戻す。 */
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -549,6 +552,47 @@ code {
 .wchip.idiom { border-color: var(--idiom); }
 .wchip.great { border-color: var(--great); box-shadow: 0 0 0 1px rgba(255,107,139,.35); }
 
+/* ダッシュボタン。画面の右中段に置く。
+   右下は武器チップ (入れ替えのドロップ先) があるので避ける。 */
+.hud-dash {
+  position: absolute;
+  right: 14px;
+  /* 武器チップ (下) も 3 択 (中央下) も避けた位置。 */
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  pointer-events: auto;
+  touch-action: none;
+  width: 96px;
+  height: 96px;
+  padding: 0;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 212, 59, .6);
+  background: rgba(10, 14, 22, .78);
+  color: #ffe9a8;
+  font: inherit;
+  font-size: .92rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: transform .08s, background .08s, border-color .08s;
+}
+.hud-dash[hidden] { display: none; }
+.hud-dash.on {
+  background: rgba(255, 212, 59, .28);
+  border-color: #ffd43b;
+  color: #fff6d8;
+  transform: translateY(-50%) scale(.95);
+}
+/* スタミナが足りないと押しても利かない。 */
+.hud-dash.empty { opacity: .4; }
+
+/* ダッシュボタンは右中段。3 択は中央下なので縦には重ならない。
+   横が狭いときだけ 3 択の幅が届くので、右に余白を残す。 */
+body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px); }
+
 .hud-paused {
   position: absolute; inset: 0;
   display: grid; place-items: center;
@@ -615,6 +659,20 @@ code {
   padding: 1px 6px;
   color: var(--fg-dim);
 }
+/* 「空にする」 … 文の語を全部語彙へ戻す。並べ直すときの逃げ道。 */
+.wrow-clear {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: .72rem;
+  color: var(--fg-dim);
+  background: #0c1018;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  padding: 1px 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.wrow-clear:hover { color: var(--fg); border-color: var(--fg-dim); }
 .wrow-grade {
   margin-left: auto;
   font-size: .78rem;
@@ -656,9 +714,39 @@ code {
 .slot .empty-mark { color: var(--fg-mute); font-size: 1.1rem; font-weight: 400; }
 
 /* ドラッグ */
-.slot.filled, .pword { cursor: grab; }
-.slot.filled:active, .pword:active { cursor: grabbing; }
-.dragging { opacity: .35; }
+.slot.filled, .pword, .sen-word { cursor: grab; }
+.slot.filled:active, .pword:active, .sen-word:active { cursor: grabbing; }
+/* 掴んだ語は薄くし、指の下へ出る影だけを見えるようにする。 */
+.dragging { opacity: .22; filter: saturate(.5); }
+.drag-ghost {
+  position: fixed;
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 9px;
+  border: 1.5px solid var(--accent);
+  border-radius: 9px;
+  background: #26200a;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, .55), 0 0 0 3px rgba(255, 212, 59, .18);
+  pointer-events: none;
+  transform: scale(1.06) rotate(-1.5deg);
+}
+.drag-ghost .dg-word {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.drag-ghost .dg-conn {
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(138, 180, 255, .9);
+  background: rgba(138, 180, 255, .22);
+  color: #b9d2ff;
+  font-size: .82rem;
+  font-weight: 700;
+}
 .drop-hot {
   border-color: var(--accent) !important;
   background: #2b2712 !important;
@@ -670,6 +758,129 @@ code {
   width: 26px; text-align: center;
   color: var(--fg-mute); font-size: .8rem;
 }
+
+/* ── 自由に並べた文 ───────────────────────────────────────────────────────
+   枠に嵌めず、語のあいだに隙間 ("＋") を置いて自由に配置する。
+   接続詞は「語 + 接続詞」の 1 組で、語のタップで切り替わる。            */
+.sen-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 6px;
+  border: 1px solid var(--line-1);
+  border-radius: 10px;
+  background: #0c1018;
+  min-height: 56px;
+}
+.sen-item { display: inline-flex; align-items: center; gap: 3px; }
+.sen-word {
+  min-width: 48px; min-height: 40px;
+  padding: 5px 9px;
+  display: grid; place-items: center;
+  border: 1.5px solid var(--line-2);
+  border-radius: 8px;
+  background: #1a2233;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  /* これが無いと指がスクロールになり、ドラッグの途中で pointercancel される。 */
+  touch-action: none;
+  transition: border-color .12s, background .12s, transform .08s;
+}
+.sen-word:active { cursor: grabbing; }
+.sen-word.armed { border-color: var(--accent); background: #2b2712; }
+/* 長押しで持ち上げた語。文の語や隙間をタップで移せる。 */
+.sen-word.held {
+  border-color: var(--accent);
+  background: #3a2f10;
+  box-shadow: 0 0 0 2px rgba(255, 212, 59, .30);
+  transform: translateY(-2px);
+}
+.sen-word.sen-tail {
+  border-style: dashed;
+  background: #121826;
+  color: var(--fg-mute);
+  cursor: default;
+}
+/* 文の語を外すボタン。ホバー / 選択中だけ濃くする。 */
+.sen-out {
+  width: 24px; height: 26px;
+  margin: 0 1px 0 2px;
+  padding: 0;
+  display: grid; place-items: center;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-mute);
+  font-size: .82rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .30;
+  touch-action: none;
+  transition: opacity .12s, color .12s, border-color .12s, background .12s;
+}
+.sen-item:hover .sen-out,
+.sen-out:focus-visible {
+  opacity: 1;
+  border-color: rgba(255, 138, 128, .45);
+  background: rgba(255, 138, 128, .10);
+  color: #ff9d92;
+}
+.sen-out:active { background: rgba(255, 138, 128, .22); }
+/* タッチにはホバーが無いので、常時少し濃くしておく。 */
+@media (hover: none) {
+  .sen-out { opacity: .55; }
+}
+
+.sen-conn {
+  min-width: 34px; height: 30px;
+  margin: 0 1px;
+  padding: 0 6px;
+  display: grid; place-items: center;
+  border: 1.5px dashed rgba(138, 180, 255, .45);
+  border-radius: 999px;
+  background: rgba(138, 180, 255, .07);
+  color: #b9d2ff;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.sen-conn.filled {
+  border-style: solid;
+  border-color: rgba(138, 180, 255, .9);
+  background: rgba(138, 180, 255, .22);
+}
+.sen-conn.empty { opacity: .45; }
+.sen-conn.empty:hover { opacity: 1; }
+.sen-gap {
+  width: 30px; min-height: 40px;
+  display: grid; place-items: center;
+  border: 1.5px dashed transparent;
+  border-radius: 8px;
+  color: var(--fg-mute);
+  font-size: 1rem;
+  opacity: .35;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: opacity .12s, border-color .12s, background .12s;
+}
+/* 語を差し込む目印。タップでも置けるので「押せる」ことが分かる。 */
+.sen-gap:hover { opacity: .9; border-color: var(--line-2); }
+.wrow-empty {
+  padding: 8px 10px;
+  border: 1px dashed var(--line-2);
+  border-radius: 10px;
+  font-size: .78rem;
+}
+.wrow-kind.dim { color: var(--fg-mute); }
 
 /* 文面。枠の語を区切って連結した結果と、その分割結果 */
 .sentence {
@@ -686,6 +897,8 @@ code {
 }
 .sn-parts { display: inline-flex; align-items: center; gap: 3px; }
 .sn-plus { color: var(--fg-mute); font-size: .78rem; }
+.sn-conn-slot { display: inline-flex; align-items: center; }
+.sn-conn-empty { color: var(--fg-mute); font-size: .78rem; opacity: .5; }
 .sn-w {
   background: #1a2233;
   border: 1px solid var(--line-2);
@@ -699,6 +912,8 @@ code {
 .sn-empty { color: #3a4459; font-weight: 400; }
 
 .wrow-self { border-color: rgba(255, 212, 59, .35); background: #14120a; }
+/* 自身の文は行の背景も少し黄め。末尾の「人」まで含む。 */
+.wrow-self .sen-row { border-color: rgba(255, 212, 59, .22); background: #100e07; }
 .wrow-kind {
   font-size: .7rem;
   color: var(--fg-mute);
@@ -756,16 +971,62 @@ code {
 .stat.up   { color: var(--ok);  border-color: rgba(140,233,154,.35); }
 .stat.bad  { color: var(--ng);  border-color: rgba(255,84,112,.35); }
 .stat.idom { color: var(--idiom); border-color: rgba(255,159,67,.45); background: rgba(60,38,14,.4); }
+.stat.nat  { color: #8ab4ff; border-color: rgba(138,180,255,.4); }
+
+/* 自然さの内訳。加点は青、減点は赤で区別する。 */
+.wrow-nat {
+  display: flex; flex-wrap: wrap; gap: .3rem .5rem;
+  align-items: baseline; margin: .2rem 0 .3rem;
+  font-family: var(--mono); font-size: .72rem; line-height: 1.5;
+}
+.wrow-nat .nat-total { color: #8ab4ff; font-weight: 700; }
+.wrow-nat .nat-plus  { color: var(--ok); }
+.wrow-nat .nat-minus { color: var(--ng); }
 
 /* 語彙 */
 .forge-side {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-height: 0;
+  padding: 12px;
+  background: #0a0e17;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
 }
 .forge-side-head { display: flex; align-items: baseline; justify-content: space-between; }
-.forge-side-head h3 { margin: 0; font-size: .95rem; }
+.forge-side-head h3 { margin: 0; font-size: .95rem; letter-spacing: .04em; color: var(--fg-dim); }
+
+/* 語を置くときの 3 手順。接続詞プールを消した余白はここに回す。 */
+.forge-how {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: .78rem;
+  color: var(--fg-mute);
+}
+.forge-how li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  line-height: 1.35;
+}
+.forge-how b {
+  flex: none;
+  min-width: 62px;
+  padding: 1px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: #141b28;
+  color: var(--fg-dim);
+  font-size: .74rem;
+  font-weight: 700;
+  text-align: center;
+}
+.forge-how em { color: var(--accent); font-style: normal; font-weight: 700; }
 
 .lexicon {
   display: grid;
@@ -792,6 +1053,10 @@ code {
   font-size: .95rem;
   font-weight: 700;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  /* 語彙の語はドラッグの起点。スクロールに奪われると置けない。 */
+  touch-action: none;
   transition: transform .08s, border-color .12s, background .12s;
   line-height: 1.1;
   text-align: center;
@@ -837,6 +1102,19 @@ code {
   background: rgba(255, 84, 112, .25);
   transform: scale(1.06);
 }
+
+/* 語を選んだ状態。文の行の落とし場だけを明るくする。 */
+.placing .sen-row {
+  border-color: rgba(255, 212, 59, .38);
+  background: #0f1119;
+}
+.placing .sen-gap {
+  opacity: .95;
+  border-color: var(--line-2);
+  background: rgba(255, 212, 59, .07);
+  color: var(--accent);
+}
+.placing .sen-word { cursor: copy; }
 /* 「忘れる」モードのボタン状態は .btn-forget.on で表現する。 */
 #lexiconCount.full { color: var(--ng); font-weight: 700; }
 
@@ -865,6 +1143,47 @@ code {
 }
 .forge-detail .dt { color: var(--fg); font-weight: 700; display: block; margin-bottom: 2px; }
 .forge-detail .dl { font-family: var(--mono); color: var(--fg-mute); }
+/* 直前の操作の結果 (入れた / 戻した / 理由)。 */
+.forge-detail .dt.msg { color: var(--ok); }
+/* その語に使える接続詞の一覧。 */
+.forge-detail .conn-list { color: var(--info, #7ad7ff); }
+
+/* 接続詞を一覧から一発で選ぶメニュー。語の右のマスをタップして開く。 */
+.conn-picker {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+  padding: 6px;
+  background: #0d1320;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
+  font-size: .8rem;
+}
+.conn-picker-head {
+  color: var(--fg-mute);
+  font-size: .68rem;
+  padding: 0 4px 4px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+}
+.conn-pick {
+  text-align: left;
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--fg-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.conn-pick:hover { color: var(--fg); background: rgba(138, 180, 255, .12); }
+.conn-pick.cur { color: var(--info, #7ad7ff); border-color: var(--info, #7ad7ff); }
 
 /* ══ タイトル ════════════════════════════════════════════════════════ */
 
@@ -1144,7 +1463,13 @@ code {
 
 /* ══ 辞書 ══════════════════════════════════════════════════════════════ */
 
-.panel-dict { width: min(780px, 100%); }
+/* 辞書パネル。画面の 9 割まで伸びる実高さを持たないと、
+   内側の .dict-list (flex: 1) が高さを得られず、362 語ぶんの行が
+   画面の下まで垂れ流しになって「反映されていない」ように見える。 */
+.panel-dict {
+  width: min(780px, 100%);
+  height: min(92vh, 820px);
+}
 .dict-bar { display: flex; gap: 10px; align-items: center; flex: none; }
 .dict-bar input {
   flex: 1;
@@ -1179,6 +1504,10 @@ code {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* パネルの中で余った高さを全部使う。これが無いと 362 語ぶんの行が
+     画面の外まではみ出し、下の語が見えない (スクロールも効かない)。 */
+  flex: 1 1 0;
+  min-height: 0;
 }
 .dict-row {
   display: grid;

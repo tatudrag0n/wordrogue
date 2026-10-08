@@ -236,58 +236,40 @@ if (syntaxBad) {
   }
 }
 
-// 接続詞の文法。
-//   ・どの語も、自分の品詞に合う接続詞を 1 つ以上持つ (行き止まりが無い)
-//   ・接続詞は枠を潰さない (「語 + 接続詞」が 1 語に潰れない)
-//   ・述語になる接続詞は全部連体形。「〜を」は目的語を取る。
+// 接続詞 (語ごとのプール)。
+//   ・どの語も、プールに 1 つ以上の形を持つ (行き止まりが無い)
+//   ・接続詞は枠を潰さない (「語 + 送り仮名」が 1 語に潰れない)
+//   ・プールの形は役割 (連体・連用・格) を持ち、格は受け先 (next) を持つ
 {
-  const {
-    CONNECTORS, canConnect, isAdnominal, PREDICATE_CONNECTORS,
-    NON_ADNOMINAL_CONNECTORS,
-  } = await import(new URL('../js/data/words.connect.js', import.meta.url));
+  const { CONNECTORS, canConnect, connectorFor } = await import(new URL('../js/data/words.connect.js', import.meta.url));
   const { WORDS, CONNECTOR_SET, segment, drawWord } = await import(new URL('../js/data/words.js', import.meta.url));
 
   const connNames = Object.keys(CONNECTORS);
   const content = Object.keys(WORDS).filter((w) => !CONNECTOR_SET.has(w));
 
-  // どの語も、自分の品詞に合う接続詞を 1 つ以上持つ。
   const deadEnd = [];
-  // 「語 + 接続詞」が 1 語に潰れないこと (合成語にならず、辞書の別の語に食われる)。
   const collapsed = [];
+  const shapeErrors = [];
   let bindable = 0;
   for (const w of content) {
-    const mine = connNames.filter((c) => canConnect(WORDS[w], c));
+    const mine = connectorFor(WORDS[w]);
     bindable += mine.length;
     if (!mine.length) deadEnd.push(`${w}(${WORDS[w].pos})`);
     for (const c of mine) {
+      if (!canConnect(WORDS[w], c)) shapeErrors.push(`${w}${c}: プールにあるのに結べない`);
       const segs = segment(w + c);
       if (!segs || segs.length !== 2 || segs[0] !== w || segs[1] !== c) {
         collapsed.push(`${w}+${c} -> ${segs ? segs.join('/') : 'null'}`);
       }
     }
+    for (const e of WORDS[w].pool) {
+      if (!['adn', 'adv', 'case'].includes(e.role)) shapeErrors.push(`${w}${e.k}: 役割が不明`);
+      if (e.role === 'case' && !e.next) shapeErrors.push(`${w}${e.k}: 格の受け先が無い`);
+    }
   }
   const pairs = content.length * connNames.length;
 
-  // 接続詞の形が日本語として破綻していないこと。
-  //   名詞を修飾できないのは「連用形・続用形」だけのはず。
-  //   「な」は な形容詞 の連体形「〜な」なので名詞を修飾できる。
-  const shapeErrors = [];
-  // 名詞を修飾しない形。連用形 (く・にの連用「静かに」) と続用形 (せし・り)。
-  const NOT_ADN = ['く', 'せし', 'り'];
-  for (const c of NOT_ADN) {
-    if (!NON_ADNOMINAL_CONNECTORS.has(c)) shapeErrors.push(`${c}: 名詞を修飾できるはず`);
-  }
-  for (const c of NON_ADNOMINAL_CONNECTORS) {
-    if (!NOT_ADN.includes(c)) shapeErrors.push(`${c}: 連用形・断定形・続用形ではない`);
-    if (isAdnominal(c)) shapeErrors.push(`${c}: 連体形なのに非連体`);
-  }
-  // 述語のうち、連体形でもあるもの (「〜された」「〜る」「〜する」) は末尾語を修飾できる。
-  for (const c of ['された', 'われた', 'られた', 'る', 'する']) {
-    if (!PREDICATE_CONNECTORS.has(c)) shapeErrors.push(`${c}: 述語に入れていない`);
-    if (!isAdnominal(c)) shapeErrors.push(`${c}: 連体形でない`);
-  }
-
-  // 接続詞は 3 択の抽選に出ない。鍛冶下部の接続詞プールから無限に置く。
+  // 接続詞は 3 択の抽選に出ない。語の後ろで切り替えるだけ。
   let conn = 0, total = 0;
   for (let i = 0; i < 6000; i++) {
     const w = drawWord(makeRng(i * 2654435761 % 4294967296));
@@ -299,12 +281,11 @@ if (syntaxBad) {
 
   console.log(`== 接続詞 ==\n  接続詞 ${connNames.length} 種類 / 実質語 ${content.length} 語`
     + ` / 結合できる組 ${bindable} (${((bindable / pairs) * 100).toFixed(1)}%)`
-    + `\n  抽選に混ざる割合 ${(drawRate * 100).toFixed(1)}% (プールから無限)`
+    + `\n  抽選に混ざる割合 ${(drawRate * 100).toFixed(1)}% (語の後ろで切り替える)`
     + `\n  合成に潰れる ${collapsed.length} / 行き止まり ${deadEnd.length} / 形の誤り ${shapeErrors.length}`);
   for (const x of deadEnd.slice(0, 20)) console.log(`\x1b[31m  どの接続詞も結べない: ${x}\x1b[0m`);
   for (const x of collapsed.slice(0, 20)) console.log(`\x1b[31m  1 語に潰れる: ${x}\x1b[0m`);
   for (const x of shapeErrors.slice(0, 20)) console.log(`\x1b[31m  形が誤り: ${x}\x1b[0m`);
-
   if (drawRate > 0) console.log(`\x1b[31m  抽選に接続詞が混ざっている: ${(drawRate * 100).toFixed(1)}%\x1b[0m`);
 
   if (collapsed.length || deadEnd.length || shapeErrors.length || drawRate > 0) {
@@ -316,8 +297,8 @@ if (syntaxBad) {
 // 語彙は 1 文字の漢字だけ。かなも 2 字以上の語も入れない。
 //
 // 2 漢字のな形容詞 (滑らか 適切 確実…) も入れない。
-// 「静かな」「確かな」「滑らかな」は 1 漢字語 + 接続詞 かな で作る。
-//   静 + かな = 静かな刃 / 確 + かな = 確かな刃 / 滑 + かな = 滑かな刃
+// 「静かな」「確かな」「滑らかな」は 1 漢字語 + 送り仮名 で作る。
+//   静 + かな = 静かな刃 / 確 + かな = 確かな刃 / 滑 + らかな = 滑らかな刃
 // 接続詞はひらがな。実質語にはかなも 2 文字も現れない (接続詞は別に数える)。
 {
   const { WORDS, CONNECTOR_SET } = await import(new URL('../js/data/words.js', import.meta.url));
@@ -378,7 +359,7 @@ if (syntaxBad) {
     '冷', '宏', '巨', '心', '圧', '律', '斉', '引', '導', '徹', '執', '瞬', '会',
     '必', '急', '反', '退', '衰', '合', '再', '回', '続', '減', '特', '囲',
     '捷', '衆', '昂', '威', '打', '防', '程', '撃', '連', '固', '湧', '潤',
-    '発', '穢', '優', '護', '結', '穿', '通',
+    '発', '穢', '優', '護', '結', '穿', '通', '眠', '香',
     // 効果語 (接頭語・接尾語として使う語。な形容詞ではない)
     //
     //   これらは「X な」が日本語に無いので `NA_ADJ_STEMS` には置かない。

@@ -10,24 +10,21 @@
 //   「火」             -> 「火」     -> 1 語          -> 不成立 (文にならない)
 //   「の」             -> 「の」     -> 接続詞だけ    -> 不成立 (実質語が無い)
 //   「爆裂」「する」   -> 「爆裂する」 -> 合成成立
-//   「風」「の」「海」「の」 -> のが 2 回 -> 不成立
+//   「風」「の」「潮」「の」「銃」 -> のが 2 回 -> 成立 (自然さの減点)
 // ============================================================================
 
-import {
-  RAW_TABLES, ADJ_STEMS, NA_ADJ_STEMS, TSUMI_STEMS, SURU_STEMS, VERB_STEMS,
-  TAIL_UNMODIFIABLE,
-} from './words.core.js';
+import { RAW_TABLES, TAIL_UNMODIFIABLE } from './words.core.js';
 import { CATEGORIES, ELEMENTS } from './words.core.js';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
-  PREDICATE_CONNECTORS, isAdnominal, isConnector, adnominalAt,
+  PREDICATE_CONNECTORS, isAdnominal, isConnector,
 } from './words.connect.js';
+import { poolOfText, posOfText } from './words.pool.js';
 
 export {
   CATEGORIES, ELEMENTS, PHRASE_BONUS, CONNECTORS, CONNECT_ORDER, POS,
-  ADJ_STEMS, NA_ADJ_STEMS, TSUMI_STEMS, SURU_STEMS, VERB_STEMS, TAIL_UNMODIFIABLE,
-  PREDICATE_CONNECTORS, isAdnominal, isConnector,
+  TAIL_UNMODIFIABLE, PREDICATE_CONNECTORS, isAdnominal, isConnector,
 };
 
 /** 単語 ID 採番用。 */
@@ -67,40 +64,33 @@ for (const table of RAW_TABLES) {
     }
 
     const effects = parseFx(fx);
-    // 品詞。接続詞の相性と末尾語の修飾判定に使う。
-    //
-    //   い形容詞 … く・い が付く
-    //   な形容詞 … な が付く
-    //   する-名詞 … する が付く
-    //   動詞     … る・された・われた・られた・せし・り
-    //   名詞     … の・を・に・へ
-    //
-    // 動詞の表に入れても「する-名詞」に該当するものは体言として扱う。
-    //   爆裂 + する = 爆裂する ✓   爆裂 + された ✗ (動詞じゃない)
-    // 品詞表を先に判定する。い形容・な形容の語幹は「する」-名詞より強い。
-    //   重 … SURU_STEMS には入れず ADJ_STEMS に置く (重い / 重く / 重つい)。
-    const pos = cat === 'connect' ? null
-      : ADJ_STEMS.has(text) ? POS.adj
-        : NA_ADJ_STEMS.has(text) ? POS.naadj
-          : SURU_STEMS.has(text) ? POS.noun
-            : VERB_STEMS.has(text) || cat === 'verb' ? POS.verb
-              : POS.noun;
-
+    // 品詞と接続詞プールは語ごとに words.pool.js で決める。
     WORDS[text] = {
       text,
       cat,
       el: el && el !== '-' ? el : null,
       fx: effects,
       player: cat === 'buff' ? effects : null,
-      pos,
-      // 「する」で述語にできる。「する」接続詞がこれにだけ付く。
-      suru: SURU_STEMS.has(text),
-      // 付言便乗「〜つい」で形容詞になる。「つ」接続詞がこれにだけ付く。
-      tsumi: TSUMI_STEMS.has(text),
+      pos: posOfText(text),
+      // この語の直後に付く送り仮名 (接続詞)。
+      pool: poolOfText(text),
     };
     wordUid++;
   }
 }
+
+// 接続詞 (送り仮名) も分割のために辞書へ入れる。効果は CONNECTORS が正。
+for (const k of CONNECT_ORDER) {
+  if (WORDS[k]) { DUPLICATES.push(k); continue; }
+  WORDS[k] = {
+    text: k, cat: 'connect', el: null, fx: CONNECTORS[k].fx, player: null, pos: null, pool: [],
+  };
+}
+
+/** い形容の語 (表示・検査用)。プールの品詞から作る。 */
+export const ADJ_STEMS = new Set(Object.keys(WORDS).filter((w) => WORDS[w].pos === POS.adj));
+/** な形容の語 (表示・検査用)。 */
+export const NA_ADJ_STEMS = new Set(Object.keys(WORDS).filter((w) => WORDS[w].pos === POS.naadj));
 
 /** 品詞。 */
 export function posOf(text) { return WORDS[text]?.pos || null; }
@@ -153,11 +143,7 @@ export const CONNECTOR_SET = new Set(
  * 接続詞の一覧。鍛冶の接続詞プールが無限に出す。
  * 接続詞は語彙から引かない — 文を編集するときにいつでも使える。
  */
-export const CONNECTOR_LIST = [
-  'された', 'われた', 'られた',
-  'く', 'な', 'かな', 'い', 'る', 'する', 'む', 'ける', 'せし', 'り',
-  'の', 'つ', 'に', 'を', 'へ',
-];
+export const CONNECTOR_LIST = CONNECT_ORDER.slice();
 
 /**
  * 開始時に放进語彙する語。漢字だけで、短いもの。
@@ -307,7 +293,6 @@ const REASONS = {
   tailverb:   '末尾語を動詞が直接修飾している',
   tailparticle: '格の接続詞の後に末尾語が来る',
   tailform:   '形を表す語が末尾語を直接修飾している',
-  dupconn:    '同じ接続詞を 2 回使っている',
   connorder:  '接続詞どうしが続いている',
   floatconn:  '接続詞が直前の語に結べない',
   connnoun:   '連用形の接続詞のあとに名詞が来ている',
@@ -390,7 +375,8 @@ export function evaluate(words, opt = {}) {
     };
   }
 
-  // 接続詞の規則。同じ接続詞 2 回で不成立。順序 (昇順 / 降順) はどちらも成立する。
+  // 接続詞の規則。語ごとのプールと、選んだ形の役割で見る。
+  // 同じ接続詞 2 回は不成立ではなく、自然さの減点 (下)。
   const conn = checkConnectors(segs, WORDS);
   if (!conn.ok) {
     return {
@@ -411,10 +397,11 @@ export function evaluate(words, opt = {}) {
   if (opt.tail && segs.length >= 2) {
     const last = segs[segs.length - 2];
     const isConn = CONNECTOR_SET.has(last);
-    // 「〜く」は動詞のときだけ連体形 (貫く刃)。文脈込みで判定する。
-    const adnOverride = isConn ? adnominalAt(segs, segs.length - 2) : undefined;
+    // 接続詞なら、その場の役割 (連体・格「の」) で名詞を修飾できるかを見る。
+    const lastC = isConn ? compounds.find((c) => c.idx === segs.length - 2) : null;
+    const adn = !!lastC && (lastC.role === 'adn' || (lastC.role === 'case' && lastC.next === 'noun'));
     const tail = checkTailModifier(
-      last, isConn ? null : WORDS[last]?.pos, isConn, TAIL_UNMODIFIABLE, adnOverride,
+      last, isConn ? null : WORDS[last]?.pos, isConn, TAIL_UNMODIFIABLE, adn,
     );
     if (!tail.ok) {
       return {
@@ -426,7 +413,7 @@ export function evaluate(words, opt = {}) {
     }
 
     // 末尾語に係っている「連体修飾句」の先頭も見る。
-    //   「業火を斬された刃剣」… された は名詞を修飾できるので通るが、
+    //   「業火を斬られた刃剣」… された は名詞を修飾できるので通るが、
     //   その名詞句の頭が「刃」なので「刃剣」になる。日本語に無い。
     // 接続詞を挟んでも、末尾語に直続する語は形を表す語にできない。
     // 末尾語そのものは末尾語配列に含まれないので、探してその 1 つ前を見る。
@@ -515,25 +502,32 @@ export function evaluate(words, opt = {}) {
   if (worstRun >= 4) {
     parts.push({ key: 'enumeration', label: `${worstRun} 語が羅列`, v: -0.45 * (worstRun - 3) });
   }
-  // 格 (体言 + の・へ)。
+  // 同じ接続詞の 2 回目以降。不成立にはしないが、くどいので減点。
+  //   「風の潮の銃」… 読めるが「の」の連続は少し重い。
+  for (const d of conn.dups) {
+    parts.push({ key: 'dupconn', label: `接続詞「${d}」の重複`, v: -0.4 });
+  }
+  // 格 (の・へ。「いの」のような名詞化 + の も含む)。
+  const isGenitive = (c) => c.role === 'case' && (c.next === 'noun' || c.connector === 'へ');
   for (const c of compounds) {
-    if (c.connector === 'の' || c.connector === 'へ') {
+    if (isGenitive(c)) {
       parts.push({ key: 'genitive', label: `格「〜${c.connector}」`, v: 0.55 });
     }
   }
+  const compAt = new Map(compounds.map((c) => [c.idx, c]));
   // 格句と連体節が同じ語に係る並び。
   //   「火傷する毒の剣」… 「火傷する毒」の「剣」。連体節が先に来て、格がその名詞に付く。
   //   「毒の火傷する剣」… 「毒の」「火傷する剣」。格と「〜する」が同じ名詞に同時に付く。
   //                       日本語ではどちらかに係り損ねる。片方を内側に入れるので減点。
-  // 「業火を斬された剛硬な剣」のように述語が一文を閉じる並びは別物なので見ない。
+  // 「業火を斬られた剛硬な剣」のように述語が一文を閉じる並びは別物なので見ない。
   for (const c of compounds) {
-    if (c.connector !== 'の' && c.connector !== 'へ') continue;
-    const i = segs.indexOf(c.source);
+    if (!isGenitive(c)) continue;
+    const i = c.idx - 1;
     const next = segs[i + 2];
     const nc = segs[i + 3];
     // 「格 + 名詞 + 連体節 (する / る / された)」 の並びだけを見る。
     if (!next || !nc || !CONNECTOR_SET.has(nc)) continue;
-    if (!PREDICATE_CONNECTORS.has(nc)) continue;
+    if (!compAt.get(i + 3)?.pred) continue;
     if (WORDS[next]?.pos !== POS.noun) continue;
     // 連体節が係る先。連体形だから、その直後の名詞に付く。
     const tailWord = opt.tail || segs[segs.length - 1];
@@ -547,8 +541,9 @@ export function evaluate(words, opt = {}) {
   }
   // 連体。い形容詞の「〜い」(い) と な形容詞の「〜な」(な) はどちらも名詞を修飾する。
   // かな もな形容詞の連体形なので同じ加点。静かな刃 / 確かな刃。
+  // 形容の形 (プールで + の印) のうち、名詞を修飾する連体だけ。
   for (const c of compounds) {
-    if (c.pos === POS.adj || c.pos === POS.naadj || c.connector === 'かな') {
+    if (c.adj && c.role === 'adn') {
       parts.push({ key: 'adjectival', label: `連体「${c.connector}」`, v: 0.5 });
     }
   }
@@ -571,8 +566,7 @@ export function evaluate(words, opt = {}) {
   let compoundBindInfo = null;
   if (opt.tail && headInfo && !TAIL_UNMODIFIABLE.has(head)) {
     // 連体形（い・な・された・る）が直前にあれば、その接続詞が末尾語に係っている。
-    const boundToTail = compounds.some((c) => c.source === head
-      && segs.indexOf(c.source) === headPos);
+    const boundToTail = compounds.some((c) => c.idx === headPos + 1);
     compoundBindInfo = { bound: boundToTail };
     if (boundToTail || headInfo.cat !== 'form') {
       parts.push({ key: 'modifier', label: '末尾語を修飾', v: 0.6 });
@@ -596,7 +590,7 @@ export function evaluate(words, opt = {}) {
   //   「業火剛利剣」   … 用言が無いので述語にならない。
   let hasPredicate = false;
   for (const c of compounds) {
-    if (PREDICATE_CONNECTORS.has(c.connector)) {
+    if (c.pred) {
       parts.push({ key: 'predicated', label: `述語「〜${c.connector}」`, v: 0.6 });
       hasPredicate = true;
     }
@@ -604,10 +598,9 @@ export function evaluate(words, opt = {}) {
   // 目的語。格助詞「〜を」のあとに動詞が来ていれば、一文として閉じている。
   //   「業火を斬る剣」… これが日本語の完全な一節。
   for (const c of compounds) {
-    if (c.connector !== 'を') continue;
-    const i = segs.indexOf(c.source);
-    const next = segs[i + 2];
-    if (next && WORDS[next] && WORDS[next].cat === 'verb') {
+    if (!(c.role === 'case' && c.next === 'verb')) continue;
+    const next = segs[c.idx + 1];
+    if (next && WORDS[next] && (WORDS[next].cat === 'verb' || compAt.get(c.idx + 2)?.pred)) {
       parts.push({ key: 'object', label: '目的語', v: 0.7 });
       break;
     }
@@ -620,8 +613,8 @@ export function evaluate(words, opt = {}) {
   //   な形容詞は語幹で名詞を修飾しないので、「業火斬る剛利剣」は減点のまま。
   if (hasPredicate) {
     const lastPredicate = compounds
-      .filter((c) => PREDICATE_CONNECTORS.has(c.connector))
-      .map((c) => segs.indexOf(c.source) + 1)
+      .filter((c) => c.pred)
+      .map((c) => c.idx)
       .pop();
     const after = segs.slice(lastPredicate + 1, tailPos);
     // 残った語が末尾語直前の修飾語そのもの (head)、または末尾語に係る句 (名詞 + の など)

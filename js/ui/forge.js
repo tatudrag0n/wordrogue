@@ -8,8 +8,8 @@
 // 接続詞は語の直後に付く。語の横にあるだけなので、
 // 文の並びを動かしても骨組みはそのまま残る。
 //   語をタップするたびに、その語に付く接続詞が切り替わる。
-//   使える接続詞を一周すると「接続詞なし」になる。
-//   例 「爆」→ せし → ぜる → … → せし(一周したら無し)
+//   候補はその語のプール (words.pool.js) だけ。一周すると「接続詞なし」になる。
+//   例 「斬」→ る → られた → り → 無し
 // 文は 10 文字まで。
 // ============================================================================
 
@@ -17,7 +17,7 @@ import { $, el, clear } from '../core/util.js';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
 } from '../data/words.js';
-import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js';
+import { CONNECTORS, CONNECT_ORDER, formOf, ROLE_LABEL } from '../data/words.connect.js';
 import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
 import { SELF_TAIL } from '../game/stats.js';
 import { keyStats } from '../game/weapon.js';
@@ -67,6 +67,12 @@ const PS_LABEL = {
  * 語に付く接続詞のチップ。語チップのすぐ右に並べて「語の直後」を表す。
  * ここをタップしても、その語が持つ接続詞が切り替わる (語と同じ操作)。
  */
+/** 接続詞メニューの説明。その語での役割を出す (同じ「に」でも 焔に=格 / 妙に=連用)。 */
+function pickTitle(wordText, k) {
+  const f = formOf({ text: wordText }, k);
+  return f ? `${wordText}${k} — ${ROLE_LABEL[f.role] || ''}` : (CONNECTORS[k]?.desc || '');
+}
+
 function renderConnector(forge, place, conn) {
   const title = conn
     ? `接続詞「${conn.text}」 — ${CONNECTORS[conn.text]?.desc || ''}`
@@ -393,7 +399,7 @@ export class Forge {
       const b = el('button', {
         class: 'conn-pick' + (text === cur ? ' cur' : ''),
         type: 'button',
-        title: text ? (CONNECTORS[text]?.desc || '') : '接続詞を外す',
+        title: text ? pickTitle(e.word.text, text) : '接続詞を外す',
       }, el('span', {}, label));
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
@@ -741,15 +747,17 @@ export class Forge {
     for (const wi of this.run.weapons) for (const w of wi.sentence.words) have.add(w.text);
     for (const w of this.run.player.self.words) have.add(w.text);
 
-    h.append(el('p', {}, '接続詞は直前の語にだけ付きます。'
-      + '語をタップすると、使える接続詞だけが順に切り替わり、一周したら無しになります。'));
+    h.append(el('p', {}, '接続詞 (送り仮名) は語ごとに決まっていて、直前の語にだけ付きます。'
+      + '語をタップすると、その語の接続詞だけが順に切り替わり、一周したら無しになります。'
+      + '連体 (〜る・〜い・〜な) は名詞を修飾し、連用 (〜く・〜に・〜り) は動詞・形容を修飾します。'
+      + '「〜を」のあとには動作が要ります。'));
+    const ROLE = { adn: '連体 (名詞を修飾)', adv: '連用 (動詞・形容を修飾)', case: '格' };
     const ct = el('table', { class: 'grammar' });
     for (const c of CONNECT_ORDER) {
       const info = CONNECTORS[c];
       ct.append(el('tr', {},
         el('td', { class: 'hc' }, c),
-        el('td', {}, info.after.join(' / ')),
-        el('td', {}, info.adn ? '名詞を修飾できる' : '名詞を修飾しない'),
+        el('td', {}, [...info.roles].map((r) => ROLE[r] || r).join(' / ')),
       ));
     }
     h.append(ct);

@@ -1,6 +1,6 @@
 // 語辞書と文判定の単体テスト。  node test/words.test.js
 import { WORDS, DRAWABLE, DRAWABLE_ALL, SIMPLE_POOL, CONNECTOR_SET, CONNECTOR_LIST, segment, evaluate, makeWord, drawWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS, CONNECTORS } from '../js/data/words.js';
-import { checkConnectors, canConnect, connectorFor, connectorAfter, POS } from '../js/data/words.connect.js';
+import { canConnect, connectorFor, formOf, POS } from '../js/data/words.connect.js';
 import { makeRng } from '../js/core/util.js';
 
 let pass = 0, fail = 0;
@@ -30,27 +30,23 @@ ok(DUPLICATES.length === 0, `語の重複定義: ${JSON.stringify(DUPLICATES)}`)
 
 sec('分割');
 ok(JSON.stringify(segment('火球')) === JSON.stringify(['火', '球']), `火球 -> ${JSON.stringify(segment('火球'))}`);
-ok(JSON.stringify(segment('爆する')) === JSON.stringify(['爆', 'する']),
-  `爆する -> ${JSON.stringify(segment('爆する'))}`);
-ok(JSON.stringify(segment('斬された')) === JSON.stringify(['斬', 'された']),
-  `斬された -> ${JSON.stringify(segment('斬された'))}`);
-ok(JSON.stringify(segment('妙な')) === JSON.stringify(['妙', 'な']),
-  `妙な -> ${JSON.stringify(segment('妙な'))}`);
-// 「か」のな形容詞の連体形は接続詞 かな。静かな = 静 + かな。
-ok(JSON.stringify(segment('静かな')) === JSON.stringify(['静', 'かな']),
-  `静かな -> ${JSON.stringify(segment('静かな'))}`);
-ok(JSON.stringify(segment('確かな')) === JSON.stringify(['確', 'かな']),
-  `確かな -> ${JSON.stringify(segment('確かな'))}`);
-ok(JSON.stringify(segment('滑かな')) === JSON.stringify(['滑', 'かな']),
-  `滑かな -> ${JSON.stringify(segment('滑かな'))}`);
+// 送り仮名は 1 つの接続詞として割れる (複数字でも)。
+for (const [s, want] of [
+  ['爆ぜる', ['爆', 'ぜる']], ['斬られた', ['斬', 'られた']], ['斬された', ['斬', 'された']],
+  ['妙な', ['妙', 'な']], ['静かな', ['静', 'かな']], ['確かな', ['確', 'かな']],
+  ['滑らかな', ['滑', 'らかな']], ['凍える', ['凍', 'える']], ['大きな', ['大', 'きな']],
+  ['明るい', ['明', 'るい']], ['呪いの', ['呪', 'いの']], ['穏やかな', ['穏', 'やかな']],
+]) {
+  ok(JSON.stringify(segment(s)) === JSON.stringify(want), `${s} -> ${JSON.stringify(segment(s))}`);
+}
 // 「確か」「静か」「滑らか」を 2 語の辞書項目には置かない。
 for (const w of ['静か', '確か', '滑らか', '適切', '確実', '緻密', '妖艶', '華美', '豪快', '良質', '明快', '優美']) {
-  ok(!WORDS[w], `「${w}」が辞書にある (1 漢字語 + かなで作るので不要)`);
+  ok(!WORDS[w], `「${w}」が辞書にある (1 漢字語 + 送り仮名で作るので不要)`);
 }
-// 「静」は な形容 (〜な) ではない。「静な」は文法で弾く。
-// (分割は辞書引きなので「静 + な」が通る。結合の可否で見る。)
+// 分割は辞書引きなので「斬 + された」は割れる。結べるかはプールで見る。
+ok(!canConnect(WORDS['斬'], 'された'), '「斬された」が結べてしまう');
 ok(!canConnect(WORDS['静'], 'な'), '「静」に「な」が付いてしまう (静な は無い)');
-ok(!!WORDS['静'] && canConnect(WORDS['静'], 'かな'), '「静」に「かな」が付かない (静かな が作れない)');
+ok(canConnect(WORDS['静'], 'かな'), '「静」に「かな」が付かない (静かな が作れない)');
 ok(segment('あいか') === null, 'あいか が分割できてしまった');
 ok(segment('の') !== null, 'の が分割できない');
 ok(segment('')?.length === 0, '空文字の処理');
@@ -192,61 +188,6 @@ sec('熟語を作ると文の力が上がる (熟語ボーナス)');
   ok(missing === 0, `熟語ボーナスが見えない熟語が ${missing} 個`);
 }
 
-sec('動詞の形が使える (する / む / ける)');
-{
-  const conns = (w) => connectorFor(WORDS[w]);
-
-  // 「〜する」が動詞として通用する語 (察する)。
-  ok(conns('察').includes('する'), '「察する」が結べない');
-  ok(!conns('焔').includes('する'), '「焔する」が結べている');
-
-  // 「〜む」の終止形・命令形。
-  for (const w of ['蝕', '踏', '挟', '掴', '嚇', '沈', '縮', '潜']) {
-    ok(conns(w).includes('む'), `「${w}む」が結べない`);
-  }
-  for (const w of ['斬', '溶', '焼', '響', '凍']) {
-    ok(!conns(w).includes('む'), `「${w}む」が結べている（日本語に無い）`);
-  }
-
-  // 上一段の「〜ける」。
-  for (const w of ['溶', '凍', '融', '焼', '焦', '砕', '潰', '冷']) {
-    ok(conns(w).includes('ける'), `「${w}ける」が結べない`);
-  }
-  for (const w of ['斬', '響', '蝕', '察']) {
-    ok(!conns(w).includes('ける'), `「${w}ける」が結べている（日本語に無い）`);
-  }
-
-  // 分割と結合の形。
-  ok(JSON.stringify(segment('蝕む')) === JSON.stringify(['蝕', 'む']), '蝕む が分割できない');
-  ok(JSON.stringify(segment('溶ける')) === JSON.stringify(['溶', 'ける']), '溶ける が分割できない');
-  ok(JSON.stringify(segment('察する')) === JSON.stringify(['察', 'する']), '察する が分割できない');
-
-  const E2 = (...ws) => evaluate(ws.map(makeWord), { minContent: 3, tail: ws[ws.length - 1] });
-  const good = [
-    ['霜', 'を', '蝕', 'む', '刃'],                    // 霜を蝕む刃
-    ['踏', 'む', '焔', 'を', '斬', 'る', '刃'],      // 踏む焔を斬る刃
-    ['溶', 'ける', '毒', 'を', '斬', 'る', '刃'],    // 溶ける毒を斬る刃
-    ['凍', 'ける', '霜', 'を', '斬', 'る', '刃'],    // 凍ける霜を斬る刃
-    ['察', 'する', '毒', 'を', '斬', 'る', '刃'],    // 察する毒を斬る刃
-    ['潰', 'ける', '毒', 'を', '斬', 'る', '刃'],    // 潰れる毒を斬る刃
-  ];
-  for (const ws of good) {
-    const r = E2(...ws);
-    ok(r.valid, `「${ws.join('')}」が不成立: ${r.reasonText}`);
-    ok(r.predicated, `「${ws.join('')}」が述語になっていない`);
-  }
-
-  const bad = [
-    ['焔', 'を', '斬', 'る', '溶', 'む'],            // 溶 + む は結べない (溶む は無い)
-    ['焔', 'を', '斬', 'る', '響', 'ける'],          // 響 + ける は結べない
-    ['焔', 'を', '斬', 'る', '斬', 'む'],            // 斬 + む は結べない
-  ];
-  for (const ws of bad) {
-    const r = E2(...ws);
-    ok(!r.valid, `「${ws.join('')}」が成立してしまった: ${r.reasonText}`);
-  }
-}
-
 sec('接続詞は語彙から引けない (鍛冶のプールで無限)');
 {
   // 接続詞は 3 択に出ない。鍛冶下部の接続詞プールから無限に置く。
@@ -287,206 +228,147 @@ sec('助詞と助動詞はもう無い');
   ok(WORDS_BY_CAT.aux === undefined, 'aux カテゴリが残っている');
 }
 
-sec('接続詞は品詞で結合が決まること');
+sec('語ごとの接続詞プール');
 {
-  const conns = Object.keys(CONNECTORS);
   const content = Object.keys(WORDS).filter((w) => !CONNECTOR_SET.has(w));
+  const conns = Object.keys(CONNECTORS);
 
-  // 全語に品詞がある。品詞が無いと結合を判断できない。
+  // 全語に品詞とプールがある。
   for (const w of content) {
-    ok(!!WORDS[w].pos, `「${w}」に品詞が無い`);
-    ok(Object.values(POS).includes(WORDS[w].pos), `「${w}」の品詞が不明: ${WORDS[w].pos}`);
+    ok(!!WORDS[w].pos && Object.values(POS).includes(WORDS[w].pos), `「${w}」の品詞が不明: ${WORDS[w].pos}`);
+    ok(Array.isArray(WORDS[w].pool), `「${w}」にプールが無い`);
   }
-
-  // 結合できるかどうかは「直前の語」で決まる。品詞の判定に加えて、
-  // 語ごとの絞り込みがある。
-  //   する … する-名詞にだけ。   焔する ✗ / 爆する ✓
-  //   つ   … 付言便乗の語にだけ。 強つい ✗ / 温つい ✓
+  // canConnect はプールにあるかどうかだけ。connectorFor はプールの順そのまま。
   for (const w of content) {
+    const pool = WORDS[w].pool.map((e) => e.k);
+    ok(JSON.stringify(connectorFor(WORDS[w])) === JSON.stringify(pool), `「${w}」の connectorFor がプールと違う`);
     for (const c of conns) {
-      const want = connectorFor(WORDS[w]).includes(c);
-      const got = canConnect(WORDS[w], c);
-      ok(got === want,
-        `「${w}」(${WORDS[w].pos}) + 「${c}」→ ${got} (期待 ${want})`);
+      ok(canConnect(WORDS[w], c) === pool.includes(c), `「${w}」+「${c}」の canConnect がプールと違う`);
+    }
+    // 形には役割がある。格は next を持つ。
+    for (const e of WORDS[w].pool) {
+      ok(['adn', 'adv', 'case'].includes(e.role), `「${w}${e.k}」の役割が不明: ${e.role}`);
+      if (e.role === 'case') ok(['noun', 'verb', 'pred'].includes(e.next), `「${w}${e.k}」の格に next が無い`);
+      ok(e.k.length <= 3, `「${w}${e.k}」の送り仮名が長すぎる`);
     }
   }
-  ok(!canConnect(WORDS['焔'], 'する'), '「焔する」が結べている');
-  ok(canConnect(WORDS['爆'], 'する'), '「爆する」が結べない');
-  ok(!canConnect(WORDS['強'], 'つ'), '「強つい」が結べている');
-  ok(canConnect(WORDS['温'], 'つ'), '「温つい」が結べない');
-  ok(!canConnect({ text: 'の', pos: null }, 'の'), '接続詞どうしで結合できてしまう');
+  // 名詞は共通の NOUN_POOL (の・を・に・へ)。
+  ok(JSON.stringify(connectorFor(WORDS['焔'])) === JSON.stringify(['の', 'を', 'に', 'へ']),
+    `「焔」のプール: ${connectorFor(WORDS['焔'])}`);
+  // 生の {text} でも同じプールを引く (辞書の外の呼び出し)。
+  ok(canConnect({ text: '焔' }, 'を'), '「焔を」が結べない');
+  ok(!canConnect({ text: 'の' }, 'の'), '接続詞どうしで結合できてしまう');
   ok(!canConnect(null, 'の'), '直前の語が無いのに結合できてしまう');
+  ok(!canConnect(WORDS['焔'], '焔'), '語を接続詞として結べてしまう');
 
-  // 日本語として正しい相性。
-  ok(canConnect({ text: '焔', pos: POS.noun }, 'を'), '「焔を」が結べない');
-  ok(canConnect({ text: '斬', pos: POS.verb }, 'された'), '「斬された」が結べない');
-  ok(canConnect({ text: '強', pos: POS.adj }, 'く'), '「強く」が結べない');
-  ok(canConnect({ text: '妙', pos: POS.naadj }, 'な'), '「妙な」が結べない');
-  ok(canConnect({ text: '妙', pos: POS.naadj }, 'に'), '「妙に」(妙に) が結べない');
-  ok(canConnect({ text: '焔', pos: POS.noun }, 'に'), '「焔に」が結べない');
-  // 音響系の用言には く も付く。「響く」= 響く。
-  ok(canConnect(WORDS['響'], 'く'), '「響く」が結べない');
-  ok(!canConnect(WORDS['斬'], 'く'), '「斬く」が結べている');
-  // 日本語として誤った相性。
-  // い形容詞と な形容詞 を混ぜない。
-  ok(!canConnect({ text: '妙', pos: POS.naadj }, 'された'), '「妙された」が結べている');
-  ok(!canConnect({ text: '妙', pos: POS.naadj }, 'い'), '「妙い」が結べている');
-  ok(!canConnect({ text: '強', pos: POS.adj }, 'な'), '「強な」が結べている');
-  // 「貫く」(つらぬく) は五段の「〜く」。「貫」はする-体言だが く も付く。
-  ok(canConnect(WORDS['貫'], 'く'), '「貫く」が結べない');
-  ok(canConnect(WORDS['貫'], 'する'), '「貫する」が結べない');
-  ok(!canConnect({ text: '焔', pos: POS.noun }, 'く'), '「焔く」が結べている');
+  // 旧例外表・旧ハックは残っていない。
+  for (const k of ['せし']) ok(!CONNECTORS[k], `旧接続詞「${k}」が残っている`);
+  ok(JSON.stringify(CONNECTOR_LIST.slice().sort()) === JSON.stringify(conns.slice().sort()),
+    'CONNECTOR_LIST と CONNECTORS が不一致');
 
-  // 「語 + 接続詞」が 1 語に潰れないこと。
-  // 潰れると合成語にならない (呪 + い が「呪い」1 語になる例)。
+  const has = (w, c) => ok(canConnect(WORDS[w], c), `「${w}${c}」が結べない`);
+  const hasNot = (w, c) => ok(!canConnect(WORDS[w], c), `「${w}${c}」が結べている (日本語に無い)`);
+
+  // ユーザーが挙げた不自然な形は全部消えている。
+  hasNot('斬', 'された'); hasNot('回', 'せし'); hasNot('凍', 'ける'); hasNot('跨', 'く');
+  hasNot('滑', 'かな'); hasNot('冷', 'つ');
+  // 代わりに本当の送り仮名がある。
+  has('斬', 'る'); has('斬', 'られた'); has('斬', 'り');
+  has('凍', 'る'); has('凍', 'える');
+  has('滑', 'らかな'); has('静', 'かな'); has('妙', 'な'); has('妙', 'に');
+  has('速', 'く'); has('速', 'い'); has('跨', 'ぐ'); has('冷', 'たい'); has('冷', 'える');
+  has('回', 'る'); has('回', 'す'); has('回', 'り'); has('回', 'された');
+  has('呪', 'う'); has('呪', 'われた'); has('呪', 'いの');
+  has('大', 'きな'); has('小', 'さな'); has('明', 'るい'); has('爆', 'ぜる');
+  has('急', 'な'); has('急', 'に'); has('急', 'ぐ');
+  // 品詞を混ぜない。
+  hasNot('妙', 'い'); hasNot('強', 'な'); hasNot('静', 'な'); hasNot('巨', 'な');
+  hasNot('焔', 'する'); hasNot('焔', 'かな'); hasNot('焔', 'く'); hasNot('強', 'かな');
+  hasNot('融', 'く'); hasNot('嚇', 'む'); hasNot('潰', 'ける'); hasNot('穿', 'く'); hasNot('焦', 'ける');
+  hasNot('温', 'つ'); hasNot('重', 'つ'); hasNot('通', 'い');
+  // 同じ送り仮名でも役割は語ごと。
+  ok(formOf(WORDS['速'], 'く').role === 'adv', '「速く」が連用でない');
+  ok(formOf(WORDS['貫'], 'く').role === 'adn', '「貫く」が連体でない');
+  ok(formOf(WORDS['妙'], 'に').role === 'adv', '「妙に」が連用でない');
+  ok(formOf(WORDS['焔'], 'に').role === 'case', '「焔に」が格でない');
+
+  // 「語 + 接続詞」が 1 語に潰れない (送り仮名ごとに 1 つの接続詞として割れる)。
   for (const w of content) {
-    for (const c of conns) {
+    for (const c of connectorFor(WORDS[w])) {
       const segs = segment(w + c);
       ok(segs && segs.length === 2 && segs[0] === w && segs[1] === c,
         `「${w}+${c}」が合成語として分割できない: ${JSON.stringify(segs)}`);
     }
   }
-  // 語と接続詞の入れ替えも許さない。
-  ok(connectorFor({ text: '焔', pos: POS.noun }).includes('を'), '「焔」に「を」を結べない');
-  ok(!connectorFor({ text: 'を' }).includes('焔'), '接続詞に語を結べている');
+
+  // 行き止まりを作らない。どの語も 1 つ以上の形を持つ。
+  const dead = content.filter((w) => connectorFor(WORDS[w]).length === 0);
+  ok(dead.length === 0, `接続詞が付かない語がある: ${dead.join(' ')}`);
+
+  console.log(`  語 ${content.length} / 接続詞 ${conns.length} 種 / 結合できる組 ${content.reduce((s, w) => s + connectorFor(WORDS[w]).length, 0)}`);
 }
 
-sec('語ごとに付けられる接続詞が全部出ること');
+sec('プールの形で文が読めること');
 {
-  // 鍛冶の候補は CONNECTOR_LIST から引かれる。表がずれると
-  // 「結合できるのに UI に出ない」語が生まれるので一致を保つ。
-  ok(JSON.stringify(CONNECTOR_LIST.slice().sort()) === JSON.stringify(Object.keys(CONNECTORS).sort()),
-    `CONNECTOR_LIST と CONNECTORS が不一致: ${CONNECTOR_LIST} / ${Object.keys(CONNECTORS)}`);
-
-  const has = (w, c) => {
-    ok(connectorFor(WORDS[w]).includes(c), `「${w}」+「${c}」が結べない`);
-  };
-  const hasNot = (w, c) => {
-    ok(!connectorFor(WORDS[w]).includes(c), `「${w}」+「${c}」が結べている`);
-  };
-
-  // 小さい / 小さく / 大きい / 大きく
-  has('小', 'い'); has('小', 'く'); has('大', 'い'); has('大', 'く');
-  // 急く / 急い / 急な / 急に
-  has('急', 'く'); has('急', 'い'); has('急', 'な'); has('急', 'に');
-  // 瞬く / 沸く / 吐く / 穿く / 融く / 散く / 響く
-  has('瞬', 'く'); has('沸', 'く'); has('吐', 'く');
-  has('穿', 'く'); has('融', 'く'); has('散', 'く'); has('響', 'く');
-  // 貫く / 焼く / 叩く / 浮く / 溶く / 跨く / 轟く / 裂く / 砕く
-  has('貫', 'く'); has('焼', 'く'); has('叩', 'く'); has('浮', 'く'); has('溶', 'く');
-  has('跨', 'く'); has('轟', 'く'); has('裂', 'く'); has('砕', 'く');
-  // 呪いは い で名詞になる (呪いの刃)。
-  has('呪', 'い'); has('呪', 'の');
-  // 回る / 回り / 回す / 回された
-  has('回', 'る'); has('回', 'り'); has('回', 'せし'); has('回', 'された');
-  // 遠い / 遠く
-  has('通', 'い'); has('通', 'く');
-  // 冷たい / 冷たく / 冷つい / 重い / 重く / 重つい
-  has('冷', 'い'); has('冷', 'く'); has('冷', 'つ');
-  has('重', 'い'); has('重', 'く'); has('重', 'つ');
-  // 「〜する」が通用する効果語
-  has('導', 'する'); has('圧', 'する'); has('律', 'する');
-  has('執', 'する'); has('反', 'する'); has('徹', 'する');
-
-  // 品詞の相性は変えない。
-  hasNot('斬', 'く');      // 「斬く」は無い
-  hasNot('妙', 'い');      // 「妙い」は無い
-  // 「Xな」が日本語に無い語には な を結ばない。
-  hasNot('静', 'な'); hasNot('剛', 'な'); hasNot('巨', 'な');   // 静な✗ / 剛な✗ / 巨な✗
-  hasNot('豪', 'な'); hasNot('精', 'な'); hasNot('滑', 'な');   // 豪な✗ / 精な✗ / 滑な✗
-  // 1 漢字で「な」が直接付くのはこの 2 語だけ。
-  has('妙', 'な'); has('妙', 'に'); has('急', 'な'); has('急', 'に');
-  hasNot('強', 'な');      // 「強な」は無い
-  // 2 漢字のな形容詞は辞書に置かない。1 漢字語 + 接続詞 かな で作る。
-  for (const w of ['静か', '確か']) {
-    ok(!WORDS[w], `「${w}」は接続詞 かな で作る語なので辞書に無い`);
-  }
-  // かな … 語幹が「〜か」になる な形容詞にだけ付く。
-  //   静かな(静か) / 確かな(確か) / 滑かな(滑らか) / 適かな(適切) …
-  for (const w of ['静', '確', '滑', '適', '華', '豪', '精', '良', '明', '優', '巧']) {
-    has(w, 'かな');
-    hasNot(w, 'な');      // 「静な」「確な」は無い。かなで書く。
-    ok(!!(WORDS[w].fx && Object.keys(WORDS[w].fx).length), `「${w}」に効果が無い`);
-  }
-  // 語幹が「〜か」にならない な形容詞には かな が付かない。
-  hasNot('強', 'かな'); hasNot('頑', 'かな'); hasNot('神', 'かな');  // 強固 頑強 神速
-  hasNot('端', 'かな'); hasNot('冷', 'かな'); hasNot('巨', 'かな');  // 端正 冷徹 巨大
-  hasNot('焔', 'かな'); hasNot('刃', 'かな');                        // 「焔か」「刃か」は無い
-  hasNot('静', 'く'); hasNot('静', 'い');      // 静は い形容の語幹ではない
-  // 「1 漢字語どうしの連結」(華麗 精密 端正) はな形容詞にしない。
-  // 置くと「華」「麗」の連結が分割で「華麗」になり、品詞と効果が替わる。
-  for (const w of ['華麗', '精密', '端正', '頑強', '神速']) {
-    ok(!WORDS[w], `1 漢字語どうしの連結「${w}」が語になっている`);
-  }
-  hasNot('焔', 'する');    // 「焔する」は無い
-  hasNot('巨', 'な');      // な形容詞は「巨大」であって「巨」ではない。「巨な」は無い
-  has('巨', 'の'); has('巨', 'に');   // 体言として「巨の刃」「焔を巨に」
-  hasNot('強', 'つ');      // 「強つい」は無い
-  // 「する」-名詞にも「付言便乗」の無い語には付かない。
-  // 品詞が当たっても語ごとの絞り込みで弾く (品詞判定より先に評価する)。
-  hasNot('弾', 'つ'); hasNot('刃', 'つ'); hasNot('焔', 'つ');
-  hasNot('焔', 'する'); hasNot('刃', 'する'); hasNot('烈', 'する');
-
-  // 文の中でも実際に並べられること。連用形・続用形のあとは動詞か形容が要る。
-  const E2 = (...ws) => evaluate(ws.map(makeWord), { minContent: 3, tail: ws[ws.length - 1] });
+  const E2 = (...ws) => evaluate(ws.map(makeWord), { minContent: 2, tail: ws[ws.length - 1] });
   const good = [
-    ['小', 'い', '焔', 'を', '斬', 'る', '刃'],   // 小さい焔を斬る刃
-    ['大', 'い', '焔', 'を', '斬', 'る', '刃'],   // 大きい焔を斬る刃
-    ['急', 'く', '斬', 'る', '妙', 'な', '刃'],   // 急く斬る妙な刃
-    ['急', 'な', '焔', 'を', '斬', 'る', '刃'],   // 急な焔を斬る刃
+    ['斬', 'られた', '刃'],                       // 斬られた刃
+    ['凍', 'える', '刃'],                         // 凍える刃
+    ['滑', 'らかな', '刃'],                       // 滑らかな刃
+    ['焔', 'を', '斬', 'る', '刃'],               // 焔を斬る刃
+    ['霜', 'を', '蝕', 'む', '刃'],               // 霜を蝕む刃
+    ['踏', 'む', '焔', 'を', '斬', 'る', '刃'],   // 踏む焔を斬る刃
+    ['溶', 'ける', '毒', 'を', '斬', 'る', '刃'], // 溶ける毒を斬る刃
+    ['察', 'する', '毒', 'を', '斬', 'る', '刃'], // 察する毒を斬る刃
+    ['小', 'さな', '焔', 'を', '斬', 'る', '刃'], // 小さな焔を斬る刃
+    ['大', 'きな', '焔', 'の', '刃'],             // 大きな焔の刃
     ['急', 'に', '斬', 'る', '妙', 'な', '刃'],   // 急に斬る妙な刃
-    ['瞬', 'く', '斬', 'る', '妙', 'な', '刃'],   // 瞬く斬る妙な刃
-    ['通', 'い', '焔', 'を', '斬', 'る', '刃'],   // 遠い焔を斬る刃
-    ['通', 'く', '斬', 'る', '妙', 'な', '刃'],   // 遠く斬る妙な刃
-    ['冷', 'つ', '焔', 'を', '斬', 'る', '刃'],   // 冷つい焔を斬る刃
-    ['重', 'い', '焔', 'を', '斬', 'る', '刃'],   // 重い焔を斬る刃
-    ['沸', 'く', '斬', 'る', '妙', 'な', '刃'],   // 沸く斬る妙な刃
-    ['穿', 'く', '斬', 'る', '妙', 'な', '刃'],   // 穿く斬る妙な刃
-    ['融', 'く', '斬', 'る', '妙', 'な', '刃'],   // とかく斬る妙な刃
-    ['散', 'く', '斬', 'る', '妙', 'な', '刃'],   // ちかく斬る妙な刃
-    ['毒', 'を', '回', 'る', '妙', 'な', '刃'],   // 毒を回る妙な刃
-    ['毒', 'を', '回', 'せし', '妙', 'な', '刃'], // 毒を回す妙な刃
-    ['毒', 'を', '回', 'り', '妙', 'な', '刃'],   // 毒を回り
-    ['導', 'する', '毒', 'を', '斬', 'る', '刃'], // 導する毒を斬る刃
-    ['圧', 'する', '毒', 'を', '斬', 'る', '刃'], // 圧する毒を斬る刃
-    ['静', 'かな', '焔', 'を', '斬', 'る', '刃'], // 静かな(静か) 焔を斬る刃
-    ['確', 'かな', '毒', 'を', '斬', 'る', '刃'], // 確かな(確か) 毒を斬る刃
-    ['滑', 'かな', '焔', 'を', '斬', 'る', '刃'], // 滑かな(滑らか) 焔を斬る刃
-    ['適', 'かな', '毒', 'を', '斬', 'る', '刃'], // 適かな(適切) 毒を斬る刃
-    ['巧', 'かな', '毒', 'を', '斬', 'る', '刃'], // 巧かな(巧妙) 毒を斬る刃
-    ['良', 'かな', '焔', 'の', '弾'],            // 良かな(良質) 焔の弾
-    ['瞬', 'く', '焔', 'を', '斬', 'る', '刃'],   // 瞬く焔 … 動詞の「〜く」は連体形
+    ['急', 'な', '焔', 'を', '斬', 'る', '刃'],   // 急な焔を斬る刃
+    ['速', 'く', '斬', 'る', '妙', 'な', '刃'],   // 速く斬る妙な刃
+    ['毒', 'を', '回', 'す', '妙', 'な', '刃'],   // 毒を回す妙な刃
+    ['毒', 'を', '回', 'り', '斬', 'る', '刃'],   // 毒を回り斬る刃
+    ['静', 'かな', '焔', 'を', '斬', 'る', '刃'], // 静かな焔を斬る刃
+    ['確', 'かな', '毒', 'を', '斬', 'る', '刃'], // 確かな毒を斬る刃
+    ['穏', 'やかな', '焔', 'の', '弾'],           // 穏やかな焔の弾
     ['貫', 'く', '毒', 'を', '斬', 'る', '刃'],   // 貫く毒を斬る刃
-    ['呪', 'い', 'の', '毒', 'を', '斬', 'る', '刃'], // 呪いの毒を斬る刃 … い が名詞を作る
-    ['呪', 'い', 'を', '斬', 'る', '刃'],         // 呪いを斬る刃
+    ['呪', 'いの', '毒', 'を', '斬', 'る', '刃'], // 呪いの毒を斬る刃
+    ['呪', 'いを', '斬', 'る', '刃'],             // 呪いを斬る刃
+    ['必', 'ず', '斬', 'る', '刃'],               // 必ず斬る刃
+    ['焔', 'に', '強', 'い', '刃'],               // 焔に強い刃
+    ['冷', 'たい', '毒', 'の', '弾'],             // 冷たい毒の弾
+    ['雷', 'の', '響', 'く', '刃'],               // 雷の響く刃
+    ['焔', 'の', '斬', 'られた', '剣'],           // 焔の斬られた剣 (「の」は連体節の主語にもなる)
   ];
   for (const ws of good) {
     const r = E2(...ws);
     ok(r.valid, `「${ws.join('')}」が不成立: ${r.reasonText}`);
   }
-
-  // 連用形「〜く」/ 続用形「〜り」のあとは名詞を置けない (規則 4)。
   const bad = [
-    ['急', 'く', '焔', 'を', '斬', 'る', '刃'],   // 急く焔 … い形容の連用形の名詞修飾
-    ['回', 'り', '毒', 'の', '弾'],               // 回り毒 … 続用形の名詞修飾
-    ['妙', 'に', '刃'],                           // 妙に刃
-    ['静', 'かな', 'された', '焔', 'を', '斬', 'る', '刃'], // 静かされた焔 … な形容に「された」は無い
-    ['滑', 'かな', 'く', '焔', 'を', '斬', 'る', '刃'],   // 滑かなく焔 … 接続詞どうしの隣接
-    ['焔', 'かな', 'を', '斬', 'る', '刃'],            // 焔かなを斬る刃 …「焔か」は無い
-    ['強', 'かな', '毒', 'を', '斬', 'る', '刃'],       // 強かな … 「強か」は無い (強固)
+    [['斬', 'された', '刃'], 'floatconn'],         // 斬された … 斬 のプールに された は無い
+    [['凍', 'ける', '刃'], 'floatconn'],           // 凍ける
+    [['滑', 'かな', '刃'], 'floatconn'],           // 滑かな
+    [['跨', 'く', '刃'], 'floatconn'],             // 跨く
+    [['冷', 'つ', '刃'], 'floatconn'],             // 冷つい
+    [['回', 'せし', '刃'], 'unseg'],               // せし は辞書から消えた
+    [['速', 'く', '焔', 'の', '刃'], 'connnoun'],  // 速く焔 … 連用のあとに名詞
+    [['妙', 'に', '刃'], 'connnoun'],              // 妙に刃
+    [['焔', 'を', '剣'], 'noobject'],              // 焔を剣
+    [['焔', 'を', '強', 'い', '剣'], 'noobject'],  // 焔を強い剣 … を は動作が要る
+    [['斬', 'る', '速', 'く', '斬', 'る', '剣'], 'connnoun'], // 斬る速く … 連体のあとに連用
+    [['焔', 'の', '斬', '剣'], 'connnoun'],        // の のあとに裸の動詞
   ];
-  for (const ws of bad) {
-    const r = E2(...ws);
-    ok(!r.valid, `「${ws.join('')}」が成立してしまった`);
+  const ER = (...ws) => evaluate(ws.map((t) => ({ text: t })), { minContent: 2, tail: ws[ws.length - 1] });
+  for (const [ws, why] of bad) {
+    const r = ER(...ws);
+    ok(!r.valid && r.reason === why, `「${ws.join('')}」→ valid=${r.valid} reason=${r.reason} (期待 ${why})`);
   }
-
-  // 行き止まりを作らない。接続詞が 1 つも付かない語は無い。
-  const dead = Object.entries(WORDS)
-    .filter(([t, w]) => w.cat !== 'connect' && connectorFor(w).length === 0)
-    .map(([t]) => t);
-  ok(dead.length === 0, `接続詞が付かない語がある: ${dead.join(' ')}`);
-
-  console.log(`  ${good.length} 通りの新しい言い方が通り / ${bad.length} 通りは規則で落ちる`);
+  // 同じ接続詞の重複は成立。ただし減点。
+  const dup = E2('風', 'の', '潮', 'の', '銃');
+  ok(dup.valid, `「風の潮の銃」が不成立: ${dup.reasonText}`);
+  ok(dup.naturalParts.some((p) => p.key === 'dupconn'), '「風の潮の銃」に重複の減点が無い');
+  const single = E2('風', 'の', '潮', '銃');
+  ok(!single.naturalParts.some((p) => p.key === 'dupconn'), '重複していないのに減点がある');
+  console.log(`  ${good.length} 通り成立 / ${bad.length} 通りは理由つきで落ちる / 重複は減点`);
 }
 
 sec('枠は語だけ、接続詞はあいだに置き換える');
@@ -513,10 +395,10 @@ sec('日本語として読めない文は落ちること');
   // ここで落ちているのが昔バグった例。
   // 「刃剣」「貫を剣」「焔貫を剛された刃剣」のような形は日本語に無い。
   let r = evaluate(
-    ['焔', '貫', 'を', '剛', 'された', '刃', '剣'].map(makeWord),
+    ['焔', '貫', 'を', '剛', 'られた', '刃', '剣'].map(makeWord),
     { minContent: 4, tail: '剣' },
   );
-  ok(!r.valid, `「焔貫を剛された刃剣」が成立してしまった: ${r.reasonText}`);
+  ok(!r.valid, `「焔貫を剛られた刃剣」が成立してしまった: ${r.reasonText}`);
 
   // 用言・形が末尾語を直接修飾できない。
   r = evaluate(['斬', '剣'].map(makeWord), { minContent: 2, tail: '剣' });
@@ -527,18 +409,18 @@ sec('日本語として読めない文は落ちること');
 
   // 接続詞を挟んでも「刃剣」は日本語に無い。
   r = evaluate(
-    ['焔', 'を', '斬', 'された', '刃', '剣'].map(makeWord),
+    ['焔', 'を', '斬', 'られた', '刃', '剣'].map(makeWord),
     { minContent: 4, tail: '剣' },
   );
   ok(!r.valid && r.reason === 'tailform',
-    `「焔を斬された刃剣」が成立した: ${r.valid}`);
+    `「焔を斬られた刃剣」が成立した: ${r.valid}`);
 
   // 名詞句の頭が属性・効果なら通る。
   r = evaluate(
-    ['焔', 'を', '斬', 'された', '剛', '剣'].map(makeWord),
+    ['焔', 'を', '斬', 'られた', '剛', '剣'].map(makeWord),
     { minContent: 4, tail: '剣' },
   );
-  ok(r.valid, `「焔を斬された剛剣」が不成立: ${r.reasonText}`);
+  ok(r.valid, `「焔を斬られた剛剣」が不成立: ${r.reasonText}`);
 
   // 「〜を」は目的語を取る。後ろに動詞 (=動作) が無ければ落ちる。
   r = evaluate(['焔', 'を', '剣'].map(makeWord), { minContent: 2, tail: '剣' });
@@ -551,8 +433,11 @@ sec('日本語として読めない文は落ちること');
   // 正しい言い方なら通る。
   r = evaluate(['焔', 'を', '斬', 'る', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
   ok(r.valid, `「焔を斬る剣」が不成立: ${r.reasonText}`);
+  r = evaluate(['焔', 'を', '斬', 'られた', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
+  ok(r.valid, `「焔を斬られた剣」が不成立: ${r.reasonText}`);
+  // 「斬された」は斬のプールに無い。宙に浮く。
   r = evaluate(['焔', 'を', '斬', 'された', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
-  ok(r.valid, `「焔を斬された剣」が不成立: ${r.reasonText}`);
+  ok(!r.valid && r.reason === 'floatconn', `「焔を斬された剣」の理由 ${r.reason}`);
 
   // 連用形の接続詞のあとに名詞は来ない。「焔の硬く剣」 ✗ →「焔の硬い剣」 ✓
   r = evaluate(['焔', 'の', '硬', 'く', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
@@ -572,26 +457,24 @@ sec('日本語として読めない文は落ちること');
   r = evaluate(['焔', '剛', 'された', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
   ok(!r.valid && r.reason === 'floatconn', `「焔剛された剣」の理由 ${r.reason}`);
 
-  r = evaluate(['焔', 'の', '斬', 'された', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
-  ok(r.valid, `「焔の斬された剣」が不成立: ${r.reasonText}`);
+  r = evaluate(['焔', 'の', '斬', 'られた', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
+  ok(r.valid, `「焔の斬られた剣」が不成立: ${r.reasonText}`);
 
   // 属性語を頭に置くと、主題が立って最も自然。
-  r = evaluate(['青', '焔', 'を', '斬', 'された', '刃'].map(makeWord),
+  r = evaluate(['青', '焔', 'を', '斬', 'られた', '刃'].map(makeWord),
     { minContent: 3, tail: '刃' });
-  ok(r.valid, `「青焔を斬された刃」が不成立: ${r.reasonText}`);
+  ok(r.valid, `「青焔を斬られた刃」が不成立: ${r.reasonText}`);
   ok(r.naturalParts.some((p) => p.key === 'topic'), '属性で始まる文に主題の加点が無い');
 
   // 連用形「〜に」(妙に) のあとに名詞は来ない。格の「〜に」と区別する。
   r = evaluate(['焔', 'の', '妙', 'に', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
   ok(!r.valid && r.reason === 'connnoun', `「焔の妙に剣」の理由 ${r.reason}`);
+  // 同じ「に」を 2 回 (格と連用)。不成立ではなく減点。
   r = evaluate(['焔', 'に', '妙', 'に', '斬', 'る', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
-  ok(!r.valid, 'には 1 回まで');
+  ok(r.valid && r.naturalParts.some((p) => p.key === 'dupconn'), `「焔に妙に斬る剣」が減点つきで成立しない: ${r.reasonText}`);
   r = evaluate(['妙', 'に', '斬', 'る', '剣'].map(makeWord), { minContent: 2, tail: '剣' });
   ok(r.valid, `「妙に斬る剣」が不成立: ${r.reasonText}`);
 
-  // 音響系の連用。「響く」は副詞として動詞を修飾する。名詞は修飾しない。
-  r = evaluate(['雷', 'の', '響', 'く', '斬', 'る', '刃'].map(makeWord), { minContent: 3, tail: '刃' });
-  ok(r.valid, `「雷の響く斬る刃」が不成立: ${r.reasonText}`);
   // 「響く刃」は動詞の「〜く」が連体形なので、名詞を修飾できる。
   r = evaluate(['雷', 'の', '響', 'く', '刃'].map(makeWord), { minContent: 3, tail: '刃' });
   ok(r.valid, `「雷の響く刃」が不成立: ${r.reasonText}`);
@@ -625,7 +508,7 @@ sec('自然さと完成度で力が決まること');
   ok(full.naturalParts.some((p) => p.key === 'object'), '目的語が数えられていない');
   ok(full.naturalParts.some((p) => p.key === 'predicated'), '述語が数えられていない');
   ok(plain.naturalParts.some((p) => p.key === 'topicform'), '形で始まる減点が無い');  // 修飾が 4 つ重なると名詞の列になる。
-  const list = P('剣', '焔', '妙', 'な', '必', '貫', '巨', '侵');
+  const list = P('剣', '焔', '妙', 'な', '必', '律', '巨', '撃');
   ok(list.valid, '修飾 4 連結が成立していない');
   ok(list.naturalParts.some((p) => p.key === 'enumeration'), '羅列の減点が無い');
   ok(list.natural < attr.natural,
@@ -671,10 +554,10 @@ sec('接続詞の規則');
   ok(r.compounds.length === 0, `例1 に合成がある: ${r.compounds.map((c) => c.text)}`);
   ok(r.segments.join('/') === '焔/妙/貫/疾/剣', `例1 の分割 ${r.segments.join('/')}`);
 
-  // 例2 … 焔の爆する妙な剛剣。格 → 説明 → 連体 の順。
-  r = E2('焔', 'の', '爆', 'する', '妙', 'な', '剛', '剣');
+  // 例2 … 焔の爆ぜる妙な剛剣。格 → 連体節 → 連体 の順。
+  r = E2('焔', 'の', '爆', 'ぜる', '妙', 'な', '剛', '剣');
   ok(r.valid, `例2 が不成立: ${r.reasonText}`);
-  ok(r.compounds.map((c) => c.text).join(',') === '焔の,爆する,妙な',
+  ok(r.compounds.map((c) => c.text).join(',') === '焔の,爆ぜる,妙な',
     `例2 の合成 ${r.compounds.map((c) => c.text).join(',')}`);
   ok(r.conn.floats.length === 0, `例2 に宙に浮く接続詞がある: ${r.conn.floats}`);
 
@@ -686,19 +569,19 @@ sec('接続詞の規則');
   r = E2('焔', 'を', '斬', 'る', '巨', 'な', '剣');
   ok(!r.valid, `「巨な」が成立してしまった: ${r.reasonText}`);
 
-  // NG1 … のが 2 回。
+  // 例3 … のが 2 回。日本語として読めるので成立。重複は減点。
   r = E2('風', 'の', '潮', 'の', '銃');
-  ok(!r.valid, 'NG1 が成立してしまった');
-  ok(r.reason === 'dupconn', `NG1 の理由 ${r.reason}`);
+  ok(r.valid, `例3「風の潮の銃」が不成立: ${r.reasonText}`);
+  ok(r.naturalParts.some((p) => p.key === 'dupconn'), '例3 に重複の減点が無い');
 
-  // NG2 … 接続詞どうしが直接隣れる (「焔を斬されたの剣」)。
+  // NG2 … 接続詞どうしが直接隣れる (「焔を斬られたの剣」)。
   //   順序 (昇順 / 降順) はどちらも成立する。接続詞の連続だけが壊れる。
-  r = E2('焔', 'を', '斬', 'された', 'の', '剣');
+  r = E2('焔', 'を', '斬', 'られた', 'の', '剣');
   ok(!r.valid, 'NG2 が成立してしまった');
   ok(r.reason === 'floatconn', `NG2 の理由 ${r.reason}`);
-  ok(/された|の/.test(r.reasonText), `NG2 の説明 ${r.reasonText}`);
+  ok(/「の」/.test(r.reasonText), `NG2 の説明 ${r.reasonText}`);
 
-  // NG3 … 用言に付かない接続詞。「焔剛された剣」 ✗
+  // NG3 … その語のプールに無い接続詞。「焔剛された剣」 ✗
   r = E2('焔', '剛', 'された', '剣');
   ok(!r.valid && r.reason === 'floatconn', `NG3 の理由 ${r.reason}`);
 
@@ -706,11 +589,11 @@ sec('接続詞の規則');
   r = E2('焔', '速', 'な', '剣');
   ok(!r.valid && r.reason === 'floatconn', `NG3b の理由 ${r.reason}`);
 
-  // NG3c … する-名詞でない語に「する」は付かない。「焔する剣」 ✗
+  // NG3c … プールに する が無い語には付かない。「焔する剣」 ✗
   r = E2('焔', 'する', '剛', '剣');
   ok(!r.valid && r.reason === 'floatconn', `NG3c の理由 ${r.reason}`);
 
-  // NG3d … 付言便乗の語だけに「つ」は付く。「強つい」 ✗
+  // NG3d … 「強つ」は強のプールに無い。 ✗
   r = E2('焔', '強', 'つ', '剛', '剣');
   ok(!r.valid && r.reason === 'floatconn', `NG3d の理由 ${r.reason}`);
 
@@ -729,13 +612,13 @@ sec('接続詞の順序 (両方向を許す)');
 {
   const E2 = (...ws) => evaluate(ws.map((w) => ({ text: w })));
   // 降順 (格 -> 説明 -> 述語) も成立。
-  ok(E2('焔', 'の', '爆', 'する', '剣').valid, 'の -> する が通らない');
-  ok(E2('焔', 'の', '燃', 'せし', '妙', 'な', '剣').valid, 'の -> せし が通らない');
-  ok(E2('焔', 'の', '温', 'つ', '剣').valid, 'の -> つ が通らない');
-  ok(E2('焔', 'を', '斬', 'された', '潮', 'の', '剣').valid, 'された -> の が通らない');
-  // 昇順 (述語 -> 格) も成立。「侵蝕する毒の針」のように自然な並び。
-  ok(E2('侵', 'する', '毒', 'の', '針').valid, 'する -> の が通らない');
-  ok(E2('爆', 'する', '焔', 'の', '剣').valid, 'する -> の (体言) が通らない');
+  ok(E2('焔', 'の', '爆', 'ぜる', '剣').valid, 'の -> ぜる が通らない');
+  ok(E2('焔', 'の', '燃', 'える', '妙', 'な', '剣').valid, 'の -> える が通らない');
+  ok(E2('焔', 'の', '撃', 'つ', '剣').valid, 'の -> つ が通らない');
+  ok(E2('焔', 'を', '斬', 'られた', '潮', 'の', '剣').valid, 'られた -> の が通らない');
+  // 昇順 (述語 -> 格) も成立。「圧する毒の針」のように自然な並び。
+  ok(E2('圧', 'する', '毒', 'の', '針').valid, 'する -> の が通らない');
+  ok(E2('爆', 'ぜる', '焔', 'の', '剣').valid, 'ぜる -> の (体言) が通らない');
   // 形容の接続詞 (く・い・な・つ) は日本語では置く場所が自由。
   //   い形容詞の連体は「い」、な形容詞の連体は「な」。
   ok(E2('速', 'い', '焔', 'を', '斬', 'る', '妙', 'な', '剣').valid,
@@ -746,10 +629,10 @@ sec('接続詞の順序 (両方向を許す)');
     '「焔を斬る妙な剣」が通らない');
   // 接続詞どうしが直接隣れる並びだけは落ちる (直前の語に結べない = 宙に浮く)。
   ok(!E2('焔', 'する', 'の', '剣').valid, 'するの の連続が通ってしまう');
-  // 同じ接続詞の 2 回目はすべて脱落。
-  for (const conn of Object.keys(CONNECTORS)) {
-    ok(!E2('火', conn, '焔', conn, '弾').valid, `接続詞「${conn}」の 2 回目が通ってしまう`);
-  }
+  // 同じ接続詞の 2 回目は不成立ではなく減点。
+  const d2 = E2('火', 'の', '焔', 'の', '弾');
+  ok(d2.valid && d2.naturalParts.some((p) => p.key === 'dupconn'), '「火の焔の弾」が減点つきで成立しない');
+  ok(d2.natural < E2('火', 'の', '焔', '弾').natural + 0.55, '重複の減点が効いていない');
 }
 
 sec('接続詞は文を成立させない');

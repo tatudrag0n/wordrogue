@@ -11,15 +11,15 @@
 // 語をタップすると直後の接続詞が切り替わり、使える接続詞を
 // 一周すると「接続詞なし」になり、また先頭から回す:
 //
-//   「爆」→ せし(ぜし) → る(ぜる) → せし … （一周したら無し）
-//   「発」→ する(する) → の(の) …        （一周したら無し）
+//   「斬」→ る(斬る) → られた(斬られた) → り(斬り) → 無し
+//   「発」→ する(発する) → の → を → に → へ → 無し
 //
-// 使える接続詞は「その語の品詞に結合できること」だけ。
-// ここが日本語の文法そのものなので、ここを通さないと文は壊れる。
+// 使える接続詞は「その語のプール (words.pool.js) にある送り仮名」だけ。
+// 並びもプールの順。文字数の上限を超えるものだけ外す。
 // ============================================================================
 
-import { evaluate, makeWord, WORDS, CONNECTOR_LIST } from '../data/words.js';
-import { canConnect, CONNECTORS } from '../data/words.connect.js';
+import { evaluate, makeWord, WORDS } from '../data/words.js';
+import { connectorFor, CONNECTORS } from '../data/words.connect.js';
 
 /** 文の文字数の上限。接続詞も末尾語も数える。 */
 export const MAX_SENTENCE_LEN = 10;
@@ -159,7 +159,7 @@ export class Sentence {
   // ───────────────────────────────────────────────────────────────────────────
 
   /**
-   * 位置の語の直後に置ける接続詞。品詞が合うものだけ。
+   * 位置の語の直後に置ける接続詞。その語のプールの送り仮名だけ (プールの順)。
    * さらに「文字数が収まる」ものだけを出す。
    * @returns {string[]}
    */
@@ -169,10 +169,7 @@ export class Sentence {
     const info = WORDS[e.word.text];
     if (!info) return [];
     const cur = e.conn ? e.conn.text.length : 0;
-    return CONNECTOR_LIST.filter((c) => {
-      if (!canConnect(info, c)) return false;
-      return this.len - cur + c.length <= this.maxLen;
-    });
+    return connectorFor(info).filter((c) => this.len - cur + c.length <= this.maxLen);
   }
 
   /** 語の直後に接続詞を置く。null で外す。 */

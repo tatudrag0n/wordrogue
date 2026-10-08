@@ -182,11 +182,11 @@ sec('文は 10 文字まで / 武器語は自分で置く');
 sec('武器名はその文面になる / 武器語が攻撃を決める');
 {
   const wi = run.weapons[0];
-  // 「焔を斬妙な」= 8 文字。末尾の「刃」が武器語。
-  setWords(wi, [['烈', 'を'], ['斬'], ['妙', 'な'], ['刃']]);
+  // 「烈しく斬る妙な刃」= 8 文字。末尾の「刃」が武器語。
+  setWords(wi, [['烈', 'しく'], ['斬', 'る'], ['妙', 'な'], ['刃']]);
   const res = wi.resolve(run.player.stats);
   console.log(`  「${wi.title}」 ${res.gradeInfo.name} 文力=${res.evalResult.fx.power.toFixed(2)} 攻撃=${res.kind}`);
-  ok(wi.title === '烈を斬妙な刃', `武器名が文面と違う: ${wi.title}`);
+  ok(wi.title === '烈しく斬る妙な刃', `武器名が文面と違う: ${wi.title}`);
   ok(res.valid, `「${wi.title}」が不成文: ${res.reasonText}`);
   ok(res.kind === 'slash', `武器語が「刃」なら斬撃のはず: ${res.kind}`);
   ok(res.evalResult.fx.explode > 0, '「烈」で爆発が付くはず');
@@ -194,14 +194,14 @@ sec('武器名はその文面になる / 武器語が攻撃を決める');
   ok(res.evalResult.fx.power > 1.3, `文の力が低い: ${res.evalResult.fx.power}`);
 
   // 並べ替えると文面が変わる。接続詞は語と動く。
-  setWords(wi, [['烈', 'を'], ['斬'], ['妙', 'な'], ['刃']]);
+  setWords(wi, [['烈', 'しく'], ['斬', 'る'], ['妙', 'な'], ['刃']]);
   const before = wi.title;
   const [a, b] = wi.sentence.entries;
   wi.sentence.entries[0] = b;
   wi.sentence.entries[1] = a;
   const swapped = wi.resolve(run.player.stats);
   ok(swapped.title !== before, '並べ替えても名前が変わらない');
-  ok(swapped.title === '斬烈を妙な刃', `入れ替え後 ${swapped.title}`);
+  ok(swapped.title === '斬る烈しく妙な刃', `入れ替え後 ${swapped.title}`);
   ok(swapped.kind === 'slash', `並べ替えで攻撃が変わった: ${swapped.kind}`);
   console.log(`  入れ替え → 「${swapped.title}」 ${swapped.kind}`);
 
@@ -969,7 +969,7 @@ sec('語をタップすると直後の接続詞が切り替わる');
   const r = newRun(1);
   const wi = r.weapons[0];
 
-  // 「発」… する-体言。「する」と「の」が付く。一周したら無し。
+  // 「発」… プールは する・の・を・に・へ。一周したら無し。
   setFlat(wi, ['焔', '発']);
   const place = { kind: 'slot', wi, index: 1 };
   const opts = wi.sentence.connOptions(1);
@@ -989,15 +989,18 @@ sec('語をタップすると直後の接続詞が切り替わる');
   ok(wi.sentence.words[1].text === '発', '語が変わった');
   ok(lexText(r) === lexBefore, '接続詞で語彙が変わった');
 
-  // 「爆」… 用言。「せし」と「る」。一周したら無し。
+  // 「燃」… 動詞。プールは える・やす だけ (燃る・燃された は無い)。一周したら無し。
   setFlat(wi, ['焔', '燃']);
   const opts2 = wi.sentence.connOptions(1);
-  ok(opts2.includes('せし') && opts2.includes('る'),
-    `「燃」の接続詞 ${opts2.join(',')}`);
+  ok(opts2.join(',') === 'える,やす', `「燃」の接続詞 ${opts2.join(',')}`);
   const p2 = { kind: 'slot', wi, index: 1 };
   const seen2 = [];
   for (let i = 0; i < opts2.length + 1; i++) seen2.push(r.cycleConnector(p2).text);
   ok(seen2[seen2.length - 1] === null, `一周しても無しにならない: ${seen2.join(',')}`);
+  // 「斬」… る・られた・り (プールの順そのまま)。
+  setFlat(wi, ['焔', '斬']);
+  const opts3 = wi.sentence.connOptions(1);
+  ok(opts3.join(',') === 'る,られた,り', `「斬」の接続詞 ${opts3.join(',')}`);
 
   // 文面には接続詞が入る。
   setFlat(wi, ['焔', 'を', '斬']);

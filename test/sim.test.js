@@ -1264,6 +1264,17 @@ sec('武器 1 つにつき複数語を並べられる');
   ok(idiom.evalResult.idiom?.phrase === '毒蝕弾', `熟語が乗らない: ${idiom.evalResult.idiom}`);
   console.log(`  熟語 → 「${idiom.fullText}」(${idiom.gradeInfo.name} / 熟語 ${idiom.evalResult.idiom.name})`);
 
+  // 二字熟語と熟語の接続詞。発 + 電 + する + 剣 = 発電する剣。
+  const hatsu = setFlat(wi, ['発', '電', 'する', '剣']);
+  ok(hatsu.sentence.text === '発電する剣', `「発電する剣」が組めない: ${hatsu.sentence.text}`);
+  const hres = hatsu.resolve(r.player.stats);
+  ok(hres.valid, `「発電する剣」が成立しない: ${hres.reasonText}`);
+  ok(hres.evalResult.idiom?.phrase === '発電', `発電が熟語にならない: ${hres.evalResult.idiom?.phrase}`);
+  ok(hres.evalResult.predicated, '発電する が述語にならない');
+  const denSuru = setFlat(wi, ['電', 'する', '剣']);
+  ok(denSuru.sentence.text === '電剣', `「電」に する が付いてしまう: ${denSuru.sentence.text}`);
+  console.log(`  二字熟語 → 「${hres.fullText}」(${hres.gradeInfo.name} / 熟語 ${hres.evalResult.idiom?.name})`);
+
   // 接続詞は文の力を上げる。同じ語並びで比較する。
   const plain = setFlat(wi, ['焔', '鋼', '剛']).resolve(r.player.stats);
   const gram = setFlat(wi, ['焔', 'の', '鋼', '剛']).resolve(r.player.stats);

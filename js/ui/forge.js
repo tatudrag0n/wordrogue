@@ -68,7 +68,11 @@ const PS_LABEL = {
  * ここをタップしても、その語が持つ接続詞が切り替わる (語と同じ操作)。
  */
 /** 接続詞メニューの説明。その語での役割を出す (同じ「に」でも 焔に=格 / 妙に=連用)。 */
-function pickTitle(wordText, k) {
+/** 熟語に付く形 (発電する) なら熟語ごと出す。 */
+function pickTitle(wordText, k, hit) {
+  if (hit && hit.compound) {
+    return `${hit.source}${k} — ${ROLE_LABEL[hit.form.role] || ''} (熟語「${hit.source}」の形)`;
+  }
   const f = formOf({ text: wordText }, k);
   return f ? `${wordText}${k} — ${ROLE_LABEL[f.role] || ''}` : (CONNECTORS[k]?.desc || '');
 }
@@ -394,12 +398,15 @@ export class Forge {
     const opts = sen.connOptions(place.index);
     const cur = e.conn ? e.conn.text : null;
     const menu = el('div', { class: 'conn-picker' });
-    menu.append(el('div', { class: 'conn-picker-head' }, `${e.word.text} の直後`));
+    // 直前の語と熟語になっていれば見出しに出す (「発電」の直後 → する が選べる)。
+    const phrase = opts.map((c) => sen.connForm(place.index, c)).find((h) => h && h.compound);
+    menu.append(el('div', { class: 'conn-picker-head' },
+      phrase ? `${e.word.text} の直後 (熟語「${phrase.source}」)` : `${e.word.text} の直後`));
     const add = (text, label) => {
       const b = el('button', {
         class: 'conn-pick' + (text === cur ? ' cur' : ''),
         type: 'button',
-        title: text ? pickTitle(e.word.text, text) : '接続詞を外す',
+        title: text ? pickTitle(e.word.text, text, sen.connForm(place.index, text)) : '接続詞を外す',
       }, el('span', {}, label));
       b.addEventListener('click', (ev) => {
         ev.preventDefault();

@@ -16,10 +16,14 @@
 //
 // 使える接続詞は「その語のプール (words.pool.js) にある送り仮名」だけ。
 // 並びもプールの順。文字数の上限を超えるものだけ外す。
+//
+// 直前の語と合わせて熟語になっているときは、熟語の送り仮名も先頭に出る。
+//   「発」「電」と並べて「電」をタップ → する(発電する) → の → を → に → へ → 無し
+// 熟語の判定は、接続詞を挟まずに続いた語だけで見る (「発の電」は熟語ではない)。
 // ============================================================================
 
 import { evaluate, makeWord, WORDS } from '../data/words.js';
-import { connectorFor, CONNECTORS } from '../data/words.connect.js';
+import { connectorsAfter, formAfter, CONNECTORS } from '../data/words.connect.js';
 
 /** 文の文字数の上限。接続詞も末尾語も数える。 */
 export const MAX_SENTENCE_LEN = 10;
@@ -169,7 +173,33 @@ export class Sentence {
     const info = WORDS[e.word.text];
     if (!info) return [];
     const cur = e.conn ? e.conn.text.length : 0;
-    return connectorFor(info).filter((c) => this.len - cur + c.length <= this.maxLen);
+    return connectorsAfter(this.runBefore(index))
+      .filter((c) => this.len - cur + c.length <= this.maxLen);
+  }
+
+  /**
+   * index の語で終わる、接続詞を挟まずに続いた語の並び (古い順)。熟語の判定用。
+   *   発 電 [する] → ['発', '電']   /   発の 電 → ['電']
+   * @returns {string[]}
+   */
+  runBefore(index) {
+    const out = [];
+    for (let i = index; i >= 0; i--) {
+      const e = this.entries[i];
+      if (!e) break;
+      if (i < index && e.conn) break;
+      out.unshift(e.word.text);
+    }
+    return out;
+  }
+
+  /**
+   * index の語の直後に接続詞 k を付けたときの形 (熟語の形を優先)。表示用。
+   * @returns {{source:string, n:number, form:object, compound:boolean}|null}
+   */
+  connForm(index, k) {
+    if (!this.entries[index]) return null;
+    return formAfter(this.runBefore(index), k);
   }
 
   /** 語の直後に接続詞を置く。null で外す。 */

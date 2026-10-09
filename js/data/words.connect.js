@@ -27,11 +27,21 @@
 //
 // 同じ接続詞を 2 回使うのは **不成立ではなく自然さの減点** にした。
 //   「風の潮の銃」は日本語として読めるので成立する (少し弱い)。
+//
+// 熟語の接続詞:
+//   接続詞の直前の語列 (接続詞を挟まずに続いた語) が熟語になっていて、
+//   その熟語がプール (words.phrase.js の pool) を持つなら、熟語の形も付く。
+//     発 電 する → 熟語「発電」+ する = 発電する (述語・連体)
+//     電 する    → 「電」は名詞で する を持たない → 宙に浮く (不成立)
+//   熟語の形と語の形の両方にあるときは熟語の形を使う (役割は熟語のもの)。
 // ============================================================================
 
-import { poolOfText, posOfText, WORD_POOLS, NOUN_POOL } from './words.pool.js';
+import {
+  poolOfText, posOfText, WORD_POOLS, NOUN_POOL, COMPOUND_POOLS, MAX_COMPOUND_POOL_LEN,
+  compoundPoolOf,
+} from './words.pool.js';
 
-export { NOUN_POOL, WORD_POOLS };
+export { NOUN_POOL, WORD_POOLS, COMPOUND_POOLS };
 
 /** 品詞。自然さの採点 (形容の連体・裸の形容) と末尾語の判定に使う。 */
 export const POS = {
@@ -119,6 +129,7 @@ export const CONNECTORS = (() => {
   };
   for (const e of NOUN_POOL) add(e);
   for (const t of Object.keys(WORD_POOLS)) for (const e of WORD_POOLS[t].pool) add(e);
+  for (const t of Object.keys(COMPOUND_POOLS)) for (const e of COMPOUND_POOLS[t].pool) add(e);
   return out;
 })();
 
@@ -176,14 +187,74 @@ export function connectorFor(word) {
   return poolOf(word).map((e) => e.k);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 熟語の接続詞
+//
+// run … 接続詞の直前に、接続詞を挟まずに続いた語のテキスト (古い順)。
+//   「炎の発電する」なら する の run は ['発', '電']。
+// run の末尾 (後ろ寄りの部分列) が熟語になっていれば、その熟語の形が付く。
+// 長い熟語から先に見る。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * run の末尾にできている熟語のうち、接続詞プールを持つものを長い順に。
+ * @param {string[]} run
+ * @returns {Array<{text:string, n:number, pool:ReadonlyArray<object>}>}
+ *   n … 熟語を作っている語の数。
+ */
+export function compoundsEndingIn(run) {
+  const out = [];
+  if (!run || run.length < 2) return out;
+  for (let n = run.length; n >= 2; n--) {
+    const text = run.slice(run.length - n).join('');
+    if (text.length > MAX_COMPOUND_POOL_LEN) continue;
+    const pool = compoundPoolOf(text);
+    if (pool) out.push({ text, n, pool });
+  }
+  return out;
+}
+
+/**
+ * run の直後に接続詞 k を付けたときの形。熟語の形を先に見て、無ければ最後の語の形。
+ * @param {string[]} run
+ * @param {string} k
+ * @returns {{source:string, n:number, form:object, compound:boolean}|null}
+ */
+export function formAfter(run, k) {
+  if (!run || !run.length || !isConnector(k)) return null;
+  for (const c of compoundsEndingIn(run)) {
+    const form = c.pool.find((e) => e.k === k);
+    if (form) return { source: c.text, n: c.n, form, compound: true };
+  }
+  const last = run[run.length - 1];
+  const form = formOf({ text: last }, k);
+  return form ? { source: last, n: 1, form, compound: false } : null;
+}
+
+/**
+ * run の直後に置ける接続詞の一覧。熟語の形 (長い熟語から) → 最後の語のプールの順。
+ * @param {string[]} run
+ * @returns {string[]}
+ */
+export function connectorsAfter(run) {
+  if (!run || !run.length) return [];
+  const out = [];
+  for (const c of compoundsEndingIn(run)) for (const e of c.pool) out.push(e.k);
+  out.push(...connectorFor({ text: run[run.length - 1] }));
+  return [...new Set(out)];
+}
+
 /**
  * この語の直後にこの接続詞を置けるか。プールにあるかどうかだけ。
  * @param {{text:string}|null} source 直前の語
  * @param {string} connector
+ * @param {string[]} [before] source の前に接続詞を挟まずに続いた語 (熟語の判定用)。
+ *   canConnect(電, 'する', ['発']) … 発電する → true / canConnect(電, 'する') → false
  */
-export function canConnect(source, connector) {
+export function canConnect(source, connector, before = []) {
   if (!source || !isConnector(connector)) return false;
-  return !!formOf(source, connector);
+  if (formOf(source, connector)) return true;
+  return !!formAfter([...before, source.text], connector);
 }
 
 /** 語が動作 (述語の形) を持つか。「〜を」の受け先になれる。 */
@@ -260,26 +331,56 @@ export function checkConnectors(segs, dict) {
   const seen = new Map();
   const info = (s) => (s && !isConnector(s) ? { text: s, ...(dict?.[s] || {}), pos: dict?.[s]?.pos || posOfText(s) } : null);
 
-  // 各位置の語に付いた形 (次の位置が接続詞なら、その項目)。
-  const formAt = (i) => {
-    const w = info(segs[i]);
-    const c = segs[i + 1];
-    if (!w || !c || !isConnector(c)) return null;
-    return formOf(w, c);
+  // j の位置で終わる、接続詞を挟まない語の並び (熟語の判定用)。
+  const runBefore = (j) => {
+    const out = [];
+    for (let t = j; t >= 0 && segs[t] && !isConnector(segs[t]) && out.length < 8; t--) out.unshift(segs[t]);
+    return out;
+  };
+  // 位置 i の接続詞が結ぶ相手と形。熟語なら熟語ごと。
+  //   → { src: 語の情報 (熟語なら熟語), e: 形, start: 結ぶ相手の先頭の位置, compound }
+  const bindAt = (i) => {
+    const s = segs[i];
+    if (!s || !isConnector(s)) return null;
+    const src = info(segs[i - 1]);
+    if (!src) return null;
+    const hit = formAfter(runBefore(i - 1), s);
+    if (!hit) return null;
+    if (!hit.compound) return { src, e: hit.form, start: i - 1, compound: false };
+    return {
+      src: { text: hit.source, pos: POS.noun, pool: compoundPoolOf(hit.source) },
+      e: hit.form, start: i - hit.n, compound: true,
+    };
+  };
+  // j から始まる語 (接続詞の直後に来る語) と、その語に付いた形。
+  // j から始まる熟語に接続詞が付いていれば熟語ごと見る (炎の 爆 発 する 剣)。
+  const headAt = (j) => {
+    if (!segs[j] || isConnector(segs[j])) return { w: null, f: null };
+    let c = j;
+    while (c < segs.length && !isConnector(segs[c])) c++;
+    if (c < segs.length && c > j + 1) {
+      const b = bindAt(c);
+      if (b && b.compound && b.start === j) return { w: b.src, f: b.e };
+    }
+    const w = info(segs[j]);
+    const b = c === j + 1 ? bindAt(c) : null;
+    return { w, f: b ? b.e : null };
   };
 
   for (let i = 0; i < segs.length; i++) {
     const s = segs[i];
     if (!isConnector(s)) continue;
 
-    // 1. 直前の語と結合する。プールに無ければ宙に浮く = 壊れた文。
+    // 1. 直前の語 (か、直前の語列でできた熟語) と結合する。
+    //    プールに無ければ宙に浮く = 壊れた文。
     const prev = segs[i - 1];
-    const src = info(prev);
-    const e = src ? formOf(src, s) : null;
+    const bound = bindAt(i);
+    const src = bound ? bound.src : info(prev);
+    const e = bound ? bound.e : null;
     if (!e) {
       acc.floats.push(s);
       const who = src ? src.text : (prev ?? '(先頭)');
-      const mine = src ? connectorFor(src) : [];
+      const mine = src ? connectorsAfter(runBefore(i - 1)) : [];
       return fail('floatconn',
         `接続詞「${s}」が直前の「${who}」に結べない。`
         + (mine.length ? `「${who}」に付くのは ${mine.join('・')}。` : '接続詞は語のあとにだけ付く。'),
@@ -293,15 +394,16 @@ export function checkConnectors(segs, dict) {
     acc.order.push(CONNECTORS[s].pri);
     acc.compounds.push({
       text: src.text + s,
-      source: prev, connector: s, pri: CONNECTORS[s].pri, pos: src.pos,
+      source: bound.compound ? src.text : prev, connector: s, pri: CONNECTORS[s].pri, pos: src.pos,
       role: e.role, next: e.next, pred: !!e.pred, adj: !!e.adj, idx: i,
+      // 熟語に付いた形なら true。start は結んだ相手の先頭の位置。
+      phrase: bound.compound, start: bound.start,
     });
     acc.used.push(s);
 
     // 次の語と、その語に付いた形。
-    const next = segs[i + 1];
-    const nw = info(next);
-    const nf = nw ? formAt(i + 1) : null;
+    const { w: nw, f: nf } = headAt(i + 1);
+    const next = nw ? nw.text : segs[i + 1];
 
     // 2. 連体と「の」のあとは名詞句。
     if (e.role === 'adn' || (e.role === 'case' && e.next === 'noun')) {

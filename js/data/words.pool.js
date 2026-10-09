@@ -25,7 +25,15 @@
 // 送り仮名は 1〜3 字 (最長「らかな」「やかな」「られた」)。辞書の最長 5 字・
 // 文の 10 字の上限には収まる。かなの並びは必ず 1 つの送り仮名なので、
 // 分割 (最少語数の DP) で割れ方が揺れることは無い。
+//
+// 熟語の接続詞プール:
+//   熟語 (words.phrase.js の pool) も自分の送り仮名を持てる。
+//     発電 … する:adn*  → 発 + 電 + する = 発電する
+//   直前の語列が熟語になっているときだけ、その熟語の形が付く
+//   (COMPOUND_POOLS / compoundPoolOf)。「電する」は作れない。
 // ============================================================================
+
+import { PHRASE_BONUS } from './words.phrase.js';
 
 /** 名詞が共通で持つ格の接続詞。 */
 export const NOUN_POOL_SPEC = 'の:case>noun を:case>verb に:case>pred へ:case>pred';
@@ -284,4 +292,29 @@ export function poolOfText(text) {
 export function posOfText(text) {
   const p = WORD_POOLS[text];
   return p ? p.pos : POS_CODE.n;
+}
+
+/**
+ * 熟語 → 熟語自身の接続詞プール。pool を持つ熟語だけ。
+ *   発電 → [する:adn*]
+ * 熟語は体言 (サ変名詞) として扱う。
+ */
+export const COMPOUND_POOLS = Object.create(null);
+for (const key of Object.keys(PHRASE_BONUS)) {
+  const spec = (PHRASE_BONUS[key].pool || '').trim();
+  if (!spec) continue;
+  COMPOUND_POOLS[key] = Object.freeze({ pos: POS_CODE.n, pool: Object.freeze(parseForms(spec.split(/\s+/))) });
+}
+
+/** 接続詞プールを持つ熟語の最長の文字数。 */
+export const MAX_COMPOUND_POOL_LEN = Object.keys(COMPOUND_POOLS)
+  .reduce((m, k) => Math.max(m, k.length), 0);
+
+/**
+ * 熟語の接続詞プール。持たなければ null。
+ * @param {string} text 熟語
+ */
+export function compoundPoolOf(text) {
+  const p = COMPOUND_POOLS[text];
+  return p ? p.pool : null;
 }

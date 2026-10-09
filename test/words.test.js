@@ -1,6 +1,6 @@
 // 語辞書と文判定の単体テスト。  node test/words.test.js
-import { WORDS, DRAWABLE, DRAWABLE_ALL, SIMPLE_POOL, CONNECTOR_SET, CONNECTOR_LIST, segment, evaluate, makeWord, drawWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS, CONNECTORS } from '../js/data/words.js';
-import { canConnect, connectorFor, formOf, POS } from '../js/data/words.connect.js';
+import { WORDS, DRAWABLE, DRAWABLE_ALL, SIMPLE_POOL, CONNECTOR_SET, CONNECTOR_LIST, segment, evaluate, makeWord, drawWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS, CONNECTORS, findCompound } from '../js/data/words.js';
+import { canConnect, connectorFor, formOf, POS, connectorsAfter, formAfter, COMPOUND_POOLS } from '../js/data/words.connect.js';
 import { makeRng } from '../js/core/util.js';
 
 let pass = 0, fail = 0;
@@ -125,7 +125,8 @@ for (const w of Object.keys(WORDS)) {
 sec('熟語はすべて到達可能であること');
 {
   // 形態語 (末尾語) は語彙から引けない。末尾語を含む熟語は対象外。
-  const avail = new Set([...DRAWABLE, ...CONNECTOR_SET]);
+  // 動詞は語彙から引ける (DRAWABLE_ALL)。爆発 = 爆 + 発 のような二字熟語に要る。
+  const avail = new Set([...DRAWABLE_ALL, ...CONNECTOR_SET]);
   const unreachable = [];
   for (const key of Object.keys(PHRASE_BONUS)) {
     const segs = segment(key);
@@ -183,9 +184,101 @@ sec('熟語を作ると文の力が上がる (熟語ボーナス)');
     const r = evaluate(segs.map(makeWord), { minContent: 2 });
     if (!r.valid) continue;                       // 文として成立しないものは対象外
     if (r.idiom?.phrase !== key) continue;        // 別の並びで評価されたものは対象外
-    if (Math.abs(r.phraseBonus - PHRASE_BONUS_VALUE) > 1e-9) missing++;
+    if (Math.abs(r.phraseBonus - PHRASE_BONUS[key].power) > 1e-9) missing++;
   }
   ok(missing === 0, `熟語ボーナスが見えない熟語が ${missing} 個`);
+}
+
+sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
+{
+  const EV = (ws, tail) => evaluate(ws.map(makeWord), tail ? { tail } : {});
+  const two = Object.keys(PHRASE_BONUS).filter((k) => PHRASE_BONUS[k].tier === 2);
+  const three = Object.keys(PHRASE_BONUS).filter((k) => PHRASE_BONUS[k].tier === 3);
+  ok(two.length >= 30 && two.length <= 60, `二字熟語の数 ${two.length}`);
+  ok(three.every((k) => k.length >= 3), '三字熟語に 2 文字のものがある');
+  for (const k of two) {
+    const p = PHRASE_BONUS[k];
+    ok(k.length === 2, `二字熟語「${k}」が 2 文字でない`);
+    // 形を表す語 (刃・弾・球・光・雷…) は二字熟語に使わない (火球のずれの再発防止)。
+    ok([...k].every((c) => WORDS[c] && WORDS[c].cat !== 'form'), `二字熟語「${k}」に形の語`);
+    // 効果は三字熟語より小さい。
+    ok(p.power < PHRASE_BONUS['毒蝕弾'].power && p.natural < PHRASE_BONUS['毒蝕弾'].natural,
+      `二字熟語「${k}」の加点が三字熟語以上`);
+  }
+  // 熟語の接続詞プールの形は全部、接続詞の一覧にある。
+  for (const k of Object.keys(COMPOUND_POOLS)) {
+    for (const e of COMPOUND_POOLS[k].pool) ok(!!CONNECTORS[e.k], `熟語「${k}」の形「${e.k}」が接続詞に無い`);
+  }
+
+  // 電熱 … 二字熟語として検出される。
+  let r = EV(['電', '熱', '剣'], '剣');
+  ok(r.valid, `「電熱剣」が不成立: ${r.reasonText}`);
+  ok(r.idiom?.phrase === '電熱', `電熱が熟語にならない: ${r.idiom?.phrase}`);
+  ok(Math.abs(r.phraseBonus - 0.1) < 1e-9, `二字熟語のボーナス ${r.phraseBonus}`);
+  ok(findCompound('炎電熱剣')?.phrase === '電熱', 'findCompound が電熱を拾わない');
+
+  // 発電する剣 … 熟語「発電」に する が付く。述語・連体。熟語ボーナスも乗る。
+  r = EV(['発', '電', 'する', '剣'], '剣');
+  ok(r.valid, `「発電する剣」が不成立: ${r.reasonText}`);
+  ok(r.idiom?.phrase === '発電', `発電が熟語にならない: ${r.idiom?.phrase}`);
+  const c = r.compounds.find((x) => x.connector === 'する');
+  ok(c && c.phrase && c.source === '発電' && c.role === 'adn' && c.pred,
+    `する が熟語「発電」に付いていない: ${JSON.stringify(c)}`);
+  ok(r.predicated, '発電する が述語にならない');
+  ok(r.phraseBonus > 0 && r.fx.shock > 0, `発電の効果が乗らない: ${r.phraseBonus} / ${r.fx.shock}`);
+  ok(r.fx.power > EV(['電', '剣'], '剣').fx.power, '発電する剣が電剣より弱い');
+
+  // 電する … 熟語になっていなければ不成立のまま。
+  r = EV(['電', 'する', '剣'], '剣');
+  ok(!r.valid && r.reason === 'floatconn', `「電する剣」が成立してしまう: ${r.reason}`);
+  r = EV(['炎', 'の', '電', 'する', '剣'], '剣');
+  ok(!r.valid && r.reason === 'floatconn', `「炎の電する剣」が成立してしまう: ${r.reason}`);
+  // 接続詞を挟むと熟語ではない (発の電する)。
+  r = EV(['発', 'の', '電', 'する', '剣'], '剣');
+  ok(!r.valid, '「発の電する剣」が成立してしまう');
+  ok(!canConnect(WORDS['電'], 'する'), '電 に する が付いてしまう');
+  ok(canConnect(WORDS['電'], 'する', ['発']), '発電 に する が付かない');
+  ok(connectorsAfter(['発', '電'])[0] === 'する', `発電 の接続詞の先頭が する でない: ${connectorsAfter(['発', '電'])}`);
+  ok(connectorsAfter(['電']).every((k) => k !== 'する'), '電 だけで する が出る');
+  ok(formAfter(['炎', '発', '電'], 'する')?.source === '発電', '語列の末尾の熟語を拾わない');
+
+  // 熟語の形の前後の規則も効く。
+  r = EV(['炎', 'の', '爆', '発', 'する', '剣'], '剣');
+  ok(r.valid, `「炎の爆発する剣」が不成立: ${r.reasonText}`);
+  r = EV(['氷', 'を', '凍', '結', 'する', '剣'], '剣');
+  ok(r.valid, `「氷を凍結する剣」が不成立: ${r.reasonText}`);
+  ok(r.naturalParts.some((p) => p.key === 'object'), '「〜を凍結する」が目的語にならない');
+  r = EV(['凍', '結', 'された', '剣'], '剣');
+  ok(r.valid && r.idiom?.phrase === '凍結', `「凍結された剣」: ${r.reasonText} / ${r.idiom?.phrase}`);
+  // された を持たない熟語には付かない。
+  r = EV(['発', '電', 'された', '剣'], '剣');
+  ok(!r.valid, '「発電された剣」が成立してしまう');
+
+  // 最長一致: 三字熟語が二字熟語より勝つ。
+  ok(EV(['凍', '結', '環'], '環').idiom?.phrase === '凍結環', '凍結環 より 凍結 が勝った');
+  ok(EV(['大', '地', '震'], '震').idiom?.phrase === '大地震', '大地震 より 二字熟語が勝った');
+  ok(EV(['感', '電', '弾'], '弾').idiom?.phrase === '感電弾', '感電弾 より 感電 が勝った');
+
+  // 鍛冶の文: 「発」「電」と並べると「電」の接続詞に する が出る (先頭)。
+  const { Sentence } = await import('../js/game/sentence.js');
+  const sen = new Sentence();
+  sen.push(makeWord('発')); sen.push(makeWord('電'));
+  ok(sen.connOptions(1)[0] === 'する', `電 の接続詞の先頭が する でない: ${sen.connOptions(1)}`);
+  ok(sen.connForm(1, 'する')?.source === '発電', 'connForm が熟語を返さない');
+  ok(sen.setConnAt(1, 'する').ok, '発電 に する を置けない');
+  ok(sen.text === '発電する', `文面 ${sen.text}`);
+  // 間に接続詞を挟むと熟語でなくなる → する は出ない。
+  const sen2 = new Sentence();
+  sen2.push(makeWord('発')); sen2.push(makeWord('電'));
+  sen2.setConnAt(0, 'の');
+  ok(!sen2.connOptions(1).includes('する'), '発の電 に する が出る');
+  ok(!sen2.setConnAt(1, 'する').ok, '発の電 に する が置けてしまう');
+  // 10 文字の上限は熟語の形にも効く。
+  const sen3 = new Sentence();
+  for (const w of ['炎', '氷', '毒', '霧', '風', '砂', '発', '電']) sen3.push(makeWord(w));
+  sen3.push(makeWord('鉄'));
+  ok(sen3.len === 9, `長さ ${sen3.len}`);
+  ok(!sen3.connOptions(7).includes('する'), '10 文字を超えるのに する が出る');
 }
 
 sec('接続詞は語彙から引けない (鍛冶のプールで無限)');

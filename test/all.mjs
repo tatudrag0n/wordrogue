@@ -384,8 +384,27 @@ if (syntaxBad) {
     && NOUNISH.has(WORDS[w].cat)
     && !ADJ_STEMS.has(w) && !NA_ADJ_STEMS.has(w) && !OK_ONE.has(w));
 
-  // 熟語は「辞書にある語だけで」完全に分割できること。
-  const broken = Object.keys(PHRASE_BONUS).filter((k) => !segment(k));
+  // 熟語は実在の語だけで組める。
+  //   - 「辞書にある語だけで」完全に分割できること。
+  //   - 三字熟語は 3 文字以上。二字熟語は 2 文字で、1 文字 2 語でできていること。
+  //   - 二字熟語は形を表す語 (刃・弾・球・光・雷…) を使わない。
+  //     「火球」のように形の熟語を戻すと、名前と効果がずれる (以前の失敗)。
+  //   - 二字熟語は語彙から引ける語だけ (動詞も可。接続詞・末尾語・「人」は不可)。
+  const { DRAWABLE_ALL } = await import(new URL('../js/data/words.js', import.meta.url));
+  const drawable = new Set(DRAWABLE_ALL);
+  const broken = [];
+  for (const k of Object.keys(PHRASE_BONUS)) {
+    const p = PHRASE_BONUS[k];
+    const segs = segment(k);
+    if (!segs) { broken.push(`${k} (分割できない)`); continue; }
+    if (p.tier === 3 && k.length < 3) broken.push(`${k} (三字熟語が 3 文字未満)`);
+    if (p.tier === 2) {
+      if (k.length !== 2 || segs.length !== 2) broken.push(`${k} (二字熟語が 1 文字 2 語でない)`);
+      if (segs.some((w) => WORDS[w]?.cat === 'form')) broken.push(`${k} (二字熟語に形の語)`);
+      if (segs.some((w) => !drawable.has(w))) broken.push(`${k} (語彙から引けない語)`);
+    }
+    if (p.tier !== 2 && p.tier !== 3) broken.push(`${k} (格が無い)`);
+  }
 
   console.log(`== 1 文字の語 ==\n  許可して無い ${stray.length} / 作れない熟語 ${broken.length}`);
   for (const w of stray) console.log(`\x1b[31m  1 文字の断片: ${w}\x1b[0m`);

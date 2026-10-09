@@ -6,7 +6,8 @@
 // 成立しなければその武器は無効化される。
 //
 //   「火」「の」「球」 -> 「火の球」 -> ['火','の','球'] -> 成立 (分节)
-//   「火」「球」       -> 「火球」   -> ['火','球']    -> 成立 + 熟語(火球)
+//   「火」「球」       -> 「火球」   -> ['火','球']    -> 成立 (形の二字熟語は無い)
+//   「発」「電」「する」 -> 「発電する」 -> 熟語「発電」に する が付く (電する は不成立)
 //   「火」             -> 「火」     -> 1 語          -> 不成立 (文にならない)
 //   「の」             -> 「の」     -> 接続詞だけ    -> 不成立 (実質語が無い)
 //   「爆裂」「する」   -> 「爆裂する」 -> 合成成立
@@ -249,6 +250,11 @@ export function segment(s) {
 //
 // 文面は核語から始まる (例: 「力火球」)。そのため合成語は文面中の
 // 部分列として探す。長いものから順に、部分文字列として現れたものを 1 つ採用する。
+//
+// 熟語は三字 (毒蝕弾) と二字 (発電) がある。採るのは最長の 1 つだけなので、
+// 「大地震」のように二字熟語 (地震・大地) を含む三字熟語は三字熟語が勝つ。
+// 同じ長さなら文の前にあるほう。1 文に熟語を 2 つ作っても乗るのは 1 つ
+// (重ねがけで効果が膨らまないように、あえて単純にしてある)。
 // ─────────────────────────────────────────────────────────────────────────────
 const MAX_COMPOUND = Object.keys(PHRASE_BONUS).reduce((m, k) => Math.max(m, k.length), 2);
 
@@ -634,15 +640,16 @@ export function evaluate(words, opt = {}) {
       });
     }
   }
-  if (idiom) parts.push({ key: 'idiom', label: `熟語「${idiom.name}」`, v: 0.7 });
+  // 熟語の加点は格で違う。三字熟語 +0.7 / 二字熟語 +0.4 (PHRASE_TIER)。
+  if (idiom) parts.push({ key: 'idiom', label: `熟語「${idiom.name}」`, v: idiom.natural ?? 0.7 });
   const natural = Math.max(0, parts.reduce((s, p) => s + p.v, 0));
 
   // 文の力。自然な分量だけが足される。
   //   実質語 1 つに 5% (長さは少しだけ報いる)
   //   自然さに 1 単位あたり 30% — 自然さが本命。
   //   熟語はさらに固定で足す。別の語と重なっていても熟語が成立すれば乗る。
-  const PHRASE_BONUS = 0.2;
-  const phraseBonus = idiom ? PHRASE_BONUS : 0;
+  //   三字熟語 +0.20 / 二字熟語 +0.10 (PHRASE_TIER)。
+  const phraseBonus = idiom ? (idiom.power ?? 0.2) : 0;
   const bonusWords = Math.max(0, content - 1);
   const predicated = hasPredicate;
   fx.power = 1 + bonusWords * 0.05 + natural * 0.30 + phraseBonus;

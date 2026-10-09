@@ -476,5 +476,28 @@ sec('「戻す」で直前の操作を戻せる');
   console.log(`  接続詞の変更と語の追加を戻した -> 「${wi.sentence.text}」`);
 }
 
+sec('熟語の接続詞がメニューに出る (発電する)');
+{
+  const { run, forge } = openForge();
+  const wi = run.weapons[0];
+  wi.sentence.clear();
+  for (const t of ['発', '電', '剣']) wi.sentence.push(makeWord(t));
+  wi._sig = null;
+  forge.render();
+  const place = { kind: 'slot', wi, wIdx: 0, index: 1 };
+  const chip = dom.doc.querySelectorAll('.sen-conn')[1];
+  const menu = forge.openConnPicker(place, chip);
+  const head = menu.querySelector('.conn-picker-head').textContent;
+  ok(head.includes('熟語「発電」'), `見出しに熟語が出ない: ${head}`);
+  const picks = [...menu.querySelectorAll('.conn-pick')].map((b) => b.textContent);
+  ok(picks.includes('する'), `する が候補に無い: ${picks.join(',')}`);
+  const btn = [...menu.querySelectorAll('.conn-pick')].find((b) => b.textContent === 'する');
+  btn.dispatchEvent({ type: 'click', preventDefault() {}, stopPropagation() {} });
+  ok(wi.sentence.text === '発電する剣', `発電する剣 にならない: ${wi.sentence.text}`);
+  const res = wi.resolve(run.player.stats);
+  ok(res.valid && res.evalResult.idiom?.phrase === '発電', `発電する剣 が熟語つきで成立しない: ${res.reasonText}`);
+  console.log(`  メニュー「${head}」→ 「${wi.sentence.text}」`);
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

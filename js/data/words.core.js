@@ -54,7 +54,7 @@ export const CATEGORIES = {
 export const TAIL_UNMODIFIABLE = new Set([
   '刃', '剣', '刀', '斧', '槍', '矛', '戈', '牙', '爪',
   '弾', '銃', '玉', '矢', '針', '弓', '球', '珠', '光', '雷',
-  '塊', '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾',
+  '塊', '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾', '杖', '拳',
 ]);
 
 const RAW_ELEMENT = `
@@ -170,6 +170,7 @@ const RAW_FORM = `
 戈     form  -  dmg+9  arc+0.8  size+0.25
 牙     form  -  dmg+6  crit+0.03
 爪     form  -  dmg+4  count+2  speed+20  arc+0.6
+拳     form  -  dmg+7  speed+40  arc+0.6
 
 弾     form  -  dmg+6  count+1  explode+30
 銃     form  -  dmg+7  count+1  speed+40
@@ -177,6 +178,7 @@ const RAW_FORM = `
 矢     form  -  dmg+5  speed+90  pierce+1
 針     form  -  dmg+3  speed+130  count+2  pierce+1
 弓     form  -  dmg+5  speed+110  pierce+1
+杖     form  -  dmg+6  pierce+2  speed+30
 球     form  -  dmg+6  area+6  size+0.15
 珠     form  -  dmg+10  pierce+4  bounce+2  crit+0.06
 還     form  -  dmg+11  pierce+5  bounce+3  speed+40

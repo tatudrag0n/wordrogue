@@ -6,7 +6,7 @@ import './seed.mjs';
 import { Run, PICKUP_VMAX, PICKUP_MAGNET, LEXICON_MAX } from '../js/game/run.js';
 import { Input } from '../js/core/input.js';
 import { makeWord, WORDS, evaluate, CONNECTOR_SET } from '../js/data/words.js';
-import { WEAPONS, FORM_SHAPE, KIND_SHAPE } from '../js/data/weapons.js';
+import { WEAPONS, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS } from '../js/data/weapons.js';
 import { ENEMIES } from '../js/data/enemies.js';
 import { WeaponInst } from '../js/game/weapon.js';
 import { makePickup, makeEnemy } from '../js/game/entities.js';
@@ -1124,8 +1124,11 @@ sec('形と攻撃は文の中の武器語が決める');
   // 武器語は自分で文に置く。置いた武器語が形と攻撃を決める。
   for (const id of Object.keys(WEAPONS)) {
     const def = WEAPONS[id];
-    const [wantShape, wantKind] = FORM_SHAPE[def.tail]
-      || [def.shape || KIND_SHAPE[def.kind], def.kind];
+    // 基本武器は単体で型を決める。特殊武器は開始文 (動詞なし) では決めず既定のまま。
+    const basic = BASIC_WEAPONS.has(def.tail);
+    const [wantShape, wantKind] = basic
+      ? (FORM_SHAPE[def.tail] || [def.shape || KIND_SHAPE[def.kind], def.kind])
+      : [def.shape || KIND_SHAPE[def.kind], def.kind];
     // 解放されているステージで始める。
     const stage = def.unlock ? def.unlock.stage : 1;
     const r = freshWeapon(stage, [id]);
@@ -1138,6 +1141,23 @@ sec('形と攻撃は文の中の武器語が決める');
     ok(res.kind === wantKind, `${id}: 攻撃 ${res.kind} が ${wantKind} でない`);
   }
 
+  // 特殊武器は「攻撃できる動詞」が付いたときだけ武器になる。
+  {
+    const r = freshWeapon(1, ['gun']);
+    const wi = r.weapons[0];
+    // 動詞なし: 炎はただの属性語。型は武器の既定 (射撃) のまま。
+    setFlat(wi, ['焔', '炎']);
+    let res = wi.resolve(r.player.stats);
+    ok(res.tail === null && res.kind === 'shot',
+      `動詞なしで特殊武器が発動した: tail=${res.tail} kind=${res.kind}`);
+    // 焦がす (動詞の述語形) を付けると「光」が特殊武器になる。
+    setFlat(wi, ['焔', 'を', '焦', 'がす', '光']);
+    res = wi.resolve(r.player.stats);
+    ok(res.special === true && res.tail === '光' && res.kind === 'beam',
+      `特殊武器「光」が発動しない: special=${res.special} tail=${res.tail} kind=${res.kind}`);
+    console.log(`  特殊武器 … 動詞なしでは不発 / 「焔を焦がす光」で ${res.kind} として発動`);
+  }
+
   // 同じ武器でも、置いた武器語が変われば攻撃の型が変わる。
   const r = freshWeapon(1, ['gun']);
   const wi = r.weapons[0];
@@ -1148,19 +1168,26 @@ sec('形と攻撃は文の中の武器語が決める');
   // 武器語が文に無ければ、その武器の既定の型。
   const base = res('火', '剛');
   ok(base.shape === 'shot' && base.kind === 'shot', `武器語なし → ${base.shape}/${base.kind}`);
+  // 基本武器は単体で形と攻撃を決める。
   for (const [form, shape, kind] of [
-    ['剣', 'blade', 'slash'], ['球', 'orb', 'shot'], ['刃', 'blade', 'slash'],
-    ['環', 'blade', 'orbit'], ['壁', 'orb', 'aura'], ['弾', 'bomb', 'bomb'],
+    ['剣', 'blade', 'slash'], ['刃', 'blade', 'slash'],
+    ['杖', 'orb', 'shot'], ['拳', 'blade', 'slash'],
   ]) {
     const x = res('火', form, '剛');
     ok(x.shape === shape, `「${form}」の形が ${x.shape} (${shape} のはず)`);
     ok(x.kind === kind, `「${form}」の攻撃が ${x.kind} (${kind} のはず)`);
   }
-  // 文の後方から最初に見つかった武器語が効く。
-  const two = res('火', '刃', '剛', '環');
-  ok(two.kind === 'orbit' && two.shape === 'blade',
-    `後ろの武器語が効かない: ${two.shape}/${two.kind} (${two.tail})`);
-  console.log(`  武器語で ${base.shape}/${base.kind} → 環なら ${two.shape}/${two.kind} / 後ろにある方が効く`);
+  // 特殊武器は動詞が無ければ形も攻撃も決めない (武器の既定のまま)。
+  for (const form of ['球', '環', '壁', '弾']) {
+    const x = res('火', form, '剛');
+    ok(x.tail === null && x.shape === 'shot' && x.kind === 'shot',
+      `特殊武器「${form}」が動詞なしで効いた: ${x.shape}/${x.kind} (${x.tail})`);
+  }
+  // 文の後方から最初に見つかった基本武器が効く。
+  const two = res('火', '剣', '剛', '刃');
+  ok(two.kind === 'slash' && two.shape === 'blade' && two.tail === '刃',
+    `後ろの基本武器が効かない: ${two.shape}/${two.kind} (${two.tail})`);
+  console.log(`  基本武器で ${base.shape}/${base.kind} → 刃なら ${two.shape}/${two.kind} / 後ろにある方が効く`);
 
   // 属性は文中の属性語から決まる (武器とは別)。
   ok(res('焔', '剛').element === 'fire', '「焔剛」→ fire');

@@ -14,7 +14,7 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE } from '../data/weapons.js';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_FORMS, ELEMENT_SHAPE } from '../data/weapons.js';
 import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS } from '../data/words.js';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
@@ -76,15 +76,42 @@ export class WeaponInst {
   resizeSlots() { this._sig = null; }
 
   /**
-   * 文の中の武器語 (末尾から見て最初に見つかったもの)。
-   * 攻撃の型はこれが決める。無いなら null。
+   * 文の中の基本武器 (末尾から見て最初に見つかったもの)。
+   * それ単体で武器として成立するので、攻撃の型はこれが決める。無いなら null。
    */
   get tail() {
     const ws = this.sentence.words;
     for (let i = ws.length - 1; i >= 0; i--) {
-      if (isForm(ws[i].text)) return ws[i].text;
+      if (BASIC_WEAPONS.has(ws[i].text)) return ws[i].text;
     }
     return null;
+  }
+
+  /**
+   * 文の中の特殊武器 (末尾から見て最初に見つかったもの)。
+   * 属性語と、基本武器でない形態語。武器になるのは攻撃できる動詞が
+   * 付いているときだけ (hasAttackVerb)。
+   */
+  get specialTail() {
+    const ws = this.sentence.words;
+    for (let i = ws.length - 1; i >= 0; i--) {
+      const t = ws[i].text;
+      if (SPECIAL_FORMS.has(t) || WORDS[t]?.cat === 'element') return t;
+    }
+    return null;
+  }
+
+  /**
+   * 文に「攻撃できる動詞」が述語の形で付いているか。
+   * 熟語の述語 (爆発する 等) は、熟語の頭の語が動詞なら数える。
+   * @param {object} e evaluate の結果
+   */
+  hasAttackVerb(e) {
+    return (e?.compounds || []).some((c) => {
+      if (!c.pred) return false;
+      if (WORDS[c.source]?.cat === 'verb') return true;
+      return c.phrase && WORDS[c.source[0]]?.cat === 'verb';
+    });
   }
   get tailWord() { return this.tail ? makeWord(this.tail) : null; }
 
@@ -174,8 +201,19 @@ export class WeaponInst {
     const e = this.evaluate();
     const base = baseStatsForLevel(this.def, this.level);
     // 攻撃の型は文の中の武器語が決める。無ければこの武器の既定。
-    const tail = this.tail;
-    const info = tail ? FORM_SHAPE[tail] : null;
+    //   基本武器 … それ単体で武器として成立する。
+    //   特殊武器 … 攻撃できる動詞が付いているときだけ武器として成立する。
+    let tail = this.tail;
+    let special = false;
+    let info = tail ? FORM_SHAPE[tail] : null;
+    if (!tail) {
+      const sp = this.specialTail;
+      if (sp && this.hasAttackVerb(e)) {
+        tail = sp;
+        special = true;
+        info = FORM_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null;
+      }
+    }
     const kind = (info && info[1]) || this.def.kind;
     const shape = (info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade';
 
@@ -191,6 +229,7 @@ export class WeaponInst {
       kind,
       shape,
       tail,
+      special,
       title: this.title,
       text: this.fullText,
       fullText: e.text,

@@ -483,7 +483,7 @@ export class Forge {
         el('span', { class: 'wrow-kind' }, KIND_LABEL[res.kind] || res.kind),
         el('span', { class: 'wrow-lv' }, `${wi.sentence.len} / ${wi.sentence.maxLen} 文字`),
         res.tail
-          ? el('span', { class: 'wrow-kind' }, `武器語 ${res.tail}`)
+          ? el('span', { class: 'wrow-kind' }, res.special ? `特殊武器 ${res.tail}` : `武器語 ${res.tail}`)
           : el('span', { class: 'wrow-kind dim' }, '武器語なし'),
         el('span', { class: `wrow-grade grade-${res.grade}` },
           res.active ? res.gradeInfo.name : '不成文'),

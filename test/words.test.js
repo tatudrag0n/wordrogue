@@ -654,6 +654,21 @@ sec('自然さと完成度で力が決まること');
   ok(gradeOf(attr) === 'idiom', `属性文が名文にならない: ${attr.grade}`);
   ok(gradeOf(plain) === 'plain', `読めない並びが名文以上になった: ${plain.grade}`);
 
+  // 連体形で結べた文頭 (凍える剣・溶かされた剣) は自然なので減点しない。
+  const boundHead = evaluate(['凍', 'える', '剣'].map(makeWord), { minContent: 2 });
+  ok(boundHead.valid && !boundHead.naturalParts.some((p) => p.key === 'topicverb'),
+    '「凍える剣」に動詞で始まる減点がある');
+  const passiveHead = evaluate(['溶', 'かされた', '剣'].map(makeWord), { minContent: 2 });
+  ok(passiveHead.valid && !passiveHead.naturalParts.some((p) => p.key === 'topicverb'),
+    '「溶かされた剣」に動詞で始まる減点がある');
+  // 同じ語の繰り返し (炎を燃やす炎) は減点。語が違う同じ属性 (炎焔) は減点しない。
+  const dupWord = evaluate(['炎', 'を', '燃', 'やす', '炎'].map(makeWord), { minContent: 2 });
+  ok(dupWord.valid && dupWord.naturalParts.some((p) => p.key === 'dupword'),
+    '「炎を燃やす炎」に同じ語の減点が無い');
+  const diffWord = evaluate(['炎', '焔', '弾'].map(makeWord), { minContent: 2 });
+  ok(diffWord.valid && !diffWord.naturalParts.some((p) => p.key === 'dupword'),
+    '「炎焔弾」に同じ語の減点がある');
+
   console.log(`  文の力 「刃必剣」=${plain.fx.power.toFixed(2)}`
     + ` / 「焔妙な剣」=${attr.fx.power.toFixed(2)}`
     + ` / 「焔を斬る剣」=${full.fx.power.toFixed(2)}`);

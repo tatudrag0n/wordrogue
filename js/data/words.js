@@ -492,14 +492,45 @@ export function evaluate(words, opt = {}) {
   // 日本語の武器名は「属性 (青・炎・業火…) で始まるときに最も自然」。
   // 形や効果、動詞で始めると主題が立たない。
   const headCat = contentSegs.length ? contentSegs[0].info.cat : null;
+  // 先頭の語が連体形で結べているなら、それは正しい連体修飾の文頭。
+  //   「凍える剣」「溶かされた剣」「滑らかな刀」… 自然な文頭なので減点しない。
+  // 減点が残るのは、裸の語幹で始まる場合だけ。
+  const headBound = compounds.some((c) => c.start === 0 && (c.role === 'adn' || c.role === 'adv'));
   if (headCat === 'element') {
     parts.push({ key: 'topic', label: '属性で始まる', v: 1.2 });
   } else if (headCat === 'form') {
     parts.push({ key: 'topicform', label: '形で始まる', v: -0.8 });
-  } else if (headCat === 'modifier') {
+  } else if (headCat === 'modifier' && !headBound) {
     parts.push({ key: 'topicmod', label: '効果で始まる', v: -0.3 });
-  } else if (headCat === 'verb') {
+  } else if (headCat === 'verb' && !headBound) {
     parts.push({ key: 'topicverb', label: '動詞で始まる', v: -0.4 });
+  }
+  // 同じ語の繰り返し (炎を燃やす炎)。冗長なので減点。
+  // 熟語の中の並び (鋼鉄) は 1 つの語なので数えない。
+  {
+    const segOff = [];
+    let off = 0;
+    for (const t of segs) { segOff.push(off); off += t.length; }
+    const inPhraseAt = (pos) => {
+      for (const key of Object.keys(PHRASE_BONUS)) {
+        for (let at = joined.indexOf(key); at >= 0; at = joined.indexOf(key, at + 1)) {
+          if (at <= pos && pos < at + key.length) return true;
+        }
+      }
+      return false;
+    };
+    // 同じ「語」が 2 回以上ある (炎を燃やす炎)。同じ属性でも語が違えば
+    // 炎焔・鋼鉄のような正当な複合があるので、属性単位では数えない。
+    const byWord = Object.create(null);
+    segs.forEach((t, i) => {
+      if (!CONNECTOR_SET.has(t)) (byWord[t] ||= []).push(segOff[i]);
+    });
+    for (const [t, poss] of Object.entries(byWord)) {
+      const bare = poss.filter((pos) => !inPhraseAt(pos)).length;
+      if (bare >= 2) {
+        parts.push({ key: 'dupword', label: `同じ語「${t}」が ${bare} 回`, v: -0.5 * (bare - 1) });
+      }
+    }
   }
   // 実体語が 4 つ以上続けて並ぶと羅列になる。
   //   「業火剛利必殺吸血剣」… 修飾が重なると名詞の列であって文ではない。

@@ -122,7 +122,7 @@ const FIXED_TAIL = '人';
  * 接続詞は鍛冶の接続詞プールから無限に使えるので引かない。
  * 辞書には残す — 文の分割と末尾語の判定に使う。
  */
-const isDrawableCat = (c) => c === 'element' || c === 'modifier'
+const isDrawableCat = (c) => c === 'element' || c === 'phenom' || c === 'modifier'
   || c === 'buff' || c === 'verb';
 
 /** 語彙から引ける語だけ (接続詞・動詞・形態語を除く)。 */
@@ -159,13 +159,13 @@ export const CONNECTOR_LIST = CONNECT_ORDER.slice();
 export const SIMPLE_POOL = Object.keys(WORDS).filter((w) => {
   const c = WORDS[w].cat;
   if (w === FIXED_TAIL) return false;
-  if (c !== 'element' && c !== 'modifier' && c !== 'buff') return false;
+  if (c !== 'element' && c !== 'phenom' && c !== 'modifier' && c !== 'buff') return false;
   return !KANA_RE.test(w) && w.length <= 2;
 });
 
 /** 種別ごとの語配列。 */
 export const WORDS_BY_CAT = {
-  element: [], form: [], modifier: [], verb: [], buff: [], connect: [],
+  element: [], phenom: [], form: [], modifier: [], verb: [], buff: [], connect: [],
 };
 for (const w of Object.keys(WORDS)) WORDS_BY_CAT[WORDS[w].cat].push(w);
 

@@ -1156,6 +1156,14 @@ sec('形と攻撃は文の中の武器語が決める');
     ok(res.special === true && res.tail === '光' && res.kind === 'beam',
       `特殊武器「光」が発動しない: special=${res.special} tail=${res.tail} kind=${res.kind}`);
     console.log(`  特殊武器 … 動詞なしでは不発 / 「焔を焦がす光」で ${res.kind} として発動`);
+    // 現象語 (渦) も特殊武器になる。属性語 (嵐・風・波) はもともと対象。
+    setFlat(wi, ['焔', '燃', '渦']);
+    wi.setConnect(1, makeWord('える'));
+    res = wi.resolve(r.player.stats);
+    ok(res.special === true && res.tail === '渦' && res.kind === 'orbit',
+      `現象語「渦」が特殊武器にならない: special=${res.special} tail=${res.tail} kind=${res.kind}`);
+    ok(WORDS['渦'].cat === 'phenom' && WORDS['嵐'].cat === 'element',
+      '渦・嵐の分類がおかしい');
   }
 
   // 同じ武器でも、置いた武器語が変われば攻撃の型が変わる。

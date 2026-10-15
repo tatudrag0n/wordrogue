@@ -379,7 +379,7 @@ if (syntaxBad) {
 
   // 動詞 (「斬」「貫」) と接続詞は 1 文字が普通なので対象外。
   // -fragment な体言・効果語だけを調べた。
-  const NOUNISH = new Set(['element', 'form', 'modifier', 'buff']);
+  const NOUNISH = new Set(['element', 'phenom', 'form', 'modifier', 'buff']);
   const stray = Object.keys(WORDS).filter((w) => w.length === 1
     && NOUNISH.has(WORDS[w].cat)
     && !ADJ_STEMS.has(w) && !NA_ADJ_STEMS.has(w) && !OK_ONE.has(w));

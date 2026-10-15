@@ -33,12 +33,30 @@ export const ELEMENTS = {
 /** 語の種類。UI 表示と抽選重みに使う。 */
 export const CATEGORIES = {
   element:  { name: '属性', color: '#ffb347', weight: 30 },
+  phenom:   { name: '現象', color: '#7dffce', weight: 20 },
   form:     { name: '形態', color: '#7ad7ff', weight: 26 },
   modifier: { name: '効果', color: '#9dff5c', weight: 24 },
   verb:     { name: '動詞', color: '#ff8fab', weight: 18 },
   buff:     { name: '自身', color: '#b47bff', weight: 12 },
   connect:  { name: '接続', color: '#8ab4ff', weight: 18 },
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// カテゴリ分類の基準 (文の中での働きで決める。迷ったら上から順に当てる)
+//   1. 属性 element … 属性値 (el) を持ち、文全体の属性を決める体言。特殊武器になれる。
+//   2. 現象 phenom  … 属性値は持たないが、自然現象・自然の力そのものを指す体言 (渦)。
+//                     属性と同じく特殊武器になれる。
+//   3. 形態 form    … 具体的な物の形・道具を指す体言。武器の頭になれるのは基本武器だけ。
+//   4. 動詞 verb    … 動作・作用そのものが主役で、述語になる語。
+//   5. 自身 buff    … プレイヤーの身体・装備・状態を指し、称号文で常時効く語。
+//   6. 効果 modifier… 上のどれでもなく、他の語を修飾するのが主役の語。
+//   7. 接続 connect … 送り仮名。語ではない。
+// 1 語が複数カテゴリに属してよい (words.js の cats)。
+//   動詞の形 (述語) を持つ語は、本来の分類に加えて verb も持つ (震える・還る・走る)。
+//   形容の形は品詞 (pos) で表し、分類は増やさない。
+// 境界の例: 岩は地の力として属性、小さい石は投擲する弾体として形態。
+//           圧・律は現象そのものより作用の修飾が主役なので効果。
+// ─────────────────────────────────────────────────────────────────────────
 
 // 品詞と接続詞 (送り仮名) は語ごとに words.pool.js で決める。
 // ここは語の種別・属性・効果だけを持つ。
@@ -278,7 +296,7 @@ const RAW_MODIFIER = `
 
 # ── 名詞・動詞的效果語 ──
 心    modifier  -  crit+0.08  homing+0.25
-渦    modifier  -  dmg+5  orbit+2
+渦    phenom    -  dmg+5  orbit+2
 圧    modifier  -  knock+90  size+0.2  speed-10
 律    modifier  -  rate+0.6  count+1  dmg+3
 斉    modifier  -  count+3  dmg+4  rate+0.3

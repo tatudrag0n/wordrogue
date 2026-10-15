@@ -14,7 +14,7 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE } from '../data/weapons.js';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, SPECIAL_SHAPE } from '../data/weapons.js';
 import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS } from '../data/words.js';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
@@ -96,7 +96,7 @@ export class WeaponInst {
     const ws = this.sentence.words;
     for (let i = ws.length - 1; i >= 0; i--) {
       const t = ws[i].text;
-      if (WORDS[t]?.cat === 'element') return t;
+      if (WORDS[t]?.cat === 'element' || WORDS[t]?.cat === 'phenom') return t;
     }
     return null;
   }
@@ -211,7 +211,7 @@ export class WeaponInst {
       if (sp && this.hasAttackVerb(e)) {
         tail = sp;
         special = true;
-        info = FORM_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null;
+        info = FORM_SHAPE[sp] || SPECIAL_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null;
       }
     }
     const kind = (info && info[1]) || this.def.kind;

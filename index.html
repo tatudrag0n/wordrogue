@@ -151,6 +151,7 @@
         <button class="btn btn-primary btn-lg" id="btnStart">はじめる</button>
         <button class="btn" id="btnStages">ステージ選択</button>
         <button class="btn" id="btnHowto">遊び方</button>
+        <button class="btn" id="btnGrow">部位強化</button>
         <button class="btn" id="btnArchive">書庫</button>
         <button class="btn" id="btnDict">辞書</button>
         <button class="btn" id="btnSettings">設定</button>
@@ -317,12 +318,14 @@
       </ul>
       </section>
       <section>
-<h3>5. プレイヤー自身も文にする</h3>
+<h3>5. プレイヤーの強化はメニューで</h3>
       <p>
-      言葉鍛冶の一番上に<strong>自身の文</strong>がある。武器と同じく自由に並べるが、
-      文の<strong>末尾は「人」で固定</strong>。並べ替えても末尾は動かない。
-      「頑」+「走」なら <code>頑走人</code> のように称号になり、
-      文の力が<strong>攻撃と防御</strong>に効く。
+      タイトルの<strong>部位強化</strong>で、頭・右腕・左腕・右手・左手・
+      右足・左足・胸・胴の 9 部位に語を入れると、その語の効果が能力に効く。
+      語は<strong>言玉</strong>を払う<strong>言葉くじ</strong>で手に入り、
+      戦闘で使う語と同じプールから出る。
+      <strong>言葉デッキ</strong>もここで組み替えられ、戦闘開始時の語彙になる。
+      戦闘中にプレイヤー自身が強化されることはない。
       </p>
       </section>
       <section>
@@ -396,13 +399,13 @@
       <p>
       ステージを終えると <strong>言玉</strong> がもらえる。
       <strong>100 + ステージ番号 × 100</strong> が基本で、
-      自分の文の力（攻撃と防御の倍率）で<strong>最大 2 倍まで増える</strong>。
+      攻撃の倍率で<strong>増える</strong>。
       倒しきれずに負けたときは半分以下。クリアしたら<strong>一旦ホームへ戻る</strong>。
       </p>
       <p>
-      ステージを終えたときの 3 択は <strong>武器の追加 / 武器の強化 / 自身の文 / 休息</strong>。
       <strong>ことばはここでは出ない。</strong>
-      新しいことばは戦闘中の<strong>レベルアップ</strong>で得る。
+      新しいことばは戦闘中の<strong>レベルアップ</strong>と、
+      タイトルの<strong>言葉くじ</strong>で得る。
       </p>
       </section>
       <section>
@@ -508,6 +511,51 @@
           <h3>語彙</h3>
           <p class="archive-note">恒久の語は廃止。言玉は「語彙」の枠を買うか、恒久強化に使う。</p>
           <div class="archive-words" id="archiveWords"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 部位強化 ══════════════════════════════════════════════════════ -->
+  <div id="grow" class="layer screen" hidden>
+    <div class="panel panel-grow">
+      <header class="panel-head">
+        <h2>部位強化</h2>
+        <button class="btn btn-close" data-close="grow">✕</button>
+      </header>
+
+      <div class="archive-ink">
+        <span class="archive-ink-label">言玉</span>
+        <b id="growInk">0</b>
+        <span class="archive-ink-note">言葉くじと書庫の強化に使う</span>
+      </div>
+
+      <div class="grow-body">
+        <section>
+          <h3>言葉くじ</h3>
+          <p class="grow-note">言玉を払って、戦闘で使うのと同じ語を 1 つ引く。すでに持っている語なら言玉が少し戻る。</p>
+          <div class="grow-gacha">
+            <button class="btn btn-primary" id="gachaBtn">引く</button>
+            <span class="grow-gacha-result" id="gachaResult"></span>
+          </div>
+        </section>
+
+        <section>
+          <h3>部位</h3>
+          <p class="grow-note">下の「所持語」から語を選んで、各部位の枠を押すと入る。入っている枠を押すと外れる。部位の語は戦闘中の能力にそのまま効く。</p>
+          <div class="grow-parts" id="growParts"></div>
+          <p class="grow-note" id="growSelNote">語を選んでください</p>
+        </section>
+
+        <section>
+          <h3>所持語</h3>
+          <div class="grow-words" id="growWords"></div>
+        </section>
+
+        <section>
+          <h3>言葉デッキ <span class="grow-deck-count" id="deckCount"></span></h3>
+          <p class="grow-note">戦闘開始時の語彙に入る語。押すと出し入れできる。最低 10 語に満たない分は、開始時に自動で補われる。接続詞はデッキに入らない。</p>
+          <div class="grow-words" id="deckWords"></div>
         </section>
       </div>
     </div>

@@ -21,7 +21,7 @@ export const FX_LABEL = {
   dmgMulPct: '威力倍率', hpMulPct: '体力倍率',
 };
 
-/** プレイヤー自身の効果 (語彙と自身の文から来る)。 */
+/** プレイヤー自身の効果 (部位強化から来る)。 */
 export const PS_LABEL = {
   hp: '体力', spd: '移動', atk: '攻撃', armor: '装甲', crit: '会心',
   regen: '回復', lifesteal: '吸血', luck: '幸運', magnet: '吸引',

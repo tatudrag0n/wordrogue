@@ -110,8 +110,8 @@ const KANA_RE = /[ぁ-んァ-ヶー]/;
 export function hasKana(text) { return KANA_RE.test(text); }
 
 /**
- * 自身の文の末尾に固定で付く語。文面には必ず現れるので、
- * 語彙から引けてはいけない (「頑強人人」のような名前になる)。
+ * 文の末尾に固定で付く語。文面には必ず現れるので、
+ * 語彙から引けてはいけない。
  * 分割には語として必要なので、辞書からは消さない。
  */
 const FIXED_TAIL = '人';
@@ -319,7 +319,7 @@ const REASONS = {
  *   minContent … 実質語の最低数。既定は 2。
  *     武器は末尾語 (tail) を文に含めて評価するため、末尾語ぶん余分に要求する。
  *   tail … 末尾語のテキスト。渡すと末尾語の直前の語も日本語として正しいか見る。
- *     も判定する。武器と自身の称号は渡す。
+ *     も判定する。武器は渡す。
  * @returns {{
  *   valid:boolean, reason:string, reasonText:string, text:string,
  *   segments:string[], content:number, grade:string, gradeInfo:Object,

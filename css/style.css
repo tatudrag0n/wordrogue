@@ -1461,6 +1461,47 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 .shop-word.can { box-shadow: 0 0 0 2px rgba(255, 212, 59, .22); }
 .shop-word.owned { opacity: .55; cursor: default; color: var(--ok); }
 
+/* ══ 部位強化 ══════════════════════════════════════════════════════════ */
+
+.panel-grow { width: min(720px, 100%); }
+.grow-body { overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.grow-body h3 { margin: 0 0 8px; font-size: .95rem; color: var(--accent); letter-spacing: .04em; }
+.grow-note { margin: 0 0 8px; font-size: .78rem; color: var(--fg-dim); }
+.grow-gacha { display: flex; align-items: center; gap: 12px; }
+.grow-gacha-result { font-size: .9rem; font-weight: 700; color: var(--ok); }
+
+.grow-parts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.grow-part {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  background: #0b0f18;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+}
+.grow-part-name { font-size: .82rem; font-weight: 700; min-width: 2.2rem; }
+.grow-slot {
+  flex: 1;
+  min-width: 2.4rem;
+  padding: 6px 4px;
+  font-size: .9rem;
+  font-weight: 700;
+}
+.grow-slot:not(.filled) { opacity: .55; }
+
+.grow-words { display: flex; gap: 6px; flex-wrap: wrap; }
+.grow-word { font-size: .88rem; font-weight: 700; padding: 7px 11px; }
+.grow-word.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255, 212, 59, .3); }
+.grow-word.deck { opacity: .55; }
+.grow-word.deck.in { opacity: 1; border-color: var(--ok); color: var(--ok); }
+.grow-deck-count { font-size: .8rem; color: var(--fg-dim); font-weight: 400; }
+
 /* ══ 辞書 ══════════════════════════════════════════════════════════════ */
 
 /* 辞書パネル。画面の 9 割まで伸びる実高さを持たないと、

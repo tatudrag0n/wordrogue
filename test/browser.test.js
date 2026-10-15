@@ -294,13 +294,11 @@ const rows = await evalJs(`(() => {
     hint: all.filter((r) => r.classList.contains('wrow-empty')).length,
   };
 })()`);
-ok(rows.self === 1, `自身の文の行の数: ${rows.self}`);
+ok(rows.self === 0, `自身の文の行が残っている: ${rows.self}`);
 ok(rows.weapon === 1, `武器の文の行の数: ${rows.weapon}`);
 // 武器が最大 3 つまで無いことを知らせる余白行。
 ok(rows.hint === 1, `武器を追加できる旨の行が無い: ${JSON.stringify(rows)}`);
 console.log(`    行: 自身 ${rows.self} / 武器 ${rows.weapon} / 追加案内 ${rows.hint}`);
-const selfRow = await evalJs('!!document.querySelector("#forgeWeapons .wrow-self")');
-ok(selfRow, 'プレイヤー自身の文の行が無い');
 const words = await evalJs('document.querySelectorAll("#forgeWeapons .sen-word").length');
 ok(words >= 3, `文の中の語が表示されない: ${words}`);
 const gaps = await evalJs('document.querySelectorAll("#forgeWeapons .sen-gap").length');
@@ -362,10 +360,9 @@ sec('文は 10 文字まで。武器語は自分で置く');
       rows: [...document.querySelectorAll('#forgeWeapons .wrow')].map(n => n.textContent),
     };
   })()`);
-  // 自身の文の末尾は「人」だけ。武器の文には末尾語が無い。
+  // 武器の文に末尾語は無い。文面表示は武器の行ぶんだけ。
   ok(tails.defs.every((w) => w.maxLen === 10), `文の上限が 10 でない: ${tails.defs.map(w => w.maxLen)}`);
-  ok(tails.texts.length === 2, `文面表示の数: ${tails.texts.length}`);
-  ok(tails.texts.some((t) => t.includes('人')), `称号の末尾が「人」ではない: ${tails.texts.join(' | ')}`);
+  ok(tails.texts.length === tails.defs.length, `文面表示の数: ${tails.texts.length} / ${tails.defs.length}`);
   for (const w of tails.defs) {
     ok(w.title && !/undefined|null|空/.test(w.title), `武器名が壊れている: ${w.title}`);
   }
@@ -578,13 +575,13 @@ sec('語彙が満杯でも文から語を戻せること');
     let pi = 0;
     while (!run.lexiconFull) run.giveWord(m.makeWord(all[(pi++) % all.length]), true);
     const before = run.lexicon.filter(Boolean).length
-      + run.weapons.reduce((n, w) => n + w.sentence.count, 0) + run.player.self.count;
+      + run.weapons.reduce((n, w) => n + w.sentence.count, 0);
     const lexText = run.lexicon[0].text;
 
     // 語彙 -> 文 (末尾の隙間)。語彙の空きが 1 つ増えるだけ。
     forge.dropOnto({ kind: 'lexicon', index: 0 }, { kind: 'gap', wi, index: wi.sentence.count });
     const after = run.lexicon.filter(Boolean).length
-      + run.weapons.reduce((n, w) => n + w.sentence.count, 0) + run.player.self.count;
+      + run.weapons.reduce((n, w) => n + w.sentence.count, 0);
     const movedIn = wi.sentence.words[wi.sentence.count - 1].text;
 
     // 文 -> 語彙。満杯なら語彙の最古の 1 語を捨てて戻す。
@@ -1197,55 +1194,57 @@ sec('ダッシュでスタミナが消費される');
   ok(sta1 > mid.sta, `回復しない: ${mid.sta.toFixed(0)} -> ${sta1.toFixed(0)}`);
 }
 
-sec('プレイヤー自身の文で称号ができる');
+sec('部位強化はメニューで設定し、戦闘に効く');
 {
-  const res = await evalJs(`(async () => {
-    const m = await import(new URL('js/data/words.js', document.baseURI).href);
-    const run = window.__wordrogue.run;
-    const p = run.player;
-    p.self.clear();
-    // 「人」は文の外に固定で付くので、文には入れない。
-    p.self.push(m.makeWord('頑'));
-    p.self.push(m.makeWord('走'));
-    run.refreshStats();
+  // メニューを開いて、部位に語を入れ、デッキを組み替える。
+  const menu = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    app.menus.show('grow');
+    const save = app.save;
+    save.addInk(1000);
+    app.menus.renderGrow();
+    const gachaBefore = save.collection.length;
+    const g = save.drawGacha();
+    save.setPart('head', 0, '頑');
+    save.toggleDeck('炎');
     return {
-      title: p.stats.selfTitle,
-      valid: p.stats.selfValid,
-      power: p.stats.selfPower,
-      atk: p.stats.atkMul,
-      armor: p.stats.armor,
-      hudHidden: document.getElementById("hudSelf").hidden,
+      shown: !document.getElementById('grow').hidden,
+      parts: document.querySelectorAll('#growParts .grow-part').length,
+      words: document.querySelectorAll('#growWords .grow-word').length,
+      gachaBefore, gachaOk: g.ok, coll: save.collection.length,
+      part: save.partWordList().join(''),
+      ink: save.ink,
     };
   })()`);
-  ok(res.title === '頑走人', `称号が「${res.title}」`);
-  ok(res.valid === true, '自身の文が不成文');
-  ok(res.power > 1, `文の力が上がっていない: ${res.power}`);
-  ok(res.armor > 0, `装甲が乗っていない: ${res.armor}`);
-  await sleep(200);
-  const shown = await evalJs('document.getElementById("hudSelf").textContent');
-  ok(shown.includes('頑走人'), `HUD に称号が出ていない: ${shown}`);
-  ok(shown.includes('称号'), `HUD の称号ラベルが無い: ${shown}`);
-  ok(/文の力 x[\d.]+/.test(shown), `HUD に文の力が出ていない: ${shown}`);
-  console.log(`    称号「${res.title}」 文の力 x${res.power.toFixed(2)} / 装甲 ${res.armor.toFixed(2)} / HUD ${shown.trim()}`);
+  ok(menu.shown, '部位強化の画面が開かない');
+  ok(menu.parts === 9, `部位の数: ${menu.parts}`);
+  ok(menu.words >= 10, `所持語の表示が少ない: ${menu.words}`);
+  ok(menu.gachaOk, '言葉くじが引けない');
+  ok(menu.coll >= menu.gachaBefore, `くじで所持語が減った: ${menu.gachaBefore} -> ${menu.coll}`);
+  ok(menu.part.includes('頑'), `部位に語が入らない: ${menu.part}`);
+  console.log(`    部位 9 / 所持 ${menu.words} 語 / くじ後の言玉 ${menu.ink}`);
 
-  // 末尾の「人」は固定。並べ替えても外れない。
-  const tail = await evalJs(`(async () => {
-    const m = await import(new URL('js/data/words.js', document.baseURI).href);
-    const run = window.__wordrogue.run;
-    const p = run.player;
-    p.self.clear();
-    p.self.push(m.makeWord('甲'));
-    p.self.push(m.makeWord('鎧'));
-    run.refreshStats();
-    const a = p.stats.selfTitle;
-    p.self.swap(0, 1);
-    run.refreshStats();
-    return { a, b: p.stats.selfTitle, count: p.self.count };
+  // ランに渡すと、部位の語が能力に乗り、デッキが開始時の語彙に入る。
+  const applied = await evalJs(`(async () => {
+    const m = await import(new URL('js/game/run.js', document.baseURI).href);
+    const app = window.__wordrogue;
+    app.menus.hide('grow');
+    const run = new m.Run({
+      stageId: 1, save: app.save, audio: app.audio, weaponIds: ['sword'],
+      lexiconSize: 12, deckWords: app.save.deck, partWords: app.save.partWordList(),
+    });
+    return {
+      partCount: run.player.stats.partCount,
+      maxHp: run.player.stats.maxHp,
+      hasSelf: run.player.self !== undefined,
+      filled: run.lexicon.filter(Boolean).length,
+    };
   })()`);
-  ok(tail.a === '甲鎧人', `末尾の「人」が付かない: ${tail.a}`);
-  ok(tail.b === '鎧甲人', `入れ替えると末尾が変わる: ${tail.b}`);
-  ok(tail.count === 2, `文に「人」を入れてしまった: ${tail.count}`);
-  console.log(`    並べ替え → 「${tail.a}」→「${tail.b}」 末尾は人固定`);
+  ok(applied.partCount >= 1, `部位が能力に乗らない: ${applied.partCount}`);
+  ok(applied.maxHp > 100, `部位で体力が増えない: ${applied.maxHp}`);
+  ok(applied.hasSelf === false, '戦闘中に自身の文が残っている');
+  ok(applied.filled >= 10, `開始時の語彙が少ない: ${applied.filled}`);
+  console.log(`    部位 ${applied.partCount} 語 / 体力 ${applied.maxHp} / 語彙 ${applied.filled} 語`);
 }
 
 sec('敵の文が表示される');

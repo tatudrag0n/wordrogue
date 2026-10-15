@@ -19,7 +19,6 @@ import {
 } from '../data/words.js';
 import { CONNECTORS, CONNECT_ORDER, formOf, ROLE_LABEL } from '../data/words.connect.js';
 import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
-import { SELF_TAIL } from '../game/stats.js';
 import { keyStats } from '../game/weapon.js';
 
 /**
@@ -29,7 +28,6 @@ import { keyStats } from '../game/weapon.js';
  */
 function placeKey(place) {
   if (place.kind === 'lexicon') return `L${place.index}`;
-  if (place.kind === 'self') return `S${place.index}`;
   return `W${place.wIdx ?? '?'}_${place.index}`;
 }
 
@@ -210,10 +208,10 @@ export class Forge {
     if (this.hintOn) this.renderHint();
   }
 
-  /** 置き場が属する文。武器の文か、プレイヤー自身の文か。 */
+  /** 置き場が属する文 (武器の文)。 */
   senOf(place) {
     if (!place || place.kind === 'lexicon') return null;
-    return place.wi ? place.wi.sentence : this.run.player.self;
+    return place.wi ? place.wi.sentence : null;
   }
 
   /** 置き場に置かれている語。 */
@@ -228,8 +226,8 @@ export class Forge {
   /** 文を 1 行に並べる。語と、その直後の接続詞。 */
   renderSentenceRow(sen, opt = {}) {
     const row = el('div', { class: 'sen-row' });
-    const wordKind = opt.wi ? 'slot' : 'self';
-    const gapKind = opt.wi ? 'gap' : 'selfgap';
+    const wordKind = 'slot';
+    const gapKind = 'gap';
 
     const mkGap = (index) => {
       const place = { kind: gapKind, index, wi: opt.wi || null, wIdx: opt.wIdx };
@@ -341,7 +339,6 @@ export class Forge {
     return {
       lexicon: this.run.lexicon.map((w) => (w ? w.text : null)),
       weapons: this.run.weapons.map((wi) => dump(wi.sentence)),
-      self: dump(this.run.player.self),
     };
   }
 
@@ -357,7 +354,6 @@ export class Forge {
       load(wi.sentence, ents);
       wi._sig = null;
     });
-    load(this.run.player.self, s.self);
     this.run.refreshStats();
   }
 
@@ -458,13 +454,11 @@ export class Forge {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 武器と自身の文
+  // 武器の文
   // ───────────────────────────────────────────────────────────────────────────
   renderWeapons() {
     const list = this.listEl;
     clear(list);
-
-    list.append(this.renderSelfRow());
 
     if (this.run.weapons.length < WEAPON_MAX) {
       list.append(el('div', { class: 'wrow wrow-empty' },
@@ -535,56 +529,6 @@ export class Forge {
     return el('div', { class: 'sentence' }, right);
   }
 
-  /** プレイヤー自身の文。「頑強疾走人」のような称号を作る。 */
-  renderSelfRow() {
-    const p = this.run.player;
-    const sen = p.self;
-    const ev = evaluate(sen.segments(), { minContent: 3, tail: SELF_TAIL });
-    const row = el('div', { class: 'wrow wrow-self' + (ev.valid ? ' ' + ev.grade : ' broken') });
-
-    row.append(el('div', { class: 'wrow-head' },
-      el('span', { class: 'wrow-name' }, p.stats.selfTitle || '自身'),
-      el('span', { class: 'wrow-kind' }, '称号'),
-      el('span', { class: 'wrow-lv' }, `${sen.len} / ${sen.maxLen} 文字`),
-      el('span', { class: 'wrow-grade grade-' + (ev.valid ? ev.grade : 'broken') },
-        ev.valid ? ev.gradeInfo.name : '不成文'),
-    ));
-
-    if (!ev.valid && sen.count) {
-      row.append(el('div', { class: 'wrow-why' },
-        `${ev.reasonText} — 語を 2 つ以上並べると文になる。`));
-    } else if (ev.valid) {
-      row.append(this.renderNatural(ev));
-    }
-
-    row.append(this.renderSentenceRow(sen, {}));
-
-    const right = el('span', { class: 'sn-res' },
-      el('span', { class: 'sn-eq' }, '= '),
-      el('b', { class: 'sn-text' }, ev.text || '—'),
-    );
-    if (ev.valid) {
-      right.append(el('span', { class: 'sn-seg' },
-        ev.segments.map((s) => el('i', { class: `sg ${catClass({ text: s })}` }, s))));
-    }
-    row.append(el('div', { class: 'sentence' }, right));
-
-    // 乗っている自身の効果。
-    const fx = [];
-    for (const w of sen.words) {
-      if (!w || !w.player) continue;
-      for (const [k, v] of Object.entries(w.player)) {
-        fx.push(`${PS_LABEL[k] || k}${v > 0 ? '+' : ''}${Math.round(v * 100) / 100}`);
-      }
-    }
-    const stats = el('div', { class: 'wrow-stats' });
-    for (const t of fx) stats.append(el('span', { class: 'stat up' }, t));
-    if (ev.valid) {
-      stats.append(el('span', { class: 'stat idom' }, `文の力 x${p.stats.selfPower.toFixed(2)}`));
-    }
-    if (stats.childNodes.length) row.append(stats);
-    return row;
-  }
 
   renderStats(res) {
     const wrap = el('div', { class: 'wrow-stats' });
@@ -727,9 +671,7 @@ export class Forge {
     // （語をタップすると一周する。どれが使えるかを毎回覚える必要をなくす。）
     const loc = this.run.findWordAnywhere(sel);
     if (loc && loc.where !== 'lexicon') {
-      const place = loc.where === 'self'
-        ? { kind: 'self', index: loc.index }
-        : { kind: 'slot', wi: loc.wi, wIdx: this.run.weapons.indexOf(loc.wi), index: loc.index };
+      const place = { kind: 'slot', wi: loc.wi, wIdx: this.run.weapons.indexOf(loc.wi), index: loc.index };
       const sen = this.senOf(place);
       const e = sen && sen.at(loc.index);
       if (e) {
@@ -752,7 +694,6 @@ export class Forge {
     const have = new Set();
     for (const w of this.run.lexicon) if (w) have.add(w.text);
     for (const wi of this.run.weapons) for (const w of wi.sentence.words) have.add(w.text);
-    for (const w of this.run.player.self.words) have.add(w.text);
 
     h.append(el('p', {}, '接続詞 (送り仮名) は語ごとに決まっていて、直前の語にだけ付きます。'
       + '語をタップすると、その語の接続詞だけが順に切り替わり、一周したら無しになります。'

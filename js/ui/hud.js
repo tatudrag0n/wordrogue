@@ -137,20 +137,17 @@ export class Hud {
     this.staFill.classList.toggle('empty', p.stamina < 12);
     if (this.btnDash) this.btnDash.classList.toggle('empty', p.stamina < 12);
 
-    // プレイヤー自身の文 (称号)。
-    const selfTitle = p.stats.selfTitle || '';
-    if (selfTitle) {
+    // 部位強化 (メインメニューで設定)。戦闘中は表示だけ。
+    const partTexts = p.stats.partTexts || [];
+    if (partTexts.length) {
       this.hudSelf.hidden = false;
       clear(this.hudSelf);
       this.hudSelf.append(
-        el('span', { class: 'hud-self-mark' }, '称号'),
-        el('b', { class: 'hud-self-text' }, selfTitle),
-        el('span', { class: 'hud-self-pow' }, `文の力 x${p.stats.selfPower.toFixed(2)}`),
+        el('span', { class: 'hud-self-mark' }, '部位'),
+        el('b', { class: 'hud-self-text' }, partTexts.join('・')),
       );
-      this.hudSelf.classList.toggle('invalid', p.stats.selfValid === false);
-      this.hudSelf.title = p.stats.selfValid
-        ? `自身の文「${selfTitle}」— 文の力が攻撃と防御に効く`
-        : `自身の文「${selfTitle}」— 不成文。枠の語を 2 つ以上並べよう`;
+      this.hudSelf.classList.remove('invalid');
+      this.hudSelf.title = '部位強化の語 — メインメニューの「部位強化」で変更できる';
     } else {
       this.hudSelf.hidden = true;
     }

@@ -1,28 +1,26 @@
 // ============================================================================
 // ワードローグ — プレイヤー能力の解決
 //
-// 語彙の中の「自身強化語」と、プレイヤー自身の文、セーブの恒久強化から
-// 最終ステータスを作る。
+// プレイヤーの強化はメインメニューの「部位強化」で行う (戦闘中には行わない)。
+// 頭・右腕・左腕・右手・左手・右足・左足・胸・胴の 9 部位に語を入れると、
+// その語の効果 (buff 語の player、それ以外の語は fx のうちプレイヤーに
+// 効くもの) がそのまま能力に乗る。セーブの恒久強化 (書庫) もここで重ねる。
 //
-// 自身の文は自由に並べる。末尾の語 (人) だけが枠の外に固定で付く。
-// 語を並べ替えても末尾は動かないので、称号は必ず「○○人」になる。
+// 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
-import { WORDS, CONNECTOR_SET, evaluate } from '../data/words.js';
+import { WORDS, CONNECTOR_SET } from '../data/words.js';
 import { clamp } from '../core/util.js';
-
-/** プレイヤー自身の文の末尾語。枠の外に固定で付く。 */
-export const SELF_TAIL = '人';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {
   maxHp: 100,
   spd: 122,        // px/s
   atk: 1,          // 攻撃倍率
-  atkMul: 1,       // 攻撃倍率 (文から来る)
+  atkMul: 1,       // 攻撃倍率
   xpMul: 1,
   hpMul: 1,
-  armor: 0,        // 被ダメージ軽減 (%)
+  armor: 0,        // 被ダメージ軽減 (割合)
   crit: 0.05,
   critDmg: 1.5,    // 会心倍率
   magnet: 1.0,     // ピックアップ回収半径倍率
@@ -35,20 +33,45 @@ export const BASE_PLAYER = {
   reflect: 0,      // 被弾を返す割合
 };
 
-/** 語彙の buff 語がプレイヤーに与えるキー一覧。 */
+/** buff 語がプレイヤーに与えるキー一覧。 */
 const BUFF_KEYS = new Set([
   'hp', 'spd', 'atk', 'armor', 'crit', 'regen', 'lifesteal',
   'luck', 'magnet', 'xp', 'size', 'shield',
 ]);
 
 /**
- * 語彙と「自身の文」からプレイヤー能力を集計する。
- * @param {Array} lexicon 語彙
- * @param {Sentence} self プレイヤーの文 (自由に並べた語)
+ * buff 以外の語を部位に入れたとき、プレイヤーに効くキー。
+ * 動詞の spd は弾速、大きさと攻撃は武器側のものなので、ここには入れない。
+ */
+const PART_KEYS = new Set([
+  'hp', 'armor', 'crit', 'regen', 'lifesteal', 'luck', 'magnet', 'shield',
+]);
+
+/**
+ * buff 語の効果をプレイヤー能力へ写す。
+ * 語データの hp は絶対値、spd と xp は割合なので、行き先のキーが違う。
+ * @returns {boolean} 何か効いたか
+ */
+function applyBuffFx(s, src) {
+  let used = false;
+  for (const [k, v] of Object.entries(src)) {
+    if (typeof v !== 'number' || !BUFF_KEYS.has(k)) continue;
+    if (k === 'hp') s.maxHp += v;
+    else if (k === 'xp') s.xpMul += v;
+    else if (k === 'spd') s.spd *= 1 + v;
+    else s[k] = (s[k] || 0) + v;
+    used = true;
+  }
+  return used;
+}
+
+/**
+ * 部位に入れた語とセーブの恒久強化からプレイヤー能力を集計する。
+ * @param {Array<string|object>} partWords 部位に入っている語 (text でも語オブジェクトでも可)
  * @param {Object} meta セーブ側の恒久強化
  * @returns {typeof BASE_PLAYER}
  */
-export function resolvePlayerStats(lexicon, self, meta = {}) {
+export function resolvePlayerStats(partWords, meta = {}) {
   const s = { ...BASE_PLAYER };
   s.maxHp += meta.hp || 0;
   s.atkMul += meta.atk || 0;
@@ -57,40 +80,31 @@ export function resolvePlayerStats(lexicon, self, meta = {}) {
   s.magnet += meta.magnet || 0;
   s.crit += meta.crit || 0;
 
-  // 語彙の buff 語。
-  for (const w of lexicon) {
-    if (!w || w.cat !== 'buff' || !w.player) continue;
-    for (const [k, v] of Object.entries(w.player)) {
-      if (!BUFF_KEYS.has(k)) continue;
-      s[k] = (s[k] || 0) + v;
+  // 部位の語。buff 語は player の効果、それ以外は fx のうち効くものだけ。
+  s.partCount = 0;
+  s.partTexts = [];
+  for (const w of partWords || []) {
+    const text = typeof w === 'string' ? w : w?.text;
+    const info = (text && WORDS[text]) || (typeof w === 'object' ? w : null);
+    if (!info || !info.text || CONNECTOR_SET.has(info.text)) continue;
+    const isBuff = info.cat === 'buff';
+    let used;
+    if (isBuff) {
+      used = applyBuffFx(s, info.player || info.fx || {});
+    } else {
+      used = false;
+      for (const [k, v] of Object.entries(info.fx || {})) {
+        if (!PART_KEYS.has(k) || typeof v !== 'number') continue;
+        if (k === 'hp') s.maxHp += v;
+        else s[k] = (s[k] || 0) + v;
+        used = true;
+      }
+    }
+    if (used) {
+      s.partCount++;
+      s.partTexts.push(info.text);
     }
   }
-
-  // プレイヤー自身の文。末尾語 (人) も一緒に評価する。
-  // 中の語が player を持っていれば足す。文が成立していれば文の力が半分だけ効く。
-  const selfFilled = self ? self.words : [];
-  const selfAll = self ? self.segments() : [];
-  const selfTitle = selfAll.map((w) => w.text).join('');
-  // 末尾語はプレイヤーが置いた語ではないので、実質語の要求を 1 つ増やす。
-  const ev = evaluate(selfAll, { minContent: 3, tail: SELF_TAIL });
-  const selfValid = ev.valid;
-  const selfPower = selfValid ? 1 + (ev.fx.power - 1) * 0.5 : 1;
-  for (const w of selfFilled) {
-    const p = w.player || (w.cat === 'buff' ? w.fx : null);
-    if (!p) continue;
-    for (const [k, v] of Object.entries(p)) {
-      if (!BUFF_KEYS.has(k)) continue;
-      s[k] = (s[k] || 0) + v;
-    }
-  }
-  s.selfTitle = selfFilled.length ? selfTitle : '';
-  s.selfValid = selfFilled.length ? selfValid : false;
-  s.selfPower = selfPower;
-  s.selfPowerFx = ev.fx.power;
-  s.selfSegments = ev.segments;
-  // 自身の文の力は、攻撃と防御に効く。
-  s.atkMul *= selfPower;
-  s.armor = clamp(s.armor * selfPower, 0, 0.8);
 
   // 補正と上限。
   s.armor = clamp(s.armor, 0, 0.75);
@@ -134,7 +148,6 @@ export function lexiconContentCount(lexicon) {
 
 /**
  * HUD に出す能力表示の並びを決める。
- * 称号は hud-self 側で出るので、ここには数値だけ。
  * 値が 0 のものは入れない。
  * @param {typeof BASE_PLAYER} s
  * @returns {Array<{key:string,label:string,value:string,kind:string}>}

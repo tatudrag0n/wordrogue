@@ -1290,7 +1290,7 @@ export class Run {
   contactTick() {
     const p = this.player;
     for (const e of this.enemies) {
-      if (e.dead || e.spawned < 1) continue;
+      if (e.dead || e.spawned < 1 || e.burrowed) continue;
       const rr = p.r + e.r;
       if (dist2(e.x, e.y, p.x, p.y) > rr * rr) continue;
       this.hurtPlayer(e.dmg);
@@ -1340,6 +1340,14 @@ export class Run {
       this.spawnEnemyShot(b.x, b.y, a + i * 0.17, 210, 16, '#ff9a6a');
     }
     this.shake(8);
+  }
+  bossSpiral(b) {
+    const n = 24;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + (this.time || 0) * 2;
+      this.spawnEnemyShot(b.x, b.y, a, 160 + i * 4, 12, '#b47bff');
+    }
+    this.shake(10);
   }
 
   bossSummon(b) {

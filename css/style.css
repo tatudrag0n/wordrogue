@@ -1587,3 +1587,26 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* ==========================================================================
+   UX polish — ホバー/フォーカス/遷移の強化
+   ========================================================================== */
+button, .btn, .up-buy, .stage-card, .lo-card {
+  transition: transform .12s ease, box-shadow .12s ease, filter .12s ease, background .12s ease;
+}
+button:hover:not(:disabled), .btn:hover:not(.off), .up-buy:hover:not(.off) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+button:active:not(:disabled), .btn:active:not(.off) {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+.stage-card:hover, .lo-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+#forge .slot, #forge .gap {
+  transition: background .12s ease, box-shadow .12s ease;
+}
+#forge .slot:hover { box-shadow: 0 0 0 2px var(--accent) inset; }

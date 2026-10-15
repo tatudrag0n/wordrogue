@@ -63,6 +63,12 @@ export const ENEMIES = {
     id: 'swarm', name: '子虫', ai: 'swarm',
     hp: 5, speed: 96, dmg: 4, r: 6, xp: 1, color: '#d8d06a',
   },
+  mole: {
+    words: ['土', '爪'],
+    id: 'mole', name: 'モグラ', ai: 'burrow',
+    hp: 18, speed: 50, dmg: 7, r: 10, xp: 2, color: '#8a6a4a',
+    burrow: { dive: 1.1, surface: 0.9, shot: { speed: 130, dmg: 6, cd: 0 } },
+  },
   wraith: {
     words: ['夜', '雷'],
     id: 'wraith', name: 'レイス', ai: 'chase',
@@ -105,7 +111,7 @@ export const ENEMIES = {
     words: ['焔', '雷', '刃'],
     id: 'boss_dragon', name: '黒竜', ai: 'boss', boss: 1,
     hp: 4200, speed: 62, dmg: 30, r: 46, xp: 140, color: '#8a2f4a', heavy: 2,
-    patterns: ['charge', 'breath', 'summon', 'slam'],
+    patterns: ['charge', 'breath', 'summon', 'slam', 'spiral'],
     arena: 330,
   },
   boss_lich: {

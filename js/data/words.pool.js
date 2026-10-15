@@ -204,6 +204,7 @@ const RAW_POOL = `
 砕  v   く:adn* ける:adn* かれた:adn* いて:adv けて:adv
 殴  v   る:adn* られた:adn* って:adv
 渦  n   +N
+還  n   る:adn* +N
 散  v   る:adn* らす:adn* らされた:adn* って:adv らして:adv
 伸  v   びる:adn* ばす:adn* ばされた:adn* びて:adv ばして:adv
 縮  v   む:adn* める:adn* められた:adn* んで:adv めて:adv

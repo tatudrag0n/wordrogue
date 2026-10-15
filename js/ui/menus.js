@@ -367,10 +367,10 @@ export class Menus {
 
   renderDictList() {
     // 形態語 (剣・銃・環 …) は武器の末尾語で、語彙から引けない。辞書にも載せない。
-    const all = Object.values(WORDS).filter((w) => w.cat !== 'form');
+    const all = Object.values(WORDS).filter((w) => w.cat !== 'form' || (w.cats || []).length > 1);
     const q = this.dictQuery;
     const rows = all.filter((w) => {
-      if (this.dictCat !== 'all' && w.cat !== this.dictCat) return false;
+      if (this.dictCat !== 'all' && !(w.cats || [w.cat]).includes(this.dictCat)) return false;
       if (!q) return true;
       if (w.text.includes(q)) return true;
       if (CONNECTOR_SET.has(w.text) && '接続'.includes(q)) return true;

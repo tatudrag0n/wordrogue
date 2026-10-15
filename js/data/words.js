@@ -66,15 +66,21 @@ for (const table of RAW_TABLES) {
 
     const effects = parseFx(fx);
     // 品詞と接続詞プールは語ごとに words.pool.js で決める。
+    const pool = poolOfText(text);
+    // 複数カテゴリ: 本来の分類 (cat) に加え、動詞の形 (述語) を持つ語は
+    // 用言としても扱う (震える・還る・走る・察する …)。cats は複数持ちうる。
+    const cats = [cat];
+    if (cat !== 'verb' && pool.some((e) => e.pred)) cats.push('verb');
     WORDS[text] = {
       text,
       cat,
+      cats,
       el: el && el !== '-' ? el : null,
       fx: effects,
       player: cat === 'buff' ? effects : null,
       pos: posOfText(text),
       // この語の直後に付く送り仮名 (接続詞)。
-      pool: poolOfText(text),
+      pool,
     };
     wordUid++;
   }
@@ -84,7 +90,7 @@ for (const table of RAW_TABLES) {
 for (const k of CONNECT_ORDER) {
   if (WORDS[k]) { DUPLICATES.push(k); continue; }
   WORDS[k] = {
-    text: k, cat: 'connect', el: null, fx: CONNECTORS[k].fx, player: null, pos: null, pool: [],
+    text: k, cat: 'connect', cats: ['connect'], el: null, fx: CONNECTORS[k].fx, player: null, pos: null, pool: [],
   };
 }
 
@@ -171,6 +177,7 @@ export function makeWord(text) {
     uid: wordUid++,
     text: base.text,
     cat: base.cat,
+    cats: base.cats,
     el: base.el,
     fx: base.fx,
     player: base.player,

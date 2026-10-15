@@ -76,6 +76,7 @@ const RAW_ELEMENT = `
 電     element thunder dmg+3  shock+0.14
 震     element thunder dmg+4  shock+0.22  area+8
 磁     element thunder dmg+5  shock+0.18  magnet+0.35
+雷     element thunder dmg+7  pierce+5  crit+0.06  speed+30
 
 毒     element poison  dmg+1  poison+2
 液     element poison  dmg+2  poison+3  area+4
@@ -89,6 +90,8 @@ const RAW_ELEMENT = `
 輝     element light   dmg+3  burn+1
 耀     element light   dmg+2  crit+0.04
 陽     element light   dmg+2  regen+0.5  area+6
+天     element light   dmg+2  pierce+1  speed+20
+光     element light   dmg+8  pierce+8  speed+60  size+0.20
 霞     element light   dmg+1  pierce+1
 皓     element light   dmg+1  crit+0.03  speed+10
 青     element light   dmg+2  crit+0.02  speed+8
@@ -100,6 +103,7 @@ const RAW_ELEMENT = `
 黒     element dark    dmg+3  pierce+2  armor+1
 夜     element dark    dmg+5  pierce+3  crit+0.04
 死     element dark    dmg+3  lifesteal+0.03
+亡     element dark    dmg+3  crit+0.03
 魔     element dark    dmg+4  crit+0.07  lifesteal+0.03
 影     element dark    dmg+1  crit+0.02  homing+0.10
 漆     element dark    dmg+2  crit+0.03  homing+0.14
@@ -111,6 +115,7 @@ const RAW_ELEMENT = `
 陸     element earth   dmg+4  speed-20  size+0.25  knock+30
 崖     element earth   dmg+4  explode+14  size+0.30  speed-15
 原     element earth   dmg+3  knock+60  speed-20  area+8
+岩     element earth   dmg+9  explode+20  size+0.35  area+12  speed-20
 
 風     element wind    dmg+1  speed+45  homing+0.08
 嵐     element wind    dmg+3  area+14  speed+40  knock+40
@@ -182,11 +187,8 @@ const RAW_FORM = `
 球     form  -  dmg+6  area+6  size+0.15
 珠     form  -  dmg+10  pierce+4  bounce+2  crit+0.06
 還     form  -  dmg+11  pierce+5  bounce+3  speed+40
-光     form  -  dmg+8  pierce+8  speed+60  size+0.20
-雷     form  -  dmg+7  pierce+5  crit+0.06  speed+30
 
 塊     form  -  dmg+8  speed-25  size+0.30  knock+25
-岩     form  -  dmg+9  explode+20  size+0.35  area+12  speed-20
 石     form  -  dmg+7  speed-20  size+0.25  knock+20
 
 環     form  -  orbit+1  count+2  dmg+5
@@ -276,6 +278,7 @@ const RAW_MODIFIER = `
 
 # ── 名詞・動詞的效果語 ──
 心    modifier  -  crit+0.08  homing+0.25
+渦    modifier  -  dmg+5  orbit+2
 圧    modifier  -  knock+90  size+0.2  speed-10
 律    modifier  -  rate+0.6  count+1  dmg+3
 斉    modifier  -  count+3  dmg+4  rate+0.3
@@ -384,7 +387,6 @@ const RAW_VERB = `
 斬      verb  -  dmg+8  crit+0.08
 砕      verb  -  dmg+6  knock+40
 殴      verb  -  dmg+6  rate+0.3
-渦      verb  -  dmg+5  orbit+2
 散      verb  -  dmg+2  count+3  spread+0.4
 伸      verb  -  dmg+2  size+0.30
 縮      verb  -  dmg+1  speed+50  size-0.15

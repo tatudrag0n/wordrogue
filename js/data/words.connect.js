@@ -40,6 +40,7 @@ import {
   poolOfText, posOfText, WORD_POOLS, NOUN_POOL, COMPOUND_POOLS, MAX_COMPOUND_POOL_LEN,
   compoundPoolOf,
 } from './words.pool.js';
+import { PHRASE_BONUS } from './words.phrase.js';
 
 export { NOUN_POOL, WORD_POOLS, COMPOUND_POOLS };
 
@@ -361,6 +362,14 @@ export function checkConnectors(segs, dict) {
     if (c < segs.length && c > j + 1) {
       const b = bindAt(c);
       if (b && b.compound && b.start === j) return { w: b.src, f: b.e };
+    }
+    // 語列が熟語になっていれば、熟語ごと名詞句の頭として扱う (滅亡の光 の「滅亡」)。
+    if (c > j + 1) {
+      const runText = segs.slice(j, c).join('');
+      if (PHRASE_BONUS[runText]) {
+        const b = bindAt(c);
+        return { w: { text: runText, pos: POS.noun }, f: b ? b.e : null };
+      }
     }
     const w = info(segs[j]);
     const b = c === j + 1 ? bindAt(c) : null;

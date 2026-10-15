@@ -184,10 +184,8 @@ export const FORM_SHAPE = {
   矢: ['arrow', 'shot'], 針: ['arrow', 'shot'], 弓: ['arrow', 'shot'],
   槍: ['arrow', 'shot'], 矛: ['arrow', 'shot'],
   球: ['orb', 'shot'], 珠: ['blade', 'boomerang'], 還: ['blade', 'boomerang'],
-  光: ['arrow', 'beam'],
-  雷: ['shot', 'chain'],
   // 爆弾
-  塊: ['orb', 'bomb'], 岩: ['orb', 'bomb'], 石: ['bomb', 'bomb'],
+  塊: ['orb', 'bomb'], 石: ['bomb', 'bomb'],
   // 軌道
   環: ['blade', 'orbit'], 輪: ['blade', 'orbit'],
   // 薙ぎ
@@ -205,15 +203,11 @@ export const BASIC_WEAPONS = new Set([
 ]);
 
 /**
- * 特殊武器 (形態語のうち基本武器でないもの): 炎・水・岩・雷・光・闇のような
- * 属性語と一緒に、攻撃できる動詞が付いている場合のみ武器として成立する。
+ * 特殊武器: **属性語だけ**。炎・水・岩・雷・光・闇のような属性語は、
+ * 攻撃できる動詞が付いている場合のみ武器として成立する。
  *   例 「天焦がす滅亡の光」… 焦がす (動詞の述語形) があるので「光」が武器になる。
- * 属性語 (element) はすべて特殊武器。形態語の残りはこの集合で列挙する。
+ * 属性語でない形態語 (玉・環・弾 …) は武器の頭にはならない (ただの語)。
  */
-export const SPECIAL_FORMS = new Set([
-  '弾', '玉', '矢', '針', '球', '珠', '還', '光', '雷',
-  '塊', '岩', '石', '環', '輪', '壁', '網', '盾', '戈',
-]);
 
 /** 属性語が特殊武器になったときの形と攻撃の型。 */
 export const ELEMENT_SHAPE = {

@@ -257,6 +257,37 @@ sec('すべての武器が文の中の武器語で攻撃を決める');
 }
 
 
+sec('基本武器でない形態語は文の終わりに置けない');
+{
+  const PS = { atk: 1, atkMul: 1, crit: 0, lifesteal: 0, magnet: 0, xpMul: 0, armor: 0, slowImmune: 0, hp: 100 };
+  const sword = new WeaponInst('sword', 1);
+
+  // 剣の文を「弾」で締めることはできない。
+  setFlat(sword, ['焔', '弾']);
+  const bad = sword.resolve(PS);
+  ok(!bad.valid && bad.reason === 'formtail',
+    `「焔弾」が成立してしまった: ${bad.reason} / ${bad.reasonText}`);
+
+  // 文の途中なら使える。武器語で締めれば成立する。
+  setFlat(sword, ['焔', '弾', 'の', '硬', '刃']);
+  const good = sword.resolve(PS);
+  ok(good.valid, `「焔弾の刃」が成立しない: ${good.reasonText}`);
+
+  // その武器自身の名前 (爆弾の「弾」) だけは末尾に置ける。
+  const bomb = new WeaponInst('bomb', 1);
+  setFlat(bomb, ['焔', '弾']);
+  const own = bomb.resolve(PS);
+  ok(own.valid, `爆弾の「焔弾」が成立しない: ${own.reasonText}`);
+
+  // ただし爆弾でも、他人の名前 (「環」) では締められない。
+  setFlat(bomb, ['焔', '環']);
+  const other = bomb.resolve(PS);
+  ok(!other.valid && other.reason === 'formtail',
+    `爆弾の「焔環」が成立してしまった: ${other.reason}`);
+
+  console.log('  焔弾 (剣) → 不成立 / 焔弾の刃 → 成立 / 焔弾 (爆弾) → 成立 / 焔環 (爆弾) → 不成立');
+}
+
 sec('不成文の武器は無効化される');
 {
   const r = freshWeapon(1);
@@ -1249,8 +1280,12 @@ sec('武器 1 つにつき複数語を並べられる');
   console.log(`  上限 → ${wi.sentence.count} 語 ${wi.sentence.len} 文字「${wi.sentence.text}」`);
 
   // 熟語は 1 文字 3 語。毒 + 蝕 + 弾 のように乗る。
-  const idiom = setFlat(wi, ['毒', '蝕', '弾']).resolve(r.player.stats);
-  ok(idiom.valid, `「毒蝕弾」が成立しない: ${idiom.reasonText}`);
+  // ただし「弾」は文の終わりに置けないので、武器語で締める。
+  const idiomBad = setFlat(wi, ['毒', '蝕', '弾']).resolve(r.player.stats);
+  ok(!idiomBad.valid && idiomBad.reason === 'formtail',
+    `「毒蝕弾」で締める文が成立してしまった: ${idiomBad.reason}`);
+  const idiom = setFlat(wi, ['毒', '蝕', '弾', 'の', '硬', '刃']).resolve(r.player.stats);
+  ok(idiom.valid, `「毒蝕弾の硬刃」が成立しない: ${idiom.reasonText}`);
   ok(idiom.evalResult.idiom?.phrase === '毒蝕弾', `熟語が乗らない: ${idiom.evalResult.idiom}`);
   console.log(`  熟語 → 「${idiom.fullText}」(${idiom.gradeInfo.name} / 熟語 ${idiom.evalResult.idiom.name})`);
 
@@ -1314,7 +1349,7 @@ sec('武器の文で敵の文を斬れる');
   ok(plain.stats.cutPower === 1, `成立文の斬り数が 1 でない: ${plain.stats.cutPower}`);
 
   // 熟語があれば +1。
-  const idiom = set('毒', '蝕', '弾');
+  const idiom = set('毒', '蝕', '弾', 'の', '硬', '刃');
   ok(idiom.valid && idiom.evalResult.idiom, `熟語が成立しない: ${idiom.fullText}`);
   ok(idiom.stats.cutPower === 2, `熟語文の斬り数が 2 でない: ${idiom.stats.cutPower}`);
 
@@ -1361,7 +1396,7 @@ sec('熟語か述語なら、一撃で 2 語斬る');
   const wi = r.weapons[0];
   const PS = r.player.stats;
   const set = (...ws) => setFlat(wi, ws).resolve(PS);
-  const strong = set('毒', '蝕', '弾');
+  const strong = set('毒', '蝕', '弾', 'の', '硬', '刃');
   ok(strong.valid, `比較用の文が成立しない: ${strong.evalResult.reasonText}`);
   ok(strong.stats.cutPower === 2, `斬り数が 2 でない: ${strong.stats.cutPower}`);
 

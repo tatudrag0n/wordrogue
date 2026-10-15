@@ -187,6 +187,22 @@ export class WeaponInst {
         gradeInfo: GRADES.broken,
       };
     }
+    // 基本武器でない形態語 (弾・環・玉…) は文の終わりに置けない。
+    // 文は武器語で締める。ただし、その武器自身の名前 (爆弾の「弾」など)
+    // だけは末尾に置ける。熟語 (毒蝕弾など) は文の途中なら使える。
+    const last = this.sentence.words[this.sentence.count - 1];
+    if (last && WORDS[last.text]?.cat === 'form'
+      && !BASIC_WEAPONS.has(last.text) && last.text !== this.def.tail) {
+      return {
+        ...e,
+        valid: false,
+        reason: 'formtail',
+        reasonText: `「${last.text}」は文の終わりに置けない。`
+          + `武器語 (刃・剣・銃…) で締めること。`,
+        grade: 'broken',
+        gradeInfo: GRADES.broken,
+      };
+    }
     return e;
   }
 

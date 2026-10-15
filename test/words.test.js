@@ -470,6 +470,16 @@ sec('プールの形で文が読めること');
   const dup = E2('風', 'の', '潮', 'の', '銃');
   ok(dup.valid, `「風の潮の銃」が不成立: ${dup.reasonText}`);
   ok(dup.naturalParts.some((p) => p.key === 'dupconn'), '「風の潮の銃」に重複の減点が無い');
+  // 裸の語幹が武器語に付くと減点 (不成立にはしない)。熟語の中は語幹複合として認める。
+  const bare = evaluate(['電', '貫', '弓'].map(makeWord), { minContent: 2 });
+  ok(bare.valid && bare.naturalParts.some((p) => p.key === 'bareform'),
+    '「電貫弓」に裸語幹の減点が無い');
+  const phraseBare = evaluate(['必', '殺', '刃'].map(makeWord), { minContent: 2 });
+  ok(phraseBare.valid && !phraseBare.naturalParts.some((p) => p.key === 'bareform'),
+    '熟語「必殺刃」に裸語幹の減点がある');
+  const connForm = evaluate(['電', '貫', 'く', '弓'].map(makeWord), { minContent: 2 });
+  ok(connForm.valid && !connForm.naturalParts.some((p) => p.key === 'bareform'),
+    '「電貫く弓」に裸語幹の減点がある');
   const single = E2('風', 'の', '潮', '銃');
   ok(!single.naturalParts.some((p) => p.key === 'dupconn'), '重複していないのに減点がある');
   console.log(`  ${good.length} 通り成立 / ${bad.length} 通りは理由つきで落ちる / 重複は減点`);

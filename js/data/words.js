@@ -589,6 +589,44 @@ export function evaluate(words, opt = {}) {
       });
     }
   }
+  // 武器語 (形態語) の直前に、名詞を修飾できない裸の語幹が付いている。
+  //   「炎必刃」(必は必ず+動詞が要る)「電速銃」(速い銃が本来)「毒固壁」
+  //   「電貫弓」(貫く弓が本来)… 成立はするが日本語として不自然なので弱くする。
+  //   熟語として登録された並び (必殺刃の「殺刃」) は語幹複合として認める。
+  {
+    // 文面での各セグメントの開始位置 (熟語の範囲判定用)。
+    const segOff = [];
+    let off = 0;
+    for (const t of segs) { segOff.push(off); off += t.length; }
+    const inPhrase = (a, b) => {
+      for (const key of Object.keys(PHRASE_BONUS)) {
+        for (let at = joined.indexOf(key); at >= 0; at = joined.indexOf(key, at + 1)) {
+          if (at <= a && b <= at + key.length) return true;
+        }
+      }
+      return false;
+    };
+    for (let i = 1; i < segs.length; i++) {
+      if (WORDS[segs[i]]?.cat !== 'form') continue;
+      // 末尾語として渡された語は tail 側の判定 (bareadj 等) に任せる。
+      if (opt.tail && i === segs.lastIndexOf(opt.tail)) continue;
+      const j = i - 1;
+      if (CONNECTOR_SET.has(segs[j])) continue; // 接続詞の形で係っていればよい
+      const prev = WORDS[segs[j]];
+      if (!prev) continue;
+      const pool = prev.pool || [];
+      const stemOnly = prev.pos === POS.adj || prev.pos === POS.naadj
+        || prev.cat === 'verb' || pool.some((e) => e.pred)
+        || !pool.some((e) => e.role === 'adn' || (e.role === 'case' && e.next === 'noun'));
+      if (!stemOnly) continue;
+      if (inPhrase(segOff[j], segOff[j] + segs[j].length + segs[i].length)) continue;
+      parts.push({
+        key: 'bareform',
+        label: `「${segs[j]}」が裸で武器語「${segs[i]}」に付いている`,
+        v: -0.6,
+      });
+    }
+  }
   // 述語。用言そのものか、「〜する」「〜された」「〜る」。
   if (verbs) parts.push({ key: 'verb', label: '動作', v: 0.4 * Math.min(verbs, 2) });
   // 主語と述語が繋がって、一文として閉じているか。

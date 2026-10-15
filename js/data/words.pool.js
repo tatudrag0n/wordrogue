@@ -224,14 +224,10 @@ const RAW_POOL = `
 掘  v   る:adn* られた:adn*p って:adv
 叩  v   く:adn* かれた:adn*p いて:adv
 踏  v   む:adn* まれた:adn*p んで:adv
-嗅  v   ぐ:adn* がれた:adn*p いで:adv
-舐  v   める:adn* められた:adn*p めて:adv
-跨  v   ぐ:adn* いで:adv
 擦  v   る:adn* れる:adn* られた:adn*p って:adv れて:adv
 潰  v   す:adn* れる:adn* された:adn*p して:adv れて:adv
 嚇  v   す:adn* された:adn*p して:adv
 縛  v   る:adn* られた:adn*p って:adv
-撫  v   でる:adn* でられた:adn*p でて:adv
 `;
 
 /** 品詞の略号。 */

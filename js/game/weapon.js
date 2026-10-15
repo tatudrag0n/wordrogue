@@ -109,13 +109,8 @@ export class WeaponInst {
   hasAttackVerb(e) {
     return (e?.compounds || []).some((c) => {
       if (!c.pred) return false;
-      const src = WORDS[c.source];
-      if (src?.cats?.includes('verb')) return !src.soft;
-      if (c.phrase) {
-        const head = WORDS[c.source[0]];
-        return head?.cat === 'verb' && !head.soft;
-      }
-      return false;
+      if (WORDS[c.source]?.cats?.includes('verb')) return true;
+      return c.phrase && WORDS[c.source[0]]?.cat === 'verb';
     });
   }
   get tailWord() { return this.tail ? makeWord(this.tail) : null; }

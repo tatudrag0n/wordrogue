@@ -1164,12 +1164,6 @@ sec('形と攻撃は文の中の武器語が決める');
       `現象語「渦」が特殊武器にならない: special=${res.special} tail=${res.tail} kind=${res.kind}`);
     ok(WORDS['渦'].cat === 'phenom' && WORDS['嵐'].cat === 'element',
       '渦・嵐の分類がおかしい');
-    // 攻撃でない動詞 (撫でる) では特殊武器は発動しない。
-    setFlat(wi, ['焔', '撫', '光']);
-    wi.setConnect(1, makeWord('でる'));
-    res = wi.resolve(r.player.stats);
-    ok(res.special !== true && res.tail === null,
-      `「撫でる光」で特殊武器が発動した: tail=${res.tail}`);
   }
 
   // 同じ武器でも、置いた武器語が変われば攻撃の型が変わる。

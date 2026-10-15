@@ -363,13 +363,13 @@ sec('語ごとの接続詞プール');
   const hasNot = (w, c) => ok(!canConnect(WORDS[w], c), `「${w}${c}」が結べている (日本語に無い)`);
 
   // ユーザーが挙げた不自然な形は全部消えている。
-  hasNot('斬', 'された'); hasNot('回', 'せし'); hasNot('凍', 'ける'); hasNot('跨', 'く');
+  hasNot('斬', 'された'); hasNot('回', 'せし'); hasNot('凍', 'ける'); hasNot('舞', 'く');
   hasNot('滑', 'かな'); hasNot('冷', 'つ');
   // 代わりに本当の送り仮名がある。
   has('斬', 'る'); has('斬', 'られた'); has('斬', 'り');
   has('凍', 'る'); has('凍', 'える');
   has('滑', 'らかな'); has('静', 'かな'); has('妙', 'な'); has('妙', 'に');
-  has('速', 'く'); has('速', 'い'); has('跨', 'ぐ'); has('冷', 'たい'); has('冷', 'える');
+  has('速', 'く'); has('速', 'い'); has('舞', 'う'); has('冷', 'たい'); has('冷', 'える');
   has('回', 'る'); has('回', 'す'); has('回', 'り'); has('回', 'された');
   has('呪', 'う'); has('呪', 'われた'); has('呪', 'いの');
   has('大', 'きな'); has('小', 'さな'); has('明', 'るい'); has('爆', 'ぜる');
@@ -436,8 +436,6 @@ sec('プールの形で文が読めること');
     ['溶', 'かされた', '刃'],                     // 溶かされた刃 (受身)
     ['燃', 'やされた', '刃'],                     // 燃やされた刃 (受身)
     ['滅', 'ぼされた', '刃'],                     // 滅ぼされた刃 (受身)
-    ['舐', 'められた', '刃'],                     // 舐められた刃 (受身)
-    ['撫', 'でられた', '刃'],                     // 撫でられた刃 (受身)
     ['掘', 'られた', '刃'],                       // 掘られた刃 (受身)
     ['斬', 'って', '燃', 'える', '刃'],           // 斬って燃える刃 (て形は動詞へ)
     ['焔', 'を', '斬', 'って', '燃', 'える', '刃'], // 焔を斬って燃える刃
@@ -451,7 +449,7 @@ sec('プールの形で文が読めること');
     [['震', 'の', '刃'], 'floatconn'],             // 震の刃 … 震は用言の語幹。「の」では名詞化しない
     [['凍', 'ける', '刃'], 'floatconn'],           // 凍ける
     [['滑', 'かな', '刃'], 'floatconn'],           // 滑かな
-    [['跨', 'く', '刃'], 'floatconn'],             // 跨く
+    [['舞', 'く', '刃'], 'floatconn'],             // 舞く
     [['冷', 'つ', '刃'], 'floatconn'],             // 冷つい
     [['回', 'せし', '刃'], 'unseg'],               // せし は辞書から消えた
     [['速', 'く', '焔', 'の', '刃'], 'connnoun'],  // 速く焔 … 連用のあとに名詞
@@ -665,12 +663,12 @@ sec('自然さと完成度で力が決まること');
   const dupWord = evaluate(['炎', 'を', '燃', 'やす', '炎'].map(makeWord), { minContent: 2 });
   ok(dupWord.valid && dupWord.naturalParts.some((p) => p.key === 'dupword'),
     '「炎を燃やす炎」に同じ語の減点が無い');
-  // 意味の弱い動詞 (撫でる等) と受身 (受けた側) は効果が半減する。
-  ok(WORDS['撫'].soft && !WORDS['斬'].soft, 'soft の印がおかしい');
-  const weakPass = evaluate(['撫', 'でられた', '剣'].map(makeWord), { minContent: 2 });
-  const strongPass = evaluate(['斬', 'られた', '剣'].map(makeWord), { minContent: 2 });
-  ok(weakPass.valid && weakPass.fx.dmg < strongPass.fx.dmg,
-    `「撫でられた剣」が弱くなっていない: ${weakPass.fx.dmg} vs ${strongPass.fx.dmg}`);
+  // 受身 (受けた側) の語は効果が半減する。「撫でる」のような攻撃でない動詞は辞書に無い。
+  for (const gone of ['撫', '舐', '嗅', '跨']) ok(!WORDS[gone], `攻撃でない動詞「${gone}」が残っている`);
+  const passDmg = evaluate(['斬', 'られた', '剣'].map(makeWord), { minContent: 2 });
+  const actDmg = evaluate(['斬', 'る', '剣'].map(makeWord), { minContent: 2 });
+  ok(passDmg.valid && passDmg.fx.dmg < actDmg.fx.dmg,
+    `「斬られた剣」が「斬る剣」より弱くなっていない: ${passDmg.fx.dmg} vs ${actDmg.fx.dmg}`);
   const diffWord = evaluate(['炎', '焔', '弾'].map(makeWord), { minContent: 2 });
   ok(diffWord.valid && !diffWord.naturalParts.some((p) => p.key === 'dupword'),
     '「炎焔弾」に同じ語の減点がある');

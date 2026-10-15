@@ -65,8 +65,6 @@ for (const table of RAW_TABLES) {
     }
 
     const effects = parseFx(fx);
-    // 意味の印: soft = 撫でる・舐める等の「攻撃でない動詞」。効果は半減する。
-    const soft = fx.includes('soft');
     // 品詞と接続詞プールは語ごとに words.pool.js で決める。
     const pool = poolOfText(text);
     // 複数カテゴリ: 本来の分類 (cat) に加え、動詞の形 (述語) を持つ語は
@@ -79,7 +77,6 @@ for (const table of RAW_TABLES) {
       cats,
       el: el && el !== '-' ? el : null,
       fx: effects,
-      soft,
       player: cat === 'buff' ? effects : null,
       pos: posOfText(text),
       // この語の直後に付く送り仮名 (接続詞)。
@@ -373,9 +370,8 @@ export function evaluate(words, opt = {}) {
     if (!filler) content++;
     if (w.cat === 'verb') verbs++;
     if (w.el) elWeight[w.el] = (elWeight[w.el] || 0) + 1;
-    const scale = w.soft ? 0.5 : 1;
     for (const [k, v] of Object.entries(w.fx)) {
-      fx[k] = (fx[k] || 0) + v * scale;
+      fx[k] = (fx[k] || 0) + v;
     }
   }
 
@@ -461,7 +457,7 @@ export function evaluate(words, opt = {}) {
   }
   for (const [k, v] of Object.entries(connFx)) fx[k] = (fx[k] || 0) + v;
 
-  // 受身の意味: 「撫でられた剣」の撫は、剣が受けた動作であって力の源ではない。
+  // 受身の意味: 「燃やされた剣」の燃は、剣が受けた動作であって力の源ではない。
   // 受身で結ばれた語 (熟語なら熟語の全語) の効果は半減する。
   let hasPassive = false;
   for (const c of compounds) {
@@ -470,8 +466,7 @@ export function evaluate(words, opt = {}) {
     for (let i = c.start; i < c.idx; i++) {
       const w = WORDS[segs[i]];
       if (!w) continue;
-      const applied = w.soft ? 0.5 : 1;
-      for (const [k, v] of Object.entries(w.fx)) fx[k] = (fx[k] || 0) - v * applied * 0.5;
+      for (const [k, v] of Object.entries(w.fx)) fx[k] = (fx[k] || 0) - v * 0.5;
     }
   }
 

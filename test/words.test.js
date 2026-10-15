@@ -665,6 +665,12 @@ sec('自然さと完成度で力が決まること');
   const dupWord = evaluate(['炎', 'を', '燃', 'やす', '炎'].map(makeWord), { minContent: 2 });
   ok(dupWord.valid && dupWord.naturalParts.some((p) => p.key === 'dupword'),
     '「炎を燃やす炎」に同じ語の減点が無い');
+  // 意味の弱い動詞 (撫でる等) と受身 (受けた側) は効果が半減する。
+  ok(WORDS['撫'].soft && !WORDS['斬'].soft, 'soft の印がおかしい');
+  const weakPass = evaluate(['撫', 'でられた', '剣'].map(makeWord), { minContent: 2 });
+  const strongPass = evaluate(['斬', 'られた', '剣'].map(makeWord), { minContent: 2 });
+  ok(weakPass.valid && weakPass.fx.dmg < strongPass.fx.dmg,
+    `「撫でられた剣」が弱くなっていない: ${weakPass.fx.dmg} vs ${strongPass.fx.dmg}`);
   const diffWord = evaluate(['炎', '焔', '弾'].map(makeWord), { minContent: 2 });
   ok(diffWord.valid && !diffWord.naturalParts.some((p) => p.key === 'dupword'),
     '「炎焔弾」に同じ語の減点がある');

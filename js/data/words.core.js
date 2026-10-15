@@ -406,32 +406,32 @@ const RAW_VERB = `
 砕      verb  -  dmg+6  knock+40
 殴      verb  -  dmg+6  rate+0.3
 散      verb  -  dmg+2  count+3  spread+0.4
-伸      verb  -  dmg+2  size+0.30
-縮      verb  -  dmg+1  speed+50  size-0.15
-跳      verb  -  dmg+2  homing+0.35
+伸      verb  -  dmg+2  size+0.30  soft
+縮      verb  -  dmg+1  speed+50  size-0.15  soft
+跳      verb  -  dmg+2  homing+0.35  soft
 響      verb  -  dmg+4  chain+3
 裂      verb  -  dmg+3  split+3
-舞      verb  -  dmg+4  orbit+1  bounce+3
+舞      verb  -  dmg+4  orbit+1  bounce+3  soft
 吸      verb  -  dmg+1  lifesteal+0.05  magnet+0.30
 吐      verb  -  dmg+3  explode+14
-潜      verb  -  dmg+2  homing+0.3  speed+40
-浮      verb  -  dmg+2  homing+0.4  speed+60
+潜      verb  -  dmg+2  homing+0.3  speed+40  soft
+浮      verb  -  dmg+2  homing+0.4  speed+60  soft
 沈      verb  -  dmg+3  size+0.3  speed-15
-昇      verb  -  dmg+3  speed+80  homing+0.2
+昇      verb  -  dmg+3  speed+80  homing+0.2  soft
 降      verb  -  dmg+3  area+16  speed-20
 挟      verb  -  dmg+2  count+2  spread+0.3
 掴      verb  -  dmg+3  size+0.35  speed-20
 掘      verb  -  dmg+3  pierce+2  speed+20
 叩      verb  -  dmg+4  knock+40  rate+0.2
 踏      verb  -  dmg+4  size+0.25  knock+25
-嗅      verb  -  dmg+2  homing+0.35
-舐      verb  -  dmg+3  lifesteal+0.03  count+1
-跨      verb  -  dmg+4  speed+50  area+8
+嗅      verb  -  dmg+2  homing+0.35  soft
+舐      verb  -  dmg+3  lifesteal+0.03  count+1  soft
+跨      verb  -  dmg+4  speed+50  area+8  soft
 擦      verb  -  dmg+3  burn+2  pierce+1
 潰      verb  -  dmg+6  area+14  knock+35
 嚇      verb  -  dmg+3  slowImmune+1  chill+1
 縛      verb  -  dmg+2  slowImmune+1  magnet+0.3
-撫      verb  -  dmg+2  lifesteal+0.04  homing+0.2
+撫      verb  -  dmg+2  lifesteal+0.04  homing+0.2  soft
 `;
 
 // 接続詞 (送り仮名) は words.connect.js が語ごとのプールから作る。

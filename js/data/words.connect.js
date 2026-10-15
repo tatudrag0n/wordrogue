@@ -404,7 +404,7 @@ export function checkConnectors(segs, dict) {
     acc.compounds.push({
       text: src.text + s,
       source: bound.compound ? src.text : prev, connector: s, pri: CONNECTORS[s].pri, pos: src.pos,
-      role: e.role, next: e.next, pred: !!e.pred, adj: !!e.adj, idx: i,
+      role: e.role, next: e.next, pred: !!e.pred, adj: !!e.adj, passive: !!e.passive, idx: i,
       // 熟語に付いた形なら true。start は結んだ相手の先頭の位置。
       phrase: bound.compound, start: bound.start,
     });

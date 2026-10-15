@@ -22,7 +22,7 @@
 //     印 + … 形容の形。連体加点の対象。
 //   +N … NOUN_POOL (の・を・に・へ) をまとめて足す。
 //
-// 送り仮名は 1〜3 字 (最長「らかな」「やかな」「られた」)。辞書の最長 5 字・
+// 送り仮名は 1〜4 字 (最長「かされた」「められた」など他動詞の受身)。辞書の最長 5 字・
 // 文の 10 字の上限には収まる。かなの並びは必ず 1 つの送り仮名なので、
 // 分割 (最少語数の DP) で割れ方が揺れることは無い。
 //
@@ -42,7 +42,7 @@ const RAW_POOL = `
 # ── 属性 (既定は体言 +N。形を持つ語だけ書く) ──
 熱  a   い:adn+ く:adv+ +N
 烈  n   しい:adn+ しく:adv+
-震  n   える:adn* えし:adn*
+震  n   える:adn* えし:adn* えて:adv
 蝕  n   む:adn* まれた:adn*
 輝  n   く:adn* ける:adn*
 耀  n   く:adn*
@@ -183,54 +183,54 @@ const RAW_POOL = `
 感  n   じる:adn*
 
 # ── 動詞 (全部書く) ──
-爆  v   ぜる:adn*
-殺  v   す:adn* された:adn*
-滅  v   ぼす:adn* びる:adn*
-轟  v   く:adn*
-侵  v   す:adn* された:adn*
-炸  v   ぜる:adn*
-破  v   る:adn* れる:adn* られた:adn*
-沸  v   く:adn* かす:adn*
-凍  v   る:adn* える:adn*
-燃  v   える:adn* やす:adn*
-焼  v   く:adn* ける:adn* かれた:adn*
-焦  v   げる:adn* がす:adn*
-溶  v   ける:adn* かす:adn*
-融  v   ける:adn* かす:adn*
-蒸  v   す:adn* された:adn*
-貫  v   く:adn* かれた:adn*
-射  v   る:adn* られた:adn*
-斬  v   る:adn* られた:adn* り:adv*
-砕  v   く:adn* ける:adn* かれた:adn*
-殴  v   る:adn* られた:adn*
+爆  v   ぜる:adn* ぜて:adv
+殺  v   す:adn* された:adn* して:adv
+滅  v   ぼす:adn* びる:adn* ぼされた:adn* ぼして:adv びて:adv
+轟  v   く:adn* いて:adv
+侵  v   す:adn* された:adn* して:adv
+炸  v   ぜる:adn* ぜて:adv
+破  v   る:adn* れる:adn* られた:adn* って:adv れて:adv
+沸  v   く:adn* かす:adn* かされた:adn* いて:adv かして:adv
+凍  v   る:adn* える:adn* って:adv えて:adv
+燃  v   える:adn* やす:adn* やされた:adn* えて:adv やして:adv
+焼  v   く:adn* ける:adn* かれた:adn* いて:adv けて:adv
+焦  v   げる:adn* がす:adn* がされた:adn* げて:adv がして:adv
+溶  v   ける:adn* かす:adn* かされた:adn* けて:adv かして:adv
+融  v   ける:adn* かす:adn* かされた:adn* けて:adv かして:adv
+蒸  v   す:adn* された:adn* して:adv
+貫  v   く:adn* かれた:adn* いて:adv
+射  v   る:adn* られた:adn* て:adv
+斬  v   る:adn* られた:adn* り:adv* って:adv
+砕  v   く:adn* ける:adn* かれた:adn* いて:adv けて:adv
+殴  v   る:adn* られた:adn* って:adv
 渦  n   +N
-散  v   る:adn* らす:adn*
-伸  v   びる:adn* ばす:adn*
-縮  v   む:adn* める:adn*
-跳  v   ねる:adn* ぶ:adn*
-響  v   く:adn*
-裂  v   く:adn* ける:adn* かれた:adn*
-舞  v   う:adn*
-吸  v   う:adn* われた:adn*
-吐  v   く:adn*
-潜  v   む:adn* る:adn*
-浮  v   く:adn* かぶ:adn*
-沈  v   む:adn* める:adn*
-昇  v   る:adn*
-降  v   る:adn*
-挟  v   む:adn* まれた:adn*
-掴  v   む:adn* まれた:adn*
-掘  v   る:adn*
-叩  v   く:adn* かれた:adn*
-踏  v   む:adn* まれた:adn*
-嗅  v   ぐ:adn*
-舐  v   める:adn*
-跨  v   ぐ:adn*
-擦  v   る:adn* れる:adn*
-潰  v   す:adn* れる:adn* された:adn*
-嚇  v   す:adn*
-縛  v   る:adn* られた:adn*
-撫  v   でる:adn*
+散  v   る:adn* らす:adn* らされた:adn* って:adv らして:adv
+伸  v   びる:adn* ばす:adn* ばされた:adn* びて:adv ばして:adv
+縮  v   む:adn* める:adn* められた:adn* んで:adv めて:adv
+跳  v   ねる:adn* ぶ:adn* ねて:adv んで:adv
+響  v   く:adn* いて:adv
+裂  v   く:adn* ける:adn* かれた:adn* いて:adv けて:adv
+舞  v   う:adn* って:adv
+吸  v   う:adn* われた:adn* って:adv
+吐  v   く:adn* かれた:adn* いて:adv
+潜  v   む:adn* る:adn* んで:adv って:adv
+浮  v   く:adn* かぶ:adn* いて:adv んで:adv
+沈  v   む:adn* める:adn* められた:adn* んで:adv めて:adv
+昇  v   る:adn* って:adv
+降  v   る:adn* って:adv
+挟  v   む:adn* まれた:adn* んで:adv
+掴  v   む:adn* まれた:adn* んで:adv
+掘  v   る:adn* られた:adn* って:adv
+叩  v   く:adn* かれた:adn* いて:adv
+踏  v   む:adn* まれた:adn* んで:adv
+嗅  v   ぐ:adn* がれた:adn* いで:adv
+舐  v   める:adn* められた:adn* めて:adv
+跨  v   ぐ:adn* いで:adv
+擦  v   る:adn* れる:adn* られた:adn* って:adv れて:adv
+潰  v   す:adn* れる:adn* された:adn* して:adv れて:adv
+嚇  v   す:adn* された:adn* して:adv
+縛  v   る:adn* られた:adn* って:adv
+撫  v   でる:adn* でられた:adn* でて:adv
 `;
 
 /** 品詞の略号。 */

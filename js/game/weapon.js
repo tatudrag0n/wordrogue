@@ -15,7 +15,7 @@
 // ============================================================================
 
 import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE } from '../data/weapons.js';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES } from '../data/words.js';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS } from '../data/words.js';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
@@ -115,9 +115,28 @@ export class WeaponInst {
   adjacentForms() {
     const ws = this.sentence.words;
     for (let i = 0; i + 1 < ws.length; i++) {
-      if (isForm(ws[i].text) && isForm(ws[i + 1].text)) return [ws[i].text, ws[i + 1].text];
+      if (!isForm(ws[i].text) || !isForm(ws[i + 1].text)) continue;
+      // 熟語として固定された並び (電光石火の「光石」) は重複ではない。
+      // 接続詞を挟まず、登録済み熟語の範囲内に収まっているときだけ許す。
+      if (!this.sentence.conns[i] && this.inPhrase(i)) continue;
+      return [ws[i].text, ws[i + 1].text];
     }
     return null;
+  }
+
+  /** words[i] と words[i+1] が登録済み熟語の一部になっていれば true。 */
+  inPhrase(i) {
+    const ws = this.sentence.words;
+    let start = 0;
+    for (let j = 0; j < i; j++) start += ws[j].text.length + (this.sentence.conns[j]?.text.length || 0);
+    const end = start + ws[i].text.length + ws[i + 1].text.length;
+    const text = this.sentence.text;
+    for (const key of Object.keys(PHRASE_BONUS)) {
+      for (let at = text.indexOf(key); at >= 0; at = text.indexOf(key, at + 1)) {
+        if (at <= start && end <= at + key.length) return true;
+      }
+    }
+    return false;
   }
 
   /**

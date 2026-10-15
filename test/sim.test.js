@@ -222,6 +222,13 @@ sec('武器名はその文面になる / 武器語が攻撃を決める');
   ok(two.reason === 'tailform', `理由 ${two.reason}`);
   console.log(`  武器語どうし → 不成立 (${two.reasonText})`);
 
+  // ただし熟語として固定された並び (電光石火) は例外として成立する。
+  setWords(wi, ['電', '光', '石', '火', '剣']);
+  const idiomW = wi.resolve(run.player.stats);
+  ok(idiomW.valid, `「電光石火剣」が不成立: ${idiomW.reasonText}`);
+  ok(idiomW.evalResult.idiom?.phrase === '電光石火', '熟語「電光石火」が発動しない');
+  console.log(`  「電光石火剣」→ 成立 (熟語 ${idiomW.evalResult.idiom?.name})`);
+
   // 「迅足」+「雷」は最長一致で 1 語にまとまる。
   setWords(wi, ['速', '雷']);
   const xunlei = wi.resolve(run.player.stats);
@@ -989,18 +996,18 @@ sec('語をタップすると直後の接続詞が切り替わる');
   ok(wi.sentence.words[1].text === '発', '語が変わった');
   ok(lexText(r) === lexBefore, '接続詞で語彙が変わった');
 
-  // 「燃」… 動詞。プールは える・やす だけ (燃る・燃された は無い)。一周したら無し。
+  // 「燃」… 動詞。プールは える・やす・やされた・えて・やして。一周したら無し。
   setFlat(wi, ['焔', '燃']);
   const opts2 = wi.sentence.connOptions(1);
-  ok(opts2.join(',') === 'える,やす', `「燃」の接続詞 ${opts2.join(',')}`);
+  ok(opts2.join(',') === 'える,やす,やされた,えて,やして', `「燃」の接続詞 ${opts2.join(',')}`);
   const p2 = { kind: 'slot', wi, index: 1 };
   const seen2 = [];
   for (let i = 0; i < opts2.length + 1; i++) seen2.push(r.cycleConnector(p2).text);
   ok(seen2[seen2.length - 1] === null, `一周しても無しにならない: ${seen2.join(',')}`);
-  // 「斬」… る・られた・り (プールの順そのまま)。
+  // 「斬」… る・られた・り・って (プールの順そのまま)。
   setFlat(wi, ['焔', '斬']);
   const opts3 = wi.sentence.connOptions(1);
-  ok(opts3.join(',') === 'る,られた,り', `「斬」の接続詞 ${opts3.join(',')}`);
+  ok(opts3.join(',') === 'る,られた,り,って', `「斬」の接続詞 ${opts3.join(',')}`);
 
   // 文面には接続詞が入る。
   setFlat(wi, ['焔', 'を', '斬']);

@@ -42,7 +42,7 @@ const RAW_POOL = `
 # ── 属性 (既定は体言 +N。形を持つ語だけ書く) ──
 熱  a   い:adn+ く:adv+ +N
 烈  n   しい:adn+ しく:adv+
-震  n   える:adn*
+震  n   える:adn* えし:adn*
 蝕  n   む:adn* まれた:adn*
 輝  n   く:adn* ける:adn*
 耀  n   く:adn*

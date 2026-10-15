@@ -499,5 +499,40 @@ sec('熟語の接続詞がメニューに出る (発電する)');
   console.log(`  メニュー「${head}」→ 「${wi.sentence.text}」`);
 }
 
+sec('熟語が成立すると、構成する語が光る');
+{
+  const { run, forge } = openForge();
+  const wi = run.weapons[0];
+  const setSen = (...ws) => {
+    wi.sentence.clear();
+    for (const t of ws) wi.sentence.push(makeWord(t));
+    if (ws.length > 3) wi.sentence.setConnAt(2, 'の');
+    wi._sig = null;
+    forge.render();
+  };
+  const litTexts = () => chipsOf(forge)
+    .filter((c) => c.classList.contains('idiom-word'))
+    .map((c) => c.textContent.trim());
+
+  // 熟語でない文では光らない。開いた直後の初回描画でも弾まない。
+  setSen('焔', '硬', '刃');
+  ok(litTexts().length === 0, `熟語でないのに光っている: ${litTexts().join(',')}`);
+  ok(!weaponRow(forge).classList.contains('idiom-born'), '初回描画で成立演出が出た');
+
+  // 毒蝕弾の硬刃。熟語 (毒・蝕・弾) の 3 語だけが光り、成立の瞬間は行が弾む。
+  setSen('毒', '蝕', '弾', '硬', '刃');
+  ok(wi.sentence.text === '毒蝕弾の硬刃', `文が違う: ${wi.sentence.text}`);
+  ok(litTexts().join('') === '毒蝕弾', `光る語が熟語と違う: ${litTexts().join(',')}`);
+  ok(weaponRow(forge).classList.contains('idiom-born'), '成立した瞬間に行が光らない');
+  const segLit = [...weaponRow(forge).querySelectorAll('.sg.idiom')].map((c) => c.textContent).join('');
+  ok(segLit === '毒蝕弾', `分割の光り方が違う: ${segLit}`);
+
+  // 同じ熟語のまま描き直しても、成立演出は繰り返さない。
+  forge.render();
+  ok(!weaponRow(forge).classList.contains('idiom-born'), '再描画でも成立演出が繰り返された');
+  ok(litTexts().join('') === '毒蝕弾', `光り続けていない: ${litTexts().join(',')}`);
+  console.log(`  毒蝕弾の硬刃 → 光る語「${litTexts().join('・')}」/ 分割「${segLit}」`);
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

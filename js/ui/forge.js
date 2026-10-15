@@ -118,6 +118,10 @@ export class Forge {
     this.hintOn = false;
     /** 直前の操作を戻すための控え (語・接続詞の並び)。 */
     this.undoStack = [];
+    /** 武器ごとの熟語 (成立の瞬間に光らせるため、前回の状態を覚える)。 */
+    this._idiomSeen = new Map();
+    /** 開いた直後の初回描画では光らせない。 */
+    this._idiomPrimed = false;
     /** 「戻す」ボタン。無い環境 (最小 DOM) では null。 */
     this.undoBtn = $('#btnForgeUndo');
     /** 接続詞を選ぶメニュー。開いている間だけ document.body に居る。 */
@@ -165,6 +169,8 @@ export class Forge {
   open() {
     this.armed = null;
     this.held = null;
+    this._idiomSeen = new Map();
+    this._idiomPrimed = false;
     this.forgetMode = false;
     this.undoStack = [];
     this.closeConnPicker();
@@ -223,6 +229,27 @@ export class Forge {
     return e ? e.word : null;
   }
 
+  /**
+   * 熟語を構成している語の位置 (文中の index の集合)。
+   * 評価結果の文面から熟語の文字範囲を割り出し、語ごとに重なるかで決める。
+   * 接続詞 (発電「する」など) は直前の語の一部として扱う。
+   */
+  idiomWordIndices(sen, ev) {
+    const out = new Set();
+    const phrase = ev?.idiom?.phrase;
+    if (!phrase || !ev?.text) return out;
+    const at = ev.text.indexOf(phrase);
+    if (at < 0) return out;
+    const end = at + phrase.length;
+    let pos = 0;
+    sen.entries.forEach((e, i) => {
+      const wLen = e.word.text.length;
+      if (pos < end && pos + wLen > at) out.add(i);
+      pos += wLen + (e.conn ? e.conn.text.length : 0);
+    });
+    return out;
+  }
+
   /** 文を 1 行に並べる。語と、その直後の接続詞。 */
   renderSentenceRow(sen, opt = {}) {
     const row = el('div', { class: 'sen-row' });
@@ -243,7 +270,7 @@ export class Forge {
     row.append(mkGap(0));
     sen.entries.forEach((e, i) => {
       const place = { kind: wordKind, index: i, wi: opt.wi || null, wIdx: opt.wIdx };
-      row.append(this.renderWordChip(e, place));
+      row.append(this.renderWordChip(e, place, opt.idiomIdx?.has(i), opt.idiomName));
       row.append(mkGap(i + 1));
     });
     // 末尾語 (「人」) は枠の外に固定で付く。
@@ -257,16 +284,18 @@ export class Forge {
   }
 
   /** 文の中の 1 語。右に、その語の直後の接続詞が付く。 */
-  renderWordChip(entry, place) {
+  renderWordChip(entry, place, inIdiom = false, idiomName = '') {
     const w = entry.word;
     const conn = entry.conn;
     const cat = CATEGORIES[w.cat] || CATEGORIES.modifier;
     const isArmed = (this.armed && this.armed === w) || (this.held && this.held.word === w);
     const isHeld = !!(this.held && this.held.word === w);
     const chip = el('div', {
-      class: 'sen-word' + (isArmed ? ' armed' : '') + (isHeld ? ' held' : ''),
-      style: { borderColor: cat.color },
+      class: 'sen-word' + (isArmed ? ' armed' : '') + (isHeld ? ' held' : '')
+        + (inIdiom ? ' idiom-word' : ''),
+      style: inIdiom ? {} : { borderColor: cat.color },
       title: `${w.text} [${cat.name}]`
+        + (inIdiom ? `\n熟語「${idiomName}」を構成する語` : '')
         + `\nタップ: 後ろの接続詞を切り替える`
         + `\n長押し: 持ち上げてタップだけで並べ替える`
         + `\nドラッグ: 並べ替える / 語彙へ戻す`
@@ -466,10 +495,16 @@ export class Forge {
           `武器語 (剣・弾・銃…) をレベルアップで得るたびに、文を 1 つ増やせる。あと ${WEAPON_MAX - this.run.weapons.length} つ。`)));
     }
 
+    let anyBorn = false;
     for (const [n, wi] of this.run.weapons.entries()) {
       const res = wi.resolve(this.run.player.stats);
+      // 熟語が新しく成立した瞬間だけ、行ごと光らせる。
+      const phrase = res.evalResult.idiom?.phrase || null;
+      const born = this._idiomPrimed && !!phrase && this._idiomSeen.get(n) !== phrase;
+      this._idiomSeen.set(n, phrase);
+      if (born) anyBorn = true;
       const row = el('div', {
-        class: 'wrow' + (res.active ? ` ${res.grade}` : ' broken'),
+        class: 'wrow' + (res.active ? ` ${res.grade}` : ' broken') + (born ? ' idiom-born' : ''),
       });
 
       const head = el('div', { class: 'wrow-head' },
@@ -503,12 +538,18 @@ export class Forge {
           + `（熟語ボーナス 文力 +${res.evalResult.phraseBonus.toFixed(2)}）`));
       }
 
-      row.append(this.renderSentenceRow(wi.sentence, { wi, wIdx: n }));
+      row.append(this.renderSentenceRow(wi.sentence, {
+        wi, wIdx: n,
+        idiomIdx: this.idiomWordIndices(wi.sentence, res.evalResult),
+        idiomName: res.evalResult.idiom?.name || '',
+      }));
       if (res.active) row.append(this.renderNatural(res.evalResult));
       row.append(this.renderSentenceText(res));
       row.append(this.renderStats(res));
       list.append(row);
     }
+    if (anyBorn) this.opt.audio?.phrase?.();
+    this._idiomPrimed = true;
   }
 
   /** 連結した結果と、その分割結果。 */
@@ -518,10 +559,19 @@ export class Forge {
       el('b', { class: 'sn-text' }, res.evalResult.text || '—'),
     );
     if (res.active) {
+      // 熟語の範囲にある分割は金色にして、どの語で熟語になったか分かるようにする。
+      const ev = res.evalResult;
+      const at = ev.idiom ? ev.text.indexOf(ev.idiom.phrase) : -1;
+      const end = at >= 0 ? at + ev.idiom.phrase.length : -1;
+      let pos = 0;
       right.append(el('span', { class: 'sn-seg' },
-        res.evalResult.segments.map((s) => el('i', {
-          class: `sg ${catClass({ text: s })}`,
-        }, s))));
+        ev.segments.map((s) => {
+          const inIdiom = at >= 0 && pos < end && pos + s.length > at;
+          pos += s.length;
+          return el('i', {
+            class: `sg ${catClass({ text: s })}` + (inIdiom ? ' idiom' : ''),
+          }, s);
+        })));
       if (res.evalResult.predicated) {
         right.append(el('span', { class: 'sn-pred' }, '述語'));
       }

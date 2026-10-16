@@ -177,6 +177,15 @@ export class WeaponInst {
    * (直前の語が武器語を修飾できるかの判定は下の adjacentForms で行う)
    */
   evaluate() {
+    // 初期状態は武器名だけで成立させる。これは意図的な「基本武器の素振り」で、
+    // 余分な語を得た後は通常の文法評価に戻る。
+    if (this.sentence.words.length === 1 && this.sentence.words[0].text === this.def.tail) {
+      const e = this.sentence.evaluate({ minContent: 1 });
+      return {
+        ...e, valid: true, reason: null, reasonText: '', grade: 'plain',
+        gradeInfo: GRADES.plain, text: this.def.name,
+      };
+    }
     const e = this.sentence.evaluate({ minContent: 2 });
     if (!e.valid) return e;
     const pair = this.adjacentForms();

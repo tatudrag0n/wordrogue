@@ -92,6 +92,10 @@ export class Menus {
     $('#btnArchive').addEventListener('click', () => { tap(); this.show('archive'); });
     this.gachaBtn.addEventListener('click', () => {
       tap();
+      this.gachaBtn.classList.remove('gacha-spin');
+      this.gachaResult.classList.remove('gacha-reveal');
+      void this.gachaBtn.offsetWidth;
+      this.gachaBtn.classList.add('gacha-spin');
       const r = this.save.drawGacha();
       this.renderGrow();
       if (!r.ok) {
@@ -104,6 +108,9 @@ export class Menus {
         this.gachaResult.textContent = `「${r.word}」を手に入れた！`;
         this.audio?.phrase?.();
       }
+      this.gachaResult.classList.remove('gacha-reveal');
+      void this.gachaResult.offsetWidth;
+      this.gachaResult.classList.add('gacha-reveal');
     });
     $('#btnDict').addEventListener('click', () => { tap(); this.show('dict'); });
     $('#btnSettings').addEventListener('click', () => { tap(); this.show('settings'); });
@@ -361,7 +368,8 @@ export class Menus {
       const inDeck = save.inDeck(t);
       const b = el('button', {
         class: 'btn grow-word deck' + (inDeck ? ' in' : ''),
-        title: inDeck ? 'デッキに入っている — 押すと外れる' : '押すとデッキに入る',
+        disabled: inDeck && save.deck.length <= DECK_MIN,
+        title: inDeck ? (save.deck.length <= DECK_MIN ? `最低 ${DECK_MIN} 語を保つため外せない` : 'デッキに入っている — 押すと外れる') : '押すとデッキに入る',
       }, (inDeck ? '✓ ' : '') + t);
       b.addEventListener('click', () => {
         save.toggleDeck(t);
@@ -466,8 +474,8 @@ export class Menus {
 
     const st = STAGES.find((s) => s.id === stageId);
     this.loadoutTitle.textContent = `第 ${stageId} 戦・${st.name}`;
-    this.loadoutSub.textContent = '武器は 1 つだけ。文は 10 文字まで。'
-      + '戦闘中に武器語を得ると、文を 3 つまで増やせる。';
+    this.loadoutSub.textContent = '基本武器を 1 つ選択。開始時の文は武器名だけ。'
+      + '戦闘中はデッキの語を選び、文を組み立てる。';
 
     this.renderLoadout();
     this.hideAll();
@@ -494,7 +502,7 @@ export class Menus {
           el('span', {}, d.name),
           el('span', { class: 'lo-kind' }, KIND_LABEL[d.kind] || d.kind)),
         el('div', { class: 'lo-core' },
-          `開始「${d.startWord}${d.startWord2}」・文 10 文字`),
+          `初期文「${d.name}」・文 10 文字`),
         el('div', { class: 'lo-desc' },
           lockedByProgress ? `第 ${d.unlock.stage} 戦で解放される` : (usable ? d.desc : '使用不可')),
       );

@@ -115,17 +115,15 @@ export class Run {
     }
     if (!this.weapons.length) this.weapons.push(new WeaponInst('sword', 1));
 
-    // 最初の武器の開始語。武器語も 1 つ入れておくので、最初から攻撃の形が決まる。
-    // 文はここから自由に組み替えられるので、入れ替えても外してもよい。
+    // 開始時は武器名だけ。属性語などはデッキから選び、戦闘中に組み立てる。
     for (const wi of this.weapons) {
-      if (wi.def.startWord) wi.sentence.push(makeWord(wi.def.startWord));
-      if (wi.def.startWord2) wi.sentence.push(makeWord(wi.def.startWord2));
       if (wi.def.tail) wi.sentence.push(makeWord(wi.def.tail));
     }
 
     // 開始時の語彙。まず言葉デッキ (メニューで編成) を入れる。
     // 接続詞はデッキに入らないので、ここでも弾く。
     const deck = (opt.deckWords || []).filter((t) => WORDS[t] && !CONNECTOR_SET.has(t));
+    this.deckPool = new Set(deck);
     for (const t of deck) {
       if (this.lexiconFreeCount <= 0) break;
       this.addWord(makeWord(t), true);
@@ -157,6 +155,8 @@ export class Run {
     this.beams = [];
     this.dmgTexts = [];
     this.corpses = [];
+    this.bossBursts = [];
+    this.bossVictoryPending = false;
 
     this.kills = 0;
     this.dmgDealt = 0;
@@ -286,13 +286,23 @@ export class Run {
   offerWordChoices() {
     const pool = [];
     const seen = new Set();
-    // 武器語。第 1 の候補にだけ入れる (他の語より出にくいように)。
+    // 実ゲームでは候補の母集団を編成済みデッキに限定する。
+    // テスト等でデッキ未指定の場合だけ従来の全語プールへフォールバック。
+    const deckWords = [...(this.deckPool || [])].filter((t) => WORDS[t] && !CONNECTOR_SET.has(t));
+    const candidateTexts = deckWords.length ? deckWords : null;
     if (this.rand() < FORM_CHOICE_CHANCE) {
-      const fw = drawWeaponWord(this.rand, this.ownedWeaponWords());
-      if (fw) { pool.push(fw); seen.add(fw.text); }
+      const weapons = (candidateTexts || Object.keys(WORDS)).filter((t) => isWeaponWord(t) && !this.ownedWeaponWords().has(t));
+      if (weapons.length) {
+        const text = weapons[Math.floor(this.rand() * weapons.length)];
+        pool.push(makeWord(text)); seen.add(text);
+      }
     }
-    for (let i = 0; i < WORD_CHOICES * 3 && pool.length < WORD_CHOICES; i++) {
-      const w = drawWord(this.rand);
+    for (let i = 0; i < WORD_CHOICES * 8 && pool.length < WORD_CHOICES; i++) {
+      let w;
+      if (candidateTexts) {
+        const text = candidateTexts[Math.floor(this.rand() * candidateTexts.length)];
+        w = makeWord(text);
+      } else w = drawWord(this.rand);
       if (!w || seen.has(w.text)) continue;
       seen.add(w.text);
       pool.push(w);
@@ -909,11 +919,12 @@ export class Run {
     if (this.rand.chance(0.025)) this.pickups.push(makePickup(e.x, e.y, 'heal', 14));
 
     if (e.boss) {
+      this.bossBursts.push({ x: e.x, y: e.y, life: 2.2, maxLife: 2.2, color: e.def.color || '#d39a35' });
       this.shake(26);
       this.audio.explode();
       this.pushHint(`${e.def.name} を討伐した!`);
+      this.bossVictoryPending = true;
       for (let i = 0; i < 30; i++) this.pickups.push(makePickup(e.x, e.y, 'xp', Math.ceil(e.xp / 30)));
-      this.finish(true);
     }
 
     if (st && st.split > 0) this.spawnSplit(e, st);
@@ -1393,7 +1404,14 @@ export class Run {
     }
   }
 
-  fxTick() { /* 画面上の告诉了は描画側 */ }
+  fxTick(dt = 0) {
+    for (const fx of this.bossBursts || []) fx.life = Math.max(0, fx.life - dt);
+    this.bossBursts = (this.bossBursts || []).filter((fx) => fx.life > 0);
+    if (this.bossVictoryPending && !this.bossBursts.length) {
+      this.bossVictoryPending = false;
+      this.finish(true);
+    }
+  }
 
   // ───────────────────────────────────────────────────────────────────────────
   // ボス行動

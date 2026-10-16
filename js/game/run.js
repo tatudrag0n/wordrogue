@@ -40,7 +40,7 @@ export const WORD_CHOICES = 3;
 export const CHOICE_TIME = 7;         // 選べる秒数
 export const LEXICON_MAX = 30;        // 語彙の容量の上限 (言玉で拡張)
 
-/** レベルアップの 3 択に武器語 (剣・弾・銃…) が入る確率。他の語より低い。 */
+/** レベルアップの 3 択に武器語 (剣・刃・銃…) が入る確率。他の語より低い。 */
 export const FORM_CHOICE_CHANCE = 0.22;
 
 export class Run {
@@ -352,7 +352,7 @@ export class Run {
       }
       const victim = this.lexicon[discardIndex];
       if (!victim) return false;
-      // 捨てる語が候補と同じなら、捨てたのに同じ語が入る.nvimになるので止める。
+      // 捨てる語が候補と同じなら、捨てたのに同じ語がまた入るだけなので止める。
       if (choice.words.some((w) => w.text === victim.text)) {
         this.pushHint(`「${victim.text}」は候補と同じなので選べない`);
         return false;

@@ -6,6 +6,7 @@
 
 import { STAGES } from '../data/stages.js';
 import { WORDS, drawWord } from '../data/words.js';
+import { canConnect } from '../data/words.connect.js';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -68,10 +69,43 @@ export const PARTS = [
   { id: 'trnk', name: '胴' },
 ];
 export const PART_SLOTS = 2;    // 1 部位に入る語の数
+/**
+ * 部位の文の長さの上限 (接続詞込み)。
+ * 部位は武器より短くする — 武器は 10 文字なので、そこを真似ない。
+ */
+export const PART_MAX_LEN = 8;
 export const DECK_MIN = 10;     // デッキの最低語数 (戦闘開始時に満たなければ補充)
 export const DECK_MAX = 30;     // デッキの最大語数 (語彙の容量上限と同じ)
 export const GACHA_COST = 25;   // 言葉くじ 1 回の言玉
 export const GACHA_REFUND = 5;  // すでに持っている語が出たときの返却
+
+/**
+ * 部位の並びを整える。文字列だけの古いセーブ (['頑','健']) もここで吸収する。
+ * 持っていない語、空の枠は落とす。
+ */
+function normalizePart(arr, collection) {
+  const out = [];
+  // 接続詞を挟まずに続いた語 (熟語の形を通すため)。
+  let run = [];
+  for (const raw of Array.isArray(arr) ? arr : []) {
+    if (!raw) continue;
+    const text = typeof raw === 'string' ? raw : raw.t;
+    if (!text || !collection.includes(text)) continue;
+    const conn = typeof raw === 'string' ? null : raw.c || null;
+    const okConn = !!conn && canConnect(WORDS[text], conn, run);
+    out.push({ t: text, c: okConn ? conn : null });
+    run = okConn ? [] : [...run, text];
+    if (out.length >= PART_SLOTS) break;
+  }
+  return out;
+}
+
+/** 枠の並びを詰める (後ろの空を落とし、語の無い枠は null のまま残す)。 */
+function compact(arr) {
+  const out = arr.slice(0, PART_SLOTS);
+  while (out.length && !out[out.length - 1]) out.pop();
+  return out;
+}
 
 /** 初期所持語。最初からデッキにも入っている。 */
 export const STARTER_WORDS = [
@@ -224,8 +258,7 @@ export class Save {
     d.deck = d.deck.filter((t) => d.collection.includes(t)).slice(0, DECK_MAX);
     if (!d.parts || typeof d.parts !== 'object' || Array.isArray(d.parts)) d.parts = {};
     for (const p of PARTS) {
-      const arr = Array.isArray(d.parts[p.id]) ? d.parts[p.id] : [];
-      d.parts[p.id] = arr.filter((t) => d.collection.includes(t)).slice(0, PART_SLOTS);
+      d.parts[p.id] = normalizePart(d.parts[p.id], d.collection);
     }
     this.save();
   }
@@ -237,15 +270,40 @@ export class Save {
   get deck() { return this.data.deck || []; }
   inDeck(text) { return this.deck.includes(text); }
 
-  /** 部位に入っている語 (全部位ぶんの text 一覧)。stats が読む。 */
+  /** 部位に入っている語 (全部位ぶんの text 一覧)。古い呼び出し用の平坦な形。 */
   partWordList() {
     const out = [];
     for (const p of PARTS) {
-      for (const t of (this.data.parts?.[p.id] || [])) if (t) out.push(t);
+      for (const e of this.partRaw(p.id)) if (e && e.text) out.push(e.text);
     }
     return out;
   }
-  partSlot(partId, i) { return (this.data.parts?.[partId] || [])[i] || null; }
+
+  /** 部位の語 (整えた { text, conn } の並び)。 */
+  partRaw(partId) {
+    return (this.data.parts?.[partId] || []).map((e) => (e ? { text: e.t, conn: e.c || null } : null));
+  }
+
+  /**
+   * 部位ごとの中身。stats.js とメニューが同じものを読む。
+   * @returns {Array<{id:string,name:string,words:Array<{text:string,conn:string|null}>}>}
+   */
+  partEntries() {
+    return PARTS.map((p) => ({
+      id: p.id,
+      name: p.name,
+      words: this.partRaw(p.id).filter(Boolean),
+    }));
+  }
+
+  /** 部位の枠 1 つ。{ text, conn } か null。 */
+  partSlot(partId, i) {
+    const e = this.data.parts?.[partId]?.[i];
+    return e ? { text: e.t, conn: e.c || null } : null;
+  }
+
+  /** 部位の枠に入っている語の text (表示用)。 */
+  partSlotText(partId, i) { return this.partSlot(partId, i)?.text || null; }
 
   /**
    * 言葉くじ。言玉を払って戦闘と同じ語プールから 1 語引く。
@@ -278,17 +336,57 @@ export class Save {
     return d.includes(text);
   }
 
-  /** 部位の枠に語を入れる (text=null で外す)。 */
+  /**
+   * 部位の枠に語を入れる (text=null で外す)。
+   * 語を変えると、その語に付けない接続詞は落ちて当然なので枠ごと買い替える。
+   * @returns {boolean} 変わったか (枠が同じ語のままなら false)
+   */
   setPart(partId, slot, text) {
     if (!PARTS.some((p) => p.id === partId)) return false;
     if (text && !this.ownsWord(text)) return false;
     const arr = this.data.parts[partId] || (this.data.parts[partId] = []);
-    arr[slot] = text || null;
-    while (arr.length && arr[arr.length - 1] === null) arr.pop();
-    this.data.parts[partId] = arr.slice(0, PART_SLOTS);
+    const was = arr[slot];
+    if (!text) {
+      if (!was) return false;            // もともと空
+      arr[slot] = null;
+      this.data.parts[partId] = compact(arr);
+      this.save();
+      return true;
+    }
+    // 同じ語が入っている枠をもう一度押したら、外す (取り外せない不具合の修正)。
+    if (was && was.t === text) {
+      arr[slot] = null;
+      this.data.parts[partId] = compact(arr);
+      this.save();
+      return true;
+    }
+    if (was && !was.t) return false;
+    arr[slot] = { t: text, c: null };
+    this.data.parts[partId] = compact(arr);
     this.save();
     return true;
   }
+
+  /**
+   * 部位の語に接続詞を付ける (null で外す)。
+   * 付けられるのは **その語のプールにある送り仮名** だけ (言葉鍛冶と同じ)。
+   * @returns {{ok:boolean, reason:string}}
+   */
+  setPartConn(partId, slot, conn) {
+    const arr = this.data.parts?.[partId];
+    const e = arr && arr[slot];
+    if (!e || !e.t) return { ok: false, reason: 'empty' };
+    if (!conn) { e.c = null; this.save(); return { ok: true, reason: 'cleared' }; }
+    // 直前に接続詞を挟まずに続いた語が熟語なら、その形も選べる (発電する)。
+    const before = arr.slice(0, slot).map((x) => (x ? x.t : null)).filter(Boolean);
+    if (!canConnect(WORDS[e.t], conn, before)) return { ok: false, reason: 'nomatch' };
+    e.c = conn;
+    this.save();
+    return { ok: true, reason: 'placed' };
+  }
+
+  /** 部位の枠を空にする (語も接続詞も外す)。 */
+  clearPart(partId, slot) { return this.setPart(partId, slot, null); }
 
   // ── 設定 ─────────────────────────────────────────────────────────────────
   setSetting(k, v) {

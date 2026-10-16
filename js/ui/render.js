@@ -127,20 +127,21 @@ export class Renderer {
     const size = 96;
     const ox = ((this.camX % size) + size) % size;
     const oy = ((this.camY % size) + size) % size;
-    g.strokeStyle = 'rgba(255,255,255,.045)';
+    g.strokeStyle = 'rgba(70, 55, 30, .055)';
     g.lineWidth = 1;
     g.beginPath();
     for (let x = ox; x < this.w; x += size) { g.moveTo(x, 0); g.lineTo(x, this.h); }
     for (let y = oy; y < this.h; y += size) { g.moveTo(0, y); g.lineTo(this.w, y); }
     g.stroke();
 
-    // ステージアクセントの淡い光。
+    // 紙の端がわずかに焼ける。暗闇ではなく「遠くが少し沈む」程度に。
     const rg = g.createRadialGradient(
       this.camX + this.w / 2, this.camY + this.h / 2, 0,
       this.camX + this.w / 2, this.camY + this.h / 2, this.viewR,
     );
-    rg.addColorStop(0, 'rgba(0,0,0,0)');
-    rg.addColorStop(1, 'rgba(0,0,0,.42)');
+    rg.addColorStop(0, 'rgba(255, 253, 246, .34)');
+    rg.addColorStop(0.55, 'rgba(255, 253, 246, 0)');
+    rg.addColorStop(1, 'rgba(88, 68, 38, .16)');
     g.fillStyle = rg;
     g.fillRect(this.camX, this.camY, this.w, this.h);
   }
@@ -155,16 +156,16 @@ export class Renderer {
         this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.3,
         this.w / 2, this.h / 2, this.viewR,
       );
-      rg.addColorStop(0, 'rgba(255,40,60,0)');
-      rg.addColorStop(1, `rgba(255,40,60,${0.3 * danger})`);
+      rg.addColorStop(0, 'rgba(184,51,43,0)');
+      rg.addColorStop(1, `rgba(184,51,43,${0.24 * danger})`);
       g.fillStyle = rg;
       g.fillRect(0, 0, this.w, this.h);
     }
     if (run.boss && run.boss.hp / run.boss.maxHp < 0.999) {
       const hp = run.boss.hp / run.boss.maxHp;
-      g.fillStyle = 'rgba(220,40,60,.85)';
+      g.fillStyle = 'rgba(184,51,43,.9)';
       g.fillRect(0, 0, this.w * hp, 4);
-      g.fillStyle = 'rgba(0,0,0,.35)';
+      g.fillStyle = 'rgba(74,56,28,.18)';
       g.fillRect(this.w * hp, 0, this.w * (1 - hp), 4);
     }
   }
@@ -221,7 +222,7 @@ export class Renderer {
       if (q.pulling) {
         const sp = Math.hypot(q.vx, q.vy);
         g.globalAlpha = fade * 0.5;
-        g.strokeStyle = q.type === 'heal' ? '#7dff9b' : '#ffd43b';
+        g.strokeStyle = q.type === 'heal' ? '#2f9e44' : '#d9a406';
         g.lineWidth = 2;
         g.beginPath();
         g.moveTo(q.x, y);
@@ -230,10 +231,16 @@ export class Renderer {
       }
 
       g.globalAlpha = fade;
-      g.fillStyle = q.type === 'heal' ? '#7dff9b' : '#ffd43b';
+      g.fillStyle = q.type === 'heal' ? '#2f9e44' : '#d9a406';
       g.beginPath();
       g.arc(q.x, y, q.r, 0, TAU);
       g.fill();
+      // 紙の上なので縁を墨で締める (金色の粒が地と同化しない)。
+      g.globalAlpha = fade * 0.75;
+      g.lineWidth = 1.3;
+      g.strokeStyle = 'rgba(28, 35, 49, .5)';
+      g.stroke();
+      g.globalAlpha = fade;
       g.globalAlpha = fade * 0.35;
       g.beginPath();
       g.arc(q.x, y, q.r * 2.2, 0, TAU);
@@ -249,7 +256,7 @@ export class Renderer {
   drawSlashes(run) {
     const g = this.ctx;
     g.save();
-    g.globalCompositeOperation = 'lighter';
+    g.globalCompositeOperation = 'source-over';
     for (const s of run.slashes) {
       const t = s.life / s.maxLife;
       const a0 = s.a - s.arc / 2;
@@ -261,7 +268,7 @@ export class Renderer {
       for (let i = 0; i < steps; i++) {
         const f = i / steps;
         const rr = rIn + (rOut - rIn) * f;
-        g.globalAlpha = t * (0.30 - f * 0.19);
+        g.globalAlpha = t * (0.42 - f * 0.26);
         g.fillStyle = s.color;
         g.beginPath();
         g.moveTo(s.x, s.y);
@@ -269,10 +276,10 @@ export class Renderer {
         g.closePath();
         g.fill();
       }
-      // 刃先の明るい縁。
-      g.globalAlpha = t * t * 0.95;
-      g.strokeStyle = '#ffffff';
-      g.lineWidth = 2.4;
+      // 刃先の縁。紙なので白は飛ばない。墨で引いて形を立てる。
+      g.globalAlpha = t * t * 0.8;
+      g.strokeStyle = 'rgba(28, 35, 49, .62)';
+      g.lineWidth = 1.6;
       g.beginPath();
       g.arc(s.x, s.y, rOut * 0.99, a0, a1);
       g.stroke();
@@ -289,18 +296,25 @@ export class Renderer {
   drawRings(run) {
     const g = this.ctx;
     g.save();
-    g.globalCompositeOperation = 'lighter';
+    g.globalCompositeOperation = 'source-over';
     for (const s of run.rings) {
       const t = s.life / s.maxLife;
-      g.globalAlpha = t * 0.5;
+      // 紙の上では「抜印」のように、白い下地へ色を乗せる。
+      g.globalAlpha = t * 0.85;
+      g.strokeStyle = 'rgba(255, 253, 247, .9)';
+      g.lineWidth = 9 * t + 6;
+      g.beginPath();
+      g.arc(s.x, s.y, s.r * (1.04 - t * 0.12), 0, TAU);
+      g.stroke();
+      g.globalAlpha = t * 0.72;
       g.strokeStyle = s.color;
       g.lineWidth = 9 * t + 1.5;
       g.beginPath();
       g.arc(s.x, s.y, s.r * (1.04 - t * 0.12), 0, TAU);
       g.stroke();
-      g.globalAlpha = t * t * 0.8;
-      g.strokeStyle = '#ffffff';
-      g.lineWidth = 2;
+      g.globalAlpha = t * t * 0.7;
+      g.strokeStyle = 'rgba(28, 35, 49, .45)';
+      g.lineWidth = 1.6;
       g.beginPath();
       g.arc(s.x, s.y, s.r * (1.04 - t * 0.12), 0, TAU);
       g.stroke();
@@ -317,6 +331,10 @@ export class Renderer {
 
       const col = e.flash > 0.05 ? '#ffffff' : e.def.color;
       g.fillStyle = col;
+      // 紙地に輪郭。塗りだけでは明るい地で溶ける。
+      g.strokeStyle = 'rgba(28, 35, 49, .5)';
+      g.lineWidth = 1.7;
+      g.lineJoin = 'round';
       g.save();
       g.translate(e.x, e.y);
 
@@ -329,12 +347,14 @@ export class Renderer {
           g.lineTo(-e.r, e.r * 0.9);
           g.closePath();
           g.fill();
+          g.stroke();
           break;
         case 'charger':
         case 'boss':
           g.rotate(e.face);
           polyPath(g, 6, e.r, e.r * 0.78);
           g.fill();
+          g.stroke();
           break;
         case 'wraith':
         case 'ghost':
@@ -346,30 +366,32 @@ export class Renderer {
           g.lineTo(-e.r, 0);
           g.closePath();
           g.fill();
+          g.stroke();
           break;
         default: {
           const sq = e.def.wobble ? 1 + Math.sin(e.wob) * 0.09 : 1;
           g.beginPath();
           g.arc(0, 0, e.r * sq, 0, TAU);
           g.fill();
+          g.stroke();
         }
       }
       g.restore();
 
-      // ヨコの点滅。
-      g.globalAlpha = 1;
-      g.fillStyle = '#fff';
+      // ヨコの点滅 (紙だと白は消えるので墨のHighlightにする)。
+      g.globalAlpha = 0.85;
+      g.fillStyle = 'rgba(28, 35, 49, .72)';
       g.beginPath();
       g.arc(e.x - e.r * 0.3, e.y - e.r * 0.3, Math.max(1.2, e.r * 0.18), 0, TAU);
       g.fill();
 
       // 状態異常のマーク。
       const marks = [];
-      if (e.burn > 0) marks.push(['#ff7a2f', e.burnT]);
-      if (e.poison > 0) marks.push(['#9dff5c', e.poisonT]);
-      if (e.chill > 0) marks.push(['#7ad7ff', e.chillT]);
-      if (e.freeze > 0) marks.push(['#c8f0ff', 1]);
-      if (e.stun > 0) marks.push(['#ffe14d', 1]);
+      if (e.burn > 0) marks.push(['#cf4a12', e.burnT]);
+      if (e.poison > 0) marks.push(['#3f7d24', e.poisonT]);
+      if (e.chill > 0) marks.push(['#1b6ca8', e.chillT]);
+      if (e.freeze > 0) marks.push(['#155e94', 1]);
+      if (e.stun > 0) marks.push(['#b8860b', 1]);
       for (let i = 0; i < marks.length; i++) {
         const [c, t] = marks[i];
         g.globalAlpha = 0.35 + 0.5 * Math.abs(Math.sin(e.t * 8 + i));
@@ -384,9 +406,9 @@ export class Renderer {
       // ボス HP バー。
       if (e.boss) {
         const w = e.r * 2.2;
-        g.fillStyle = 'rgba(0,0,0,.6)';
+        g.fillStyle = 'rgba(74,56,28,.22)';
         g.fillRect(e.x - w / 2, e.y - e.r - 14, w, 4);
-        g.fillStyle = '#ff4d6d';
+        g.fillStyle = '#b8332b';
         g.fillRect(e.x - w / 2, e.y - e.r - 14, w * clamp(e.hp / e.maxHp, 0, 1), 4);
       }
 
@@ -417,14 +439,14 @@ export class Renderer {
     g.textBaseline = 'bottom';
     const y = e.y - e.r - (e.boss ? 22 : 16);
 
-    // 影。どの背景でも読めるようにする。
-    g.lineWidth = 4;
-    g.strokeStyle = 'rgba(0,0,0,.85)';
+    // 滲み。紙なので、文字のまわりを白く抜いてから墨で書く。
+    g.lineWidth = 4.5;
+    g.strokeStyle = 'rgba(255, 253, 247, .95)';
     g.lineJoin = 'round';
     g.strokeText(text, e.x, y);
 
     if (e.broken) {
-      g.fillStyle = '#ff5470';
+      g.fillStyle = '#b8332b';
       g.fillText(text, e.x, y);
       g.font = font(size - 1);
       const tag = '不成文';
@@ -434,7 +456,7 @@ export class Renderer {
       g.fillText(tag, e.x, ty);
     } else {
       // 斬った直後は黄色く光らせる。
-      g.fillStyle = e.cutFlash > 0.02 ? '#ffd43b' : '#eef3fb';
+      g.fillStyle = e.cutFlash > 0.02 ? '#c1432b' : '#1c2331';
       g.fillText(text, e.x, y);
     }
     g.restore();
@@ -445,13 +467,13 @@ export class Renderer {
     // 弾が多いときは細部を落として矩形描画にフォールバックする。
     const detail = run.bullets.length <= 150;
     g.save();
-    g.globalCompositeOperation = 'lighter';
+    g.globalCompositeOperation = 'source-over';
     for (const b of run.bullets) {
       if (b.kindName === 'orbit') {
         g.save();
         g.translate(b.x, b.y);
         g.rotate(b.spin);
-        g.fillStyle = b.color || '#fff';
+        g.fillStyle = b.color || '#6b7383';
         g.globalAlpha = 0.95;
         const r = Math.max(2, b.r);
         g.beginPath();
@@ -475,7 +497,7 @@ export class Renderer {
    */
 
   drawProjectile(g, b, t, detail) {
-    const c = b.color || '#ffffff';
+    const c = b.color || '#6b7383';
     const el = b.element || 'none';
     const r = Math.max(2, b.r);
     const sp = Math.hypot(b.vx, b.vy);
@@ -773,7 +795,7 @@ export class Renderer {
       g.globalAlpha = a;
       g.translate(t.x, t.y);
       g.rotate(t.a);
-      g.fillStyle = '#ffd43b';
+      g.fillStyle = '#dd7322';
       g.beginPath();
       g.arc(0, 0, p.r * 0.95, 0, TAU);
       g.fill();
@@ -784,7 +806,7 @@ export class Renderer {
     if (p.shield > 0) {
       g.save();
       g.globalAlpha = 0.28 + 0.12 * Math.sin(run.t * 4);
-      g.strokeStyle = '#8ce9ff';
+      g.strokeStyle = 'rgba(27, 108, 168, .8)';
       g.lineWidth = 2.5;
       g.beginPath();
       g.arc(p.x, p.y, p.r + 8, 0, TAU);
@@ -798,14 +820,20 @@ export class Renderer {
     g.translate(p.x, p.y);
     g.rotate(p.face);
 
-    // 白い体。進行方向のトゲと瞳で向きを示す。
-    g.fillStyle = p.flash > 0.05 ? '#fff' : '#f2f6ff';
+    // 自機は墨の丸。紙の上でいちばん濃く見えるように、周囲だけを白く抜く。
+    g.globalAlpha = 0.9;
+    g.fillStyle = 'rgba(255, 253, 247, .95)';
+    g.beginPath();
+    g.arc(0, 0, p.r + 3.5, 0, TAU);
+    g.fill();
+    g.globalAlpha = 1;
+    g.fillStyle = p.flash > 0.05 ? '#b8332b' : '#1c2331';
     g.beginPath();
     g.arc(0, 0, p.r, 0, TAU);
     g.fill();
 
     // 進行方向のトゲ。
-    g.fillStyle = '#ffd43b';
+    g.fillStyle = '#e8b425';
     g.beginPath();
     g.moveTo(p.r * 1.5, 0);
     g.lineTo(p.r * 0.4, -p.r * 0.62);
@@ -814,7 +842,7 @@ export class Renderer {
     g.fill();
 
     // 視線。
-    g.fillStyle = '#1a2030';
+    g.fillStyle = '#fdfbf4';
     g.beginPath();
     g.arc(p.r * 0.45, 0, p.r * 0.24, 0, TAU);
     g.fill();
@@ -825,11 +853,11 @@ export class Renderer {
   drawLightnings(run) {
     const g = this.ctx;
     g.save();
-    g.globalCompositeOperation = 'lighter';
+    g.globalCompositeOperation = 'source-over';
     g.lineCap = 'round';
     for (const l of run.lightnings) {
       const t = l.life / l.maxLife;
-      const c = l.color || '#c8f0ff';
+      const c = l.color || '#1b6ca8';
       g.globalAlpha = t;
       g.strokeStyle = c;
       g.lineWidth = 4 * t + 1;
@@ -853,13 +881,21 @@ export class Renderer {
   drawBeams(run) {
     const g = this.ctx;
     g.save();
-    g.globalCompositeOperation = 'lighter';
+    g.globalCompositeOperation = 'source-over';
     g.lineCap = 'round';
     for (const b of run.beams) {
       const t = b.life / b.maxLife;
-      g.globalAlpha = t * 0.85;
-      g.strokeStyle = '#fff6c9';
-      g.lineWidth = b.w * t;
+      // 紙の上では光ではなく「走った墨」と「その内側の白」。
+      g.globalAlpha = t * 0.55;
+      g.strokeStyle = 'rgba(28, 35, 49, .35)';
+      g.lineWidth = b.w * t * 1.3;
+      g.beginPath();
+      g.moveTo(b.x, b.y);
+      g.lineTo(b.x + Math.cos(b.a) * b.len, b.y + Math.sin(b.a) * b.len);
+      g.stroke();
+      g.globalAlpha = t * 0.95;
+      g.strokeStyle = '#e8a30a';
+      g.lineWidth = b.w * t * 0.62;
       g.beginPath();
       g.moveTo(b.x, b.y);
       g.lineTo(b.x + Math.cos(b.a) * b.len, b.y + Math.sin(b.a) * b.len);
@@ -877,10 +913,10 @@ export class Renderer {
       const a = clamp(t.life / t.maxLife, 0, 1);
       g.globalAlpha = a;
       g.font = `700 ${t.crit ? 19 : 13}px system-ui, sans-serif`;
-      g.lineWidth = 3;
-      g.strokeStyle = 'rgba(0,0,0,.75)';
+      g.lineWidth = 3.6;
+      g.strokeStyle = 'rgba(255, 253, 247, .95)';
       g.strokeText(String(t.v), t.x, t.y);
-      g.fillStyle = t.crit ? '#ffd43b' : '#fff';
+      g.fillStyle = t.crit ? '#b8332b' : '#1c2331';
       g.fillText(String(t.v), t.x, t.y);
     }
     g.restore();
@@ -893,15 +929,15 @@ export class Renderer {
     if (!stick || !stick.active) return;
     const g = this.ctx;
     g.save();
-    g.globalAlpha = 0.32;
-    g.strokeStyle = '#fff';
+    g.globalAlpha = 0.42;
+    g.strokeStyle = '#1c2331';
     g.lineWidth = 2.5;
     g.beginPath();
     g.arc(stick.ox, stick.oy, 56, 0, TAU);
     g.stroke();
 
     g.globalAlpha = 0.5;
-    g.fillStyle = '#fff';
+    g.fillStyle = '#1c2331';
     g.beginPath();
     g.arc(stick.ox + stick.dx * 56, stick.oy + stick.dy * 56, 20, 0, TAU);
     g.fill();

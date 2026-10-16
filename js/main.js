@@ -109,7 +109,7 @@ function startRun(weaponIds) {
     weaponIds: app.lastLoadout,
     lexiconSize: 12,
     deckWords: app.save.deck,
-    partWords: app.save.partWordList(),
+    partEntries: app.save.partEntries(),
   });
   run.shakeOn = app.save.setting('screenShake') !== false;
   run.showDamage = app.save.setting('showDamage') !== false;

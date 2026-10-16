@@ -10,11 +10,13 @@ import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { getStage } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
 import {
-  makeWord, drawWord, drawSimple, drawFormWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST, WORDS,
+  makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
+  WORDS, isWeaponWord, weaponHeadKind,
 } from '../data/words.js';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm } from '../data/weapons.js';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
+import { normPartEntries } from './parts.js';
 import { WeaponInst } from './weapon.js';
 import { fireWeapon, damage as damageEnemy } from './combat.js';
 import {
@@ -67,7 +69,16 @@ export class Run {
     this.viewR = 480;
 
     // 部位強化の語 (メインメニューで設定)。戦闘中は変えられない。
+    // メニューからは { name, words:[{text,conn}] } の形 (部位 = 1 文) で貰う。
+    // 古い opt.partWords (語の flat な並び) もそのまま受けつける。
+    this.partEntries = (opt.partEntries || []).map((p) => ({
+      name: p?.name || '',
+      words: normPartEntries(p?.words),
+    })).filter((p) => p.words.length);
     this.partWords = (opt.partWords || []).filter((t) => WORDS[t] && !CONNECTOR_SET.has(t));
+    if (!this.partEntries.length && this.partWords.length) {
+      this.partEntries = this.partWords.map((t) => ({ name: '', words: [{ text: t, conn: null }] }));
+    }
 
     this.player = {
       x: 0, y: 0, vx: 0, vy: 0,
@@ -168,7 +179,10 @@ export class Run {
   // 能力
   // ───────────────────────────────────────────────────────────────────────────
   refreshStats(full = false) {
-    const s = resolvePlayerStats(this.partWords, this.save?.d.meta || {});
+    const s = resolvePlayerStats(
+      this.partEntries.length ? this.partEntries : this.partWords,
+      this.save?.d.meta || {},
+    );
     const p = this.player;
     const ratio = p.maxHp > 0 ? clamp(p.hp / p.maxHp, 0, 1) : 1;
     p.stats = s;
@@ -202,8 +216,15 @@ export class Run {
       return true;
     }
     if (!force) return false;
-    // 満杯。最も古い 1 語を捨てる。
+    // 満杯。最も古い 1 語を捨ててそこに入れる。
+    // (枠が潰れてどの語か分からないときは末尾に足す — 昔のセーブの語彙など)
     const drop = this.oldestLexiconIndex();
+    if (drop < 0) {
+      this.lexicon[this.lexicon.length - 1] = word;
+      this.refreshStats();
+      this.pushHint(`「${word.text}」を手に入れた`);
+      return true;
+    }
     const lost = this.lexicon[drop];
     this.lexicon[drop] = word;
     this.refreshStats();
@@ -258,7 +279,8 @@ export class Run {
   /**
    * 3 つの候補を作って、選んでもらう。
    * 接続詞は出ない (語の横にあるので、文を作るとき、切り替えるだけ)。
-   * 武器語 (剣・弾・銃…) は他の語より低い確率で入る。
+   * 武器語 (基本武器 14 語) は他の語より低い確率で入る。
+   *   環・弾・玉 のような形態語は武器語ではないので、ここでは出ない (語側で引ける)。
    * 選んでいる間も時間は止まらない。時間切れなら 1 番目を自動で取る。
    */
   offerWordChoices() {
@@ -266,7 +288,7 @@ export class Run {
     const seen = new Set();
     // 武器語。第 1 の候補にだけ入れる (他の語より出にくいように)。
     if (this.rand() < FORM_CHOICE_CHANCE) {
-      const fw = drawFormWord(this.rand, this.ownedFormWords());
+      const fw = drawWeaponWord(this.rand, this.ownedWeaponWords());
       if (fw) { pool.push(fw); seen.add(fw.text); }
     }
     for (let i = 0; i < WORD_CHOICES * 3 && pool.length < WORD_CHOICES; i++) {
@@ -284,13 +306,18 @@ export class Run {
     this.onWordChoice?.(this.pendingChoices);
   }
 
-  /** すでに入っている武器語。候補が重複しないように除外する。 */
-  ownedFormWords() {
+  /** すでに入っている武器語 (基本武器)。候補が重複しないように除外する。 */
+  ownedWeaponWords() {
     const out = new Set();
-    for (const w of this.lexicon) if (w && w.cat === 'form') out.add(w.text);
-    for (const wi of this.weapons) for (const w of wi.sentence.words) if (w.cat === 'form') out.add(w.text);
+    for (const w of this.lexicon) if (w && isWeaponWord(w.text)) out.add(w.text);
+    for (const wi of this.weapons) {
+      for (const w of wi.sentence.words) if (isWeaponWord(w.text)) out.add(w.text);
+    }
     return out;
   }
+
+  /** @deprecated 名称が変わった。ownedWeaponWords を使うこと。 */
+  ownedFormWords() { return this.ownedWeaponWords(); }
 
   /**
    * 3 択のうち 1 つを選んだ。
@@ -335,6 +362,8 @@ export class Run {
       this.lexicon[discardIndex] = word;
       this.refreshStats();
       this.pushHint(`「${victim.text}」を忘れて「${word.text}」を手に入れた`);
+      // ここでも武器語は新しい文にする。満杯かどうかで挙動が変わるのは不具合だった。
+      this.absorbWeaponWord(word);
       this.onWordChoice?.(this.pendingChoices);
       return true;
     }
@@ -346,15 +375,50 @@ export class Run {
   }
 
   /**
-   * 武器語を得ると、新しい文を作れる。
-   * 武器は最大 3 つまで。3 つあれば語彙に置いたままになる。
+   * 武器語 (基本武器) を得ると、新しい文を作れる。
+   * 武器は最大 3 つまで。3 つ埋まっていれば語彙に置いたままになる
+   * (鍛冶で文を 1 つ外せば、そこから作れる)。
+   *   形態語 (弾・環・玉…) は武器語ではないので、文を作らない。
    * @returns {{ok:boolean, reason:string, wi?:object}}
    */
-  absorbFormWord(word) {
-    if (!word || word.cat !== 'form') return { ok: false, reason: 'notform' };
+  absorbWeaponWord(word) {
+    if (!word || !isWeaponWord(word.text)) return { ok: false, reason: 'notweapon' };
     if (this.weapons.length >= WEAPON_MAX) {
-      this.pushHint(`武器は ${WEAPON_MAX} つまで。新しい文は作れない`);
+      this.pushHint(`武器は ${WEAPON_MAX} つまで。「${word.text}」は語彙に置いた — 鍛冶で文を 1 つ外すと作れる`);
       return { ok: false, reason: 'max' };
+    }
+    return this.craftWeaponFrom(word);
+  }
+
+  /** @deprecated 武器語 = 基本武器だけになった。absorbWeaponWord を使うこと。 */
+  absorbFormWord(word) { return this.absorbWeaponWord(word); }
+
+  /**
+   * 語を 1 つ使って、新しい武器の文を作る。戦闘中の「文を鍛える」の核。
+   *
+   *   基本武器 (剣・銃・刃…) … 置いてすぐ攻撃の型が決まる。
+   *   属性語・現象語 (光・雷・渦…) … **特殊武器**。攻撃できる動詞を述語に
+   *     付けた瞬間から撃てる (文だけで成立していても動詞が無ければ撃たない)。
+   *   形態語 (弾・環・玉…) … 武器語ではないので作れない。
+   *
+   * 語彙から語を 1 つ取り出して新しい文の頭にする。語は消えない (文へ移る)。
+   * @param {object} word 語彙にある語
+   * @returns {{ok:boolean, reason:string, wi?:object}}
+   */
+  craftWeaponFrom(word) {
+    if (!word) return { ok: false, reason: 'noword' };
+    const can = canCraftFrom(word.text);
+    if (!can.ok) {
+      const why = can.reason === 'form'
+        ? `「${word.text}」は武器語ではない (形態語はただの語)。武器語は刃・剣・銃…だけ`
+        : `「${word.text}」からは文を作れない。属性語・現象語・基本武器の語だけ`;
+      this.pushHint(why);
+      return { ok: false, reason: can.reason, reasonText: why };
+    }
+    if (this.weapons.length >= WEAPON_MAX) {
+      const why = `武器は ${WEAPON_MAX} つまで。使っていない文を 1 つ外してから作って`;
+      this.pushHint(why);
+      return { ok: false, reason: 'max', reasonText: why };
     }
     const loc = this.findWordAnywhere(word);
     if (loc) this.clearPlace(loc);
@@ -362,8 +426,37 @@ export class Run {
     wi.sentence.push(word);
     this.weapons.push(wi);
     this.refreshStats();
-    this.pushHint(`武器語「${word.text}」を得た — 新しい文「${wi.title}」`);
-    return { ok: true, reason: 'made', wi };
+    this.pushHint(can.kind === 'special'
+      ? `特殊武器「${word.text}」の文を作った — 攻撃できる動詞を述べると撃てる`
+      : `武器語「${word.text}」を得た — 新しい文「${wi.title}」`);
+    return { ok: true, reason: 'made', kind: can.kind, wi };
+  }
+
+  /**
+   * 武器語から作った文 (武器) を外す。語は語彙へ戻るので消えない。
+   * ステージ開始から持っている固定の武器は外せない。
+   * 3 つの枠が埋まったままだと新しい武器語を取れないので、こっそり枠を
+   * 占有できないようにするための出口 (取り外せない不具合の修正)。
+   * @returns {{ok:boolean, reason:string, returned?:number}}
+   */
+  dropWeapon(wi) {
+    if (!wi) return { ok: false, reason: 'nowi' };
+    if (!wi.def.isForm) return { ok: false, reason: 'fixed' };
+    if (this.weapons.length <= 1) return { ok: false, reason: 'last' };
+    // 文の中の語は語彙へ戻す。満杯なら語彙の最古の 1 語を捨てる (toLexicon と同じ)。
+    let n = 0;
+    for (const w of [...wi.sentence.words]) if (this.toLexicon(w).ok) n++;
+    const i = this.weapons.indexOf(wi);
+    if (i >= 0) this.weapons.splice(i, 1);
+    this.refreshStats();
+    this.pushHint(`文「${wi.title || wi.def.name}」を外した${n ? ` — ${n} 語を語彙へ戻した` : ''}`);
+    return { ok: true, reason: 'dropped', returned: n };
+  }
+
+  /** この語から新しい文 (武器) を作れるか。UI の + ボタンが読む。 */
+  canCraftFromWord(word) {
+    if (!word) return false;
+    return canCraftFrom(word.text).ok && this.weapons.length < WEAPON_MAX;
   }
 
   /**
@@ -461,16 +554,20 @@ export class Run {
     return e ? e.conn : null;
   }
 
-  /** 置き場の直後に接続詞を置く。 */
+  /**
+   * 置き場の直後に接続詞を置く (null で外す)。
+   * 戻り値は { ok, reason }。外すだけの操作も ok で返すので、
+   * 呼び出し側は「外せなかった」と誤報しない。
+   */
   setConnAt(place, word) {
-    if (!Run.isWordPlace(place)) return false;
+    if (!Run.isWordPlace(place)) return { ok: false, reason: 'notconn' };
     const sen = this.sentenceOf(place);
-    if (!sen) return false;
+    if (!sen) return { ok: false, reason: 'notconn' };
     const r = sen.setConnAt(place.index, word ? word.text : null);
-    if (!r.ok) return false;
+    if (!r.ok) return r;
     if (place.wi) place.wi._sig = null;
     this.refreshStats();
-    return true;
+    return r;
   }
 
   /**
@@ -1303,14 +1400,14 @@ export class Run {
   // ───────────────────────────────────────────────────────────────────────────
   bossRing(b) {
     const n = 14;
-    for (let i = 0; i < n; i++) this.spawnEnemyShot(b.x, b.y, (i / n) * TAU, 210, 14, '#fff');
+    for (let i = 0; i < n; i++) this.spawnEnemyShot(b.x, b.y, (i / n) * TAU, 210, 14, '#5f3dc4');
     this.shake(6);
   }
 
   bossBreath(b) {
     const a = Math.atan2(this.player.y - b.y, this.player.x - b.x);
     for (let i = -3; i <= 3; i++) {
-      this.spawnEnemyShot(b.x, b.y, a + i * 0.17, 210, 16, '#ff9a6a');
+      this.spawnEnemyShot(b.x, b.y, a + i * 0.17, 210, 16, '#cf4a12');
     }
     this.shake(8);
   }
@@ -1318,7 +1415,7 @@ export class Run {
     const n = 24;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU + (this.time || 0) * 2;
-      this.spawnEnemyShot(b.x, b.y, a, 160 + i * 4, 12, '#b47bff');
+      this.spawnEnemyShot(b.x, b.y, a, 160 + i * 4, 12, '#7048b8');
     }
     this.shake(10);
   }
@@ -1350,7 +1447,7 @@ export class Run {
       this.damageNumbers(p.x, p.y, 8, false);
     }
     this.lightnings.push({
-      x1: b.x, y1: b.y, x2: p.x, y2: p.y, life: 0.25, maxLife: 0.25, color: '#b47bff',
+      x1: b.x, y1: b.y, x2: p.x, y2: p.y, life: 0.25, maxLife: 0.25, color: '#7048b8',
     });
   }
 

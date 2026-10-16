@@ -6,11 +6,18 @@
 // その語の効果 (buff 語の player、それ以外の語は fx のうちプレイヤーに
 // 効くもの) がそのまま能力に乗る。セーブの恒久強化 (書庫) もここで重ねる。
 //
+// 部位は **1 文として数える** (武器と同じ)。1 部位に 2 語まで入れられて、
+// 語の直後には接続詞が選べる。
+//   頑・健        … 2 語が並ぶだけ。文の力は少しだけ乗る。
+//   発 + 電する   … 熟語「発電」が成立して、部位まるごとの効果が伸びる。
+// 不成文の部位 (接続詞が結べていない等) は何も効かない。
+//
 // 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
-import { WORDS, CONNECTOR_SET } from '../data/words.js';
+import { WORDS, CONNECTOR_SET, CONNECTORS } from '../data/words.js';
 import { clamp } from '../core/util.js';
+import { evaluatePart, normPartEntries } from './parts.js';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {
@@ -66,12 +73,44 @@ function applyBuffFx(s, src) {
 }
 
 /**
+ * 部位 1 つぶんの効果をプレイヤー能力に足す。
+ * @param {object} s 集計中の能力
+ * @param {object} src 語・接続詞・熟語の効果
+ * @param {Set<string>} keys 通すキー
+ * @param {number} gain 文の力による倍率
+ * @param {boolean} buffForm buff 語の形か (hp / xp / spd の向きが違う)
+ * @returns {boolean} 何か効いたか
+ */
+function applyPartSrc(s, src, keys, gain, buffForm) {
+  let used = false;
+  for (const [k, v] of Object.entries(src || {})) {
+    if (typeof v !== 'number') continue;
+    if (buffForm) {
+      if (!BUFF_KEYS.has(k)) continue;
+      if (k === 'hp') s.maxHp += v * gain;
+      else if (k === 'xp') s.xpMul += v * gain;
+      else if (k === 'spd') s.spd *= 1 + v * gain;
+      else s[k] = (s[k] || 0) + v * gain;
+      used = true;
+      continue;
+    }
+    if (!keys.has(k)) continue;
+    if (k === 'hp') s.maxHp += v * gain;
+    else s[k] = (s[k] || 0) + v * gain;
+    used = true;
+  }
+  return used;
+}
+
+/**
  * 部位に入れた語とセーブの恒久強化からプレイヤー能力を集計する。
- * @param {Array<string|object>} partWords 部位に入っている語 (text でも語オブジェクトでも可)
+ * @param {Array} parts 部位。次のどれでも受けつける。
+ *   ・{ name, words:[{text,conn}] }   … 部位ごとの文 (いまの形)
+ *   ・'頑' / { text:'頑' }             … 語 1 つ (古い呼び出し。1 語 = 1 部位)
  * @param {Object} meta セーブ側の恒久強化
  * @returns {typeof BASE_PLAYER}
  */
-export function resolvePlayerStats(partWords, meta = {}) {
+export function resolvePlayerStats(parts, meta = {}) {
   const s = { ...BASE_PLAYER };
   s.maxHp += meta.hp || 0;
   s.atkMul += meta.atk || 0;
@@ -80,30 +119,45 @@ export function resolvePlayerStats(partWords, meta = {}) {
   s.magnet += meta.magnet || 0;
   s.crit += meta.crit || 0;
 
-  // 部位の語。buff 語は player の効果、それ以外は fx のうち効くものだけ。
   s.partCount = 0;
   s.partTexts = [];
-  for (const w of partWords || []) {
-    const text = typeof w === 'string' ? w : w?.text;
-    const info = (text && WORDS[text]) || (typeof w === 'object' ? w : null);
-    if (!info || !info.text || CONNECTOR_SET.has(info.text)) continue;
-    const isBuff = info.cat === 'buff';
-    let used;
-    if (isBuff) {
-      used = applyBuffFx(s, info.player || info.fx || {});
-    } else {
-      used = false;
-      for (const [k, v] of Object.entries(info.fx || {})) {
-        if (!PART_KEYS.has(k) || typeof v !== 'number') continue;
-        if (k === 'hp') s.maxHp += v;
-        else s[k] = (s[k] || 0) + v;
-        used = true;
+  s.partRows = [];      // 部位ごとの表示 (文・grade・文の力)
+  s.partBroken = [];    // 不成文の部位
+
+  for (const raw of parts || []) {
+    const isPart = raw && typeof raw === 'object' && Array.isArray(raw.words);
+    const words = isPart ? raw.words : [raw];
+    const name = isPart ? (raw.name || raw.id || '') : '';
+    const p = evaluatePart(normPartEntries(words));
+    if (!p.sen.count) continue;
+
+    if (!p.valid) {
+      s.partBroken.push({ name, text: p.text, reasonText: p.reasonText });
+      continue;
+    }
+    const gain = p.gain;
+    let used = 0;
+    // 語そのものの効果。
+    for (const e of p.sen.entries) {
+      const info = WORDS[e.word.text];
+      if (!info) continue;
+      const isBuff = info.cat === 'buff';
+      const ok = isBuff
+        ? applyPartSrc(s, info.player || info.fx || {}, BUFF_KEYS, gain, true)
+        : applyPartSrc(s, info.fx || {}, PART_KEYS, gain, false);
+      if (ok) { used++; s.partTexts.push(info.text); }
+      // 語の直後の接続詞。部位ではプレイヤーに効くキーだけを通す。
+      if (e.conn) {
+        if (applyPartSrc(s, CONNECTORS[e.conn.text]?.fx || {}, PART_KEYS, gain, false)) used++;
       }
     }
-    if (used) {
-      s.partCount++;
-      s.partTexts.push(info.text);
-    }
+    // 熟語が成立していれば、その効果も乗る (発電 = 感電など)。
+    if (p.idiom) applyPartSrc(s, p.idiom.fx || {}, PART_KEYS, gain, false);
+    s.partCount += used;
+    s.partRows.push({
+      name, text: p.text, grade: p.ev.grade, gradeName: p.gradeInfo?.name || '',
+      power: p.power, gain, idiom: p.idiom?.name || null,
+    });
   }
 
   // 補正と上限。

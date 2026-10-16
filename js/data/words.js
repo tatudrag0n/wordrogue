@@ -14,7 +14,9 @@
 //   「風」「の」「潮」「の」「銃」 -> のが 2 回 -> 成立 (自然さの減点)
 // ============================================================================
 
-import { RAW_TABLES, TAIL_UNMODIFIABLE } from './words.core.js';
+import {
+  RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
+} from './words.core.js';
 import { CATEGORIES, ELEMENTS } from './words.core.js';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
@@ -26,6 +28,8 @@ import { poolOfText, posOfText } from './words.pool.js';
 export {
   CATEGORIES, ELEMENTS, PHRASE_BONUS, CONNECTORS, CONNECT_ORDER, POS,
   TAIL_UNMODIFIABLE, PREDICATE_CONNECTORS, isAdnominal, isConnector,
+  // 武器語 (基本武器) の一覧と判定。UI もここを通る。
+  WEAPON_WORDS, WEAPON_WORD_SET as BASIC_WEAPONS, isWeaponWord,
 };
 
 /** 単語 ID 採番用。 */
@@ -118,27 +122,31 @@ const FIXED_TAIL = '人';
 
 /**
  * 語彙から引ける語のカテゴリ。
- * 形態語 (剣・銃・環 …) は武器の末尾語だから引かない。
+ * 武器語 (基本武器) は語彙から引かない — レベルアップの 3 択でだけ得る。
+ * 形態語の残り (弾・環・玉・壁…) はただの語なので引ける。
  * 接続詞は鍛冶の接続詞プールから無限に使えるので引かない。
  * 辞書には残す — 文の分割と末尾語の判定に使う。
  */
-const isDrawableCat = (c) => c === 'element' || c === 'phenom' || c === 'modifier'
-  || c === 'buff' || c === 'verb';
+const isDrawableCat = (c) => c === 'element' || c === 'phenom' || c === 'form'
+  || c === 'modifier' || c === 'buff' || c === 'verb';
 
-/** 語彙から引ける語だけ (接続詞・動詞・形態語を除く)。 */
+/** 語彙から引ける語だけ (接続詞・動詞・武器語を除く)。 */
 export const DRAWABLE = Object.keys(WORDS).filter((w) => {
   const c = WORDS[w].cat;
-  return c !== 'connect' && c !== 'verb' && c !== 'form' && w !== FIXED_TAIL;
+  if (w === FIXED_TAIL) return false;
+  if (c === 'connect' || c === 'verb') return false;
+  return c !== 'form' || !isWeaponWord(w);
 });
 
 /**
  * 語彙から引ける語。動詞も含む。
  * 接続詞は鍛冶の接続詞プールから無限に使えるので引かない。
- * 動詞は 1 枚で 1 つの動作になる。形態語は末尾語なので入らない。
+ * 動詞は 1 枚で 1 つの動作になる。武器語 (基本武器) は 3 択でだけ得る。
+ * 形態語の残り (弾・環・玉…) はただの語として引ける。
  * 出る比重は種別ごとに少しずつ抑えてある。
  */
 export const DRAWABLE_ALL = Object.keys(WORDS).filter(
-  (w) => w !== FIXED_TAIL && isDrawableCat(WORDS[w].cat),
+  (w) => w !== FIXED_TAIL && isDrawableCat(WORDS[w].cat) && !isWeaponWord(w),
 );
 
 /** 接続詞。分割はするが、それだけでは文にならない。 */
@@ -291,10 +299,11 @@ export function findCompound(text) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const GRADES = {
-  broken: { key: 'broken', name: '不成文', color: '#ff5470' },
-  plain:  { key: 'plain',  name: '成立',   color: '#8ce99a' },
-  idiom:  { key: 'idiom',  name: '名文',   color: '#ffd43b' },
-  great:  { key: 'great',  name: '絶句',   color: '#ff9f43' },
+  // 紙の上で読む色。明るい地では彩度を上げるより濃くする。
+  broken: { key: 'broken', name: '不成文', color: '#b8332b' },
+  plain:  { key: 'plain',  name: '成立',   color: '#23703f' },
+  idiom:  { key: 'idiom',  name: '名文',   color: '#a8770f' },
+  great:  { key: 'great',  name: '絶句',   color: '#b3620f' },
 };
 
 const REASONS = {
@@ -673,7 +682,7 @@ export function evaluate(words, opt = {}) {
       if (inPhrase(segOff[j], segOff[j] + segs[j].length + segs[i].length)) continue;
       parts.push({
         key: 'bareform',
-        label: `「${segs[j]}」が裸で武器語「${segs[i]}」に付いている`,
+        label: `「${segs[j]}」が裸で${isWeaponWord(segs[i]) ? '武器語' : '形態語'}「${segs[i]}」に付いている`,
         v: -0.6,
       });
     }
@@ -822,17 +831,36 @@ export function drawWord(rng, opts = {}) {
 }
 
 /**
- * 武器語 (形態語) を 1 つ引く。
+ * 武器語 (基本武器) を 1 つ引く。
  * レベルアップの 3 択には他の語より低い確率で出る。
  * 語彙からは引けない — 戦闘中に得た武器語は、そのまま新しい文になる。
+ *
+ * 環・弾・玉 のような形態語は武器語ではない (ただの語)。ここでは出ない。
  * @param {Function} rng
- * @param {Set<string>} [exclude] すで دخلている武器語
+ * @param {Set<string>} [exclude] すでに入っている武器語
  * @returns {object|null}
  */
-export function drawFormWord(rng, exclude) {
-  const pool = WORDS_BY_CAT.form.filter((w) => !(exclude && exclude.has(w)));
+export function drawWeaponWord(rng, exclude) {
+  const pool = WEAPON_WORDS.filter((w) => !(exclude && exclude.has(w)));
   if (!pool.length) return null;
   return makeWord(pool[Math.floor(rng() * pool.length)]);
+}
+
+/** @deprecated 武器語 = 基本武器だけになった。drawWeaponWord を使うこと。 */
+export const drawFormWord = drawWeaponWord;
+
+/**
+ * 文の頭になれる語か。
+ *   basic   … 基本武器 (武器語)。それ単体で攻撃の型を決める。
+ *   special … 属性語・現象語。攻撃できる動詞が述語で付いているときだけ武器になる。
+ *   null    … ただの語。
+ */
+export function weaponHeadKind(text) {
+  if (isWeaponWord(text)) return 'basic';
+  const info = WORDS[text];
+  if (!info) return null;
+  if (info.cat === 'element' || info.cat === 'phenom') return 'special';
+  return null;
 }
 
 /**

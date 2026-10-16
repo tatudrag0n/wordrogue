@@ -1,5 +1,6 @@
 // 辞書の健全性と文判定のテスト。      node test/words.test.js
 // 1 ステージの完走シミュレーション。   node test/sim.test.js
+// 部位強化メニュー (最小 DOM)。     node test/grow.menu.test.js
 // ブラウザ実機テスト (Chrome が必要)。  node test/browser.test.js
 //
 //   全部まとめて:  npm test
@@ -173,25 +174,37 @@ if (syntaxBad) {
   }
 }
 
-// 武器語 -> 攻撃タイプの表 (FORM_SHAPE) が辞書に追従していること。
-// ここが古くなると、武器語を置いた武器が攻撃しなくなる。
+// 武器語 -> 攻撃タイプの表 (FORM_SHAPE) と辞書のつきあい。
+// 武器語は基本武器 14 語だけ。ここが古くなると武器が攻撃しなくなるし、
+// 「環・弾・玉」のような形態語が武器語に化けると、編成が全部それ決めになってしまう。
 {
-  const { WORDS, WORDS_BY_CAT } = await import(new URL('../js/data/words.js', import.meta.url));
-  const { FORM_SHAPE, KIND_LABEL } = await import(new URL('../js/data/weapons.js', import.meta.url));
+  const { WORDS, WORDS_BY_CAT, WEAPON_WORDS, isWeaponWord, DRAWABLE_ALL } =
+    await import(new URL('../js/data/words.js', import.meta.url));
+  const { FORM_SHAPE, KIND_LABEL, BASIC_WEAPONS, WEAPONS } =
+    await import(new URL('../js/data/weapons.js', import.meta.url));
   const entries = Object.entries(FORM_SHAPE).map(([text, v]) => ({ text, shape: v[0], kind: v[1] }));
 
   const dead = entries.filter((e) => !WORDS[e.text]);
-  const notForm = entries.filter((e) => WORDS[e.text] && WORDS[e.text].cat !== 'form');
+  // 武器語は基本武器 (14 語) とぴったり一致すること。
+  const notBasic = entries.filter((e) => !BASIC_WEAPONS.has(e.text));
   const noLabel = [...new Set(entries.map((e) => e.kind))].filter((k) => !KIND_LABEL[k]);
   const known = new Set(entries.map((e) => e.text));
-  const noInfo = WORDS_BY_CAT.form.filter((t) => !known.has(t));
+  const noShape = [...BASIC_WEAPONS].filter((t) => !known.has(t));
+  const tails = new Set(Object.values(WEAPONS).map((d) => d.tail));
+  const strayTail = [...tails].filter((t) => BASIC_WEAPONS.has(t) && !known.has(t));
+  // 形態語のうち武器語でないものは「ただの語」なので、語彙から引けること。
+  const plain = WORDS_BY_CAT.form.filter((t) => !isWeaponWord(t));
+  const stuck = plain.filter((t) => !DRAWABLE_ALL.includes(t));
 
-  console.log(`== 武器語表 ==\n  ${entries.length} 語 / 辞書に無い ${dead.length} / 攻撃名なし ${noLabel.length} / 未登録 ${noInfo.length}`);
+  console.log(`== 武器語表 ==\n  武器語 ${entries.length} 語 / 形態語 ${WORDS_BY_CAT.form.length}`
+    + ` (武器語でない ${plain.length}) / 辞書に無い ${dead.length} / 攻撃名なし ${noLabel.length}`
+    + ` / 型が無い基本武器 ${noShape.length} / 語彙から引けない形態語 ${stuck.length}`);
   if (dead.length) console.log('  辞書に無い: ' + dead.map((e) => e.text).join(' '));
-  if (notForm.length) console.log('  武器語でない: ' + notForm.map((e) => e.text).join(' '));
+  if (notBasic.length) console.log('  基本武器でない武器語: ' + notBasic.map((e) => e.text).join(' '));
   if (noLabel.length) console.log('  攻撃名なし: ' + noLabel.join(' '));
-  if (noInfo.length) console.log('  未登録: ' + noInfo.join(' '));
-  if (dead.length || notForm.length || noLabel.length || noInfo.length) {
+  if (noShape.length) console.log('  型が無い基本武器: ' + noShape.join(' '));
+  if (stuck.length) console.log('  語彙から引けない形態語: ' + stuck.join(' '));
+  if (dead.length || notBasic.length || noLabel.length || noShape.length || strayTail.length || stuck.length) {
     console.log('\n=== 失敗したテストがあります ===');
     process.exit(1);
   }
@@ -467,6 +480,7 @@ let failed = 0;
 failed += await run('test/words.test.js');
 failed += await run('test/sim.test.js');
 failed += await run('test/forge.drag.test.js');
+failed += await run('test/grow.menu.test.js');
 
 if (startServer) {
   const server = await serve(ROOT, PORT);

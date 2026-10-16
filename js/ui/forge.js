@@ -250,6 +250,28 @@ export class Forge {
     return out;
   }
 
+  /** 武器語から作った文を 1 本外す。固定の武器 (刃・銃…) は外せない。 */
+  dropWeaponRow(wi) {
+    if (this.suppressClick) return { ok: false, reason: 'ignore' };
+    this.beginEdit();
+    const r = this.run.dropWeapon(wi);
+    if (r.ok) {
+      this.msg = `文「${wi.title || wi.def.name}」を外した — ${r.returned} 語を語彙へ戻す。`;
+      this.armed = null;
+      this.held = null;
+      this.opt.audio?.tap?.();
+    } else {
+      this.popEdit();
+      this.msg = r.reason === 'fixed'
+        ? 'はじめから持っている武器の文は外せない。語を入れ替えて使ってください。'
+        : 'もう 1 本足りない — 文を外すと攻撃しなくなる。';
+      this.opt.audio?.broken?.();
+    }
+    this.opt.onChange?.();
+    this.render();
+    return r;
+  }
+
   /** 文を 1 行に並べる。語と、その直後の接続詞。 */
   renderSentenceRow(sen, opt = {}) {
     const row = el('div', { class: 'sen-row' });
@@ -504,7 +526,8 @@ export class Forge {
       this._idiomSeen.set(n, phrase);
       if (born) anyBorn = true;
       const row = el('div', {
-        class: 'wrow' + (res.active ? ` ${res.grade}` : ' broken') + (born ? ' idiom-born' : ''),
+        class: 'wrow' + (res.active ? ` ${res.grade}` : res.pending ? ' pending' : ' broken')
+          + (born ? ' idiom-born' : ''),
       });
 
       const head = el('div', { class: 'wrow-head' },
@@ -513,10 +536,23 @@ export class Forge {
         el('span', { class: 'wrow-lv' }, `${wi.sentence.len} / ${wi.sentence.maxLen} 文字`),
         res.tail
           ? el('span', { class: 'wrow-kind' }, res.special ? `特殊武器 ${res.tail}` : `武器語 ${res.tail}`)
-          : el('span', { class: 'wrow-kind dim' }, '武器語なし'),
+          : wi.def.special
+            ? el('span', { class: 'wrow-kind dim' }, '特殊武器 動詞待ち')
+            : el('span', { class: 'wrow-kind dim' }, '武器語なし'),
         el('span', { class: `wrow-grade grade-${res.grade}` },
           res.active ? res.gradeInfo.name : '不成文'),
       );
+      // 武器語から作った文は、ここで行ごと外せる。外すと語は語彙へ戻る。
+      // (3 本が埋まったまま空いた文だけ残して新しい武器語が取れない、を防ぐ)
+      if (wi.def.isForm) {
+        const dropBtn = el('button', {
+          class: 'wrow-drop', type: 'button',
+          title: 'この文を外す。入っている語は語彙へ戻る',
+          'aria-label': `${wi.def.name} の文を外す`,
+        }, el('span', {}, '文を外す'));
+        this.makeTappable(dropBtn, () => this.dropWeaponRow(wi));
+        head.append(dropBtn);
+      }
       // 並び直すときに全部戻すのはタップ 1 回で済むようにする。
       if (wi.sentence.count) {
         const clearBtn = el('button', {
@@ -531,7 +567,9 @@ export class Forge {
 
       if (!res.active) {
         row.append(el('div', { class: 'wrow-why' },
-          `${res.reasonText} — この武器は攻撃しません。語を足してください。`));
+          res.pending
+            ? `${res.reasonText} — まだ攻撃しません。`
+            : `${res.reasonText} — この武器は攻撃しません。語を足してください。`));
       } else if (res.evalResult.idiom) {
         row.append(el('div', { class: 'wrow-why', style: { color: 'var(--idiom)' } },
           `熟語「${res.evalResult.idiom.name}」成立 — ${res.evalResult.idiom.desc}`
@@ -628,10 +666,12 @@ export class Forge {
         continue;
       }
       const cat = CATEGORIES[w.cat] || CATEGORIES.modifier;
+      const info = WORDS[w.text];
       const node = el('div', {
         class: 'pword'
           + (this.armed === w ? ' armed' : '')
-          + (this.forgetMode ? ' forgetable' : ''),
+          + (this.forgetMode ? ' forgetable' : '')
+          + (w.cat === 'form' ? ' is-form' : ''),
         style: { borderColor: cat.color },
         title: this.forgetMode
           ? `${w.text} を忘れる（捨てる）`
@@ -643,6 +683,10 @@ export class Forge {
       this.makeDropTarget(node, place);
       if (this.forgetMode) this.makeTappable(node, () => this.onLexiconClick(w));
       else this.makeDraggable(node, place, () => this.onLexiconClick(w));
+      // 武器語 (基本武器) と属性語・現象語は、この語から新しい文を作れる。
+      // 形態語 (弾・環・玉…) は武器語ではないので + が出ない。
+      const canCraft = !this.forgetMode && this.run.canCraftFromWord(w);
+      if (canCraft) node.append(this.renderCraftButton(w, info));
       box.append(node);
     }
 
@@ -729,9 +773,14 @@ export class Forge {
           `この語に使える接続詞: ${this.connListText(e, place)}`));
       }
     }
-    if (info?.cat === 'form') {
+    if (info?.cat === 'element' || info?.cat === 'phenom') {
       d.append(el('span', { class: 'dl' },
-        '武器語。文に置くと攻撃の形が決まる。語彙に置いて文のどこにでも置ける。'));
+        '属性・現象の語。語彙の右の＋でこの語を頭にした文 (特殊武器) を作れる。'
+        + '攻撃できる動詞を述べると撃つようになる。'));
+    } else if (info?.cat === 'form') {
+      d.append(el('span', { class: 'dl' },
+        '形態語。文に置いて効果で支えるただの語 (武器語ではない)。'
+        + '武器語 (3 択で得られる) は刃・剣・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃の 14 語だけ。'));
     } else {
       d.append(el('span', { class: 'dl' }, '文に置ける。並べた並びで文の力が上がる。'));
     }
@@ -780,6 +829,46 @@ export class Forge {
   // ───────────────────────────────────────────────────────────────────────────
   // 操作
   // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 語彙の語につける「＋ 文を作る」ボタン。
+   * 押すとその語を頭にした新しい武器の文が生まれる (最大 3 本)。
+   * 属性語・現象語なら **特殊武器** — 攻撃できる動詞を述語に足すまで撃たない。
+   */
+  renderCraftButton(word, info) {
+    const special = info?.cat === 'element' || info?.cat === 'phenom';
+    const b = el('button', {
+      class: 'pword-craft' + (special ? ' special' : ''), type: 'button',
+      title: special
+        ? `${word.text} — 特殊武器の文を作る (動詞を述べると撃てる)`
+        : `${word.text} — この語で新しい武器の文を作る`,
+      'aria-label': `${word.text} で新しい文を作る`,
+    }, el('span', {}, '＋'));
+    this.makeTappable(b, () => this.craftFrom(word));
+    return b;
+  }
+
+  /** 語を 1 つ使って新しい文を作る。語彙から語は移動する (消えない)。 */
+  craftFrom(word) {
+    if (this.suppressClick) return { ok: false, reason: 'ignore' };
+    this.beginEdit();
+    const r = this.run.craftWeaponFrom(word);
+    if (r.ok) {
+      this.msg = r.kind === 'special'
+        ? `特殊武器「${word.text}」の文を作った — 攻撃できる動詞を述べると撃てる。`
+        : `「${word.text}」で新しい文を作った。`;
+      this.armed = null;
+      this.held = null;
+      this.opt.audio?.worn?.(r.wi ? r.wi.resolve(this.run.player.stats) : { active: true });
+    } else {
+      this.popEdit();
+      this.msg = r.reasonText || `「${word.text}」からは文を作れない (${r.reason})。`;
+      this.opt.audio?.broken?.();
+    }
+    this.opt.onChange?.();
+    this.render();
+    return r;
+  }
 
   /** 語彙の語をタップ。選ぶか、忘れるモードなら捨てる。 */
   onLexiconClick(word) {
@@ -950,6 +1039,8 @@ export class Forge {
   makeTappable(node, onTap) {
     node.addEventListener('pointerdown', (ev) => {
       this.downAt.set(node, { x: ev.clientX, y: ev.clientY });
+      // タップ用の要素 (＋ や ✕) を掴んで語のドラッグを始めない。
+      ev.stopPropagation();
     }, true);
     node.addEventListener('pointerup', (ev) => {
       if (this.suppressClick || this.dragFrom) return;

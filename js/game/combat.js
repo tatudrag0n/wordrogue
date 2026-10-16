@@ -267,7 +267,7 @@ function cutByWeapon(e, st, run) {
     run.dmgTexts.push({
       x: e.x, y: e.y - e.r - 12, v: 0, crit: false,
       life: 0.7, maxLife: 0.7, vy: -30, text: `−${r.text}`,
-      color: '#ffd43b',
+      color: '#c1432b',
     });
   }
   if (r.broken) {

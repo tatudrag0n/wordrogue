@@ -1245,6 +1245,58 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   ok(applied.hasSelf === false, '戦闘中に自身の文が残っている');
   ok(applied.filled >= 10, `開始時の語彙が少ない: ${applied.filled}`);
   console.log(`    部位 ${applied.partCount} 語 / 体力 ${applied.maxHp} / 語彙 ${applied.filled} 語`);
+
+  // 接続詞を実際に押して選ぶ。部位はどの接続詞でも選べて、
+  // 文が成る形には ✓、成らない形には ✕ が付く。
+  const conn = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    app.menus.show('grow');
+    app.menus.renderGrow();
+    const live = () => [...document.querySelectorAll('#growParts .grow-part')]
+      .find(p => p.querySelector('.grow-part-name').textContent === '頭');
+    const chips = () => [...live().querySelectorAll('.grow-conn-pick')];
+    // 一覧が開くまで押す (すでに開いていれば閉じてしまうため)。
+    const open = () => {
+      if (!live().querySelector('.grow-conn-pick')) live().querySelector('.gs-conn').click();
+      return chips();
+    };
+    const lab = live().querySelector('.gs-conn').textContent.trim();
+    const first = open();
+    const okOwn = first.find(n => n.classList.contains('ok'));
+    const more = live().querySelector('.grow-conn-more');
+    const moreLabel = more ? more.textContent.trim() : '';
+    more.click();
+    const all = chips();
+    const noPick = all.find(n => n.classList.contains('no'));
+    const noText = noPick.textContent.trim();
+    // ✕ の形でも選べる。選ぶと不成文と直し方が出る。
+    noPick.click();
+    const bad = live().querySelector('.grow-part-note.bad');
+    const broken = (bad ? bad.textContent : '') + (live().querySelector('.grow-part-fix') ? ' / 直し方あり' : '');
+    // 成る形へ戻す。
+    open().find(n => n.classList.contains('ok')).click();
+    const note = live().querySelector('.grow-part-note');
+    return {
+      lab, first: first.length, okOwn: okOwn ? okOwn.textContent.trim() : '', moreLabel,
+      all: all.length, no: all.filter(n => n.classList.contains('no')).length, noText,
+      broken, note: note ? note.textContent.trim() : '',
+      conn: (app.save.partRaw('head') || []).filter(Boolean)[0].conn,
+      totalRows: document.querySelectorAll('#growTotal .eff').length,
+      wordEff: document.querySelectorAll('#growWords .grow-word-eff').length,
+      noEffMark: document.querySelectorAll('#growWords .grow-word.no-eff').length,
+    };
+  })()`);
+  ok(conn.first >= 3, `接続詞の候補が少ない: ${conn.first}`);
+  ok(conn.okOwn.length > 0, `「この語の形」に成る形が無い: ${JSON.stringify(conn.first)}`);
+  ok(/ほかの接続詞/.test(conn.moreLabel), `「ほかの接続詞」が無い: ${conn.moreLabel}`);
+  ok(conn.all > 20, `ほかの接続詞が開かない: ${conn.all}`);
+  ok(conn.no > 0, `不成文になる形 (✕) が出ていない: ${conn.all} 件`);
+  ok(/不成文/.test(conn.broken) && /直し方/.test(conn.broken),
+    `✕ を選んでも不成文と直し方が出ない: ${conn.broken}`);
+  ok(conn.note.length > 0 && !/不成文/.test(conn.note), `成る形に戻っていない: ${conn.note}`);
+  ok(conn.totalRows > 0, '部位の合計に効果が出ていない');
+  ok(conn.wordEff > 0 && conn.noEffMark > 0, '所持語に効きの表示が無い');
+  console.log(`    接続詞 ${conn.first} 件 (${conn.okOwn}) → ほか ${conn.all} 件 (✕ ${conn.no}) → ${conn.conn === null ? '無し' : conn.conn}`);
 }
 
 sec('敵の文が表示される');

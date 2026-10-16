@@ -6,7 +6,7 @@
 
 import { STAGES } from '../data/stages.js';
 import { WORDS, drawWord } from '../data/words.js';
-import { canConnect } from '../data/words.connect.js';
+import { CONNECTORS } from '../data/words.connect.js';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -82,19 +82,19 @@ export const GACHA_REFUND = 5;  // すでに持っている語が出たときの
 /**
  * 部位の並びを整える。文字列だけの古いセーブ (['頑','健']) もここで吸収する。
  * 持っていない語、空の枠は落とす。
+ *
+ * 接続詞は辞書にある送り仮名なら何でも通す (部位は自由に選べる)。
+ * 文として成り立っているかはここでは見ない — 不成文でも保存しておき、
+ * 画面が「不成文」と理由を出す。読めない文字列だけを落とす。
  */
 function normalizePart(arr, collection) {
   const out = [];
-  // 接続詞を挟まずに続いた語 (熟語の形を通すため)。
-  let run = [];
   for (const raw of Array.isArray(arr) ? arr : []) {
     if (!raw) continue;
     const text = typeof raw === 'string' ? raw : raw.t;
     if (!text || !collection.includes(text)) continue;
     const conn = typeof raw === 'string' ? null : raw.c || null;
-    const okConn = !!conn && canConnect(WORDS[text], conn, run);
-    out.push({ t: text, c: okConn ? conn : null });
-    run = okConn ? [] : [...run, text];
+    out.push({ t: text, c: conn && CONNECTORS[conn] ? conn : null });
     if (out.length >= PART_SLOTS) break;
   }
   return out;
@@ -381,7 +381,10 @@ export class Save {
 
   /**
    * 部位の語に接続詞を付ける (null で外す)。
-   * 付けられるのは **その語のプールにある送り仮名** だけ (言葉鍛冶と同じ)。
+   *
+   * 部位は **どの接続詞でも選べる**。言葉鍛冶 (武器) はその語のプールの
+   * 送り仮名だけだが、部位は語が少なく、プールを絞ると「1 つも選べない」
+   * 語が出るため。文として成り立つかは選んだあとに画面が示す。
    * @returns {{ok:boolean, reason:string}}
    */
   setPartConn(partId, slot, conn) {
@@ -389,9 +392,7 @@ export class Save {
     const e = arr && arr[slot];
     if (!e || !e.t) return { ok: false, reason: 'empty' };
     if (!conn) { e.c = null; this.save(); return { ok: true, reason: 'cleared' }; }
-    // 直前に接続詞を挟まずに続いた語が熟語なら、その形も選べる (発電する)。
-    const before = arr.slice(0, slot).map((x) => (x ? x.t : null)).filter(Boolean);
-    if (!canConnect(WORDS[e.t], conn, before)) return { ok: false, reason: 'nomatch' };
+    if (!CONNECTORS[conn]) return { ok: false, reason: 'unknown' };
     e.c = conn;
     this.save();
     return { ok: true, reason: 'placed' };

@@ -325,9 +325,11 @@
       <p>
       タイトルの<strong>部位強化</strong>で、頭・右腕・左腕・右手・左手・
       右足・左足・胸・胴の 9 部位に語を入れると、その語の効果が能力に効く。
-      <strong>1 部位 = 1 文</strong>。語は 2 つまで入れられて、武器の文とおなじように
-      <strong>接続詞</strong>を付けられる（語の右の「・」をタップ → 一覧から選ぶ）。
-      文が<strong>成っていると効きが伸び</strong>、不成文だと<strong>何も効かない</strong>。
+      <strong>1 部位 = 1 文</strong>。語は 2 つまで入れられて、
+      語の右の<strong>「接続詞」</strong>を押すと付けられる形の一覧が開く。
+      部位は<strong>どの接続詞でも選べる</strong> — <strong>✓ は文が成る形</strong>（効きが伸びる）、
+      ✕ は不成文（何も効かない）。文の力は<strong>体そのもの</strong>（攻撃と体力）にも乗る。
+      <strong>何がどれだけ変わるか</strong>は、各部の下と「部位の合計」に数字で出る。
       語は<strong>言玉</strong>を払う<strong>言葉くじ</strong>で手に入り、
       戦闘で使う語と同じプールから出る。
       <strong>言葉デッキ</strong>もここで組み替えられ、戦闘開始時の語彙になる。
@@ -547,15 +549,22 @@
         </section>
 
         <section>
+          <h3>部位の合計</h3>
+          <div class="grow-total" id="growTotal"></div>
+        </section>
+
+        <section>
           <h3>部位</h3>
           <p class="grow-note">下の「所持語」から語を選んで、各部位の枠を押すと入る。入っている枠を押すと外れる（語を 2 つまで）。
-          語の右の「・」をタップすると<strong>接続詞</strong>が選べて、部位の 1 文が整う。文が成るほど効きが伸びる。</p>
+          語の右の<strong>「接続詞」</strong>を押すと、その語に付けられる形の一覧が開く。どの接続詞でも選べて、
+          <strong>✓ は文が成る形</strong>（文の力が体に乗る）、✕ は不成文（効果なし）。
+          各部位の下に<strong>何がどれだけ変わるか</strong>が出る。</p>
           <div class="grow-parts" id="growParts"></div>
           <p class="grow-note" id="growSelNote">語を選んでください</p>
         </section>
 
         <section>
-          <h3>所持語</h3>
+          <h3>所持語 <span class="grow-deck-count">部位に入れると効く語には効果が出る</span></h3>
           <div class="grow-words" id="growWords"></div>
         </section>
 

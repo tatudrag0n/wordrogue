@@ -19,7 +19,6 @@ import {
 } from '../data/words.js';
 import { CONNECTORS, CONNECT_ORDER, formOf, ROLE_LABEL } from '../data/words.connect.js';
 import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
-import { SELF_TAIL } from '../game/stats.js';
 import { keyStats } from '../game/weapon.js';
 
 /**
@@ -29,7 +28,6 @@ import { keyStats } from '../game/weapon.js';
  */
 function placeKey(place) {
   if (place.kind === 'lexicon') return `L${place.index}`;
-  if (place.kind === 'self') return `S${place.index}`;
   return `W${place.wIdx ?? '?'}_${place.index}`;
 }
 
@@ -68,7 +66,11 @@ const PS_LABEL = {
  * ここをタップしても、その語が持つ接続詞が切り替わる (語と同じ操作)。
  */
 /** 接続詞メニューの説明。その語での役割を出す (同じ「に」でも 焔に=格 / 妙に=連用)。 */
-function pickTitle(wordText, k) {
+/** 熟語に付く形 (発電する) なら熟語ごと出す。 */
+function pickTitle(wordText, k, hit) {
+  if (hit && hit.compound) {
+    return `${hit.source}${k} — ${ROLE_LABEL[hit.form.role] || ''} (熟語「${hit.source}」の形)`;
+  }
   const f = formOf({ text: wordText }, k);
   return f ? `${wordText}${k} — ${ROLE_LABEL[f.role] || ''}` : (CONNECTORS[k]?.desc || '');
 }
@@ -116,6 +118,10 @@ export class Forge {
     this.hintOn = false;
     /** 直前の操作を戻すための控え (語・接続詞の並び)。 */
     this.undoStack = [];
+    /** 武器ごとの熟語 (成立の瞬間に光らせるため、前回の状態を覚える)。 */
+    this._idiomSeen = new Map();
+    /** 開いた直後の初回描画では光らせない。 */
+    this._idiomPrimed = false;
     /** 「戻す」ボタン。無い環境 (最小 DOM) では null。 */
     this.undoBtn = $('#btnForgeUndo');
     /** 接続詞を選ぶメニュー。開いている間だけ document.body に居る。 */
@@ -163,6 +169,8 @@ export class Forge {
   open() {
     this.armed = null;
     this.held = null;
+    this._idiomSeen = new Map();
+    this._idiomPrimed = false;
     this.forgetMode = false;
     this.undoStack = [];
     this.closeConnPicker();
@@ -206,10 +214,10 @@ export class Forge {
     if (this.hintOn) this.renderHint();
   }
 
-  /** 置き場が属する文。武器の文か、プレイヤー自身の文か。 */
+  /** 置き場が属する文 (武器の文)。 */
   senOf(place) {
     if (!place || place.kind === 'lexicon') return null;
-    return place.wi ? place.wi.sentence : this.run.player.self;
+    return place.wi ? place.wi.sentence : null;
   }
 
   /** 置き場に置かれている語。 */
@@ -221,11 +229,32 @@ export class Forge {
     return e ? e.word : null;
   }
 
+  /**
+   * 熟語を構成している語の位置 (文中の index の集合)。
+   * 評価結果の文面から熟語の文字範囲を割り出し、語ごとに重なるかで決める。
+   * 接続詞 (発電「する」など) は直前の語の一部として扱う。
+   */
+  idiomWordIndices(sen, ev) {
+    const out = new Set();
+    const phrase = ev?.idiom?.phrase;
+    if (!phrase || !ev?.text) return out;
+    const at = ev.text.indexOf(phrase);
+    if (at < 0) return out;
+    const end = at + phrase.length;
+    let pos = 0;
+    sen.entries.forEach((e, i) => {
+      const wLen = e.word.text.length;
+      if (pos < end && pos + wLen > at) out.add(i);
+      pos += wLen + (e.conn ? e.conn.text.length : 0);
+    });
+    return out;
+  }
+
   /** 文を 1 行に並べる。語と、その直後の接続詞。 */
   renderSentenceRow(sen, opt = {}) {
     const row = el('div', { class: 'sen-row' });
-    const wordKind = opt.wi ? 'slot' : 'self';
-    const gapKind = opt.wi ? 'gap' : 'selfgap';
+    const wordKind = 'slot';
+    const gapKind = 'gap';
 
     const mkGap = (index) => {
       const place = { kind: gapKind, index, wi: opt.wi || null, wIdx: opt.wIdx };
@@ -241,7 +270,7 @@ export class Forge {
     row.append(mkGap(0));
     sen.entries.forEach((e, i) => {
       const place = { kind: wordKind, index: i, wi: opt.wi || null, wIdx: opt.wIdx };
-      row.append(this.renderWordChip(e, place));
+      row.append(this.renderWordChip(e, place, opt.idiomIdx?.has(i), opt.idiomName));
       row.append(mkGap(i + 1));
     });
     // 末尾語 (「人」) は枠の外に固定で付く。
@@ -255,16 +284,18 @@ export class Forge {
   }
 
   /** 文の中の 1 語。右に、その語の直後の接続詞が付く。 */
-  renderWordChip(entry, place) {
+  renderWordChip(entry, place, inIdiom = false, idiomName = '') {
     const w = entry.word;
     const conn = entry.conn;
     const cat = CATEGORIES[w.cat] || CATEGORIES.modifier;
     const isArmed = (this.armed && this.armed === w) || (this.held && this.held.word === w);
     const isHeld = !!(this.held && this.held.word === w);
     const chip = el('div', {
-      class: 'sen-word' + (isArmed ? ' armed' : '') + (isHeld ? ' held' : ''),
-      style: { borderColor: cat.color },
+      class: 'sen-word' + (isArmed ? ' armed' : '') + (isHeld ? ' held' : '')
+        + (inIdiom ? ' idiom-word' : ''),
+      style: inIdiom ? {} : { borderColor: cat.color },
       title: `${w.text} [${cat.name}]`
+        + (inIdiom ? `\n熟語「${idiomName}」を構成する語` : '')
         + `\nタップ: 後ろの接続詞を切り替える`
         + `\n長押し: 持ち上げてタップだけで並べ替える`
         + `\nドラッグ: 並べ替える / 語彙へ戻す`
@@ -337,7 +368,6 @@ export class Forge {
     return {
       lexicon: this.run.lexicon.map((w) => (w ? w.text : null)),
       weapons: this.run.weapons.map((wi) => dump(wi.sentence)),
-      self: dump(this.run.player.self),
     };
   }
 
@@ -353,7 +383,6 @@ export class Forge {
       load(wi.sentence, ents);
       wi._sig = null;
     });
-    load(this.run.player.self, s.self);
     this.run.refreshStats();
   }
 
@@ -394,12 +423,15 @@ export class Forge {
     const opts = sen.connOptions(place.index);
     const cur = e.conn ? e.conn.text : null;
     const menu = el('div', { class: 'conn-picker' });
-    menu.append(el('div', { class: 'conn-picker-head' }, `${e.word.text} の直後`));
+    // 直前の語と熟語になっていれば見出しに出す (「発電」の直後 → する が選べる)。
+    const phrase = opts.map((c) => sen.connForm(place.index, c)).find((h) => h && h.compound);
+    menu.append(el('div', { class: 'conn-picker-head' },
+      phrase ? `${e.word.text} の直後 (熟語「${phrase.source}」)` : `${e.word.text} の直後`));
     const add = (text, label) => {
       const b = el('button', {
         class: 'conn-pick' + (text === cur ? ' cur' : ''),
         type: 'button',
-        title: text ? pickTitle(e.word.text, text) : '接続詞を外す',
+        title: text ? pickTitle(e.word.text, text, sen.connForm(place.index, text)) : '接続詞を外す',
       }, el('span', {}, label));
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
@@ -451,13 +483,11 @@ export class Forge {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 武器と自身の文
+  // 武器の文
   // ───────────────────────────────────────────────────────────────────────────
   renderWeapons() {
     const list = this.listEl;
     clear(list);
-
-    list.append(this.renderSelfRow());
 
     if (this.run.weapons.length < WEAPON_MAX) {
       list.append(el('div', { class: 'wrow wrow-empty' },
@@ -465,10 +495,16 @@ export class Forge {
           `武器語 (剣・弾・銃…) をレベルアップで得るたびに、文を 1 つ増やせる。あと ${WEAPON_MAX - this.run.weapons.length} つ。`)));
     }
 
+    let anyBorn = false;
     for (const [n, wi] of this.run.weapons.entries()) {
       const res = wi.resolve(this.run.player.stats);
+      // 熟語が新しく成立した瞬間だけ、行ごと光らせる。
+      const phrase = res.evalResult.idiom?.phrase || null;
+      const born = this._idiomPrimed && !!phrase && this._idiomSeen.get(n) !== phrase;
+      this._idiomSeen.set(n, phrase);
+      if (born) anyBorn = true;
       const row = el('div', {
-        class: 'wrow' + (res.active ? ` ${res.grade}` : ' broken'),
+        class: 'wrow' + (res.active ? ` ${res.grade}` : ' broken') + (born ? ' idiom-born' : ''),
       });
 
       const head = el('div', { class: 'wrow-head' },
@@ -476,7 +512,7 @@ export class Forge {
         el('span', { class: 'wrow-kind' }, KIND_LABEL[res.kind] || res.kind),
         el('span', { class: 'wrow-lv' }, `${wi.sentence.len} / ${wi.sentence.maxLen} 文字`),
         res.tail
-          ? el('span', { class: 'wrow-kind' }, `武器語 ${res.tail}`)
+          ? el('span', { class: 'wrow-kind' }, res.special ? `特殊武器 ${res.tail}` : `武器語 ${res.tail}`)
           : el('span', { class: 'wrow-kind dim' }, '武器語なし'),
         el('span', { class: `wrow-grade grade-${res.grade}` },
           res.active ? res.gradeInfo.name : '不成文'),
@@ -502,12 +538,18 @@ export class Forge {
           + `（熟語ボーナス 文力 +${res.evalResult.phraseBonus.toFixed(2)}）`));
       }
 
-      row.append(this.renderSentenceRow(wi.sentence, { wi, wIdx: n }));
+      row.append(this.renderSentenceRow(wi.sentence, {
+        wi, wIdx: n,
+        idiomIdx: this.idiomWordIndices(wi.sentence, res.evalResult),
+        idiomName: res.evalResult.idiom?.name || '',
+      }));
       if (res.active) row.append(this.renderNatural(res.evalResult));
       row.append(this.renderSentenceText(res));
       row.append(this.renderStats(res));
       list.append(row);
     }
+    if (anyBorn) this.opt.audio?.phrase?.();
+    this._idiomPrimed = true;
   }
 
   /** 連結した結果と、その分割結果。 */
@@ -517,10 +559,19 @@ export class Forge {
       el('b', { class: 'sn-text' }, res.evalResult.text || '—'),
     );
     if (res.active) {
+      // 熟語の範囲にある分割は金色にして、どの語で熟語になったか分かるようにする。
+      const ev = res.evalResult;
+      const at = ev.idiom ? ev.text.indexOf(ev.idiom.phrase) : -1;
+      const end = at >= 0 ? at + ev.idiom.phrase.length : -1;
+      let pos = 0;
       right.append(el('span', { class: 'sn-seg' },
-        res.evalResult.segments.map((s) => el('i', {
-          class: `sg ${catClass({ text: s })}`,
-        }, s))));
+        ev.segments.map((s) => {
+          const inIdiom = at >= 0 && pos < end && pos + s.length > at;
+          pos += s.length;
+          return el('i', {
+            class: `sg ${catClass({ text: s })}` + (inIdiom ? ' idiom' : ''),
+          }, s);
+        })));
       if (res.evalResult.predicated) {
         right.append(el('span', { class: 'sn-pred' }, '述語'));
       }
@@ -528,56 +579,6 @@ export class Forge {
     return el('div', { class: 'sentence' }, right);
   }
 
-  /** プレイヤー自身の文。「頑強疾走人」のような称号を作る。 */
-  renderSelfRow() {
-    const p = this.run.player;
-    const sen = p.self;
-    const ev = evaluate(sen.segments(), { minContent: 3, tail: SELF_TAIL });
-    const row = el('div', { class: 'wrow wrow-self' + (ev.valid ? ' ' + ev.grade : ' broken') });
-
-    row.append(el('div', { class: 'wrow-head' },
-      el('span', { class: 'wrow-name' }, p.stats.selfTitle || '自身'),
-      el('span', { class: 'wrow-kind' }, '称号'),
-      el('span', { class: 'wrow-lv' }, `${sen.len} / ${sen.maxLen} 文字`),
-      el('span', { class: 'wrow-grade grade-' + (ev.valid ? ev.grade : 'broken') },
-        ev.valid ? ev.gradeInfo.name : '不成文'),
-    ));
-
-    if (!ev.valid && sen.count) {
-      row.append(el('div', { class: 'wrow-why' },
-        `${ev.reasonText} — 語を 2 つ以上並べると文になる。`));
-    } else if (ev.valid) {
-      row.append(this.renderNatural(ev));
-    }
-
-    row.append(this.renderSentenceRow(sen, {}));
-
-    const right = el('span', { class: 'sn-res' },
-      el('span', { class: 'sn-eq' }, '= '),
-      el('b', { class: 'sn-text' }, ev.text || '—'),
-    );
-    if (ev.valid) {
-      right.append(el('span', { class: 'sn-seg' },
-        ev.segments.map((s) => el('i', { class: `sg ${catClass({ text: s })}` }, s))));
-    }
-    row.append(el('div', { class: 'sentence' }, right));
-
-    // 乗っている自身の効果。
-    const fx = [];
-    for (const w of sen.words) {
-      if (!w || !w.player) continue;
-      for (const [k, v] of Object.entries(w.player)) {
-        fx.push(`${PS_LABEL[k] || k}${v > 0 ? '+' : ''}${Math.round(v * 100) / 100}`);
-      }
-    }
-    const stats = el('div', { class: 'wrow-stats' });
-    for (const t of fx) stats.append(el('span', { class: 'stat up' }, t));
-    if (ev.valid) {
-      stats.append(el('span', { class: 'stat idom' }, `文の力 x${p.stats.selfPower.toFixed(2)}`));
-    }
-    if (stats.childNodes.length) row.append(stats);
-    return row;
-  }
 
   renderStats(res) {
     const wrap = el('div', { class: 'wrow-stats' });
@@ -720,9 +721,7 @@ export class Forge {
     // （語をタップすると一周する。どれが使えるかを毎回覚える必要をなくす。）
     const loc = this.run.findWordAnywhere(sel);
     if (loc && loc.where !== 'lexicon') {
-      const place = loc.where === 'self'
-        ? { kind: 'self', index: loc.index }
-        : { kind: 'slot', wi: loc.wi, wIdx: this.run.weapons.indexOf(loc.wi), index: loc.index };
+      const place = { kind: 'slot', wi: loc.wi, wIdx: this.run.weapons.indexOf(loc.wi), index: loc.index };
       const sen = this.senOf(place);
       const e = sen && sen.at(loc.index);
       if (e) {
@@ -745,7 +744,6 @@ export class Forge {
     const have = new Set();
     for (const w of this.run.lexicon) if (w) have.add(w.text);
     for (const wi of this.run.weapons) for (const w of wi.sentence.words) have.add(w.text);
-    for (const w of this.run.player.self.words) have.add(w.text);
 
     h.append(el('p', {}, '接続詞 (送り仮名) は語ごとに決まっていて、直前の語にだけ付きます。'
       + '語をタップすると、その語の接続詞だけが順に切り替わり、一周したら無しになります。'

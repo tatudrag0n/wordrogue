@@ -8,7 +8,19 @@ import { ENEMIES } from '../data/enemies.js';
 import { WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
 import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { META_UPGRADES } from '../core/save.js';
+import {
+  META_UPGRADES, PARTS, PART_SLOTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
+} from '../core/save.js';
+
+/** 語の効果を 1 行にまとめる (ツールチップ用)。 */
+function fxText(src, label) {
+  const parts = [];
+  for (const [k, v] of Object.entries(src || {})) {
+    if (typeof v !== 'number' || Math.abs(v) < 0.01) continue;
+    parts.push(`${label[k] || k}${v > 0 ? '+' : ''}${Math.round(v * 100) / 100}`);
+  }
+  return parts.length ? parts.join(' ') : '効果なし';
+}
 
 export class Menus {
   /** @param {{save:object, audio:object}} opt */
@@ -38,6 +50,17 @@ export class Menus {
     this.archiveInk = $('#archiveInk');
     this.archiveUpgrades = $('#archiveUpgrades');
     this.archiveWords = $('#archiveWords');
+    this.grow = $('#grow');
+    this.growInk = $('#growInk');
+    this.gachaBtn = $('#gachaBtn');
+    this.gachaResult = $('#gachaResult');
+    this.growParts = $('#growParts');
+    this.growSelNote = $('#growSelNote');
+    this.growWords = $('#growWords');
+    this.deckWords = $('#deckWords');
+    this.deckCount = $('#deckCount');
+    /** 部位に入れるために選んでいる語。 */
+    this.growSel = null;
 
     /** 辞書。検索語と絞り込みカテゴリ。 */
     this.dictQuery = '';
@@ -60,7 +83,23 @@ export class Menus {
     $('#btnStart').addEventListener('click', () => { tap(); this.showStages(); });
     $('#btnStages').addEventListener('click', () => { tap(); this.showStages(); });
     $('#btnHowto').addEventListener('click', () => { tap(); this.show('howto'); });
+    $('#btnGrow').addEventListener('click', () => { tap(); this.show('grow'); });
     $('#btnArchive').addEventListener('click', () => { tap(); this.show('archive'); });
+    this.gachaBtn.addEventListener('click', () => {
+      tap();
+      const r = this.save.drawGacha();
+      this.renderGrow();
+      if (!r.ok) {
+        this.gachaResult.textContent = r.reason === 'ink' ? '言玉が足りない' : '引けなかった';
+        this.audio?.broken?.();
+      } else if (r.dup) {
+        this.gachaResult.textContent = `「${r.word}」— すでに持っている (${GACHA_REFUND} 言玉戻った)`;
+        this.audio?.tap?.();
+      } else {
+        this.gachaResult.textContent = `「${r.word}」を手に入れた！`;
+        this.audio?.phrase?.();
+      }
+    });
     $('#btnDict').addEventListener('click', () => { tap(); this.show('dict'); });
     $('#btnSettings').addEventListener('click', () => { tap(); this.show('settings'); });
 
@@ -101,7 +140,7 @@ export class Menus {
   }
 
   hideAll() {
-    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'archive']) {
+    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'archive', 'grow']) {
       this[k].hidden = true;
     }
   }
@@ -121,7 +160,7 @@ export class Menus {
 
   show(name) {
     // タブ系 (遊び方/書庫/辞書/設定) を開くときは、下に見えている画面を覚える。
-    if (['howto', 'archive', 'dict', 'settings'].includes(name)) {
+    if (['howto', 'archive', 'dict', 'settings', 'grow'].includes(name)) {
       const base = ['title', 'stages', 'loadout', 'result']
         .find((k) => !this[k].hidden);
       this._tabFrom = base || null;
@@ -134,6 +173,78 @@ export class Menus {
     if (name === 'settings') this.renderSettings();
     if (name === 'dict') this.renderDict();
     if (name === 'archive') this.renderArchive();
+    if (name === 'grow') this.renderGrow();
+  }
+
+  // ── 部位強化 (言葉くじ・部位・言葉デッキ) ──────────────────────────────
+  renderGrow() {
+    const save = this.save;
+    this.growInk.textContent = String(save.ink);
+    this.gachaBtn.textContent = `引く (${GACHA_COST} 言玉)`;
+    this.gachaBtn.classList.toggle('off', save.ink < GACHA_COST);
+
+    // 部位。枠を押すと、選んでいる語を入れる (選んでいなければ外す)。
+    clear(this.growParts);
+    for (const p of PARTS) {
+      const box = el('div', { class: 'grow-part' },
+        el('span', { class: 'grow-part-name' }, p.name));
+      for (let i = 0; i < PART_SLOTS; i++) {
+        const t = save.partSlot(p.id, i);
+        const slot = el('button', {
+          class: 'btn grow-slot' + (t ? ' filled' : ''),
+          title: t ? `「${t}」— 押すと外れる` : '選んだ語がここに入る',
+        }, t || '＋');
+        slot.addEventListener('click', () => {
+          if (this.growSel) {
+            if (save.setPart(p.id, i, this.growSel)) this.audio?.phrase?.();
+          } else if (t) {
+            save.setPart(p.id, i, null);
+            this.audio?.tap?.();
+          }
+          this.renderGrow();
+        });
+        box.append(slot);
+      }
+      this.growParts.append(box);
+    }
+    this.growSelNote.textContent = this.growSel
+      ? `「${this.growSel}」を選択中 — 部位の枠を押すと入る。もう一度語を押すと選択解除`
+      : '所持語から語を選んでください';
+
+    // 所持語 (部位用)。押すと選択。部位の語はそのまま能力に効く。
+    clear(this.growWords);
+    for (const t of save.collection) {
+      const info = WORDS[t];
+      if (!info) continue;
+      const src = info.cat === 'buff' ? (info.player || info.fx) : info.fx;
+      const b = el('button', {
+        class: 'btn grow-word' + (this.growSel === t ? ' sel' : ''),
+        title: `${CATEGORIES[info.cat]?.name || info.cat}: ${fxText(src, info.cat === 'buff' ? PS_LABEL : FX_LABEL)}`,
+      }, t);
+      b.addEventListener('click', () => {
+        this.growSel = this.growSel === t ? null : t;
+        this.audio?.tap?.();
+        this.renderGrow();
+      });
+      this.growWords.append(b);
+    }
+
+    // 言葉デッキ。押すと出し入れ。戦闘開始時の語彙になる。
+    this.deckCount.textContent = `${save.deck.length} / ${DECK_MAX} 語 (最低 ${DECK_MIN})`;
+    clear(this.deckWords);
+    for (const t of save.collection) {
+      const inDeck = save.inDeck(t);
+      const b = el('button', {
+        class: 'btn grow-word deck' + (inDeck ? ' in' : ''),
+        title: inDeck ? 'デッキに入っている — 押すと外れる' : '押すとデッキに入る',
+      }, (inDeck ? '✓ ' : '') + t);
+      b.addEventListener('click', () => {
+        save.toggleDeck(t);
+        this.audio?.tap?.();
+        this.renderGrow();
+      });
+      this.deckWords.append(b);
+    }
   }
 
   // ── 書庫 (恒久進行) ──────────────────────────────────────────────────────
@@ -168,8 +279,8 @@ export class Menus {
 
     clear(this.archiveWords);
     this.archiveWords.append(el('p', { class: 'muted' },
-      '恒久の語は廃止。言玉は「語彙」の枠を買うか、恒久強化に使う。'
-      + '語彙の枠は最大 30 個まで広げる。'));
+      '言玉は恒久強化と「語彙」の枠 (最大 30 個) のほか、'
+      + 'タイトルの「部位強化」の言葉くじでも使う。'));
   }
 
   // ── タイトル ────────────────────────────────────────────────────────────
@@ -367,10 +478,10 @@ export class Menus {
 
   renderDictList() {
     // 形態語 (剣・銃・環 …) は武器の末尾語で、語彙から引けない。辞書にも載せない。
-    const all = Object.values(WORDS).filter((w) => w.cat !== 'form');
+    const all = Object.values(WORDS).filter((w) => w.cat !== 'form' || (w.cats || []).length > 1);
     const q = this.dictQuery;
     const rows = all.filter((w) => {
-      if (this.dictCat !== 'all' && w.cat !== this.dictCat) return false;
+      if (this.dictCat !== 'all' && !(w.cats || [w.cat]).includes(this.dictCat)) return false;
       if (!q) return true;
       if (w.text.includes(q)) return true;
       if (CONNECTOR_SET.has(w.text) && '接続'.includes(q)) return true;

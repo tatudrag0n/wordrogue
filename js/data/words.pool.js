@@ -22,10 +22,18 @@
 //     印 + … 形容の形。連体加点の対象。
 //   +N … NOUN_POOL (の・を・に・へ) をまとめて足す。
 //
-// 送り仮名は 1〜3 字 (最長「らかな」「やかな」「られた」)。辞書の最長 5 字・
+// 送り仮名は 1〜4 字 (最長「かされた」「められた」など他動詞の受身)。辞書の最長 5 字・
 // 文の 10 字の上限には収まる。かなの並びは必ず 1 つの送り仮名なので、
 // 分割 (最少語数の DP) で割れ方が揺れることは無い。
+//
+// 熟語の接続詞プール:
+//   熟語 (words.phrase.js の pool) も自分の送り仮名を持てる。
+//     発電 … する:adn*  → 発 + 電 + する = 発電する
+//   直前の語列が熟語になっているときだけ、その熟語の形が付く
+//   (COMPOUND_POOLS / compoundPoolOf)。「電する」は作れない。
 // ============================================================================
+
+import { PHRASE_BONUS } from './words.phrase.js';
 
 /** 名詞が共通で持つ格の接続詞。 */
 export const NOUN_POOL_SPEC = 'の:case>noun を:case>verb に:case>pred へ:case>pred';
@@ -34,8 +42,8 @@ const RAW_POOL = `
 # ── 属性 (既定は体言 +N。形を持つ語だけ書く) ──
 熱  a   い:adn+ く:adv+ +N
 烈  n   しい:adn+ しく:adv+
-震  n   える:adn*
-蝕  n   む:adn* まれた:adn*
+震  n   える:adn* えし:adn* えて:adv
+蝕  n   む:adn* まれた:adn*p
 輝  n   く:adn* ける:adn*
 耀  n   く:adn*
 霞  n   む:adn* +N
@@ -48,7 +56,7 @@ const RAW_POOL = `
 疾  n   き:adn
 翔  n   ける:adn*
 錬  n   る:adn* +N
-呪  n   う:adn* われた:adn* いの:case>noun いを:case>verb
+呪  n   う:adn* われた:adn*p いの:case>noun いを:case>verb
 流  n   れる:adn* す:adn*
 
 # ── 効果語 (い形容) ──
@@ -126,7 +134,7 @@ const RAW_POOL = `
 圧  n   する:adn* +N
 律  n   する:adn*
 引  n   く:adn* き:adv*
-導  n   く:adn* き:adv* かれた:adn*
+導  n   く:adn* き:adv* かれた:adn*p
 徹  n   する:adn*
 執  n   る:adn* する:adn*
 瞬  n   く:adn*
@@ -137,11 +145,11 @@ const RAW_POOL = `
 衰  n   える:adn*
 合  n   う:adn* する:adn*
 再  n   び:adv
-回  n   る:adn* す:adn* り:adv* された:adn*
+回  n   る:adn* す:adn* り:adv* された:adn*p
 続  n   く:adn* ける:adn*
 減  n   る:adn* らす:adn*
 特  n   に:adv
-囲  n   む:adn* う:adn* まれた:adn*
+囲  n   む:adn* う:adn* まれた:adn*p
 昂  n   る:adn* ぶる:adn*
 打  n   つ:adn* ち:adv*
 防  n   ぐ:adn*
@@ -152,7 +160,7 @@ const RAW_POOL = `
 発  n   する:adn* +N
 穢  n   れた:adn* す:adn*
 護  n   る:adn*
-結  n   ぶ:adn* ばれた:adn*
+結  n   ぶ:adn* ばれた:adn*p
 穿  n   つ:adn*
 通  n   る:adn* す:adn*
 
@@ -175,54 +183,51 @@ const RAW_POOL = `
 感  n   じる:adn*
 
 # ── 動詞 (全部書く) ──
-爆  v   ぜる:adn*
-殺  v   す:adn* された:adn*
-滅  v   ぼす:adn* びる:adn*
-轟  v   く:adn*
-侵  v   す:adn* された:adn*
-炸  v   ぜる:adn*
-破  v   る:adn* れる:adn* られた:adn*
-沸  v   く:adn* かす:adn*
-凍  v   る:adn* える:adn*
-燃  v   える:adn* やす:adn*
-焼  v   く:adn* ける:adn* かれた:adn*
-焦  v   げる:adn* がす:adn*
-溶  v   ける:adn* かす:adn*
-融  v   ける:adn* かす:adn*
-蒸  v   す:adn* された:adn*
-貫  v   く:adn* かれた:adn*
-射  v   る:adn* られた:adn*
-斬  v   る:adn* られた:adn* り:adv*
-砕  v   く:adn* ける:adn* かれた:adn*
-殴  v   る:adn* られた:adn*
+爆  v   ぜる:adn* ぜて:adv
+殺  v   す:adn* された:adn*p して:adv
+滅  v   ぼす:adn* びる:adn* ぼされた:adn*p ぼして:adv びて:adv
+轟  v   く:adn* いて:adv
+侵  v   す:adn* された:adn*p して:adv
+炸  v   ぜる:adn* ぜて:adv
+破  v   る:adn* れる:adn* られた:adn*p って:adv れて:adv
+沸  v   く:adn* かす:adn* かされた:adn*p いて:adv かして:adv
+凍  v   る:adn* える:adn* って:adv えて:adv
+燃  v   える:adn* やす:adn* やされた:adn*p えて:adv やして:adv
+焼  v   く:adn* ける:adn* かれた:adn*p いて:adv けて:adv
+焦  v   げる:adn* がす:adn* がされた:adn*p げて:adv がして:adv
+溶  v   ける:adn* かす:adn* かされた:adn*p けて:adv かして:adv
+融  v   ける:adn* かす:adn* かされた:adn*p けて:adv かして:adv
+蒸  v   す:adn* された:adn*p して:adv
+貫  v   く:adn* かれた:adn*p いて:adv
+射  v   る:adn* られた:adn*p て:adv
+斬  v   る:adn* られた:adn*p り:adv* って:adv
+砕  v   く:adn* ける:adn* かれた:adn*p いて:adv けて:adv
+殴  v   る:adn* られた:adn*p って:adv
 渦  n   +N
-散  v   る:adn* らす:adn*
-伸  v   びる:adn* ばす:adn*
-縮  v   む:adn* める:adn*
-跳  v   ねる:adn* ぶ:adn*
-響  v   く:adn*
-裂  v   く:adn* ける:adn* かれた:adn*
-舞  v   う:adn*
-吸  v   う:adn* われた:adn*
-吐  v   く:adn*
-潜  v   む:adn* る:adn*
-浮  v   く:adn* かぶ:adn*
-沈  v   む:adn* める:adn*
-昇  v   る:adn*
-降  v   る:adn*
-挟  v   む:adn* まれた:adn*
-掴  v   む:adn* まれた:adn*
-掘  v   る:adn*
-叩  v   く:adn* かれた:adn*
-踏  v   む:adn* まれた:adn*
-嗅  v   ぐ:adn*
-舐  v   める:adn*
-跨  v   ぐ:adn*
-擦  v   る:adn* れる:adn*
-潰  v   す:adn* れる:adn* された:adn*
-嚇  v   す:adn*
-縛  v   る:adn* られた:adn*
-撫  v   でる:adn*
+還  n   る:adn* +N
+散  v   る:adn* らす:adn* らされた:adn*p って:adv らして:adv
+伸  v   びる:adn* ばす:adn* ばされた:adn*p びて:adv ばして:adv
+縮  v   む:adn* める:adn* められた:adn*p んで:adv めて:adv
+跳  v   ねる:adn* ぶ:adn* ねて:adv んで:adv
+響  v   く:adn* いて:adv
+裂  v   く:adn* ける:adn* かれた:adn*p いて:adv けて:adv
+舞  v   う:adn* って:adv
+吸  v   う:adn* われた:adn*p って:adv
+吐  v   く:adn* かれた:adn*p いて:adv
+潜  v   む:adn* る:adn* んで:adv って:adv
+浮  v   く:adn* かぶ:adn* いて:adv んで:adv
+沈  v   む:adn* める:adn* められた:adn*p んで:adv めて:adv
+昇  v   る:adn* って:adv
+降  v   る:adn* って:adv
+挟  v   む:adn* まれた:adn*p んで:adv
+掴  v   む:adn* まれた:adn*p んで:adv
+掘  v   る:adn* られた:adn*p って:adv
+叩  v   く:adn* かれた:adn*p いて:adv
+踏  v   む:adn* まれた:adn*p んで:adv
+擦  v   る:adn* れる:adn* られた:adn*p って:adv れて:adv
+潰  v   す:adn* れる:adn* された:adn*p して:adv れて:adv
+嚇  v   す:adn* された:adn*p して:adv
+縛  v   る:adn* られた:adn*p って:adv
 `;
 
 /** 品詞の略号。 */
@@ -233,13 +238,14 @@ export const POS_CODE = { n: '体言', a: '形容', na: '形動', v: '用言' };
  * @returns {{k:string, role:string, next?:string, pred?:boolean, adj?:boolean}}
  */
 export function parseForm(tok) {
-  const m = /^([ぁ-ん]+):(adn|adv|case>(?:noun|verb|pred))([*+]?)$/.exec(tok);
+  const m = /^([ぁ-ん]+):(adn|adv|case>(?:noun|verb|pred))([*+]?)(p?)$/.exec(tok);
   if (!m) throw new Error(`接続詞プールの書式が不正: ${tok}`);
-  const [, k, roleRaw, mark] = m;
+  const [, k, roleRaw, mark, pass] = m;
   const [role, next] = roleRaw.split('>');
   const e = { k, role };
   if (next) e.next = next;
   if (mark === '*') e.pred = true;
+  if (pass) e.passive = true;
   if (mark === '+') e.adj = true;
   return Object.freeze(e);
 }
@@ -284,4 +290,29 @@ export function poolOfText(text) {
 export function posOfText(text) {
   const p = WORD_POOLS[text];
   return p ? p.pos : POS_CODE.n;
+}
+
+/**
+ * 熟語 → 熟語自身の接続詞プール。pool を持つ熟語だけ。
+ *   発電 → [する:adn*]
+ * 熟語は体言 (サ変名詞) として扱う。
+ */
+export const COMPOUND_POOLS = Object.create(null);
+for (const key of Object.keys(PHRASE_BONUS)) {
+  const spec = (PHRASE_BONUS[key].pool || '').trim();
+  if (!spec) continue;
+  COMPOUND_POOLS[key] = Object.freeze({ pos: POS_CODE.n, pool: Object.freeze(parseForms(spec.split(/\s+/))) });
+}
+
+/** 接続詞プールを持つ熟語の最長の文字数。 */
+export const MAX_COMPOUND_POOL_LEN = Object.keys(COMPOUND_POOLS)
+  .reduce((m, k) => Math.max(m, k.length), 0);
+
+/**
+ * 熟語の接続詞プール。持たなければ null。
+ * @param {string} text 熟語
+ */
+export function compoundPoolOf(text) {
+  const p = COMPOUND_POOLS[text];
+  return p ? p.pool : null;
 }

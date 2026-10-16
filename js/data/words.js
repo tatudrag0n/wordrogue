@@ -6,7 +6,8 @@
 // 成立しなければその武器は無効化される。
 //
 //   「火」「の」「球」 -> 「火の球」 -> ['火','の','球'] -> 成立 (分节)
-//   「火」「球」       -> 「火球」   -> ['火','球']    -> 成立 + 熟語(火球)
+//   「火」「球」       -> 「火球」   -> ['火','球']    -> 成立 (形の二字熟語は無い)
+//   「発」「電」「する」 -> 「発電する」 -> 熟語「発電」に する が付く (電する は不成立)
 //   「火」             -> 「火」     -> 1 語          -> 不成立 (文にならない)
 //   「の」             -> 「の」     -> 接続詞だけ    -> 不成立 (実質語が無い)
 //   「爆裂」「する」   -> 「爆裂する」 -> 合成成立
@@ -65,15 +66,21 @@ for (const table of RAW_TABLES) {
 
     const effects = parseFx(fx);
     // 品詞と接続詞プールは語ごとに words.pool.js で決める。
+    const pool = poolOfText(text);
+    // 複数カテゴリ: 本来の分類 (cat) に加え、動詞の形 (述語) を持つ語は
+    // 用言としても扱う (震える・還る・走る・察する …)。cats は複数持ちうる。
+    const cats = [cat];
+    if (cat !== 'verb' && pool.some((e) => e.pred)) cats.push('verb');
     WORDS[text] = {
       text,
       cat,
+      cats,
       el: el && el !== '-' ? el : null,
       fx: effects,
       player: cat === 'buff' ? effects : null,
       pos: posOfText(text),
       // この語の直後に付く送り仮名 (接続詞)。
-      pool: poolOfText(text),
+      pool,
     };
     wordUid++;
   }
@@ -83,7 +90,7 @@ for (const table of RAW_TABLES) {
 for (const k of CONNECT_ORDER) {
   if (WORDS[k]) { DUPLICATES.push(k); continue; }
   WORDS[k] = {
-    text: k, cat: 'connect', el: null, fx: CONNECTORS[k].fx, player: null, pos: null, pool: [],
+    text: k, cat: 'connect', cats: ['connect'], el: null, fx: CONNECTORS[k].fx, player: null, pos: null, pool: [],
   };
 }
 
@@ -103,8 +110,8 @@ const KANA_RE = /[ぁ-んァ-ヶー]/;
 export function hasKana(text) { return KANA_RE.test(text); }
 
 /**
- * 自身の文の末尾に固定で付く語。文面には必ず現れるので、
- * 語彙から引けてはいけない (「頑強人人」のような名前になる)。
+ * 文の末尾に固定で付く語。文面には必ず現れるので、
+ * 語彙から引けてはいけない。
  * 分割には語として必要なので、辞書からは消さない。
  */
 const FIXED_TAIL = '人';
@@ -115,7 +122,7 @@ const FIXED_TAIL = '人';
  * 接続詞は鍛冶の接続詞プールから無限に使えるので引かない。
  * 辞書には残す — 文の分割と末尾語の判定に使う。
  */
-const isDrawableCat = (c) => c === 'element' || c === 'modifier'
+const isDrawableCat = (c) => c === 'element' || c === 'phenom' || c === 'modifier'
   || c === 'buff' || c === 'verb';
 
 /** 語彙から引ける語だけ (接続詞・動詞・形態語を除く)。 */
@@ -152,13 +159,13 @@ export const CONNECTOR_LIST = CONNECT_ORDER.slice();
 export const SIMPLE_POOL = Object.keys(WORDS).filter((w) => {
   const c = WORDS[w].cat;
   if (w === FIXED_TAIL) return false;
-  if (c !== 'element' && c !== 'modifier' && c !== 'buff') return false;
+  if (c !== 'element' && c !== 'phenom' && c !== 'modifier' && c !== 'buff') return false;
   return !KANA_RE.test(w) && w.length <= 2;
 });
 
 /** 種別ごとの語配列。 */
 export const WORDS_BY_CAT = {
-  element: [], form: [], modifier: [], verb: [], buff: [], connect: [],
+  element: [], phenom: [], form: [], modifier: [], verb: [], buff: [], connect: [],
 };
 for (const w of Object.keys(WORDS)) WORDS_BY_CAT[WORDS[w].cat].push(w);
 
@@ -170,6 +177,7 @@ export function makeWord(text) {
     uid: wordUid++,
     text: base.text,
     cat: base.cat,
+    cats: base.cats,
     el: base.el,
     fx: base.fx,
     player: base.player,
@@ -249,6 +257,11 @@ export function segment(s) {
 //
 // 文面は核語から始まる (例: 「力火球」)。そのため合成語は文面中の
 // 部分列として探す。長いものから順に、部分文字列として現れたものを 1 つ採用する。
+//
+// 熟語は三字 (毒蝕弾) と二字 (発電) がある。採るのは最長の 1 つだけなので、
+// 「大地震」のように二字熟語 (地震・大地) を含む三字熟語は三字熟語が勝つ。
+// 同じ長さなら文の前にあるほう。1 文に熟語を 2 つ作っても乗るのは 1 つ
+// (重ねがけで効果が膨らまないように、あえて単純にしてある)。
 // ─────────────────────────────────────────────────────────────────────────────
 const MAX_COMPOUND = Object.keys(PHRASE_BONUS).reduce((m, k) => Math.max(m, k.length), 2);
 
@@ -306,7 +319,7 @@ const REASONS = {
  *   minContent … 実質語の最低数。既定は 2。
  *     武器は末尾語 (tail) を文に含めて評価するため、末尾語ぶん余分に要求する。
  *   tail … 末尾語のテキスト。渡すと末尾語の直前の語も日本語として正しいか見る。
- *     も判定する。武器と自身の称号は渡す。
+ *     も判定する。武器は渡す。
  * @returns {{
  *   valid:boolean, reason:string, reasonText:string, text:string,
  *   segments:string[], content:number, grade:string, gradeInfo:Object,
@@ -444,6 +457,19 @@ export function evaluate(words, opt = {}) {
   }
   for (const [k, v] of Object.entries(connFx)) fx[k] = (fx[k] || 0) + v;
 
+  // 受身の意味: 「燃やされた剣」の燃は、剣が受けた動作であって力の源ではない。
+  // 受身で結ばれた語 (熟語なら熟語の全語) の効果は半減する。
+  let hasPassive = false;
+  for (const c of compounds) {
+    if (!c.passive) continue;
+    hasPassive = true;
+    for (let i = c.start; i < c.idx; i++) {
+      const w = WORDS[segs[i]];
+      if (!w) continue;
+      for (const [k, v] of Object.entries(w.fx)) fx[k] = (fx[k] || 0) - v * 0.5;
+    }
+  }
+
   // 属性は重みの最大のものを採用。すべて重み 1 なので立ち上がり数で決まる。
   let element = 'none';
   let best = 0;
@@ -479,14 +505,45 @@ export function evaluate(words, opt = {}) {
   // 日本語の武器名は「属性 (青・炎・業火…) で始まるときに最も自然」。
   // 形や効果、動詞で始めると主題が立たない。
   const headCat = contentSegs.length ? contentSegs[0].info.cat : null;
+  // 先頭の語が連体形で結べているなら、それは正しい連体修飾の文頭。
+  //   「凍える剣」「溶かされた剣」「滑らかな刀」… 自然な文頭なので減点しない。
+  // 減点が残るのは、裸の語幹で始まる場合だけ。
+  const headBound = compounds.some((c) => c.start === 0 && (c.role === 'adn' || c.role === 'adv'));
   if (headCat === 'element') {
     parts.push({ key: 'topic', label: '属性で始まる', v: 1.2 });
   } else if (headCat === 'form') {
     parts.push({ key: 'topicform', label: '形で始まる', v: -0.8 });
-  } else if (headCat === 'modifier') {
+  } else if (headCat === 'modifier' && !headBound) {
     parts.push({ key: 'topicmod', label: '効果で始まる', v: -0.3 });
-  } else if (headCat === 'verb') {
+  } else if (headCat === 'verb' && !headBound) {
     parts.push({ key: 'topicverb', label: '動詞で始まる', v: -0.4 });
+  }
+  // 同じ語の繰り返し (炎を燃やす炎)。冗長なので減点。
+  // 熟語の中の並び (鋼鉄) は 1 つの語なので数えない。
+  {
+    const segOff = [];
+    let off = 0;
+    for (const t of segs) { segOff.push(off); off += t.length; }
+    const inPhraseAt = (pos) => {
+      for (const key of Object.keys(PHRASE_BONUS)) {
+        for (let at = joined.indexOf(key); at >= 0; at = joined.indexOf(key, at + 1)) {
+          if (at <= pos && pos < at + key.length) return true;
+        }
+      }
+      return false;
+    };
+    // 同じ「語」が 2 回以上ある (炎を燃やす炎)。同じ属性でも語が違えば
+    // 炎焔・鋼鉄のような正当な複合があるので、属性単位では数えない。
+    const byWord = Object.create(null);
+    segs.forEach((t, i) => {
+      if (!CONNECTOR_SET.has(t)) (byWord[t] ||= []).push(segOff[i]);
+    });
+    for (const [t, poss] of Object.entries(byWord)) {
+      const bare = poss.filter((pos) => !inPhraseAt(pos)).length;
+      if (bare >= 2) {
+        parts.push({ key: 'dupword', label: `同じ語「${t}」が ${bare} 回`, v: -0.5 * (bare - 1) });
+      }
+    }
   }
   // 実体語が 4 つ以上続けて並ぶと羅列になる。
   //   「業火剛利必殺吸血剣」… 修飾が重なると名詞の列であって文ではない。
@@ -583,6 +640,44 @@ export function evaluate(words, opt = {}) {
       });
     }
   }
+  // 武器語 (形態語) の直前に、名詞を修飾できない裸の語幹が付いている。
+  //   「炎必刃」(必は必ず+動詞が要る)「電速銃」(速い銃が本来)「毒固壁」
+  //   「電貫弓」(貫く弓が本来)… 成立はするが日本語として不自然なので弱くする。
+  //   熟語として登録された並び (必殺刃の「殺刃」) は語幹複合として認める。
+  {
+    // 文面での各セグメントの開始位置 (熟語の範囲判定用)。
+    const segOff = [];
+    let off = 0;
+    for (const t of segs) { segOff.push(off); off += t.length; }
+    const inPhrase = (a, b) => {
+      for (const key of Object.keys(PHRASE_BONUS)) {
+        for (let at = joined.indexOf(key); at >= 0; at = joined.indexOf(key, at + 1)) {
+          if (at <= a && b <= at + key.length) return true;
+        }
+      }
+      return false;
+    };
+    for (let i = 1; i < segs.length; i++) {
+      if (WORDS[segs[i]]?.cat !== 'form') continue;
+      // 末尾語として渡された語は tail 側の判定 (bareadj 等) に任せる。
+      if (opt.tail && i === segs.lastIndexOf(opt.tail)) continue;
+      const j = i - 1;
+      if (CONNECTOR_SET.has(segs[j])) continue; // 接続詞の形で係っていればよい
+      const prev = WORDS[segs[j]];
+      if (!prev) continue;
+      const pool = prev.pool || [];
+      const stemOnly = prev.pos === POS.adj || prev.pos === POS.naadj
+        || prev.cat === 'verb' || pool.some((e) => e.pred)
+        || !pool.some((e) => e.role === 'adn' || (e.role === 'case' && e.next === 'noun'));
+      if (!stemOnly) continue;
+      if (inPhrase(segOff[j], segOff[j] + segs[j].length + segs[i].length)) continue;
+      parts.push({
+        key: 'bareform',
+        label: `「${segs[j]}」が裸で武器語「${segs[i]}」に付いている`,
+        v: -0.6,
+      });
+    }
+  }
   // 述語。用言そのものか、「〜する」「〜された」「〜る」。
   if (verbs) parts.push({ key: 'verb', label: '動作', v: 0.4 * Math.min(verbs, 2) });
   // 主語と述語が繋がって、一文として閉じているか。
@@ -634,15 +729,16 @@ export function evaluate(words, opt = {}) {
       });
     }
   }
-  if (idiom) parts.push({ key: 'idiom', label: `熟語「${idiom.name}」`, v: 0.7 });
+  // 熟語の加点は格で違う。三字熟語 +0.7 / 二字熟語 +0.4 (PHRASE_TIER)。
+  if (idiom) parts.push({ key: 'idiom', label: `熟語「${idiom.name}」`, v: idiom.natural ?? 0.7 });
   const natural = Math.max(0, parts.reduce((s, p) => s + p.v, 0));
 
   // 文の力。自然な分量だけが足される。
   //   実質語 1 つに 5% (長さは少しだけ報いる)
   //   自然さに 1 単位あたり 30% — 自然さが本命。
   //   熟語はさらに固定で足す。別の語と重なっていても熟語が成立すれば乗る。
-  const PHRASE_BONUS = 0.2;
-  const phraseBonus = idiom ? PHRASE_BONUS : 0;
+  //   三字熟語 +0.20 / 二字熟語 +0.10 (PHRASE_TIER)。
+  const phraseBonus = idiom ? (idiom.power ?? 0.2) : 0;
   const bonusWords = Math.max(0, content - 1);
   const predicated = hasPredicate;
   fx.power = 1 + bonusWords * 0.05 + natural * 0.30 + phraseBonus;

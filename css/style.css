@@ -799,6 +799,25 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
   box-shadow: 0 0 0 2px rgba(255, 212, 59, .30);
   transform: translateY(-2px);
 }
+/* 熟語を構成する語。金枠で光らせ、成立した瞬間は行ごと弾ませる。 */
+.sen-word.idiom-word {
+  border-color: var(--idiom);
+  background: #2e2110;
+  box-shadow: 0 0 0 2px rgba(255, 159, 67, .35), 0 0 12px rgba(255, 159, 67, .35);
+}
+.wrow.idiom-born { animation: idiomBorn .9s ease-out; }
+.wrow.idiom-born .sen-word.idiom-word { animation: idiomPop .9s ease-out; }
+@keyframes idiomBorn {
+  0% { box-shadow: 0 0 0 0 rgba(255, 159, 67, 0); }
+  25% { box-shadow: 0 0 26px 5px rgba(255, 159, 67, .55); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 159, 67, 0); }
+}
+@keyframes idiomPop {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.18); }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
 .sen-word.sen-tail {
   border-style: dashed;
   background: #121826;
@@ -943,6 +962,12 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
   border: 1px solid var(--line);
   border-radius: 3px;
   padding: 0 3px;
+}
+.sg.idiom {
+  color: var(--idiom);
+  border-color: var(--idiom);
+  font-weight: 700;
+  background: rgba(255, 159, 67, .12);
 }
 .sg-gram { color: #b9a8ff; border-style: dotted; }
 .sg-verb { color: #ffb0c2; border-color: rgba(255,143,171,.35); }
@@ -1461,6 +1486,47 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 .shop-word.can { box-shadow: 0 0 0 2px rgba(255, 212, 59, .22); }
 .shop-word.owned { opacity: .55; cursor: default; color: var(--ok); }
 
+/* ══ 部位強化 ══════════════════════════════════════════════════════════ */
+
+.panel-grow { width: min(720px, 100%); }
+.grow-body { overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.grow-body h3 { margin: 0 0 8px; font-size: .95rem; color: var(--accent); letter-spacing: .04em; }
+.grow-note { margin: 0 0 8px; font-size: .78rem; color: var(--fg-dim); }
+.grow-gacha { display: flex; align-items: center; gap: 12px; }
+.grow-gacha-result { font-size: .9rem; font-weight: 700; color: var(--ok); }
+
+.grow-parts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.grow-part {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  background: #0b0f18;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+}
+.grow-part-name { font-size: .82rem; font-weight: 700; min-width: 2.2rem; }
+.grow-slot {
+  flex: 1;
+  min-width: 2.4rem;
+  padding: 6px 4px;
+  font-size: .9rem;
+  font-weight: 700;
+}
+.grow-slot:not(.filled) { opacity: .55; }
+
+.grow-words { display: flex; gap: 6px; flex-wrap: wrap; }
+.grow-word { font-size: .88rem; font-weight: 700; padding: 7px 11px; }
+.grow-word.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255, 212, 59, .3); }
+.grow-word.deck { opacity: .55; }
+.grow-word.deck.in { opacity: 1; border-color: var(--ok); color: var(--ok); }
+.grow-deck-count { font-size: .8rem; color: var(--fg-dim); font-weight: 400; }
+
 /* ══ 辞書 ══════════════════════════════════════════════════════════════ */
 
 /* 辞書パネル。画面の 9 割まで伸びる実高さを持たないと、
@@ -1587,3 +1653,26 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* ==========================================================================
+   UX polish — ホバー/フォーカス/遷移の強化
+   ========================================================================== */
+button, .btn, .up-buy, .stage-card, .lo-card {
+  transition: transform .12s ease, box-shadow .12s ease, filter .12s ease, background .12s ease;
+}
+button:hover:not(:disabled), .btn:hover:not(.off), .up-buy:hover:not(.off) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+button:active:not(:disabled), .btn:active:not(.off) {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+.stage-card:hover, .lo-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+#forge .slot, #forge .gap {
+  transition: background .12s ease, box-shadow .12s ease;
+}
+#forge .slot:hover { box-shadow: 0 0 0 2px var(--accent) inset; }

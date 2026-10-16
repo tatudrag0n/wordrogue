@@ -338,8 +338,8 @@ if (syntaxBad) {
     '氷', '雪', '霜', '冬',
     '電', '震', '磁',
     '毒', '液', '蝕', '霧', '菌', '瘴',
-    '聖', '神', '輝', '耀', '陽', '霞', '皓', '青', '白', '赤',
-    '闇', '暗', '黒', '夜', '死', '魔', '影', '漆',
+    '聖', '神', '輝', '耀', '陽', '霞', '皓', '青', '白', '赤', '天',
+    '闇', '暗', '黒', '夜', '死', '魔', '影', '漆', '亡',
     '土', '砂', '塵', '地', '陸', '崖', '原',
     '風', '嵐', '突', '旋', '疾', '翔',
     '草', '樹', '苔', '芽', '緑', '根', '花',
@@ -350,7 +350,7 @@ if (syntaxBad) {
     // 武器語 (形を表す語)
     '刃', '剣', '刀', '斧', '槍', '矛', '戈', '牙', '爪',
     '弾', '銃', '玉', '矢', '針', '弓', '球', '珠', '還', '光', '雷',
-    '塊', '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾',
+    '塊', '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾', '杖', '拳',
     // 効果語 (体言のもの)
     // 「巨」は体言として許可する。な形容詞は「巨大」であって「巨」ではない。
     //   「巨な」は日本語に無いので `巨` はな形容の語幹表に入れず、接続詞は の・に・へ・を だけ。
@@ -359,7 +359,7 @@ if (syntaxBad) {
     '冷', '宏', '巨', '心', '圧', '律', '斉', '引', '導', '徹', '執', '瞬', '会',
     '必', '急', '反', '退', '衰', '合', '再', '回', '続', '減', '特', '囲',
     '捷', '衆', '昂', '威', '打', '防', '程', '撃', '連', '固', '湧', '潤',
-    '発', '穢', '優', '護', '結', '穿', '通', '眠', '香',
+    '発', '穢', '優', '護', '結', '穿', '通', '眠', '香', '渦',
     // 効果語 (接頭語・接尾語として使う語。な形容詞ではない)
     //
     //   これらは「X な」が日本語に無いので `NA_ADJ_STEMS` には置かない。
@@ -379,13 +379,32 @@ if (syntaxBad) {
 
   // 動詞 (「斬」「貫」) と接続詞は 1 文字が普通なので対象外。
   // -fragment な体言・効果語だけを調べた。
-  const NOUNISH = new Set(['element', 'form', 'modifier', 'buff']);
+  const NOUNISH = new Set(['element', 'phenom', 'form', 'modifier', 'buff']);
   const stray = Object.keys(WORDS).filter((w) => w.length === 1
     && NOUNISH.has(WORDS[w].cat)
     && !ADJ_STEMS.has(w) && !NA_ADJ_STEMS.has(w) && !OK_ONE.has(w));
 
-  // 熟語は「辞書にある語だけで」完全に分割できること。
-  const broken = Object.keys(PHRASE_BONUS).filter((k) => !segment(k));
+  // 熟語は実在の語だけで組める。
+  //   - 「辞書にある語だけで」完全に分割できること。
+  //   - 三字熟語は 3 文字以上。二字熟語は 2 文字で、1 文字 2 語でできていること。
+  //   - 二字熟語は形を表す語 (刃・弾・球・光・雷…) を使わない。
+  //     「火球」のように形の熟語を戻すと、名前と効果がずれる (以前の失敗)。
+  //   - 二字熟語は語彙から引ける語だけ (動詞も可。接続詞・末尾語・「人」は不可)。
+  const { DRAWABLE_ALL } = await import(new URL('../js/data/words.js', import.meta.url));
+  const drawable = new Set(DRAWABLE_ALL);
+  const broken = [];
+  for (const k of Object.keys(PHRASE_BONUS)) {
+    const p = PHRASE_BONUS[k];
+    const segs = segment(k);
+    if (!segs) { broken.push(`${k} (分割できない)`); continue; }
+    if (p.tier === 3 && k.length < 3) broken.push(`${k} (三字熟語が 3 文字未満)`);
+    if (p.tier === 2) {
+      if (k.length !== 2 || segs.length !== 2) broken.push(`${k} (二字熟語が 1 文字 2 語でない)`);
+      if (segs.some((w) => WORDS[w]?.cat === 'form')) broken.push(`${k} (二字熟語に形の語)`);
+      if (segs.some((w) => !drawable.has(w))) broken.push(`${k} (語彙から引けない語)`);
+    }
+    if (p.tier !== 2 && p.tier !== 3) broken.push(`${k} (格が無い)`);
+  }
 
   console.log(`== 1 文字の語 ==\n  許可して無い ${stray.length} / 作れない熟語 ${broken.length}`);
   for (const w of stray) console.log(`\x1b[31m  1 文字の断片: ${w}\x1b[0m`);

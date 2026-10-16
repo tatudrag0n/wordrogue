@@ -180,20 +180,47 @@ export const FORM_SHAPE = {
   斧: ['blade', 'slash'], 戈: ['blade', 'slash'], 牙: ['blade', 'slash'],
   // 射撃
   弾: ['bomb', 'bomb'], 銃: ['shot', 'shot'], 玉: ['shot', 'shot'],
-  爪: ['blade', 'slash'],
+  爪: ['blade', 'slash'], 拳: ['blade', 'slash'], 杖: ['orb', 'shot'],
   矢: ['arrow', 'shot'], 針: ['arrow', 'shot'], 弓: ['arrow', 'shot'],
   槍: ['arrow', 'shot'], 矛: ['arrow', 'shot'],
   球: ['orb', 'shot'], 珠: ['blade', 'boomerang'], 還: ['blade', 'boomerang'],
-  光: ['arrow', 'beam'],
-  雷: ['shot', 'chain'],
   // 爆弾
-  塊: ['orb', 'bomb'], 岩: ['orb', 'bomb'], 石: ['bomb', 'bomb'],
+  塊: ['orb', 'bomb'], 石: ['bomb', 'bomb'],
   // 軌道
   環: ['blade', 'orbit'], 輪: ['blade', 'orbit'],
   // 薙ぎ
   鞭: ['blade', 'whip'], 鎖: ['blade', 'whip'],
   // 城壁
   壁: ['orb', 'aura'], 網: ['orb', 'aura'], 盾: ['orb', 'aura'],
+};
+
+/**
+ * 基本武器: それ単体でも武器として成立する語。
+ * 文の中にあれば (攻撃できる動詞が無くても) 攻撃の型を決める。
+ */
+export const BASIC_WEAPONS = new Set([
+  '刃', '剣', '刀', '斧', '槍', '矛', '牙', '爪', '弓', '鞭', '鎖', '杖', '拳', '銃',
+]);
+
+/** 現象語が特殊武器になったときの形と攻撃の型。 */
+export const SPECIAL_SHAPE = {
+  渦: ['orb', 'orbit'],
+};
+
+/**
+ * 特殊武器: **属性語と現象語だけ**。炎・水・岩・雷・光・闇のような属性語は、
+ * 攻撃できる動詞が付いている場合のみ武器として成立する。
+ *   例 「天焦がす滅亡の光」… 焦がす (動詞の述語形) があるので「光」が武器になる。
+ * 属性語でない形態語 (玉・環・弾 …) は武器の頭にはならない (ただの語)。
+ */
+
+/** 属性語が特殊武器になったときの形と攻撃の型。 */
+export const ELEMENT_SHAPE = {
+  fire: ['orb', 'bomb'], ice: ['orb', 'shot'], thunder: ['shot', 'chain'],
+  poison: ['orb', 'aura'], light: ['arrow', 'beam'], dark: ['orb', 'shot'],
+  earth: ['orb', 'bomb'], wind: ['orb', 'shot'], nature: ['orb', 'aura'],
+  steel: ['orb', 'shot'], blood: ['blade', 'slash'], water: ['orb', 'shot'],
+  gold: ['orb', 'shot'], none: ['orb', 'shot'],
 };
 
 /** 攻撃の型から描画の形を引くときの既定値。 */

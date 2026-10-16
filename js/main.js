@@ -108,6 +108,8 @@ function startRun(weaponIds) {
     audio: app.audio,
     weaponIds: app.lastLoadout,
     lexiconSize: 12,
+    deckWords: app.save.deck,
+    partWords: app.save.partWordList(),
   });
   run.shakeOn = app.save.setting('screenShake') !== false;
   run.showDamage = app.save.setting('showDamage') !== false;
@@ -155,9 +157,8 @@ function onRunEnd(cleared) {
   app.hud.setPaused(false);
   // 書庫の通貨「言玉」。文を崩した敵の数で入り、クリアするとまとまって入る。
   const broken = app.run.brokenCount || 0;
-  // プレイヤーの強さ (恒久強化と自身の文) で報酬が上乗せされる。
-  const buff = 1 + (app.run.player.stats.atkMul - 1) * 0.5
-    + (app.run.player.stats.selfPower - 1);
+  // プレイヤーの強さ (恒久強化と部位強化) で報酬が上乗せされる。
+  const buff = 1 + (app.run.player.stats.atkMul - 1) * 0.5;
   const ink = cleared
     ? Math.round((100 + app.run.stage.id * 100) * buff)
     : Math.round((100 + broken * 15) * buff);

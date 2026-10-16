@@ -33,12 +33,30 @@ export const ELEMENTS = {
 /** 語の種類。UI 表示と抽選重みに使う。 */
 export const CATEGORIES = {
   element:  { name: '属性', color: '#ffb347', weight: 30 },
+  phenom:   { name: '現象', color: '#7dffce', weight: 20 },
   form:     { name: '形態', color: '#7ad7ff', weight: 26 },
   modifier: { name: '効果', color: '#9dff5c', weight: 24 },
   verb:     { name: '動詞', color: '#ff8fab', weight: 18 },
   buff:     { name: '自身', color: '#b47bff', weight: 12 },
   connect:  { name: '接続', color: '#8ab4ff', weight: 18 },
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// カテゴリ分類の基準 (文の中での働きで決める。迷ったら上から順に当てる)
+//   1. 属性 element … 属性値 (el) を持ち、文全体の属性を決める体言。特殊武器になれる。
+//   2. 現象 phenom  … 属性値は持たないが、自然現象・自然の力そのものを指す体言 (渦)。
+//                     属性と同じく特殊武器になれる。
+//   3. 形態 form    … 具体的な物の形・道具を指す体言。武器の頭になれるのは基本武器だけ。
+//   4. 動詞 verb    … 動作・作用そのものが主役で、述語になる語。
+//   5. 自身 buff    … プレイヤーの身体・装備・状態を指し、部位強化で常時効く語。
+//   6. 効果 modifier… 上のどれでもなく、他の語を修飾するのが主役の語。
+//   7. 接続 connect … 送り仮名。語ではない。
+// 1 語が複数カテゴリに属してよい (words.js の cats)。
+//   動詞の形 (述語) を持つ語は、本来の分類に加えて verb も持つ (震える・還る・走る)。
+//   形容の形は品詞 (pos) で表し、分類は増やさない。
+// 境界の例: 岩は地の力として属性、小さい石は投擲する弾体として形態。
+//           圧・律は現象そのものより作用の修飾が主役なので効果。
+// ─────────────────────────────────────────────────────────────────────────
 
 // 品詞と接続詞 (送り仮名) は語ごとに words.pool.js で決める。
 // ここは語の種別・属性・効果だけを持つ。
@@ -54,7 +72,7 @@ export const CATEGORIES = {
 export const TAIL_UNMODIFIABLE = new Set([
   '刃', '剣', '刀', '斧', '槍', '矛', '戈', '牙', '爪',
   '弾', '銃', '玉', '矢', '針', '弓', '球', '珠', '光', '雷',
-  '塊', '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾',
+  '塊', '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾', '杖', '拳',
 ]);
 
 const RAW_ELEMENT = `
@@ -76,6 +94,7 @@ const RAW_ELEMENT = `
 電     element thunder dmg+3  shock+0.14
 震     element thunder dmg+4  shock+0.22  area+8
 磁     element thunder dmg+5  shock+0.18  magnet+0.35
+雷     element thunder dmg+7  pierce+5  crit+0.06  speed+30
 
 毒     element poison  dmg+1  poison+2
 液     element poison  dmg+2  poison+3  area+4
@@ -89,6 +108,8 @@ const RAW_ELEMENT = `
 輝     element light   dmg+3  burn+1
 耀     element light   dmg+2  crit+0.04
 陽     element light   dmg+2  regen+0.5  area+6
+天     element light   dmg+2  pierce+1  speed+20
+光     element light   dmg+8  pierce+8  speed+60  size+0.20
 霞     element light   dmg+1  pierce+1
 皓     element light   dmg+1  crit+0.03  speed+10
 青     element light   dmg+2  crit+0.02  speed+8
@@ -100,6 +121,7 @@ const RAW_ELEMENT = `
 黒     element dark    dmg+3  pierce+2  armor+1
 夜     element dark    dmg+5  pierce+3  crit+0.04
 死     element dark    dmg+3  lifesteal+0.03
+亡     element dark    dmg+3  crit+0.03
 魔     element dark    dmg+4  crit+0.07  lifesteal+0.03
 影     element dark    dmg+1  crit+0.02  homing+0.10
 漆     element dark    dmg+2  crit+0.03  homing+0.14
@@ -111,6 +133,7 @@ const RAW_ELEMENT = `
 陸     element earth   dmg+4  speed-20  size+0.25  knock+30
 崖     element earth   dmg+4  explode+14  size+0.30  speed-15
 原     element earth   dmg+3  knock+60  speed-20  area+8
+岩     element earth   dmg+9  explode+20  size+0.35  area+12  speed-20
 
 風     element wind    dmg+1  speed+45  homing+0.08
 嵐     element wind    dmg+3  area+14  speed+40  knock+40
@@ -170,6 +193,7 @@ const RAW_FORM = `
 戈     form  -  dmg+9  arc+0.8  size+0.25
 牙     form  -  dmg+6  crit+0.03
 爪     form  -  dmg+4  count+2  speed+20  arc+0.6
+拳     form  -  dmg+7  speed+40  arc+0.6
 
 弾     form  -  dmg+6  count+1  explode+30
 銃     form  -  dmg+7  count+1  speed+40
@@ -177,14 +201,12 @@ const RAW_FORM = `
 矢     form  -  dmg+5  speed+90  pierce+1
 針     form  -  dmg+3  speed+130  count+2  pierce+1
 弓     form  -  dmg+5  speed+110  pierce+1
+杖     form  -  dmg+6  pierce+2  speed+30
 球     form  -  dmg+6  area+6  size+0.15
 珠     form  -  dmg+10  pierce+4  bounce+2  crit+0.06
 還     form  -  dmg+11  pierce+5  bounce+3  speed+40
-光     form  -  dmg+8  pierce+8  speed+60  size+0.20
-雷     form  -  dmg+7  pierce+5  crit+0.06  speed+30
 
 塊     form  -  dmg+8  speed-25  size+0.30  knock+25
-岩     form  -  dmg+9  explode+20  size+0.35  area+12  speed-20
 石     form  -  dmg+7  speed-20  size+0.25  knock+20
 
 環     form  -  orbit+1  count+2  dmg+5
@@ -274,6 +296,7 @@ const RAW_MODIFIER = `
 
 # ── 名詞・動詞的效果語 ──
 心    modifier  -  crit+0.08  homing+0.25
+渦    phenom    -  dmg+5  orbit+2
 圧    modifier  -  knock+90  size+0.2  speed-10
 律    modifier  -  rate+0.6  count+1  dmg+3
 斉    modifier  -  count+3  dmg+4  rate+0.3
@@ -382,7 +405,6 @@ const RAW_VERB = `
 斬      verb  -  dmg+8  crit+0.08
 砕      verb  -  dmg+6  knock+40
 殴      verb  -  dmg+6  rate+0.3
-渦      verb  -  dmg+5  orbit+2
 散      verb  -  dmg+2  count+3  spread+0.4
 伸      verb  -  dmg+2  size+0.30
 縮      verb  -  dmg+1  speed+50  size-0.15
@@ -402,14 +424,10 @@ const RAW_VERB = `
 掘      verb  -  dmg+3  pierce+2  speed+20
 叩      verb  -  dmg+4  knock+40  rate+0.2
 踏      verb  -  dmg+4  size+0.25  knock+25
-嗅      verb  -  dmg+2  homing+0.35
-舐      verb  -  dmg+3  lifesteal+0.03  count+1
-跨      verb  -  dmg+4  speed+50  area+8
 擦      verb  -  dmg+3  burn+2  pierce+1
 潰      verb  -  dmg+6  area+14  knock+35
 嚇      verb  -  dmg+3  slowImmune+1  chill+1
 縛      verb  -  dmg+2  slowImmune+1  magnet+0.3
-撫      verb  -  dmg+2  lifesteal+0.04  homing+0.2
 `;
 
 // 接続詞 (送り仮名) は words.connect.js が語ごとのプールから作る。

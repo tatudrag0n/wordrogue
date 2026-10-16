@@ -43,7 +43,7 @@ export const STAGES = [
     waves: [
       { at: 0,  list: [['goblin', 12], ['swarm', 16]] },
       { at: 14, list: [['skeleton', 10], ['shooter', 5]] },
-      { at: 30, list: [['wraith', 8], ['goblin', 14]] },
+      { at: 30, list: [['wraith', 8], ['goblin', 14], ['mole', 6]] },
       { at: 46, list: [['brute', 4], ['shooter', 8]] },
       { at: 62, list: [['wraith', 12], ['ghost', 10]] },
     ],
@@ -56,7 +56,7 @@ export const STAGES = [
     waves: [
       { at: 0,  list: [['skeleton', 14], ['ghost', 10]] },
       { at: 14, list: [['wraith', 10], ['shooter', 10]] },
-      { at: 30, list: [['brute', 6], ['skeleton', 16]] },
+      { at: 30, list: [['brute', 6], ['skeleton', 16], ['mole', 8]] },
       { at: 46, list: [['ghost', 16], ['wraith', 14]] },
       { at: 62, list: [['golem', 2], ['shooter', 12]] },
     ],

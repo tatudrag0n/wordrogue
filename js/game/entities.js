@@ -40,6 +40,7 @@ export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1, rnd = Math.random
     // AI
     t: rnd() * 2,
     atkCd: 0, charging: 0, cdLeft: (d.charge?.cd || 2) * rnd(),
+    burrowed: false, burrowT: 1.2,
     phase: rnd() * TAU,
     dead: false,
     spawned: 0,
@@ -258,6 +259,25 @@ export function updateEnemy(en, w, dt) {
       case 'boss':
         bossMove(en, w, dt, dx, dy, d);
         break;
+      case 'burrow': {
+        const cfg = en.def.burrow || { dive: 1.0, surface: 1.0 };
+        en.burrowT -= dt;
+        if (en.burrowT <= 0) {
+          en.burrowed = !en.burrowed;
+          en.burrowT = en.burrowed ? cfg.dive : cfg.surface;
+          if (!en.burrowed) {
+            // 浮上時に弾を撃つ。
+            const shot = cfg.shot || { speed: 140, dmg: 6 };
+            w.spawnEnemyShot?.(en.x, en.y, Math.atan2(dy, dx), shot.speed, shot.dmg, en.def.color);
+          }
+        }
+        if (en.burrowed) {
+          mvx = dx * 1.4; mvy = dy * 1.4;
+        } else {
+          mvx = dx * 0.6; mvy = dy * 0.6;
+        }
+        break;
+      }
       default:
         mvx = dx; mvy = dy;
     }
@@ -354,6 +374,9 @@ function bossMove(en, w, dt, dx, dy, d) {
         break;
       case 'drain':
         w.bossDrain?.(en);
+        break;
+      case 'spiral':
+        w.bossSpiral?.(en);
         break;
     }
     return;

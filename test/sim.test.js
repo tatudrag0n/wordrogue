@@ -6,15 +6,15 @@ import './seed.mjs';
 import { Run, PICKUP_VMAX, PICKUP_MAGNET, LEXICON_MAX } from '../js/game/run.js';
 import { Input } from '../js/core/input.js';
 import { makeWord, WORDS, evaluate, CONNECTOR_SET } from '../js/data/words.js';
-import { WEAPONS, FORM_SHAPE, KIND_SHAPE } from '../js/data/weapons.js';
+import { WEAPONS, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS } from '../js/data/weapons.js';
 import { ENEMIES } from '../js/data/enemies.js';
 import { WeaponInst } from '../js/game/weapon.js';
 import { makePickup, makeEnemy } from '../js/game/entities.js';
 import { damage } from '../js/game/combat.js';
-import { SELF_TAIL, resolvePlayerStats } from '../js/game/stats.js';
+import { resolvePlayerStats } from '../js/game/stats.js';
 import { Sentence, MAX_SENTENCE_LEN } from '../js/game/sentence.js';
 import { STAGES } from '../js/data/stages.js';
-import { Save, META_UPGRADES } from '../js/core/save.js';
+import { Save, META_UPGRADES, GACHA_COST, GACHA_REFUND, PARTS } from '../js/core/save.js';
 import { makeRng } from '../js/core/util.js';
 
 let pass = 0, fail = 0;
@@ -35,9 +35,9 @@ sec('クリア報酬の言玉は難易度とバフで増える');
   const r = newRun(3);
   r.refreshStats();
   const atk = r.player.stats.atkMul;
-  const self = r.player.stats.selfPower;
+  const parts = r.player.stats.partCount;
   ok(Number.isFinite(atk) && atk > 0, `攻撃倍率が壊れている: ${atk}`);
-  ok(Number.isFinite(self) && self >= 1, `文の力が壊れている: ${self}`);
+  ok(Number.isFinite(parts) && parts >= 0, `部位の数が壊れている: ${parts}`);
   // ステージ 1 と 9 では 9 のほうが高い。
   const inkLow = Math.round((100 + 1 * 100) * 1);
   const inkHigh = Math.round((100 + 9 * 100) * 1);
@@ -115,13 +115,14 @@ function freshSave() {
   return { d: { meta: {} }, unlockWeapon() {} };
 }
 
-function newRun(stageId, weaponIds, sv) {
+function newRun(stageId, weaponIds, sv, extra = {}) {
   const save = sv || freshSave();
   return new Run({
     stageId, audio, save, weaponIds,
     // 本番 (main.js) と同じく、書庫で広げたぶんだけ語彙が増える。
     lexiconSize: 12 + (save.lexiconBonus || 0),
     rng: makeRng(stageId * 7919 + 13),
+    ...extra,
   });
 }
 
@@ -222,6 +223,13 @@ sec('武器名はその文面になる / 武器語が攻撃を決める');
   ok(two.reason === 'tailform', `理由 ${two.reason}`);
   console.log(`  武器語どうし → 不成立 (${two.reasonText})`);
 
+  // ただし熟語として固定された並び (電光石火) は例外として成立する。
+  setWords(wi, ['電', '光', '石', '火', '剣']);
+  const idiomW = wi.resolve(run.player.stats);
+  ok(idiomW.valid, `「電光石火剣」が不成立: ${idiomW.reasonText}`);
+  ok(idiomW.evalResult.idiom?.phrase === '電光石火', '熟語「電光石火」が発動しない');
+  console.log(`  「電光石火剣」→ 成立 (熟語 ${idiomW.evalResult.idiom?.name})`);
+
   // 「迅足」+「雷」は最長一致で 1 語にまとまる。
   setWords(wi, ['速', '雷']);
   const xunlei = wi.resolve(run.player.stats);
@@ -248,6 +256,37 @@ sec('すべての武器が文の中の武器語で攻撃を決める');
   }
 }
 
+
+sec('基本武器でない形態語は文の終わりに置けない');
+{
+  const PS = { atk: 1, atkMul: 1, crit: 0, lifesteal: 0, magnet: 0, xpMul: 0, armor: 0, slowImmune: 0, hp: 100 };
+  const sword = new WeaponInst('sword', 1);
+
+  // 剣の文を「弾」で締めることはできない。
+  setFlat(sword, ['焔', '弾']);
+  const bad = sword.resolve(PS);
+  ok(!bad.valid && bad.reason === 'formtail',
+    `「焔弾」が成立してしまった: ${bad.reason} / ${bad.reasonText}`);
+
+  // 文の途中なら使える。武器語で締めれば成立する。
+  setFlat(sword, ['焔', '弾', 'の', '硬', '刃']);
+  const good = sword.resolve(PS);
+  ok(good.valid, `「焔弾の刃」が成立しない: ${good.reasonText}`);
+
+  // その武器自身の名前 (爆弾の「弾」) だけは末尾に置ける。
+  const bomb = new WeaponInst('bomb', 1);
+  setFlat(bomb, ['焔', '弾']);
+  const own = bomb.resolve(PS);
+  ok(own.valid, `爆弾の「焔弾」が成立しない: ${own.reasonText}`);
+
+  // ただし爆弾でも、他人の名前 (「環」) では締められない。
+  setFlat(bomb, ['焔', '環']);
+  const other = bomb.resolve(PS);
+  ok(!other.valid && other.reason === 'formtail',
+    `爆弾の「焔環」が成立してしまった: ${other.reason}`);
+
+  console.log('  焔弾 (剣) → 不成立 / 焔弾の刃 → 成立 / 焔弾 (爆弾) → 成立 / 焔環 (爆弾) → 不成立');
+}
 
 sec('不成文の武器は無効化される');
 {
@@ -544,54 +583,39 @@ sec('入力なし・移動を止められる');
   ok(!r4.player.dashing, 'スタミナ切れでもダッシュしたまま');
 }
 
-sec('自身の文の末尾は「人」で固定');
+sec('部位強化の語が能力に効く');
 {
-  const r = freshWeapon(1);
-  const p = r.player;
-  // 自身の文も自由に並べる。末尾の「人」は文の外に固定で付く。
-  const set = (...ws) => {
-    p.self.clear();
-    for (const w of ws) p.self.push(makeWord(w));
-    r.refreshStats();
-  };
+  // 部位に何も入れなければ素の能力。
+  const r0 = newRun(1);
+  ok(r0.player.stats.partCount === 0, `部位が最初から入っている: ${r0.player.stats.partCount}`);
+  ok(r0.player.stats.maxHp === 100, `素の体力が 100 でない: ${r0.player.stats.maxHp}`);
 
-  // 称号は空。
-  set();
-  ok(p.stats.selfTitle === '', `称号が最初から入っている: ${p.stats.selfTitle}`);
+  // 部位の語はそのまま能力に乗る (頑: 体力+25 / 健: 体力+20 回復+0.3)。
+  const r = newRun(1, undefined, undefined, { partWords: ['頑', '健'] });
+  ok(r.player.stats.partCount === 2, `部位の語が効いていない: ${r.player.stats.partCount}`);
+  ok(r.player.stats.maxHp === 145, `部位で体力が増えない: ${r.player.stats.maxHp}`);
+  ok(r.player.stats.regen > 0, `部位で回復が増えない: ${r.player.stats.regen}`);
+  ok(r.player.maxHp === 145, `最大体力に反映されない: ${r.player.maxHp}`);
 
-  // 1 語では不成文。末尾の「人」だけでは文にならない。
-  set('頑');
-  ok(p.stats.selfValid === false, '1 語で称号が成立している');
-  ok(p.stats.selfTitle === '頑人', `称号が「${p.stats.selfTitle}」`);
+  // resolvePlayerStats を直接呼んでも同じ。
+  const direct = resolvePlayerStats(['頑', '健'], {});
+  ok(direct.maxHp === 145 && direct.partCount === 2, `直接呼んだ部位が違う: ${direct.maxHp}/${direct.partCount}`);
 
-  // 2 語で成立。末尾は「人」。
-  set('頑', '走');
-  ok(p.stats.selfValid === true, '2 語で称号が成立しない');
-  ok(p.stats.selfTitle === '頑走人', `称号が「${p.stats.selfTitle}」`);
-  ok(p.stats.selfTitle.endsWith(SELF_TAIL), `末尾が「${SELF_TAIL}」でない: ${p.stats.selfTitle}`);
+  // 存在しない語・接続詞は部位に入らない。
+  const rBad = newRun(1, undefined, undefined, { partWords: ['存在しない語', 'の'] });
+  ok(rBad.player.stats.partCount === 0, `変な語が部位に効いている: ${rBad.player.stats.partCount}`);
 
-  // 並べ替えても末尾は動かない。
-  p.self.swap(0, 1);
-  r.refreshStats();
-  ok(p.stats.selfTitle === '走頑人', `並べ替えで称号が変わらない: ${p.stats.selfTitle}`);
+  // 戦闘中の語彙 (デッキ) ではプレイヤーは強化されない。
+  const r2 = newRun(1, undefined, undefined, { deckWords: ['頑', '健', '癒'] });
+  ok(r2.player.stats.partCount === 0, `語彙の buff で強化されている: ${r2.player.stats.partCount}`);
+  ok(r2.player.stats.maxHp === 100, `語彙で体力が増えている: ${r2.player.stats.maxHp}`);
+  const lex = r2.lexicon.filter(Boolean).map((w) => w.text);
+  ok(lex.slice(0, 3).join('') === '頑健癒', `デッキが開始時の語彙に入っていない: ${lex.join(',')}`);
 
-  // 「人」は文の外。「人」を入れても 2 つにはならない。
-  ok(p.self.count === 2, `文の語が変わっている: ${p.self.count}`);
-  ok(!p.self.words.some((w) => w.text === SELF_TAIL), '「人」が文の中にある');
+  // デッキが最低語数に満たなくても、開始時の語彙は補充される。
+  ok(lex.length >= 10, `開始時の語彙が少ない: ${lex.length}`);
 
-  // 称号の力が attack と防御に効く。
-  ok(p.stats.atkMul > 1, `攻撃に称号の力が乗っていない: ${p.stats.atkMul}`);
-  ok(p.stats.armor > 0, `防御に称号の力が乗っていない: ${p.stats.armor}`);
-
-  // 分割の最後が「人」。
-  const seg = p.stats.selfSegments;
-  ok(seg[seg.length - 1] === SELF_TAIL, `分割の最後が「${SELF_TAIL}」でない: ${seg.join('/')}`);
-
-  // resolvePlayerStats を直接呼んでも同じ称号。
-  const direct = resolvePlayerStats([], p.self, {});
-  ok(direct.selfTitle === '走頑人', `直接呼んだ称号が「${direct.selfTitle}」`);
-
-  console.log(`  「${p.stats.selfTitle}」 文の力 x${p.stats.selfPower.toFixed(2)} / ${seg.join('/')} / 攻撃 x${p.stats.atkMul.toFixed(2)}`);
+  console.log(`  部位「頑・健」 体力 ${r.player.stats.maxHp} / 回復 ${r.player.stats.regen} / デッキ先頭 ${lex.slice(0, 3).join('・')}`);
 }
 
 sec('経験値の吸引が暴れない');
@@ -680,11 +704,11 @@ sec('レベルアップは 3 択 1 択');
   r2.grantLevelWords(5);
   ok(r2.pendingChoices.length === 2, `5 の倍数で 2 回出ていない: ${r2.pendingChoices.length}`);
 
-  // 4 レベルごとに自身の文に 1 語 (これは自動)。
+  // 戦闘中のプレイヤー強化はない (部位強化はメニュー側だけ)。
   const r3 = newRun(1);
   r3.grantLevelWords(5);
-  const selfFilled = r3.player.selfSlots.filter(Boolean).length;
-  ok(selfFilled === 1, `自身の文に語が入らない: ${selfFilled}`);
+  ok(r3.player.self === undefined, '戦闘中に自身の文が残っている');
+  ok(r3.partWords.length === 0, `戦闘中に部位が増えている: ${r3.partWords.length}`);
 
   // 時間切れなら 1 番目が自動で入る。
   const r4 = newRun(1);
@@ -845,7 +869,6 @@ sec('ドラッグの入れ替えは語を消さない');
 {
   const r = newRun(1);
   const wi = r.weapons[0];
-  const self = r.player.self;
 
   // 文 ⇄ 文。語は入ったまま、並びだけ入れ替わる。
   setFlat(wi, ['焔', '剛', '速']);
@@ -859,19 +882,6 @@ sec('ドラッグの入れ替えは語を消さない');
   ok(wi.sentence.text === '速焔剛', `文の並びが入れ替わっていない: ${wi.sentence.text}`);
   ok(wi.sentence.count === 3, `語が失われた: ${wi.sentence.count}`);
   ok(lexText(r) === lexBefore, '並べ替えで語彙が変わった');
-
-  // 文 → 自身の文。移動になる。
-  const moved = wi.sentence.words[0];
-  self.clear();
-  self.push(before[1]);
-  const r2 = r.moveWordTo(
-    { kind: 'slot', wi, index: 0 },
-    { kind: 'self', index: self.count },
-  );
-  ok(r2.ok, `文 → 自身の移動が失敗: ${r2.reason}`);
-  ok(self.words[self.count - 1] === moved, '自身の文に語が入っていない');
-  ok(wi.sentence.count === 2, '元の文から語が消えた');
-  ok(wi.sentence.count + self.count === 4, `語が失われた: ${wi.sentence.count} + ${self.count}`);
 
   // 語彙 → 文。空きがあればそのまま入る。
   const lexWord = r.lexicon.find(Boolean);
@@ -989,18 +999,18 @@ sec('語をタップすると直後の接続詞が切り替わる');
   ok(wi.sentence.words[1].text === '発', '語が変わった');
   ok(lexText(r) === lexBefore, '接続詞で語彙が変わった');
 
-  // 「燃」… 動詞。プールは える・やす だけ (燃る・燃された は無い)。一周したら無し。
+  // 「燃」… 動詞。プールは える・やす・やされた・えて・やして。一周したら無し。
   setFlat(wi, ['焔', '燃']);
   const opts2 = wi.sentence.connOptions(1);
-  ok(opts2.join(',') === 'える,やす', `「燃」の接続詞 ${opts2.join(',')}`);
+  ok(opts2.join(',') === 'える,やす,やされた,えて,やして', `「燃」の接続詞 ${opts2.join(',')}`);
   const p2 = { kind: 'slot', wi, index: 1 };
   const seen2 = [];
   for (let i = 0; i < opts2.length + 1; i++) seen2.push(r.cycleConnector(p2).text);
   ok(seen2[seen2.length - 1] === null, `一周しても無しにならない: ${seen2.join(',')}`);
-  // 「斬」… る・られた・り (プールの順そのまま)。
+  // 「斬」… る・られた・り・って (プールの順そのまま)。
   setFlat(wi, ['焔', '斬']);
   const opts3 = wi.sentence.connOptions(1);
-  ok(opts3.join(',') === 'る,られた,り', `「斬」の接続詞 ${opts3.join(',')}`);
+  ok(opts3.join(',') === 'る,られた,り,って', `「斬」の接続詞 ${opts3.join(',')}`);
 
   // 文面には接続詞が入る。
   setFlat(wi, ['焔', 'を', '斬']);
@@ -1012,19 +1022,6 @@ sec('語をタップすると直後の接続詞が切り替わる');
   ok(wi.fullText === '焔斬', `を を外しても文面が戻らない: ${wi.fullText}`);
   ok(wi.sentence.words[1].text === '斬', `後ろの語が消えた: ${wi.sentence.words[1].text}`);
   ok(lexText(r) === lexBefore, '語彙が変わった');
-
-  // 自身の文の語も同じように回せる。
-  const p = r.player;
-  p.self.clear();
-  p.self.push(makeWord('頑'));
-  p.self.push(makeWord('走'));
-  const sp = { kind: 'self', index: 0 };
-  const c1 = r.cycleConnector(sp).text;
-  ok(c1, '自身の接続詞が切り替わらない');
-  ok(connOf(p.self, 0) === c1, '自身の接続詞が入っていない');
-  ok(r.clearConnector(sp).ok, '自身の接続詞を外せない');
-  ok(connOf(p.self, 0) === null, '自身の接続詞が残っている');
-  ok(p.self.words[0].text === '頑', `自身の後ろの語が消えた: ${p.self.words[0].text}`);
 
   // 満杯でも切り替えられる。語彙は関係ない。
   const r2 = newRun(1);
@@ -1050,15 +1047,12 @@ sec('語をタップすると直後の接続詞が切り替わる');
   ok(r.lexiconFull, '満杯になっていない');
   ok(r.lexicon.every(Boolean), '語彙に空きが残っている');
 
-  // 文に語を入れておく。枠は無いので count で数える。
+  // 文に語を入れておく。
   setFlat(wi, ['焔', '剛']);
-  r.player.self.clear();
-  r.player.self.push(makeWord('頑'));
 
   // 語が 1 つも減っていないかを数える。
   const total = () => r.lexicon.filter(Boolean).length
-    + r.weapons.reduce((n, w) => n + w.sentence.count, 0)
-    + r.player.self.count;
+    + r.weapons.reduce((n, w) => n + w.sentence.count, 0);
   const n0 = total();
 
   // 文 → 語彙。満杯でも語彙で最も古い 1 語を捨てて戻す。
@@ -1078,14 +1072,6 @@ sec('語をタップすると直後の接続詞が切り替わる');
   ok(r2.ok, `語彙の語を文に入れられない: ${r2.reason}`);
   ok(wi.sentence.words[wi.sentence.count - 1] === lexWord, '文に語が入っていない');
   ok(r.lexicon[1] === null, '語彙に語が残っている');
-  ok(total() === n0 - 1, '移動で語が失われた');
-
-  // 自身の文も同じ。
-  const selfWord = r.lexicon[2];
-  const r3 = r.placeSelfWord(r.player.self.count, selfWord);
-  ok(r3.ok, `自身の文に語を入れられない: ${r3.reason}`);
-  ok(r.player.self.words[r.player.self.count - 1] === selfWord, '自身の文に語が入っていない');
-  ok(r.lexicon[2] === null, '語彙に語が残っている');
   ok(total() === n0 - 1, '移動で語が失われた');
 
   // 文 ↔ 文 の入れ替えは通る。語は 2 つとも残る。
@@ -1117,8 +1103,11 @@ sec('形と攻撃は文の中の武器語が決める');
   // 武器語は自分で文に置く。置いた武器語が形と攻撃を決める。
   for (const id of Object.keys(WEAPONS)) {
     const def = WEAPONS[id];
-    const [wantShape, wantKind] = FORM_SHAPE[def.tail]
-      || [def.shape || KIND_SHAPE[def.kind], def.kind];
+    // 基本武器は単体で型を決める。特殊武器は開始文 (動詞なし) では決めず既定のまま。
+    const basic = BASIC_WEAPONS.has(def.tail);
+    const [wantShape, wantKind] = basic
+      ? (FORM_SHAPE[def.tail] || [def.shape || KIND_SHAPE[def.kind], def.kind])
+      : [def.shape || KIND_SHAPE[def.kind], def.kind];
     // 解放されているステージで始める。
     const stage = def.unlock ? def.unlock.stage : 1;
     const r = freshWeapon(stage, [id]);
@@ -1131,6 +1120,31 @@ sec('形と攻撃は文の中の武器語が決める');
     ok(res.kind === wantKind, `${id}: 攻撃 ${res.kind} が ${wantKind} でない`);
   }
 
+  // 特殊武器は「攻撃できる動詞」が付いたときだけ武器になる。
+  {
+    const r = freshWeapon(1, ['gun']);
+    const wi = r.weapons[0];
+    // 動詞なし: 炎はただの属性語。型は武器の既定 (射撃) のまま。
+    setFlat(wi, ['焔', '炎']);
+    let res = wi.resolve(r.player.stats);
+    ok(res.tail === null && res.kind === 'shot',
+      `動詞なしで特殊武器が発動した: tail=${res.tail} kind=${res.kind}`);
+    // 焦がす (動詞の述語形) を付けると「光」が特殊武器になる。
+    setFlat(wi, ['焔', 'を', '焦', 'がす', '光']);
+    res = wi.resolve(r.player.stats);
+    ok(res.special === true && res.tail === '光' && res.kind === 'beam',
+      `特殊武器「光」が発動しない: special=${res.special} tail=${res.tail} kind=${res.kind}`);
+    console.log(`  特殊武器 … 動詞なしでは不発 / 「焔を焦がす光」で ${res.kind} として発動`);
+    // 現象語 (渦) も特殊武器になる。属性語 (嵐・風・波) はもともと対象。
+    setFlat(wi, ['焔', '燃', '渦']);
+    wi.setConnect(1, makeWord('える'));
+    res = wi.resolve(r.player.stats);
+    ok(res.special === true && res.tail === '渦' && res.kind === 'orbit',
+      `現象語「渦」が特殊武器にならない: special=${res.special} tail=${res.tail} kind=${res.kind}`);
+    ok(WORDS['渦'].cat === 'phenom' && WORDS['嵐'].cat === 'element',
+      '渦・嵐の分類がおかしい');
+  }
+
   // 同じ武器でも、置いた武器語が変われば攻撃の型が変わる。
   const r = freshWeapon(1, ['gun']);
   const wi = r.weapons[0];
@@ -1141,19 +1155,26 @@ sec('形と攻撃は文の中の武器語が決める');
   // 武器語が文に無ければ、その武器の既定の型。
   const base = res('火', '剛');
   ok(base.shape === 'shot' && base.kind === 'shot', `武器語なし → ${base.shape}/${base.kind}`);
+  // 基本武器は単体で形と攻撃を決める。
   for (const [form, shape, kind] of [
-    ['剣', 'blade', 'slash'], ['球', 'orb', 'shot'], ['刃', 'blade', 'slash'],
-    ['環', 'blade', 'orbit'], ['壁', 'orb', 'aura'], ['弾', 'bomb', 'bomb'],
+    ['剣', 'blade', 'slash'], ['刃', 'blade', 'slash'],
+    ['杖', 'orb', 'shot'], ['拳', 'blade', 'slash'],
   ]) {
     const x = res('火', form, '剛');
     ok(x.shape === shape, `「${form}」の形が ${x.shape} (${shape} のはず)`);
     ok(x.kind === kind, `「${form}」の攻撃が ${x.kind} (${kind} のはず)`);
   }
-  // 文の後方から最初に見つかった武器語が効く。
-  const two = res('火', '刃', '剛', '環');
-  ok(two.kind === 'orbit' && two.shape === 'blade',
-    `後ろの武器語が効かない: ${two.shape}/${two.kind} (${two.tail})`);
-  console.log(`  武器語で ${base.shape}/${base.kind} → 環なら ${two.shape}/${two.kind} / 後ろにある方が効く`);
+  // 特殊武器は動詞が無ければ形も攻撃も決めない (武器の既定のまま)。
+  for (const form of ['球', '環', '壁', '弾']) {
+    const x = res('火', form, '剛');
+    ok(x.tail === null && x.shape === 'shot' && x.kind === 'shot',
+      `特殊武器「${form}」が動詞なしで効いた: ${x.shape}/${x.kind} (${x.tail})`);
+  }
+  // 文の後方から最初に見つかった基本武器が効く。
+  const two = res('火', '剣', '剛', '刃');
+  ok(two.kind === 'slash' && two.shape === 'blade' && two.tail === '刃',
+    `後ろの基本武器が効かない: ${two.shape}/${two.kind} (${two.tail})`);
+  console.log(`  基本武器で ${base.shape}/${base.kind} → 刃なら ${two.shape}/${two.kind} / 後ろにある方が効く`);
 
   // 属性は文中の属性語から決まる (武器とは別)。
   ok(res('焔', '剛').element === 'fire', '「焔剛」→ fire');
@@ -1259,10 +1280,25 @@ sec('武器 1 つにつき複数語を並べられる');
   console.log(`  上限 → ${wi.sentence.count} 語 ${wi.sentence.len} 文字「${wi.sentence.text}」`);
 
   // 熟語は 1 文字 3 語。毒 + 蝕 + 弾 のように乗る。
-  const idiom = setFlat(wi, ['毒', '蝕', '弾']).resolve(r.player.stats);
-  ok(idiom.valid, `「毒蝕弾」が成立しない: ${idiom.reasonText}`);
+  // ただし「弾」は文の終わりに置けないので、武器語で締める。
+  const idiomBad = setFlat(wi, ['毒', '蝕', '弾']).resolve(r.player.stats);
+  ok(!idiomBad.valid && idiomBad.reason === 'formtail',
+    `「毒蝕弾」で締める文が成立してしまった: ${idiomBad.reason}`);
+  const idiom = setFlat(wi, ['毒', '蝕', '弾', 'の', '硬', '刃']).resolve(r.player.stats);
+  ok(idiom.valid, `「毒蝕弾の硬刃」が成立しない: ${idiom.reasonText}`);
   ok(idiom.evalResult.idiom?.phrase === '毒蝕弾', `熟語が乗らない: ${idiom.evalResult.idiom}`);
   console.log(`  熟語 → 「${idiom.fullText}」(${idiom.gradeInfo.name} / 熟語 ${idiom.evalResult.idiom.name})`);
+
+  // 二字熟語と熟語の接続詞。発 + 電 + する + 剣 = 発電する剣。
+  const hatsu = setFlat(wi, ['発', '電', 'する', '剣']);
+  ok(hatsu.sentence.text === '発電する剣', `「発電する剣」が組めない: ${hatsu.sentence.text}`);
+  const hres = hatsu.resolve(r.player.stats);
+  ok(hres.valid, `「発電する剣」が成立しない: ${hres.reasonText}`);
+  ok(hres.evalResult.idiom?.phrase === '発電', `発電が熟語にならない: ${hres.evalResult.idiom?.phrase}`);
+  ok(hres.evalResult.predicated, '発電する が述語にならない');
+  const denSuru = setFlat(wi, ['電', 'する', '剣']);
+  ok(denSuru.sentence.text === '電剣', `「電」に する が付いてしまう: ${denSuru.sentence.text}`);
+  console.log(`  二字熟語 → 「${hres.fullText}」(${hres.gradeInfo.name} / 熟語 ${hres.evalResult.idiom?.name})`);
 
   // 接続詞は文の力を上げる。同じ語並びで比較する。
   const plain = setFlat(wi, ['焔', '鋼', '剛']).resolve(r.player.stats);
@@ -1313,7 +1349,7 @@ sec('武器の文で敵の文を斬れる');
   ok(plain.stats.cutPower === 1, `成立文の斬り数が 1 でない: ${plain.stats.cutPower}`);
 
   // 熟語があれば +1。
-  const idiom = set('毒', '蝕', '弾');
+  const idiom = set('毒', '蝕', '弾', 'の', '硬', '刃');
   ok(idiom.valid && idiom.evalResult.idiom, `熟語が成立しない: ${idiom.fullText}`);
   ok(idiom.stats.cutPower === 2, `熟語文の斬り数が 2 でない: ${idiom.stats.cutPower}`);
 
@@ -1360,7 +1396,7 @@ sec('熟語か述語なら、一撃で 2 語斬る');
   const wi = r.weapons[0];
   const PS = r.player.stats;
   const set = (...ws) => setFlat(wi, ws).resolve(PS);
-  const strong = set('毒', '蝕', '弾');
+  const strong = set('毒', '蝕', '弾', 'の', '硬', '刃');
   ok(strong.valid, `比較用の文が成立しない: ${strong.evalResult.reasonText}`);
   ok(strong.stats.cutPower === 2, `斬り数が 2 でない: ${strong.stats.cutPower}`);
 
@@ -1432,8 +1468,8 @@ sec('買った恒久強化がプレイヤーに効く');
   save.buyMeta('magnet');
   save.buyMeta('xp');
 
-  const plain = resolvePlayerStats([], new Sentence(), {});
-  const buffed = resolvePlayerStats([], new Sentence(), save.d.meta);
+  const plain = resolvePlayerStats([], {});
+  const buffed = resolvePlayerStats([], save.d.meta);
   ok(buffed.maxHp > plain.maxHp, `体力が上がっていない: ${plain.maxHp} -> ${buffed.maxHp}`);
   ok(buffed.atkMul > plain.atkMul, `攻撃が上がっていない: ${plain.atkMul} -> ${buffed.atkMul}`);
   ok(buffed.armor > plain.armor, `装甲が上がっていない`);
@@ -1446,6 +1482,61 @@ sec('買った恒久強化がプレイヤーに効く');
   // ランにも反映される。
   const r = newRun(1, undefined, save);
   ok(r.player.maxHp === buffed.maxHp, `ランに体力が反映されない: ${r.player.maxHp} != ${buffed.maxHp}`);
+}
+
+sec('言葉くじ・デッキ・部位はセーブで管理する');
+{
+  const save = new Save();
+  save.reset();
+  // 初期セットが所持語に入り、デッキも同じ内容で始まる。部位は 9 つ。
+  ok(PARTS.length === 9, `部位の数: ${PARTS.length}`);
+  ok(save.collection.length >= 10, `初期所持語が少ない: ${save.collection.length}`);
+  ok(save.deck.length === save.collection.length, '初期デッキが所持語と違う');
+  ok(save.deck.every((t) => save.ownsWord(t)), '持っていない語がデッキにいる');
+  // 接続詞は所持語・デッキに入らない。
+  ok(!save.collection.some((t) => CONNECTOR_SET.has(t)), '接続詞が所持語にいる');
+
+  // 言玉不足では引けない。
+  save.addInk(10);
+  const ng = save.drawGacha();
+  ok(!ng.ok && ng.reason === 'ink', `言玉不足で引けた: ${ng.reason}`);
+
+  // 引ける。代金が引かれ、新しい語が増えるか、重複なら返却される。
+  save.addInk(1000);
+  const inkBefore = save.ink;
+  const colBefore = save.collection.length;
+  const g = save.drawGacha();
+  ok(g.ok && !!g.word, `くじが引けない: ${g.reason}`);
+  ok(save.ink === inkBefore - GACHA_COST + (g.dup ? GACHA_REFUND : 0),
+    `くじの収支が違う: ${inkBefore} -> ${save.ink} (dup=${g.dup})`);
+  if (!g.dup) {
+    ok(save.collection.length === colBefore + 1 && save.ownsWord(g.word),
+      `新しい語が増えていない: ${g.word}`);
+  }
+
+  // 部位: 持っている語だけ入る。外せる。
+  ok(save.setPart('head', 0, '頑'), '部位に語が入らない');
+  ok(save.partWordList().includes('頑'), '部位の語が読めない');
+  ok(!save.setPart('head', 1, '存在しない語'), '持っていない語が部位に入った');
+  ok(!save.setPart('xxx', 0, '頑'), '無い部位に入った');
+  save.setPart('head', 0, null);
+  ok(!save.partWordList().includes('頑'), '部位の語が外れない');
+
+  // デッキ: 出し入れできる。持っていない語は入らない。
+  const t0 = save.collection[0];
+  const wasIn = save.inDeck(t0);
+  save.toggleDeck(t0);
+  ok(save.inDeck(t0) === !wasIn, 'デッキの出し入れができない');
+  save.toggleDeck(t0);
+  ok(save.inDeck(t0) === wasIn, 'デッキが元に戻らない');
+  ok(save.toggleDeck('存在しない語') === false, '持っていない語がデッキに入った');
+
+  // ランへ渡すと、部位は能力に、デッキは開始時の語彙に効く。
+  save.setPart('chst', 0, '頑');
+  const run = newRun(1, undefined, save, { deckWords: save.deck, partWords: save.partWordList() });
+  ok(run.player.stats.partCount === 1, `部位がランに効かない: ${run.player.stats.partCount}`);
+  ok(run.player.stats.maxHp === 125, `部位で体力が増えない: ${run.player.stats.maxHp}`);
+  console.log(`  くじ「${g.word}」${g.dup ? ' (重複)' : ''} / 所持 ${save.collection.length} 語 / デッキ ${save.deck.length} 語`);
 }
 
 sec('言玉で語彙の枠を広げると次のランで入る');

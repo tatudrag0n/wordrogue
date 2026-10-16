@@ -312,7 +312,7 @@ export class Renderer {
     const g = this.ctx;
     for (const e of run.enemies) {
       if (e.spawned < 1) continue;
-      const a = (e.alpha ?? 1) * clamp(e.spawned, 0, 1);
+      const a = (e.alpha ?? 1) * clamp(e.spawned, 0, 1) * (e.burrowed ? 0.25 : 1);
       g.globalAlpha = a;
 
       const col = e.flash > 0.05 ? '#ffffff' : e.def.color;

@@ -74,7 +74,7 @@ export const PART_SLOTS = 2;    // 1 部位に入る語の数
  * 部位は武器より短くする — 武器は 10 文字なので、そこを真似ない。
  */
 export const PART_MAX_LEN = 8;
-export const DECK_MIN = 10;     // デッキの最低語数 (戦闘開始時に満たなければ補充)
+export const DECK_MIN = 20;     // デッキの最低語数 (戦闘開始時に満たなければ補充)
 export const DECK_MAX = 30;     // デッキの最大語数 (語彙の容量上限と同じ)
 export const GACHA_COST = 25;   // 言葉くじ 1 回の言玉
 export const GACHA_REFUND = 5;  // すでに持っている語が出たときの返却
@@ -112,7 +112,7 @@ export const STARTER_WORDS = [
   '炎', '焔', '氷', '電', '毒', '風', '水',
   '強', '速', '硬', '静', '妙',
   '斬', '燃', '貫',
-  '頑', '健', '癒',
+  '頑', '健', '癒', '聖', '鉄',
 ];
 
 export class Save {
@@ -254,8 +254,18 @@ export class Save {
     }
     d.collection = d.collection.filter((t) => WORDS[t]);
     if (!d.collection.length) d.collection = STARTER_WORDS.filter((t) => WORDS[t]);
+    // 旧セーブにも最低 20 語を保証。新しい語は初期語彙から補う。
+    for (const t of STARTER_WORDS) {
+      if (d.collection.length >= DECK_MIN) break;
+      if (WORDS[t] && !d.collection.includes(t)) d.collection.push(t);
+    }
     if (!Array.isArray(d.deck)) d.deck = d.collection.slice(0, DECK_MAX);
     d.deck = d.deck.filter((t) => d.collection.includes(t)).slice(0, DECK_MAX);
+    // デッキも常に最低数を保つ。既存ユーザーは所持語から順に補充。
+    for (const t of d.collection) {
+      if (d.deck.length >= DECK_MIN) break;
+      if (!d.deck.includes(t)) d.deck.push(t);
+    }
     if (!d.parts || typeof d.parts !== 'object' || Array.isArray(d.parts)) d.parts = {};
     for (const p of PARTS) {
       d.parts[p.id] = normalizePart(d.parts[p.id], d.collection);
@@ -327,8 +337,10 @@ export class Save {
     if (!this.ownsWord(text)) return false;
     const d = this.data.deck;
     const i = d.indexOf(text);
-    if (i >= 0) d.splice(i, 1);
-    else {
+    if (i >= 0) {
+      if (d.length <= DECK_MIN) return true;
+      d.splice(i, 1);
+    } else {
       if (d.length >= DECK_MAX) return true;
       d.push(text);
     }

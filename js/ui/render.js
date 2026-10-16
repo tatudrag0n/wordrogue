@@ -72,16 +72,19 @@ export class Renderer {
     this.step('pickups', () => this.drawPickups(run));
     this.step('slashes', () => this.drawSlashes(run));
     this.step('rings', () => this.drawRings(run));
+    this.step('boss-burst', () => this.drawBossBursts(run));
     this.step('beams', () => this.drawBeams(run));
     this.step('enemies', () => this.drawEnemies(run));
     this.step('bullets', () => this.drawBullets(run));
     this.step('player', () => this.drawPlayer(run));
+    this.step('weapon-spirits', () => this.drawWeaponSpirits(run));
     this.step('lightnings', () => this.drawLightnings(run));
     this.step('texts', () => this.drawDamageTexts(run));
 
     g.restore();
 
     this.step('vignette', () => this.drawVignette(run));
+    this.step('motes', () => this.drawMotes(run));
     this.step('stick', () => this.drawStickUI(stick));
   }
 
@@ -144,6 +147,32 @@ export class Renderer {
     rg.addColorStop(1, 'rgba(88, 68, 38, .16)');
     g.fillStyle = rg;
     g.fillRect(this.camX, this.camY, this.w, this.h);
+  }
+
+  // 画面手前を漂う魔力の粒子。固定シードで配置し、時間だけで動かすため
+  // フレームごとの乱数ちらつきや追加のゲーム状態を発生させない。
+  drawMotes(run) {
+    const g = this.ctx;
+    const count = Math.min(34, Math.floor((this.w * this.h) / 38000));
+    for (let i = 0; i < count; i++) {
+      const seed = i * 127.1 + 41.7;
+      const x0 = ((Math.sin(seed) * 43758.5) % 1 + 1) % 1;
+      const y0 = ((Math.sin(seed * 2.3) * 17631.2) % 1 + 1) % 1;
+      const phase = seed % TAU;
+      const x = (x0 * this.w + Math.sin(run.t * 0.42 + phase) * 18 + this.w) % this.w;
+      const y = (y0 * this.h - run.t * (8 + i % 7) + this.h * 4) % this.h;
+      const pulse = 0.3 + (Math.sin(run.t * 2.1 + phase) + 1) * 0.28;
+      const r = 1 + (i % 3) * 0.55;
+      g.save();
+      g.globalAlpha = pulse;
+      g.fillStyle = run.boss ? '#f0a34b' : '#d4a94e';
+      g.shadowColor = g.fillStyle;
+      g.shadowBlur = 9;
+      g.beginPath();
+      g.arc(x, y, r, 0, TAU);
+      g.fill();
+      g.restore();
+    }
   }
 
   drawVignette(run) {
@@ -320,6 +349,41 @@ export class Renderer {
       g.stroke();
     }
     g.restore();
+  }
+
+  drawBossBursts(run) {
+    const g = this.ctx;
+    for (const fx of run.bossBursts || []) {
+      const t = 1 - fx.life / fx.maxLife;
+      const radius = 28 + t * Math.max(this.w, this.h) * 0.72;
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = (1 - t) * 0.75;
+      const glow = g.createRadialGradient(fx.x, fx.y, 0, fx.x, fx.y, radius);
+      glow.addColorStop(0, 'rgba(255,250,222,.95)');
+      glow.addColorStop(.12, fx.color);
+      glow.addColorStop(.48, 'rgba(224,138,61,.35)');
+      glow.addColorStop(1, 'rgba(224,138,61,0)');
+      g.fillStyle = glow;
+      g.beginPath(); g.arc(fx.x, fx.y, radius, 0, TAU); g.fill();
+      g.globalAlpha = (1 - t) * .9;
+      g.strokeStyle = '#ffe7a1';
+      g.lineWidth = 8 * (1 - t) + 1;
+      g.beginPath(); g.arc(fx.x, fx.y, 20 + t * radius * .72, 0, TAU); g.stroke();
+      // 放射状の光条を一斉に走らせる。
+      g.globalAlpha = (1 - t) * .7;
+      g.strokeStyle = '#fff4cc'; g.lineWidth = 2;
+      for (let i = 0; i < 20; i++) {
+        const a = i * TAU / 20 + .12;
+        const inner = 34 + t * radius * .35;
+        const outer = inner + 18 + (i % 4) * 8;
+        g.beginPath();
+        g.moveTo(fx.x + Math.cos(a) * inner, fx.y + Math.sin(a) * inner);
+        g.lineTo(fx.x + Math.cos(a) * outer, fx.y + Math.sin(a) * outer);
+        g.stroke();
+      }
+      g.restore();
+    }
   }
 
   drawEnemies(run) {
@@ -787,6 +851,20 @@ export class Renderer {
     const g = this.ctx;
     const p = run.player;
 
+    // 常時ゆっくり呼吸する護りの紋環。被弾・ダッシュ演出と重ねて自機を際立たせる。
+    g.save();
+    const pulse = 0.5 + 0.5 * Math.sin(run.t * 2.4);
+    g.globalAlpha = 0.1 + pulse * 0.12;
+    g.strokeStyle = run.boss ? '#d34b35' : '#d2a448';
+    g.lineWidth = 1.2 + pulse * 1.2;
+    g.setLineDash([3, 8]);
+    g.lineDashOffset = -run.t * 16;
+    g.beginPath();
+    g.arc(p.x, p.y, p.r + 10 + pulse * 3, 0, TAU);
+    g.stroke();
+    g.setLineDash([]);
+    g.restore();
+
     // ダッシュの残像。
     for (const t of p.dashTrail || []) {
       const a = (t.life / t.maxLife) * 0.42;
@@ -848,6 +926,35 @@ export class Renderer {
     g.fill();
     g.restore();
     g.globalAlpha = 1;
+  }
+
+  // 武器の種類ごとに異なる「待機モーション」。攻撃の合間にも武器が息づく。
+  drawWeaponSpirits(run) {
+    const g = this.ctx, p = run.player;
+    for (let i = 0; i < run.weapons.length; i++) {
+      const wi = run.weapons[i];
+      const report = run.weaponReport?.()[i];
+      if (report && !report.res.active) continue;
+      const phase = run.t * (wi.def.kind === 'orbit' ? 1.8 : 1.15) + i * TAU / Math.max(1, run.weapons.length);
+      const radius = p.r + 17 + Math.sin(run.t * 2 + i) * 2;
+      const x = p.x + Math.cos(phase) * radius;
+      const y = p.y + Math.sin(phase) * radius * .58;
+      g.save();
+      g.translate(x, y); g.rotate(phase + Math.PI / 4);
+      g.globalAlpha = .48 + .22 * Math.sin(run.t * 3 + i);
+      g.strokeStyle = wi.def.kind === 'chain' || wi.def.kind === 'beam' ? '#6fb5d7' : '#d4a94e';
+      g.fillStyle = 'rgba(255,248,218,.85)'; g.lineWidth = 1.5;
+      g.shadowColor = g.strokeStyle; g.shadowBlur = 7;
+      g.beginPath();
+      if (wi.def.kind === 'shot' || wi.def.kind === 'beam') {
+        g.moveTo(0, -6); g.lineTo(4, 4); g.lineTo(0, 2); g.lineTo(-4, 4); g.closePath();
+        g.fill(); g.stroke();
+      } else {
+        g.moveTo(0, -7); g.lineTo(3, 0); g.lineTo(0, 7); g.lineTo(-3, 0); g.closePath();
+        g.fill(); g.stroke();
+      }
+      g.restore();
+    }
   }
 
   drawLightnings(run) {

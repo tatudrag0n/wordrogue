@@ -1972,3 +1972,100 @@ button:active:not(:disabled), .btn:active:not(.off) {
   transition: background .12s ease, box-shadow .12s ease;
 }
 #forge .slot:hover { box-shadow: 0 0 0 2px var(--accent) inset; }
+
+/* ══ 豪華な幻想譚の演出 ═══════════════════════════════════════════════ */
+:root {
+  --gold: #bd8b35;
+  --gold-light: #f2d58b;
+  --accent: #a83228;
+  --accent-2: #e08a3d;
+  --line: #d8c79e;
+  --line-2: #ad9563;
+  --shadow: 0 24px 70px rgba(34, 22, 12, .28), 0 1px 0 rgba(255,255,255,.8) inset;
+}
+html, body {
+  background:
+    radial-gradient(ellipse at 50% 8%, rgba(255,250,228,.96), transparent 47%),
+    radial-gradient(ellipse at 8% 86%, rgba(199,143,62,.12), transparent 34%),
+    repeating-linear-gradient(135deg, rgba(126,92,39,.025) 0 1px, transparent 1px 5px),
+    linear-gradient(145deg, #e9dfc9, #f8f1df 48%, #dfd1b4);
+}
+.screen {
+  background: radial-gradient(ellipse at center, rgba(255,251,237,.83), rgba(64,42,22,.18)), rgba(35,27,20,.32);
+  backdrop-filter: blur(12px) saturate(1.12);
+}
+.panel {
+  border: 1px solid #b39b68;
+  outline: 1px solid rgba(255,255,255,.7);
+  outline-offset: -5px;
+  box-shadow: 0 26px 80px rgba(26,18,10,.3), 0 0 0 1px rgba(189,139,53,.25), inset 0 1px 0 #fff;
+  background: linear-gradient(145deg, #fffdf5, #f8f0dc 62%, #eee2c5);
+}
+.panel-head::after { height: 3px; background: linear-gradient(90deg, #9e3025, #d8ad55 78px, #ddcfad 78px); }
+.btn { border-color: #b8a477; box-shadow: inset 0 1px #fff, 0 4px 12px rgba(73,51,19,.12); }
+.btn-primary {
+  background: linear-gradient(115deg, #7e201d, #bd3d2d 48%, #8c281f);
+  border: 1px solid #76221b;
+  box-shadow: inset 0 1px rgba(255,232,189,.38), 0 7px 20px rgba(126,32,29,.25);
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::after {
+  content: ''; position: absolute; inset: -80% auto -80% -40%; width: 25%;
+  transform: rotate(24deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,.34), transparent);
+  transition: left .5s ease;
+}
+.btn-primary:hover::after { left: 125%; }
+.title-wrap { position: relative; isolation: isolate; }
+.title-wrap::before {
+  content: '✦'; position: absolute; z-index: -1; top: -1.3em; left: 50%;
+  transform: translateX(-50%); font-size: 2rem; color: var(--gold);
+  text-shadow: 0 0 22px rgba(189,139,53,.45); animation: sigilGlow 3s ease-in-out infinite;
+}
+.title-main { color: #28221b; text-shadow: 0 2px 0 #fff8e8, 0 8px 24px rgba(68,43,14,.16); }
+.title-main span { color: #a83228; }
+.title-main::after { background: linear-gradient(90deg, transparent, #a83228 35%, #d9ac50 70%, transparent); height: 4px; }
+.title-tag { color: #726044; }
+.title-record div { background: rgba(255,252,241,.88); border-color: #d2c096; box-shadow: 0 5px 18px rgba(80,57,20,.11), inset 0 1px #fff; }
+.title-record b { color: #a83228; }
+.stage-card, .lo-card, .reward-card { transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s, filter .22s; }
+.stage-card:hover, .lo-card:hover, .reward-card:hover { transform: translateY(-4px) scale(1.012); filter: saturate(1.08); box-shadow: 0 14px 30px rgba(72,48,15,.2); }
+@keyframes sigilGlow { 0%,100% { opacity:.55; transform:translateX(-50%) scale(.92) rotate(-8deg); } 50% { opacity:1; transform:translateX(-50%) scale(1.12) rotate(8deg); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+
+/* くじ演出: 引く瞬間の印章回転と、結果の紙吹雪風ポップ */
+#gachaBtn.gacha-spin { animation: gachaRoll .62s cubic-bezier(.2,.8,.3,1); }
+.grow-gacha-result.gacha-reveal { animation: gachaReveal .62s cubic-bezier(.16,1,.3,1); }
+@keyframes gachaRoll {
+  0% { transform: rotate(0) scale(1); filter: brightness(1); }
+  22% { transform: rotate(-7deg) scale(1.08); filter: brightness(1.35); box-shadow: 0 0 0 5px #f1d27c, 0 0 28px #e8ac3c; }
+  52% { transform: rotate(8deg) scale(.94); }
+  78% { transform: rotate(-3deg) scale(1.05); }
+  100% { transform: rotate(0) scale(1); filter: brightness(1); }
+}
+@keyframes gachaReveal {
+  0% { opacity: 0; transform: translateY(14px) scale(.72); filter: brightness(2) blur(3px); }
+  55% { opacity: 1; transform: translateY(-4px) scale(1.14); filter: brightness(1.35); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+/* 熟語成立: 鍛冶画面の行を発光させ、語チップに連鎖する印 */
+#forge .wrow.idiom-born { animation: idiomForge .82s cubic-bezier(.2,.8,.2,1); }
+#forge .wrow.idiom-born .sen-word.idiom-word { animation: idiomForgeWord .82s ease-out; }
+@keyframes idiomForge {
+  0% { filter: brightness(1); box-shadow: inset 0 0 0 rgba(214,160,54,0); }
+  32% { filter: brightness(1.35); box-shadow: inset 0 0 34px rgba(255,205,89,.55), 0 0 22px rgba(255,197,66,.7); }
+  100% { filter: brightness(1); box-shadow: inset 0 0 0 rgba(214,160,54,0); }
+}
+@keyframes idiomForgeWord {
+  0%,100% { transform: scale(1); }
+  28% { transform: translateY(-7px) scale(1.2); box-shadow: 0 0 22px #f3c653; }
+  56% { transform: translateY(2px) scale(.97); }
+}
+/* 武器チップの攻撃周期に合わせた臨場感。成立文ほど強く脈動 */
+.hud-weapons .wchip { position: relative; }
+.hud-weapons .wchip:not(.broken) { animation: weaponReady 2.8s ease-in-out infinite; }
+.hud-weapons .wchip.idiom { animation: weaponIdiom 1.7s ease-in-out infinite; }
+@keyframes weaponReady { 0%,100% { box-shadow: 0 2px 8px rgba(65,45,15,.12); } 50% { box-shadow: 0 3px 14px rgba(192,139,47,.25); } }
+@keyframes weaponIdiom { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.13) drop-shadow(0 0 5px rgba(220,166,48,.48)); } }

@@ -1158,6 +1158,17 @@ sec('形と攻撃は文の中の武器語が決める');
       `現象語「渦」が特殊武器にならない: special=${res.special} tail=${res.tail} kind=${res.kind}`);
     ok(WORDS['渦'].cat === 'phenom' && WORDS['嵐'].cat === 'element',
       '渦・嵐の分類がおかしい');
+    // 熟語の述語 (毒殺する) も攻撃できる動詞として数える。
+    // 熟語の頭の語 (毒) は動詞でないが、構成語の「殺」が動詞なので発動する。
+    setFlat(wi, ['毒', '殺', 'する', '光']);
+    res = wi.resolve(r.player.stats);
+    ok(res.special === true && res.tail === '光' && res.kind === 'beam',
+      `「毒殺する光」が特殊武器にならない: special=${res.special} tail=${res.tail} kind=${res.kind}`);
+    // 構成語のどれもが述語にできなければ不発のまま (毒蝕する は述語にならない)。
+    setFlat(wi, ['毒', '蝕', 'する', '光']);
+    res = wi.resolve(r.player.stats);
+    ok(res.tail === null && res.kind === 'shot',
+      `述語にならない「毒蝕する光」が発動した: tail=${res.tail} kind=${res.kind}`);
   }
 
   // 同じ武器でも、置いた武器語が変われば攻撃の型が変わる。

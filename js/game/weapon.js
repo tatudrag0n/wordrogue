@@ -9,7 +9,7 @@
 //   語の横 (直後) には接続詞が付く。語をタップすると切り替わる。
 //   文は 10 文字まで。
 //
-// 攻撃の型は「文の中の武器語 (剣・弾・環…)」が決める。
+// 攻撃の型は「文の中の武器語 (剣・刃・銃…)」が決める。
 // 武器語は自動で付かない。戦闘中のレベルアップで語として得る。
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
@@ -92,9 +92,10 @@ export class WeaponInst {
   }
 
   /**
-   * 文の中の特殊武器 (末尾から見て最初に見つかったもの)。
-   * 属性語と、基本武器でない形態語。武器になるのは攻撃できる動詞が
+   * 文の中の特殊武器の頭 (末尾から見て最初に見つかったもの)。
+   * 属性語と現象語だけ。武器になるのは攻撃できる動詞が
    * 付いているときだけ (hasAttackVerb)。
+   * 基本武器でない形態語 (弾・環・玉 …) はただの語なので、武器にはならない。
    */
   get specialTail() {
     const ws = this.sentence.words;
@@ -107,14 +108,15 @@ export class WeaponInst {
 
   /**
    * 文に「攻撃できる動詞」が述語の形で付いているか。
-   * 熟語の述語 (爆発する 等) は、熟語の頭の語が動詞なら数える。
+   * 熟語の述語 (爆裂する・毒殺する 等) は、熟語の構成語に動詞があれば数える。
    * @param {object} e evaluate の結果
    */
   hasAttackVerb(e) {
     return (e?.compounds || []).some((c) => {
       if (!c.pred) return false;
-      if (WORDS[c.source]?.cats?.includes('verb')) return true;
-      return c.phrase && WORDS[c.source[0]]?.cat === 'verb';
+      // 熟語に付いた形は、構成語ぜんぶを見る (毒殺する … 殺が動詞)。
+      const parts = c.phrase ? [...c.source] : [c.source];
+      return parts.some((t) => WORDS[t]?.cats?.includes('verb'));
     });
   }
   get tailWord() { return this.tail ? makeWord(this.tail) : null; }

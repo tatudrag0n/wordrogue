@@ -64,6 +64,9 @@ const tap = (node) => {
   node.dispatchEvent(pointer('pointerup', p.x, p.y));
 };
 
+/** ドラッグ直後の suppressClick が切れるまで待つ。 */
+const settle = () => new Promise((r) => setTimeout(r, 5));
+
 /** 長押し。押したまま待つ。タップにはしない。 */
 const longPress = async (node) => {
   const p = centerOf(node);
@@ -532,6 +535,98 @@ sec('熟語が成立すると、構成する語が光る');
   ok(!weaponRow(forge).classList.contains('idiom-born'), '再描画でも成立演出が繰り返された');
   ok(litTexts().join('') === '毒蝕弾', `光り続けていない: ${litTexts().join(',')}`);
   console.log(`  毒蝕弾の硬刃 → 光る語「${litTexts().join('・')}」/ 分割「${segLit}」`);
+}
+
+sec('語彙の＋で属性語から特殊武器の文を作る');
+{
+  const { run, forge } = openForge();
+  // 語彙を空にしてから 光 (属性語) を 1 つ置く。
+  run.lexicon.fill(null);
+  run.lexicon[0] = makeWord('光');
+  forge.render();
+  ok(!!run.lexicon[0] && run.lexicon[0].text === '光', '語彙に光を置けない');
+  ok(run.canCraftFromWord(run.lexicon[0]) === true, '属性語から文を作れない');
+
+  const chip = lexWords()[0];
+  ok(!!chip, '語彙に「光」が出ない');
+  const plus = chip.querySelector('.pword-craft');
+  ok(!!plus && !plus.classList.contains('disabled'), '語彙に＋ ボタンが無い');
+
+  const w0 = run.weapons.length;
+  tap(plus);
+  ok(run.weapons.length === w0 + 1, `＋ で新しい文が増えない: ${w0} -> ${run.weapons.length}`);
+  const wi = run.weapons[run.weapons.length - 1];
+  ok(wi.sentence.words.some((w) => w.text === '光'), `作った文に「光」が無い: ${wi.sentence.text}`);
+  ok(!run.lexicon.some((w) => w && w.text === '光'), '語彙から「光」が消えていない');
+  let res = wi.resolve(run.player.stats);
+  ok(!res.active && !res.valid, `語 1 つなのに扱いが違う: ${res.reason}`);
+  wi.sentence.push(makeWord('剛'));
+  res = wi.resolve(run.player.stats);
+  ok(res.valid && !res.active && res.pending,
+    `動詞待ちになっていない: valid=${res.valid} active=${res.active} pending=${res.pending}`);
+  ok(res.stats.dmg === 0, `動詞待ちで威力が付いている: ${res.stats.dmg}`);
+
+  // 増えた行にも文の操作が一通り揃っている。
+  forge.selWeapon = wi;
+  forge.selIndex = wi.sentence.count;
+  forge.render();
+  const rows = [...dom.doc.querySelectorAll('#forgeWeapons .wrow')];
+  const newRow = rows.find((r) => r.textContent.includes('光'));
+  ok(!!newRow, '作った文が武器欄に出ない');
+  ok(newRow.querySelectorAll('.sen-gap').length > 0, '新しい文に隙間が無い');
+  ok(newRow.querySelectorAll('.sen-out').length > 0, '新しい文の語に ✕ が無い');
+  console.log(`  ＋ →「${wi.sentence.text}」(${run.weapons.length} 本目)`);
+}
+
+sec('形態語 (弾・環・玉) は武器語ではない — ＋ も付かない');
+{
+  const { run, forge } = openForge();
+  run.lexicon.fill(null);
+  for (const t of ['弾', '環', '玉', '壁', '剣']) run.giveWord(makeWord(t), true);
+  forge.render();
+  const chips = lexWords();
+  ok(chips.length >= 4, `語彙が足りない: ${chips.length}`);
+  for (const c of chips) {
+    const t = c.querySelector('span').textContent;
+    if (t === '剣') { ok(!!c.querySelector('.pword-craft'), `武器語「${t}」に＋ が無い`); continue; }
+    ok(!c.querySelector('.pword-craft:not(.is-form)'), `形態語「${t}」に＋ が付いている`);
+  }
+  // 形態語の語彙は文の中にも置ける (ただの語)。置いた語は取り外せる。
+  const wi = run.weapons[0];
+  const tama = chips.find((c) => c.querySelector('span').textContent === '弾');
+  ok(!!tama, '語彙に「弾」が無い');
+  const before = wi.sentence.count;
+  drag(tama, gapsOf(forge).at(-1));
+  await settle();
+  ok(wi.sentence.count === before + 1, `形態語が文に置けない: ${wi.sentence.text}`);
+  forge.render();
+  const outs = outBtns(forge);
+  ok(outs.length > 0, '文から語を外す ✕ が無い (取り外せない不具合)');
+  const last = outs.at(-1);
+  const nBefore = wi.sentence.count;
+  tap(last);
+  ok(wi.sentence.count === nBefore - 1, `✕ で語が外れない: ${nBefore} -> ${wi.sentence.count}`);
+
+  // 文まるごと外す (.wrow-drop) と、語が語彙に戻る。
+  // 武器語「剣」の文を 1 本作って、そこに行き着く。
+  const kenChip = lexWords().find((c) => c.querySelector('span').textContent === '剣');
+  ok(!!kenChip, '語彙に「剣」が無い');
+  await settle();
+  tap(kenChip.querySelector('.pword-craft'));
+  ok(run.weapons.length === 2, `「剣」から文が増えない: ${run.weapons.length}`);
+  await settle();
+  forge.render();
+  const drop = [...dom.doc.getElementById('forgeWeapons').querySelectorAll('.wrow-drop')][0];
+  ok(!!drop, '文を外すボタンが無い');
+  const w0 = run.weapons.length;
+  const lexBefore = run.lexicon.filter(Boolean).length;
+  ok(!!drop, '文を外すボタンが無い');
+  await settle();
+  tap(drop);
+  ok(run.weapons.length === w0 - 1, `文が外れない: ${w0} -> ${run.weapons.length}`);
+  ok(run.lexicon.filter(Boolean).length >= lexBefore, '外した文の語が語彙に戻っていない');
+  ok(run.lexicon.some((w) => w && w.text === '剣'), '「剣」が語彙に戻らない');
+  console.log(`  形態語「弾」は語彙から引けて文に置ける / 文は ${run.weapons.length} 本`);
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

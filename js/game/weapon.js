@@ -19,7 +19,11 @@ import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS } from '../da
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
-/** 武器語 (形態語) かどうか。 */
+/**
+ * 形態語かどうか。武器語 (攻撃の型を決める語) はこのうち基本武器の 14 語だけ。
+ * 弾・環・玉 のような形態語はただの語だが、「形を重ねない」並びの規則は
+ * 同じものを使うので、判定は形態語まとめて見る。
+ */
 const isForm = (text) => WORDS[text]?.cat === 'form';
 
 let wUid = 0;
@@ -135,7 +139,7 @@ export class WeaponInst {
   get fullText() { return this.sentence.text; }
 
   /**
-   * 文の中に 2 つ以上の武器語が並んでいないか。
+   * 文の中に 2 つ以上の形態語が並んでいないか。
    * 「刃剣」「弾矢」は日本語に無い並びなので落とす。
    * @returns {string[]|null}  並んでいた 2 語
    */
@@ -181,29 +185,26 @@ export class WeaponInst {
         ...e,
         valid: false,
         reason: 'tailform',
-        reasonText: `武器語「${pair[0]}」と「${pair[1]}」が並んでいない。`
+        reasonText: `「${pair[0]}」と「${pair[1]}」が並んでいる。`
           + `形を表す語どうしは隣り合えないので、語を 1 つ挟むこと。`,
         grade: 'broken',
         gradeInfo: GRADES.broken,
       };
     }
-    // 基本武器でない形態語 (弾・環・玉…) は文の終わりに置けない。
-    // 文は武器語で締める。ただし、その武器自身の名前 (爆弾の「弾」など)
-    // だけは末尾に置ける。熟語 (毒蝕弾など) は文の途中なら使える。
-    const last = this.sentence.words[this.sentence.count - 1];
-    if (last && WORDS[last.text]?.cat === 'form'
-      && !BASIC_WEAPONS.has(last.text) && last.text !== this.def.tail) {
-      return {
-        ...e,
-        valid: false,
-        reason: 'formtail',
-        reasonText: `「${last.text}」は文の終わりに置けない。`
-          + `武器語 (刃・剣・銃…) で締めること。`,
-        grade: 'broken',
-        gradeInfo: GRADES.broken,
-      };
-    }
+    // 形態語 (弾・環・玉…) はただの語なので、置く場所は自由。
+    // 「文は武器語で締める」という制約はやめた — 文末にこられると
+    // 攻撃の型を失って不利益になるので、そこは型だけで判断する。
     return e;
+  }
+
+  /**
+   * 特殊武器 (属性語・現象語を頭にした文) は、攻撃できる動詞が述語として
+   * 付いているときだけ発動する。付けている間は文はあるが武器がまだ無い。
+   * 固定の武器 (光・雷・壁 …) はこの判定を見ない。既定の型で最初から撃てる。
+   * @param {object} e evaluate の結果
+   */
+  pendingSpecialVerb(e) {
+    return !!this.def.special && !this.hasAttackVerb(e);
   }
 
   /**
@@ -227,17 +228,24 @@ export class WeaponInst {
       if (sp && this.hasAttackVerb(e)) {
         tail = sp;
         special = true;
-        info = FORM_SHAPE[sp] || SPECIAL_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null;
+        info = SPECIAL_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null;
       }
     }
     const kind = (info && info[1]) || this.def.kind;
     const shape = (info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade';
+    // 属性語を頭にした文は、動詞が無くても不成文ではない。ただ撃てない。
+    const pending = e.valid && this.pendingSpecialVerb(e);
+    const active = e.valid && !pending;
 
     const out = {
-      active: e.valid,
+      active,
       valid: e.valid,
-      reason: e.reason,
-      reasonText: e.reasonText,
+      pending,
+      reason: pending ? 'nov' : e.reason,
+      reasonText: pending
+        ? `動詞が無いので「${this.def.name}」はまだ武器になっていない。`
+          + '斬・燃・貫…に述語 (〜る・〜られた) を付けて、火を点けること。'
+        : e.reasonText,
       grade: e.grade,
       gradeInfo: e.gradeInfo,
       element: e.element,
@@ -254,8 +262,8 @@ export class WeaponInst {
       dps: 0,
     };
 
-    if (!e.valid) {
-      // 不成文。性能はゼロ。戦闘では完全に無効化される。
+    if (!active) {
+      // 不成文 (または特殊武器の動詞待ち)。性能はゼロ。戦闘では完全に無効化される。
       out.stats = { ...base, dmg: 0, rate: 0, count: 0 };
       this._sig = sig; this._cache = out;
       return out;

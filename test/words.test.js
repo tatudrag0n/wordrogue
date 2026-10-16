@@ -1,5 +1,5 @@
 // 語辞書と文判定の単体テスト。  node test/words.test.js
-import { WORDS, DRAWABLE, DRAWABLE_ALL, SIMPLE_POOL, CONNECTOR_SET, CONNECTOR_LIST, segment, evaluate, makeWord, drawWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS, CONNECTORS, findCompound } from '../js/data/words.js';
+import { WORDS, DRAWABLE, DRAWABLE_ALL, SIMPLE_POOL, CONNECTOR_SET, CONNECTOR_LIST, segment, evaluate, makeWord, drawWord, drawWeaponWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS, CONNECTORS, findCompound, WEAPON_WORDS, isWeaponWord } from '../js/data/words.js';
 import { canConnect, connectorFor, formOf, POS, connectorsAfter, formAfter, COMPOUND_POOLS } from '../js/data/words.connect.js';
 import { makeRng } from '../js/core/util.js';
 
@@ -13,11 +13,20 @@ const sec = (t) => console.log(`\n== ${t} ==`);
 sec('辞書の健全性');
 ok(Object.keys(WORDS).length > 200, `語数太少: ${Object.keys(WORDS).length}`);
 ok(DRAWABLE.length > 150, `引ける語が少ない: ${DRAWABLE.length}`);
-// 形態語 (末尾語) は語彙から引けない。辞書には分割用として残る。
-ok(!DRAWABLE.some((w) => WORDS[w].cat === 'form'), 'DRAWABLE に形態語が混じっている');
-ok(!DRAWABLE_ALL.some((w) => WORDS[w].cat === 'form'), 'DRAWABLE_ALL に形態語が混じっている');
+// **武器語 (基本武器) は語彙から引けない** — レベルアップの 3 択でだけ得る。
+// 形態語の残り (弾・環・玉・壁…) はただの語なので語彙に出る。
+for (const w of WEAPON_WORDS) {
+  ok(!DRAWABLE.includes(w), `武器語「${w}」が語彙から引ける`);
+  ok(!DRAWABLE_ALL.includes(w), `武器語「${w}」が語彙 (動詞込み) から引ける`);
+  ok(!SIMPLE_POOL.includes(w), `武器語「${w}」が開始語彙の補充に出る`);
+}
+for (const w of ['弾', '環', '玉', '壁', '球', '塊', '石', '輪', '盾', '網', '針', '矢', '珠', '還', '戈']) {
+  ok(WORDS[w] && WORDS[w].cat === 'form', `形態語「${w}」が形態として無い`);
+  ok(!isWeaponWord(w), `形態語「${w}」が武器語として登録されている`);
+  ok(DRAWABLE_ALL.includes(w), `形態語「${w}」が語彙から引けない (ただの語のはず)`);
+}
 ok(!SIMPLE_POOL.some((w) => WORDS[w].cat === 'form'), 'SIMPLE_POOL に形態語が混じっている');
-ok(WORDS['剣'] && WORDS['銃'] && WORDS['環'], '末尾語が辞書から消えている');
+ok(WORDS['剣'] && WORDS['銃'] && WORDS['環'], '武器語・形態語が辞書から消えている');
 for (const w of Object.keys(WORDS)) {
   ok(typeof w === 'string' && w.length > 0, `不正な語: ${JSON.stringify(w)}`);
   ok(!/[\s]/.test(w), `語に空白を含む: ${JSON.stringify(w)}`);

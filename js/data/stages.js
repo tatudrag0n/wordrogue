@@ -13,7 +13,7 @@
 export const STAGES = [
   {
     id: 1, name: '村の外れ', time: 60, boss: null,
-    color: '#2a3a2e', ground: '#1b2a1f', accent: '#8fd694',
+    color: '#6f8a52', ground: '#dfe7cb', accent: '#3f6b3a',
     intro: '夜が明ける前に村を出る。',
     waves: [
       { at: 0,  list: [['bat', 6]] },
@@ -25,7 +25,7 @@ export const STAGES = [
   },
   {
     id: 2, name: '森の奥', time: 70, boss: 'boss_slime',
-    color: '#1e3326', ground: '#13241a', accent: '#7ad694',
+    color: '#4e7a46', ground: '#d8e3c6', accent: '#2f5c34',
     intro: '樹が蠢える。何かが居る。',
     waves: [
       { at: 0,  list: [['bat', 10], ['slime', 6]] },
@@ -38,7 +38,7 @@ export const STAGES = [
   },
   {
     id: 3, name: '廃村', time: 80, boss: 'boss_dragon',
-    color: '#332a20', ground: '#241c15', accent: '#e0b070',
+    color: '#a3814f', ground: '#e9dcc0', accent: '#7d5a2a',
     intro: '民が去った村。灯りがまだ点いている。',
     waves: [
       { at: 0,  list: [['goblin', 12], ['swarm', 16]] },
@@ -51,7 +51,7 @@ export const STAGES = [
   },
   {
     id: 4, name: '地下墓場', time: 85, boss: 'boss_lich',
-    color: '#2a2a34', ground: '#1b1b22', accent: '#b0b0d0',
+    color: '#767c95', ground: '#dfe0e6', accent: '#4c5169',
     intro: '石棺の隙間から冷気。',
     waves: [
       { at: 0,  list: [['skeleton', 14], ['ghost', 10]] },
@@ -64,7 +64,7 @@ export const STAGES = [
   },
   {
     id: 5, name: '城塞外壁', time: 90, boss: 'boss_demon',
-    color: '#3a2020', ground: '#261515', accent: '#ff8a70',
+    color: '#a97a4e', ground: '#e9dccb', accent: '#8a4f28',
     intro: '城壁の向こうで、魔王が待っている。',
     waves: [
       { at: 0,  list: [['brute', 8], ['skeleton', 16]] },
@@ -77,7 +77,7 @@ export const STAGES = [
   },
   {
     id: 6, name: '深淵の魔王城', time: 100, boss: 'boss_demon',
-    color: '#2a1030', ground: '#1a0a1e', accent: '#d070ff',
+    color: '#6c5cae', ground: '#dddff0', accent: '#4b3d86',
     intro: 'すべてが終わる場所。',
     waves: [
       { at: 0,  list: [['wraith', 20], ['shooter', 16]] },
@@ -90,7 +90,7 @@ export const STAGES = [
   },
   {
     id: 7, name: '語書庫', time: 105, boss: 'boss_scribe',
-    color: '#2a2620', ground: '#1c1913', accent: '#e8d8a0',
+    color: '#a5813f', ground: '#eee6cf', accent: '#7a5a1e',
     intro: '使われなかったことばが積まれている。',
     waves: [
       { at: 0,  list: [['brush', 20], ['skeleton', 14]] },
@@ -103,7 +103,7 @@ export const STAGES = [
   },
   {
     id: 8, name: '韻律の塔', time: 110, boss: 'boss_scribe',
-    color: '#202a34', ground: '#151d24', accent: '#80c0e0',
+    color: '#4f86a8', ground: '#dce8ef', accent: '#2c6280',
     intro: '上へ上へ。同じ音が何千も重なっている。',
     waves: [
       { at: 0,  list: [['rhymer', 16], ['inkfiend', 12]] },
@@ -116,7 +116,7 @@ export const STAGES = [
   },
   {
     id: 9, name: '言葉の根源', time: 120, boss: 'boss_word',
-    color: '#332a3a', ground: '#221b28', accent: '#f0d0ff',
+    color: '#c9971f', ground: '#f2ead2', accent: '#9a6f0c',
     intro: '最初の語が、そこから生まれている。',
     waves: [
       { at: 0,  list: [['rhymer', 20], ['inkfiend', 18], ['brush', 40]] },

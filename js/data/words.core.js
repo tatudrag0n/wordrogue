@@ -14,32 +14,51 @@
 
 /** 属性定義。色と纏わる状態異常の紐付け。 */
 export const ELEMENTS = {
-  none:    { name: '無属性', color: '#dfe8f2', glow: 'rgba(223,232,242,.55)', status: null },
-  fire:    { name: '火',     color: '#ff7a2f', glow: 'rgba(255,122,47,.60)',  status: 'burn' },
-  ice:     { name: '氷',     color: '#7ad7ff', glow: 'rgba(122,215,255,.60)', status: 'chill' },
-  thunder: { name: '雷',     color: '#ffe14d', glow: 'rgba(255,225,77,.60)',  status: 'shock' },
-  poison:  { name: '毒',     color: '#9dff5c', glow: 'rgba(157,255,92,.60)',  status: 'poison' },
-  light:   { name: '光',     color: '#fff3b0', glow: 'rgba(255,243,176,.60)', status: 'none' },
-  dark:    { name: '闇',     color: '#b47bff', glow: 'rgba(180,123,255,.60)', status: 'none' },
-  earth:   { name: '土',     color: '#d4a373', glow: 'rgba(212,163,115,.60)', status: 'none' },
-  wind:    { name: '風',     color: '#a8f0e0', glow: 'rgba(168,240,224,.60)', status: 'none' },
-  nature:  { name: '草',     color: '#7dff9b', glow: 'rgba(125,255,155,.60)', status: 'poison' },
-  steel:   { name: '鉄',     color: '#cfe3ef', glow: 'rgba(207,227,239,.60)', status: 'none' },
-  blood:   { name: '血',     color: '#ff4d6d', glow: 'rgba(255,77,109,.60)',  status: 'none' },
-  water:   { name: '水',     color: '#5fb8ff', glow: 'rgba(95,184,255,.60)',  status: 'chill' },
-  gold:    { name: '金',     color: '#ffd23f', glow: 'rgba(255,210,63,.60)',  status: 'none' },
+  none:     { name: '無属性', color: '#6b7383', glow: 'rgba(107,115,131,.34)', status: null },
+  fire:     { name: '火', color: '#d9480f', glow: 'rgba(217,72,15,.34)', status: 'burn' },
+  ice:      { name: '氷', color: '#1971c2', glow: 'rgba(25,113,194,.34)', status: 'chill' },
+  thunder:  { name: '雷', color: '#c2870a', glow: 'rgba(194,135,10,.38)', status: 'shock' },
+  poison:   { name: '毒', color: '#4f9b13', glow: 'rgba(79,155,19,.34)', status: 'poison' },
+  light:    { name: '光', color: '#d9a406', glow: 'rgba(217,164,6,.42)', status: 'none' },
+  dark:     { name: '闇', color: '#5f3dc4', glow: 'rgba(95,61,196,.34)', status: 'none' },
+  earth:    { name: '土', color: '#a3703f', glow: 'rgba(163,112,63,.34)', status: 'none' },
+  wind:     { name: '風', color: '#2f9e8f', glow: 'rgba(47,158,143,.34)', status: 'none' },
+  nature:   { name: '草', color: '#2f9e44', glow: 'rgba(47,158,68,.34)', status: 'poison' },
+  steel:    { name: '鉄', color: '#64748b', glow: 'rgba(100,116,139,.34)', status: 'none' },
+  blood:    { name: '血', color: '#c92a46', glow: 'rgba(201,42,70,.34)', status: 'none' },
+  water:    { name: '水', color: '#1c7ed6', glow: 'rgba(28,126,214,.34)', status: 'chill' },
+  gold:     { name: '金', color: '#e8a30a', glow: 'rgba(232,163,10,.42)', status: 'none' },
 };
 
-/** 語の種類。UI 表示と抽選重みに使う。 */
+/** 語の種類。UI 表示と抽選重みに使う。色は明るい紙地 (和紙) を前提にする。 */
 export const CATEGORIES = {
-  element:  { name: '属性', color: '#ffb347', weight: 30 },
-  phenom:   { name: '現象', color: '#7dffce', weight: 20 },
-  form:     { name: '形態', color: '#7ad7ff', weight: 26 },
-  modifier: { name: '効果', color: '#9dff5c', weight: 24 },
-  verb:     { name: '動詞', color: '#ff8fab', weight: 18 },
-  buff:     { name: '自身', color: '#b47bff', weight: 12 },
-  connect:  { name: '接続', color: '#8ab4ff', weight: 18 },
+  element:  { name: '属性', color: '#e8762a', weight: 30 },
+  phenom:   { name: '現象', color: '#12a58a', weight: 20 },
+  // 形態語は武器語ではない「ただの語」。数だけ多いので抽選の重みは落としてある。
+  form:     { name: '形態', color: '#2f7fc4', weight: 12 },
+  modifier: { name: '効果', color: '#4e9b1f', weight: 24 },
+  verb:     { name: '動詞', color: '#d94f7a', weight: 18 },
+  buff:     { name: '自身', color: '#7d55d6', weight: 12 },
+  connect:  { name: '接続', color: '#5b7fb5', weight: 18 },
 };
+
+/**
+ * 武器語 = **基本武器の語だけ**。
+ *
+ * 武器語といえるのは次の 3 つをまとめて満たす語だけだった。
+ *   1. レベルアップの 3 択で「武器語」として出る
+ *   2. 文の中にあると攻撃の型を決める
+ *   3. 文の末尾 (武器の名前) になれる
+ * 環・弾・玉・球・壁 のような形態語は 1 を満たさない (語彙から引けるただの語) ので、
+ * 武器語から外した。武器語はこの 14 語だけ。
+ */
+export const WEAPON_WORDS = [
+  '刃', '剣', '刀', '斧', '槍', '矛', '牙', '爪', '弓', '鞭', '鎖', '杖', '拳', '銃',
+];
+export const WEAPON_WORD_SET = new Set(WEAPON_WORDS);
+
+/** 武器語 (基本武器) か。 */
+export const isWeaponWord = (text) => WEAPON_WORD_SET.has(text);
 
 // ─────────────────────────────────────────────────────────────────────────
 // カテゴリ分類の基準 (文の中での働きで決める。迷ったら上から順に当てる)

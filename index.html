@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0a0d14">
+<meta name="theme-color" content="#f3eee1">
 <meta name="description" content="言葉を組み合わせて武装する 2D ローグライク。 combina 語で作った文が成立しなければ、武器は無効になる。">
 <title>ワードローグ — Wordrogue</title>
 <link rel="stylesheet" href="css/style.css">
@@ -249,15 +249,18 @@
       <section>
       <h3>2. 武器語は自分で得る</h3>
       <p>
-      攻撃を決める<strong>武器語</strong>（<code>剣</code> <code>銃</code> <code>弾</code> <code>環</code> …）は
-      <strong>自動で付かない</strong>。武器語は<strong>レベルアップの 3 択</strong>に
-      <strong>他の語より低い確率</strong>で出る。
+      攻撃を決める<strong>武器語</strong>は <code>刃</code> <code>剣</code> <code>刀</code> <code>斧</code>
+      <code>槍</code> <code>矛</code> <code>牙</code> <code>爪</code> <code>弓</code> <code>鞭</code>
+      <code>鎖</code> <code>杖</code> <code>拳</code> <code>銃</code> の <strong>14 語だけ</strong>。
+      <strong>自動で付かない</strong>ので、<strong>レベルアップの 3 択</strong>で
+      <strong>他の語より低い確率</strong>で引く。
       </p>
       <ul class="howto-list">
       <li>刃・剣・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃は、それだけで武器になる（基本武器）</li>
       <li>炎・雷・光・渦のような属性・現象の語は、攻撃できる動詞が付いたときだけ武器になる（特殊武器）</li>
-      <li>弾・環・玉のような形の語は、文の<strong>終わり</strong>には置けない（その武器自身の名前は除く）。文は武器語で締める</li>
-      <li>武器語を文に置くと、その武器語が攻撃を決める。武器語どうしは隣り合えない</li>
+      <li>弾・環・玉・壁・球のような語は<strong>武器語ではない</strong>。ただの語なので語彙から引けるし、文のどこに置いてもよい（文末も）</li>
+      <li>武器語を文に置くと、その武器語が攻撃を決める。武器語どうしは隣り合えない。同じ<strong>形</strong>を表す語どうしも隣り合えない</li>
+      <li>語彙が<strong>満杯</strong>でも、武器語を選べば古い語を 1 つ捨てて<strong>新しい文</strong>になる。作った文は鍛冶で「文を外す」と語が戻る</li>
       </ul>
       <p>
       <strong>最初は武器が 1 つだけ。</strong>戦闘中に武器語を得ると
@@ -268,7 +271,7 @@
       <h3>3. 語の種類</h3>
       <ul class="howto-list">
       <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
-      <li><b>形態</b> … 剣・銃・弓・弾・矢・球・環・壁など。<strong>武器語</strong>。語彙からは引かれず、武器の攻撃を決める</li>
+      <li><b>形態</b> … 剣・銃・弓と、弾・矢・球・環・壁など。<strong>うち基本武器の 14 語だけが武器語</strong>で、語彙からは引けない。残りは語彙から引けるただの語（攻撃の型は決めない）</li>
       <li><b>効果</b> … 貫・裂・散など。数値を上げる。</li>
       <li><b>動詞</b> … <code>燃</code> <code>貫</code> <code>凍</code> など。1 枚で 1 つの動作になる。</li>
       <li><b>接続</b> … <code>る</code> <code>の</code> <code>られた</code> など。語ごとに付く送り仮名が決まっている。
@@ -322,6 +325,9 @@
       <p>
       タイトルの<strong>部位強化</strong>で、頭・右腕・左腕・右手・左手・
       右足・左足・胸・胴の 9 部位に語を入れると、その語の効果が能力に効く。
+      <strong>1 部位 = 1 文</strong>。語は 2 つまで入れられて、武器の文とおなじように
+      <strong>接続詞</strong>を付けられる（語の右の「・」をタップ → 一覧から選ぶ）。
+      文が<strong>成っていると効きが伸び</strong>、不成文だと<strong>何も効かない</strong>。
       語は<strong>言玉</strong>を払う<strong>言葉くじ</strong>で手に入り、
       戦闘で使う語と同じプールから出る。
       <strong>言葉デッキ</strong>もここで組み替えられ、戦闘開始時の語彙になる。
@@ -352,7 +358,7 @@
       <p>
       語彙は <strong>12 個</strong>から始まり、書庫で<strong>言玉</strong>を使い
       「語彙」を買うと 1 個ずつ広がる（<strong>上限 30</strong>、次のステージへ持ち越す）。
-      <strong>武器語</strong>は他の語より出にくい。選ぶと<strong>新しい文</strong>ができる。
+      <strong>武器語</strong>は他の語より出にくい。選ぶと<strong>新しい文</strong>ができる（満杯なら古い語を 1 つ捨てる）。
       </p>
       </section>
       <section>
@@ -414,7 +420,7 @@
       <strong>辞書</strong>を開くと、使えるすべてのことばを一覧できる。
       カテゴリで絞り込んだり、名前で検索したりできる。
       開いている間は時間が止まる。
-      形態（剣・銃・環 …）は<strong>武器語</strong>なので、語彙からは引けない。
+      基本武器（剣・銃・弓 …）は<strong>武器語</strong>なので語彙から引けず、環・弾・玉のような語はただの語なので引ける。
       </p>
       <ul class="howto-list">
       <li>戦闘中 … HUD の <strong>「辞」</strong> ボタン</li>
@@ -542,7 +548,8 @@
 
         <section>
           <h3>部位</h3>
-          <p class="grow-note">下の「所持語」から語を選んで、各部位の枠を押すと入る。入っている枠を押すと外れる。部位の語は戦闘中の能力にそのまま効く。</p>
+          <p class="grow-note">下の「所持語」から語を選んで、各部位の枠を押すと入る。入っている枠を押すと外れる（語を 2 つまで）。
+          語の右の「・」をタップすると<strong>接続詞</strong>が選べて、部位の 1 文が整う。文が成るほど効きが伸びる。</p>
           <div class="grow-parts" id="growParts"></div>
           <p class="grow-note" id="growSelNote">語を選んでください</p>
         </section>
@@ -610,7 +617,7 @@
 </div>
 
 <noscript>
-  <p style="color:#fff;padding:2rem;font-family:sans-serif">
+  <p style="color:#232a38;padding:2rem;font-family:sans-serif">
     このゲームは JavaScript を必要とします。ブラウザで JavaScript を有効にしてください。
   </p>
 </noscript>

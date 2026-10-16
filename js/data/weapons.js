@@ -13,6 +13,9 @@
 // level を上げるほど基礎値が伸びる。文の長さは武器レベルとは無関係で 10 文字まで。
 // ============================================================================
 
+import { WEAPON_WORD_SET } from './words.core.js';
+import { WORDS, weaponHeadKind } from './words.js';
+
 /**
  * kind の種類と挙動:
  *   slash     前方扇形を薙ぎ払う。近接。
@@ -169,38 +172,36 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
 export const WEAPON_MAX = 3;
 
 /**
- * 武器語 (形態語) と、描画の形・攻撃の型の対応。
+ * 武器語 (基本武器) と、描画の形・攻撃の型の対応。
  *
- * 武器語は文の中に自分で置く。置いた武器語が攻撃を決める。
+ * ここに載っている語だけが武器語。文の中に置くと攻撃の型を決める。
+ * 環・弾・玉・球・壁 のような形態語は載せない — ただの語なので、
+ * 攻撃の型は変えない (その武器の既定の型がそのまま残る)。
  * 武器語が文に無ければ、その武器の既定の型になる。
  */
 export const FORM_SHAPE = {
   // 斬撃
   刃: ['blade', 'slash'], 剣: ['blade', 'slash'], 刀: ['blade', 'slash'],
-  斧: ['blade', 'slash'], 戈: ['blade', 'slash'], 牙: ['blade', 'slash'],
+  斧: ['blade', 'slash'], 牙: ['blade', 'slash'], 爪: ['blade', 'slash'],
+  拳: ['blade', 'slash'],
   // 射撃
-  弾: ['bomb', 'bomb'], 銃: ['shot', 'shot'], 玉: ['shot', 'shot'],
-  爪: ['blade', 'slash'], 拳: ['blade', 'slash'], 杖: ['orb', 'shot'],
-  矢: ['arrow', 'shot'], 針: ['arrow', 'shot'], 弓: ['arrow', 'shot'],
-  槍: ['arrow', 'shot'], 矛: ['arrow', 'shot'],
-  球: ['orb', 'shot'], 珠: ['blade', 'boomerang'], 還: ['blade', 'boomerang'],
-  // 爆弾
-  塊: ['orb', 'bomb'], 石: ['bomb', 'bomb'],
-  // 軌道
-  環: ['blade', 'orbit'], 輪: ['blade', 'orbit'],
+  銃: ['shot', 'shot'], 杖: ['orb', 'shot'],
+  弓: ['arrow', 'shot'], 槍: ['arrow', 'shot'], 矛: ['arrow', 'shot'],
   // 薙ぎ
   鞭: ['blade', 'whip'], 鎖: ['blade', 'whip'],
-  // 城壁
-  壁: ['orb', 'aura'], 網: ['orb', 'aura'], 盾: ['orb', 'aura'],
 };
 
 /**
  * 基本武器: それ単体でも武器として成立する語。
- * 文の中にあれば (攻撃できる動詞が無くても) 攻撃の型を決める。
+ * 語彙からは引けず、レベルアップの 3 択でだけ得られる。
+ * 武器語の一覧は words.core.js の WEAPON_WORDS が唯一のソース。
  */
-export const BASIC_WEAPONS = new Set([
-  '刃', '剣', '刀', '斧', '槍', '矛', '牙', '爪', '弓', '鞭', '鎖', '杖', '拳', '銃',
-]);
+export const BASIC_WEAPONS = WEAPON_WORD_SET;
+
+/** 形態語のうち、武器語ではないもの (弾・環・玉…)。ただの語。 */
+export const FORM_WORDS = new Set(
+  Object.keys(WORDS).filter((w) => WORDS[w].cat === 'form' && !BASIC_WEAPONS.has(w)),
+);
 
 /** 現象語が特殊武器になったときの形と攻撃の型。 */
 export const SPECIAL_SHAPE = {
@@ -211,8 +212,9 @@ export const SPECIAL_SHAPE = {
  * 特殊武器: **属性語と現象語だけ**。炎・水・岩・雷・光・闇のような属性語は、
  * 攻撃できる動詞が付いている場合のみ武器として成立する。
  *   例 「天焦がす滅亡の光」… 焦がす (動詞の述語形) があるので「光」が武器になる。
- * 属性語でない形態語 (玉・環・弾 …) は武器の頭にはならない (ただの語)。
+ * 形態語 (玉・環・弾 …) は属性語ではないので武器の頭にならない (ただの語)。
  */
+
 
 /** 属性語が特殊武器になったときの形と攻撃の型。 */
 export const ELEMENT_SHAPE = {
@@ -242,14 +244,21 @@ export function defForForm(text) {
   // 武器語そのものの定義をキャッシュして使い回す。
   const id = `form:${text}`;
   if (formDefs.has(id)) return formDefs.get(id);
-  const info = FORM_SHAPE[text] || ['shot', 'shot'];
+  const head = weaponHeadKind(text);
+  //   基本武器 … FORM_SHAPE が形と攻撃を決める。
+  //   特殊武器 … 現象語 → 属性 → 武器の既定、の順で形を決める。
+  const info = head === 'basic'
+    ? (FORM_SHAPE[text] || ['blade', 'slash'])
+    : (SPECIAL_SHAPE[text] || ELEMENT_SHAPE[WORDS[text]?.el] || ['orb', 'shot']);
   const def = {
     id,
     name: text,
     kind: info[1],
     shape: info[0],
     glyph: text,
-    desc: `${text} の文。語を並べて 10 文字までの文にする。`,
+    desc: head === 'special'
+      ? `${text} の文。攻撃できる動詞を述べると「${text}」が武器になる。`
+      : `${text} の文。語を並べて 10 文字までの文にする。`,
     base: { dmg: 5, rate: 1.2, speed: 260, size: 1, count: 1, range: 100, area: 0 },
     grow: { dmg: 1.9, rate: 0.08 },
     startWord: null,
@@ -257,9 +266,27 @@ export function defForForm(text) {
     maxLevel: 8,
     unlock: null,
     isForm: true,
+    // 属性語・現象語由来の文 = 特殊武器。動詞が要る。
+    special: head === 'special',
   };
   formDefs.set(id, def);
   return def;
+}
+
+/**
+ * この語から新しい文 (武器) を作れるか。
+ *   基本武器の語 … 置いてすぐ攻撃の型が決まる。
+ *   属性語・現象語 … 特殊武器。攻撃できる動詞を述語に足すまで無効。
+ * 形態語 (弾・環・玉…) は武器語ではないので作れない。
+ * @returns {{ok:boolean, kind:string|null, reason:string}}
+ */
+export function canCraftFrom(text) {
+  const head = weaponHeadKind(text);
+  if (head) return { ok: true, kind: head, reason: '' };
+  if (WORDS[text]?.cat === 'form') {
+    return { ok: false, kind: null, reason: 'form' };
+  }
+  return { ok: false, kind: null, reason: 'notweapon' };
 }
 
 /** 武器の定義を引く。武器語由来のものはその場でつくる。 */

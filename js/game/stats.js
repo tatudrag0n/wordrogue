@@ -12,6 +12,10 @@
 //   発 + 電する   … 熟語「発電」が成立して、部位まるごとの効果が伸びる。
 // 不成文の部位 (接続詞が結べていない等) は何も効かない。
 //
+// **文の力は体そのものにも乗る。** 語が buff でなくても、正しく文にすれば
+// わずかに攻撃と体力が上がる (文力ボーナス)。接続詞を足して文を整える意味を
+// どの語でも持たせるためで、倍率は体じゅうで頭打ちにする。
+//
 // 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
@@ -53,6 +57,19 @@ const BUFF_KEYS = new Set([
 const PART_KEYS = new Set([
   'hp', 'armor', 'crit', 'regen', 'lifesteal', 'luck', 'magnet', 'shield',
 ]);
+
+/**
+ * 文の力 → 体のボーナス。
+ * 成立した部位 1 つぶんの (文の力 - 1) を積み上げて、攻撃と体力に足す。
+ * 属性語のように語そのものに player 効果が無い語でも、接続詞を足して
+ * 文を整えれば体が強くなる。倍率は上限を置いて破綻させない。
+ */
+export const PART_POWER = {
+  atk: 0.25,      // (文の力 - 1) あたりの攻撃倍率
+  hp: 12,         // (文の力 - 1) あたりの最大体力
+  atkMax: 0.6,    // 全部位を合わせた上限
+  hpMax: 40,
+};
 
 /**
  * buff 語の効果をプレイヤー能力へ写す。
@@ -110,7 +127,7 @@ function applyPartSrc(s, src, keys, gain, buffForm) {
  * @param {Object} meta セーブ側の恒久強化
  * @returns {typeof BASE_PLAYER}
  */
-export function resolvePlayerStats(parts, meta = {}) {
+export function resolvePlayerStats(parts, meta = {}, opt = {}) {
   const s = { ...BASE_PLAYER };
   s.maxHp += meta.hp || 0;
   s.atkMul += meta.atk || 0;
@@ -123,16 +140,18 @@ export function resolvePlayerStats(parts, meta = {}) {
   s.partTexts = [];
   s.partRows = [];      // 部位ごとの表示 (文・grade・文の力)
   s.partBroken = [];    // 不成文の部位
+  s.partPowerBonus = 0; // 文の力から来たボーナス (文力 - 1 の合計)
 
   for (const raw of parts || []) {
     const isPart = raw && typeof raw === 'object' && Array.isArray(raw.words);
     const words = isPart ? raw.words : [raw];
     const name = isPart ? (raw.name || raw.id || '') : '';
+    const id = isPart ? (raw.id || raw.name || '') : '';
     const p = evaluatePart(normPartEntries(words));
     if (!p.sen.count) continue;
 
     if (!p.valid) {
-      s.partBroken.push({ name, text: p.text, reasonText: p.reasonText });
+      s.partBroken.push({ name, id, text: p.text, reasonText: p.reasonText });
       continue;
     }
     const gain = p.gain;
@@ -153,12 +172,26 @@ export function resolvePlayerStats(parts, meta = {}) {
     }
     // 熟語が成立していれば、その効果も乗る (発電 = 感電など)。
     if (p.idiom) applyPartSrc(s, p.idiom.fx || {}, PART_KEYS, gain, false);
+    // 文の力そのものを体に写す。
+    s.partPowerBonus += Math.max(0, p.power - 1);
     s.partCount += used;
     s.partRows.push({
-      name, text: p.text, grade: p.ev.grade, gradeName: p.gradeInfo?.name || '',
+      name, id, text: p.text, grade: p.ev.grade, gradeName: p.gradeInfo?.name || '',
       power: p.power, gain, idiom: p.idiom?.name || null,
+      /** 語・接続詞から来た効果があったか (0 なら表示用の語)。 */
+      effects: used,
+      powerAtk: Math.min(PART_POWER.atkMax, Math.max(0, p.power - 1) * PART_POWER.atk),
+      powerHp: Math.min(PART_POWER.hpMax, Math.max(0, p.power - 1) * PART_POWER.hp),
     });
   }
+
+  // 文の力ぶんのボーナス。ここも上限を置く。
+  // opt.powerBonus === false で切れる (語そのものの効きだけを見たいとき)。
+  const withPower = opt.powerBonus !== false;
+  s.partPowerAtk = withPower ? Math.min(PART_POWER.atkMax, s.partPowerBonus * PART_POWER.atk) : 0;
+  s.partPowerHp = withPower ? Math.min(PART_POWER.hpMax, s.partPowerBonus * PART_POWER.hp) : 0;
+  s.atkMul += s.partPowerAtk;
+  s.maxHp += s.partPowerHp;
 
   // 補正と上限。
   s.armor = clamp(s.armor, 0, 0.75);
@@ -178,8 +211,96 @@ export function resolvePlayerStats(parts, meta = {}) {
   return s;
 }
 
-/** 語彙の中で重複している語をまとめる (表示用)。 */
-export function lexiconSummary(lexicon) {
+/**
+ * 部位の効きを「差分」で見せるための表。
+ * key は resolvePlayerStats の戻り値、label は画面の名前、
+ * fmt は増加分の見せ方 (d = 増減量、v = その能力の絶対値)。
+ */
+const EFFECT_ROWS = [
+  { key: 'maxHp', label: '体力', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
+  { key: 'atkMul', label: '攻撃', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'armor', label: '装甲', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'crit', label: '会心', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'spd', label: '移動', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
+  { key: 'regen', label: '回復', fmt: (d) => `${d > 0 ? '+' : ''}${d.toFixed(1)}/s` },
+  { key: 'lifesteal', label: '吸血', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'shield', label: '盾', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
+  { key: 'magnet', label: '吸引', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'xpMul', label: '経験値', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'critDmg', label: '会心威力', fmt: (d) => `${d > 0 ? '+' : ''}${d.toFixed(2)}倍` },
+  { key: 'size', label: '大きさ', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'luck', label: '幸運', fmt: (d) => `${d > 0 ? '+' : ''}${d.toFixed(2)}` },
+];
+
+/** 数値の差が、画面に出す意味を持つか。丸めると 0 になる差は出さない。 */
+function diffShown(key, d) {
+  const a = Math.abs(d);
+  if (a < 1e-9) return false;
+  if (key === 'maxHp' || key === 'spd' || key === 'shield') return Math.round(a) > 0;
+  if (key === 'regen') return Math.round(a * 10) > 0;
+  if (key === 'luck') return Math.round(a * 100) > 0;
+  return Math.round(a * 100) > 0;   // % と倍で見せるもの
+}
+
+/** 2 つの能力の差を、画面に出す行にする。 */
+function diffRows(a, b) {
+  const out = [];
+  for (const r of EFFECT_ROWS) {
+    const d = (a[r.key] || 0) - (b[r.key] || 0);
+    if (!diffShown(r.key, d)) continue;
+    out.push({ key: r.key, label: r.label, delta: d, text: r.fmt(d) });
+  }
+  return out;
+}
+
+/**
+ * 部位 1 つだけを取り替えたときの能力の差。
+ * 「この部位を入れると何がどれだけ変わるか」をそのまま出す。
+ * @param {Array} parts save.partEntries() の形
+ * @param {string} partId 取り替える部位
+ * @param {Object} [meta] 書庫の恒久強化
+ * @returns {Array<{key:string, label:string, delta:number, text:string}>}
+ */
+export function partEffectRows(parts, partId, meta = {}) {
+  const list = (parts || []).filter(Boolean);
+  const withPart = resolvePlayerStats(list, meta);
+  const rest = list.filter((p) => (p.id || p.name) !== partId);
+  const without = resolvePlayerStats(rest, meta);
+  return diffRows(withPart, without);
+}
+
+/**
+ * 全部位を合わせた効き (素の能力との差)。
+ * @returns {Array<{key:string, label:string, delta:number, text:string}>}
+ */
+export function partTotalRows(parts, meta = {}) {
+  return diffRows(resolvePlayerStats((parts || []).filter(Boolean), meta), resolvePlayerStats([], meta));
+}
+
+/**
+ * 語 1 つを部位に入れたときの効き (差分)。文の力ぶんも含む。
+ * @param {string} text
+ * @param {Object} [meta]
+ */
+export function wordEffectRows(text, meta = {}) {
+  return partEffectRows([{ id: 'tmp', name: 'tmp', words: [{ text, conn: null }] }], 'tmp', meta);
+}
+
+/**
+ * 語 1 つを部位に入れたときの **語そのもの** の効き。
+ * 文の力ぶんのボーナスを切って測るので、「この語が体に直接効くか」が分かる。
+ * 属性語・武器語は 0 件になる (武器の文で使う語)。
+ * @param {string} text
+ * @param {Object} [meta]
+ */
+export function wordDirectEffectRows(text, meta = {}) {
+  const part = { id: 'tmp', name: 'tmp', words: [{ text, conn: null }] };
+  const withPart = resolvePlayerStats([part], meta, { powerBonus: false });
+  const without = resolvePlayerStats([], meta, { powerBonus: false });
+  return diffRows(withPart, without);
+}
+
+/** 語彙の中で重複している語をまとめる (表示用)。 */export function lexiconSummary(lexicon) {
   const count = new Map();
   for (const w of lexicon) {
     if (!w) continue;

@@ -7,11 +7,29 @@ import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
 import { WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
 import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js';
-import { evaluatePart, partConnOptions } from '../game/parts.js';
+import { evaluatePart, partConnChoices, partWordForms } from '../game/parts.js';
+import {
+  partEffectRows, partTotalRows, wordEffectRows, wordDirectEffectRows,
+} from '../game/stats.js';
+import { ROLE_LABEL } from '../data/words.connect.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
   META_UPGRADES, PARTS, PART_SLOTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
 } from '../core/save.js';
+
+/** 接続詞の役割の見出し。 */
+const ROLE_ORDER = ['adn', 'adv', 'case'];
+function roleLabelOf(role) { return `${ROLE_LABEL[role] || role}の形`; }
+
+/**
+ * この枠に今この接続詞を付けたとき、部位の文が成っているか。
+ * 接続詞を外した状態は語だけで決まる。
+ */
+function partValidWithConn(words, index, conn) {
+  const w = (words || []).map((x) => ({ text: x.text, conn: x.conn }));
+  if (w[index]) w[index].conn = conn || null;
+  return evaluatePart(w.filter(Boolean)).valid;
+}
 
 /** 語の効果を 1 行にまとめる (ツールチップ用)。 */
 function fxText(src, label) {
@@ -56,6 +74,7 @@ export class Menus {
     this.gachaBtn = $('#gachaBtn');
     this.gachaResult = $('#gachaResult');
     this.growParts = $('#growParts');
+    this.growTotal = $('#growTotal');
     this.growSelNote = $('#growSelNote');
     this.growWords = $('#growWords');
     this.deckWords = $('#deckWords');
@@ -64,6 +83,8 @@ export class Menus {
     this.growSel = null;
     /** 接続詞の一覧を開いている枠 { part, slot }。 */
     this.growConn = null;
+    /** 「ほかの接続詞」を開いている枠 ("part:slot")。 */
+    this.growConnAll = null;
     /** 詳細 note に出す一次性のメッセージ。renderGrow で消す。 */
     this.growNote = '';
 
@@ -214,15 +235,27 @@ export class Menus {
     return slot;
   }
 
+  /** 能力の差分を 1 行のチップにする (「体力 +25」など)。 */
+  effectChips(rows, cls = 'eff') {
+    return rows.map((r) => el('span', { class: `${cls} up`, title: r.label + ' ' + r.text },
+      el('i', {}, r.label), r.text));
+  }
+
   /** 語が入っている部位の枠。語 (タップで接続詞が回る) + 接続詞 + ✕。 */
   renderGrowSlot(part, i, entry, words) {
     const save = this.save;
     const box = el('div', { class: 'grow-slot filled' });
-    const opts = partConnOptions(words, i);
+    const open = this.growConn && this.growConn.part === part.id && this.growConn.slot === i;
+    // 接続詞は自由に選べる。まず「その語の形」、次に「熟語の形」、最後に残り。
+    // 全部を試すのは一覧を開いているときだけ (1 枠 105 通りの評価になるため)。
+    const choices = open ? partConnChoices(words, i) : null;
+    const own = partWordForms(entry.text);
+    const cycle = own.filter((k) => partValidWithConn(words, i, k));
+    const list = cycle.length ? cycle : own;
 
     const word = el('button', {
       class: 'btn gs-word', type: 'button',
-      title: `「${entry.text}」\nタップ: 接続詞を切り替える (${opts.join(' → ')} → 無し)`
+      title: `「${entry.text}」\nタップ: 接続詞を順に切り替える (${list.join(' → ') || '無し'} → 無し)`
         + (this.growSel && this.growSel !== entry.text
             ? `\n今「${this.growSel}」を選んでいるので、押すとその語に置き換わる` : '')
         + (this.growSel === entry.text ? '\n選んでいる語と同じなので、押すとこの枠から外れる' : ''),
@@ -236,20 +269,22 @@ export class Menus {
         this.audio?.tap?.();
       } else {
         // 接続詞を 1 つ進める。一周したら無し。
-        const next = opts.length
-          ? (opts.indexOf(entry.conn) + 1 < opts.length ? opts[opts.indexOf(entry.conn) + 1] : null)
-          : null;
+        const at = list.indexOf(entry.conn);
+        const next = at + 1 < list.length ? list[at + 1] : null;
         save.setPartConn(part.id, i, next);
         if (next) this.audio?.phrase?.(); else this.audio?.tap?.();
       }
       this.renderGrow();
     });
 
+    const validNow = partValidWithConn(words, i, entry.conn);
     const conn = el('button', {
-      class: 'btn gs-conn' + (entry.conn ? ' filled' : ''), type: 'button',
-      title: '接続詞 — 使える語の一覧を開く',
-    }, el('span', {}, entry.conn || '・'));
-    const open = this.growConn && this.growConn.part === part.id && this.growConn.slot === i;
+      class: 'btn gs-conn' + (entry.conn ? ' filled' : '') + (entry.conn && !validNow ? ' bad' : ''),
+      type: 'button',
+      title: entry.conn
+        ? `接続詞「${entry.conn}」— 別の接続詞を選ぶ`
+        : '接続詞を選ぶ (押すと一覧が開く)',
+    }, el('span', {}, entry.conn || '接続詞'));
     if (open) conn.classList.add('on');
     conn.addEventListener('click', () => {
       this.growConn = open ? null : { part: part.id, slot: i };
@@ -269,46 +304,138 @@ export class Menus {
     });
 
     box.append(word, conn, out);
-    if (open) box.append(this.renderGrowConnMenu(part, i, words, opts));
+    if (open) box.append(this.renderGrowConnMenu(part, i, words, choices));
     return box;
   }
 
-  /** 接続詞の一覧。枠の下にインラインで出す (画面の位置を計算しない)。 */
-  renderGrowConnMenu(part, i, words, opts) {
+  /**
+   * 接続詞の一覧。枠の下にインラインで出す (画面の位置を計算しない)。
+   * 部位はどの接続詞でも選べるので、3 段に分けて出す。
+   *   ① 無し
+   *   ② その語の形 (プールの送り仮名) と、熟語の形 … まずこれを選べばよい
+   *   ③ ほか全部 … 並びによっては文が壊れる。✓ / ✕ を付けて出す
+   * ✓ の付いた形は文が成り立って効果が出る。✕ は不成文 (理由を下に出す)。
+   */
+  renderGrowConnMenu(part, i, words, choices) {
     const menu = el('div', { class: 'grow-conn-menu' });
     const cur = (words[i] && words[i].conn) || null;
-    const add = (text, label, tip) => {
+    const pick = (text) => {
+      this.save.setPartConn(part.id, i, text);
+      this.growConn = null;
+      this.audio?.phrase?.();
+      this.renderGrow();
+    };
+    const chip = (c) => {
       const b = el('button', {
-        class: 'btn grow-conn-pick' + (text === cur ? ' cur' : ''), type: 'button', title: tip,
-      }, el('span', {}, label));
-      b.addEventListener('click', () => {
-        this.save.setPartConn(part.id, i, text);
-        this.growConn = null;
-        this.audio?.phrase?.();
+        class: 'btn grow-conn-pick' + (c.text === cur ? ' cur' : '')
+          + (c.valid ? ' ok' : ' no') + (c.source !== 'other' ? ' own' : ''),
+        type: 'button',
+        title: `${words[i].text}${c.text} — ${c.valid ? '文が成る' : '不成文'}\n${c.roleLabel}。${c.desc}`
+          + (c.source === 'word' ? '\nこの語の形' : c.source === 'compound' ? '\n熟語の形' : '')
+          + (!c.valid && c.reason ? `\n${c.reason}` : ''),
+      }, el('span', {}, c.text));
+      b.addEventListener('click', () => pick(c.text));
+      return b;
+    };
+
+    const off = el('button', {
+      class: 'btn grow-conn-pick' + (!cur ? ' cur' : ''), type: 'button', title: '接続詞を外す',
+    }, el('span', {}, '無し'));
+    off.addEventListener('click', () => pick(null));
+    menu.append(off);
+
+    const own = choices.filter((c) => c.source !== 'other');
+    const rest = choices.filter((c) => c.source === 'other');
+    const okOwn = own.filter((c) => c.valid);
+    const okRest = rest.filter((c) => c.valid);
+
+    if (own.length) {
+      menu.append(el('span', { class: 'grow-conn-head' }, 'この語の形'));
+      for (const c of own) menu.append(chip(c));
+    } else {
+      menu.append(el('span', { class: 'grow-conn-none' },
+        `「${words[i].text}」に元から付く送り仮名は無い`));
+    }
+
+    // その並びで文が成る形は、語の形でなくても先に出す。
+    for (const c of okRest) menu.append(chip(c));
+
+    // それ以外は畳んでおく。押すと開く。
+    if (rest.length > okRest.length) {
+      const others = rest.filter((c) => !c.valid);
+      const open = this.growConnAll === `${part.id}:${i}`;
+      const more = el('button', {
+        class: 'btn grow-conn-more', type: 'button',
+        title: 'ほかの接続詞 (並びによっては不成文になる)',
+      }, open ? 'ほかを閉じる' : `ほかの接続詞 (${others.length})`);
+      more.addEventListener('click', () => {
+        this.growConnAll = open ? null : `${part.id}:${i}`;
+        this.audio?.tap?.();
         this.renderGrow();
       });
-      menu.append(b);
-    };
-    add(null, '無し', '接続詞を外す');
-    if (!opts.length) {
-      menu.append(el('span', { class: 'grow-conn-none' }, 'この語に付く接続詞は無い (他の語と並べると生まれる)'));
+      menu.append(more);
+      if (open) {
+        const groups = el('div', { class: 'grow-conn-all' });
+        for (const role of ROLE_ORDER) {
+          const inRole = others.filter((c) => c.role === role);
+          if (!inRole.length) continue;
+          groups.append(el('span', { class: 'grow-conn-head' }, roleLabelOf(role)));
+          for (const c of inRole) groups.append(chip(c));
+        }
+        menu.append(groups);
+      }
     }
-    for (const c of opts) add(c, c, `${words[i].text}${c} — 使える形`);
+
+    const mark = el('span', { class: 'grow-conn-legend' },
+      el('i', { class: 'ok' }, '✓'), 'は文が成る形。', el('i', { class: 'no' }, '✕'), 'は不成文 (効果なし)。');
+    menu.append(mark);
     return menu;
   }
 
-  /** 部位の文の評価。成ったか、何倍になったかを必ず出す。 */
+  /**
+   * 部位の評価。**何がどれだけ変わるか** を必ず数字で出す。
+   * 語そのものが武器用で効かない場合は、そう言い切る。
+   */
   renderGrowPartNote(part, words) {
-    if (!words.length) return el('div', { class: 'grow-part-note empty' }, 'から — 語を入れて 1 文にする');
-    const p = evaluatePart(words);
-    if (!p.valid) {
-      return el('div', { class: 'grow-part-note bad' },
-        `不成文 — ${p.reasonText || '文になっていない'} (何も効かない)`);
+    if (!words.length) {
+      return el('div', { class: 'grow-part-note empty' },
+        'から — 下の所持語を選んで枠を押すと入る');
     }
-    const gain = `×${p.gain.toFixed(2)}`;
-    const idiom = p.idiom ? ` 熟語「${p.idiom.name}」` : '';
-    return el('div', { class: `grow-part-note ${p.ev.grade}` },
-      `「${p.text}」 ${p.gradeInfo?.name || ''} ${gain}${idiom}`);
+    const p = evaluatePart(words);
+    const effects = partEffectRows(this.save.partEntries(), part.id, this.save.d.meta);
+    const box = el('div', { class: 'grow-part-note ' + (p.valid ? p.ev.grade : 'bad') });
+
+    if (!p.valid) {
+      box.append(el('b', {}, '不成文 — 効果なし'));
+      box.append(el('span', {}, p.reasonText || '文になっていない'));
+      const fix = partConnChoices(words, words.length - 1).filter((c) => c.valid);
+      box.append(el('span', { class: 'grow-part-fix' },
+        fix.length
+          ? `直すなら「${words[words.length - 1].text}」に ${fix.slice(0, 4).map((c) => c.text).join(' / ')}`
+          : 'この 2 語では文にならない。語を入れ替えるか、並びを変える'));
+      return box;
+    }
+
+    const head = el('div', { class: 'grow-part-head' },
+      el('b', {}, `「${p.text}」`),
+      el('span', { class: `grow-part-grade grade-${p.ev.grade}` }, p.gradeInfo?.name || ''),
+      el('span', {}, `文の力 ${p.power.toFixed(2)}`),
+      el('span', {}, `効き ×${p.gain.toFixed(2)}`),
+      p.idiom ? el('span', { class: 'grow-part-idiom' }, `熟語「${p.idiom.name}」`) : null,
+    );
+    box.append(head);
+
+    if (effects.length) {
+      box.append(el('div', { class: 'grow-part-eff' }, ...this.effectChips(effects)));
+    } else if (words.length < 2) {
+      // 1 語だけの部位。文の力は 1.00 なので、語そのものが体に効かないと何も起きない。
+      box.append(el('div', { class: 'grow-part-eff none' },
+        'この語は体に直接は効かない (武器の文で使う語) — もう 1 語足して文にすると、文の力ぶんだけ強くなる'));
+    } else {
+      box.append(el('div', { class: 'grow-part-eff none' },
+        '文は成っているが、この語は体に効かない (武器の文で使う語) — 体に効く語 (頑・健・癒 など) に入れ替える'));
+    }
+    return box;
   }
 
   renderGrow() {
@@ -316,6 +443,27 @@ export class Menus {
     this.growInk.textContent = String(save.ink);
     this.gachaBtn.textContent = `引く (${GACHA_COST} 言玉)`;
     this.gachaBtn.classList.toggle('off', save.ink < GACHA_COST);
+
+    // 全部位の合計。ここだけ見れば「今どう強くなっているか」が分かる。
+    if (this.growTotal) {
+      const meta = save.d.meta || {};
+      const rows = partTotalRows(save.partEntries(), meta);
+      clear(this.growTotal);
+      this.growTotal.append(el('span', { class: 'grow-total-label' }, '部位の合計'));
+      if (!rows.length) {
+        this.growTotal.append(el('span', { class: 'grow-total-none' },
+          'まだ効いていない — 語を入れて文を成らせると体が強くなる'));
+      } else {
+        this.growTotal.append(el('span', { class: 'grow-total-eff' }, ...this.effectChips(rows, 'eff big')));
+      }
+      const broken = save.partEntries().filter((x) => {
+        const w = x.words.filter(Boolean);
+        return w.length && !evaluatePart(w).valid;
+      }).length;
+      if (broken) {
+        this.growTotal.append(el('span', { class: 'grow-total-warn' }, `不成文の部位 ${broken} つ (効果なし)`));
+      }
+    }
 
     // 部位。空いた枠に選んだ語が入る。語の右が接続詞、✕ で外れる。
     clear(this.growParts);
@@ -335,10 +483,13 @@ export class Menus {
     }
 
     const note = this.growNote ? `${this.growNote} — ` : '';
-    this.growSelNote.textContent = this.growSel
-      ? `${note}「${this.growSel}」を選択中 — 空いた枠を押すと入り、入っている語を押すと外れる。語の右の「・」で接続詞を選べる`
-      : `${note}部位は 1 文。2 語なら接続詞でつないだ文のほうが強く効く`;
+    const body = this.growSel
+      ? `「${this.growSel}」を選択中 — 空いた枠を押すと入り、入っている語を押すと外れる。語の右の「接続詞」で文を整えられる`
+      : '部位は 1 文。語の右の「接続詞」を押すと、その語に付く形を選べる';
+    const extra = this._growEffectNote ? ` — ${this._growEffectNote}` : '';
+    this.growSelNote.textContent = `${note}${body}${extra}`;
     this.growNote = '';
+    this._growEffectNote = '';
 
     // 所持語 (部位用)。押すと選択。部位の語はそのまま能力に効く。
     clear(this.growWords);
@@ -347,14 +498,26 @@ export class Menus {
       if (!info) continue;
       const src = info.cat === 'buff' ? (info.player || info.fx) : info.fx;
       const used = save.partWordList().filter((x) => x === t).length;
+      // この語を単体で部位に入れると何が変わるか。
+      //   direct … 語そのものが体に効くか (体力 +25 など)
+      //   eff    … 文の力ぶんも含めた効き (文が成ればどの語でも少し乗る)
+      const direct = wordDirectEffectRows(t, save.d.meta || {});
+      const eff = wordEffectRows(t, save.d.meta || {});
       const b = el('button', {
-        class: 'btn grow-word' + (this.growSel === t ? ' sel' : '') + (used ? ' used' : ''),
+        class: 'btn grow-word' + (this.growSel === t ? ' sel' : '') + (used ? ' used' : '')
+          + (direct.length ? ' has-eff' : ' no-eff'),
         title: `${CATEGORIES[info.cat]?.name || info.cat}: ${fxText(src, info.cat === 'buff' ? PS_LABEL : FX_LABEL)}`
+          + (direct.length ? `\n体に効く: ${direct.map((r) => `${r.label} ${r.text}`).join(' / ')}`
+            : '\n体に直接は効かない (武器の文で使う語)')
+          + (eff.length && !direct.length ? '\n文にすれば文の力ぶんだけ強くなる' : '')
           + (used ? `\n部位に ${used} 語入っている (同じ語をいくつでも置ける)` : ''),
       }, t, used ? el('i', { class: 'grow-word-used' }, `×${used}`) : null);
+      if (direct.length) b.append(el('i', { class: 'grow-word-eff' }, direct.map((r) => r.text).join(' ')));
       b.addEventListener('click', () => {
         this.growSel = this.growSel === t ? null : t;
         this.growConn = null;
+        this.growConnAll = null;
+        if (!direct.length) this._growEffectNote = `「${t}」は体に直接は効かない (文にすれば文の力ぶんだけ強くなる)`;
         this.audio?.tap?.();
         this.renderGrow();
       });

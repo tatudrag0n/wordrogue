@@ -17,7 +17,7 @@ import { resolvePlayerStats } from '../js/game/stats.js';
 import { Sentence, MAX_SENTENCE_LEN } from '../js/game/sentence.js';
 import { STAGES } from '../js/data/stages.js';
 import { Save, META_UPGRADES, GACHA_COST, GACHA_REFUND, PARTS } from '../js/core/save.js';
-import { evaluatePart, partConnOptions } from '../js/game/parts.js';
+import { evaluatePart, partConnOptions, partConnChoices } from '../js/game/parts.js';
 import { WEAPON_MAX } from '../js/data/weapons.js';
 import { makeRng } from '../js/core/util.js';
 
@@ -1576,13 +1576,28 @@ sec('部位強化は 1 文。接続詞が使える');
   ok(two.maxHp > 145, `2 語の部位が 1 語ぶんより弱いです: ${two.maxHp}`);
   ok(two.partCount === 2, `2 語が数えていない: ${two.partCount}`);
 
-  // 接続詞を付けられる。語のプールにある形だけ (頑には な・に )。
+  // 接続詞を付けられる。部位は **どの接続詞でも選べる** (武器の鍛冶と違う)。
+  // その語の形 (プールの送り仮名) は source='word' として先に出て、
+  // 文を壊す形も選べるが valid=false で示される。
   const opts = partConnOptions(save.partRaw('head').filter(Boolean), 0);
   ok(Array.isArray(opts), 'partConnOptions が配列を返さない');
   const put = save.setPartConn('head', 0, opts[0] || null);
   ok(!opts.length || put.ok, `接続詞が付けられない: ${JSON.stringify(put)}`);
-  // プールに無い形は付かない。
-  ok(!save.setPartConn('head', 0, 'された').ok, 'プールに無い接続詞が付いた');
+
+  const headWords = save.partRaw('head').filter(Boolean);
+  const choices = partConnChoices(headWords, 0);
+  ok(choices.length > opts.length, '接続詞の候補が自由になっていない');
+  ok(choices.some((c) => c.text === 'な' && c.source === 'word' && c.valid),
+    `その語の形 (頑な) が出ない: ${JSON.stringify(choices.slice(0, 4))}`);
+  ok(choices.some((c) => c.text === 'された' && !c.valid),
+    '文を壊す形が valid=false で出ない');
+  // 自由に選べる。選んだ形がそのまま保存される。
+  ok(save.setPartConn('head', 0, 'された').ok, '接続詞を選べない');
+  ok(save.partRaw('head')[0].c === 'された' || save.partRaw('head')[0].conn === 'された',
+    '選んだ接続詞が保存されない');
+  ok(evaluatePart(save.partRaw('head').filter(Boolean)).valid === false,
+    '不成文になる形なのに文が成っている');
+  save.setPartConn('head', 0, null);
 
   // 熟語になる 2 語 (発電 + する) は、文の力だけが乗る (部位の語に player 効果が無ければ 0)。
   let withPower = 1;

@@ -2,17 +2,17 @@
 // ワードローグ — 起動とメインループ
 // ============================================================================
 
-import { $, clamp } from './core/util.js';
-import { Input } from './core/input.js';
-import { Audio } from './core/audio.js';
-import { Save } from './core/save.js';
-import { Run } from './game/run.js';
-import { Renderer } from './ui/render.js';
-import { Hud } from './ui/hud.js';
-import { Forge } from './ui/forge.js';
-import { Menus } from './ui/menus.js';
+import { $, clamp } from './core/util.js?v=1.3';
+import { Input } from './core/input.js?v=1.3';
+import { Audio } from './core/audio.js?v=1.3';
+import { Save } from './core/save.js?v=1.3';
+import { Run } from './game/run.js?v=1.3';
+import { Renderer } from './ui/render.js?v=1.3';
+import { Hud } from './ui/hud.js?v=1.3';
+import { Forge } from './ui/forge.js?v=1.3';
+import { Menus } from './ui/menus.js?v=1.3';
 
-import { STAGES } from './data/stages.js';
+import { STAGES } from './data/stages.js?v=1.3';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態

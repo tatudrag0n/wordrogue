@@ -1,55 +1,37 @@
 // ============================================================================
 // ワードローグ — プレイヤー能力の解決
 //
-// 語彙の中の「身体語」と、プレイヤーの部位 (右手 / 左手 / 胴 / 頭)、
-// セーブの恒久強化から最終ステータスを作る。
+// プレイヤーの強化はメインメニューの「部位強化」で行う (戦闘中には行わない)。
+// 頭・右腕・左腕・右手・左手・右足・左足・胸・胴の 9 部位に語を入れると、
+// その語の効果 (buff 語の player、それ以外の語は fx のうちプレイヤーに
+// 効くもの) がそのまま能力に乗る。セーブの恒久強化 (書庫) もここで重ねる。
 //
-// 部位には語を 1 つずつ置ける。語の効果はそのままプレイヤーに足される。
-// 手の部位 (右手 / 左手) に属性語を置くと、斬撃・薙ぎの武器がその属性を纏う。
-//   例 「硬」を左手に -> 硬い左手 (減傷 +2) / 「炎」を左手に -> 炎の左手
+// 部位は **1 文として数える** (武器と同じ)。1 部位に 2 語まで入れられて、
+// 語の直後には接続詞が選べる。
+//   頑・健        … 2 語が並ぶだけ。文の力は少しだけ乗る。
+//   発 + 電する   … 熟語「発電」が成立して、部位まるごとの効果が伸びる。
+// 不成文の部位 (接続詞が結べていない等) は何も効かない。
+//
+// **文の力は体そのものにも乗る。** 語が buff でなくても、正しく文にすれば
+// わずかに攻撃と体力が上がる (文力ボーナス)。接続詞を足して文を整える意味を
+// どの語でも持たせるためで、倍率は体じゅうで頭打ちにする。
+//
+// 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
-import { WORDS, ELEMENTS, CONNECTOR_SET } from '../data/words.js';
+import { WORDS, CONNECTOR_SET, CONNECTORS } from '../data/words.js';
 import { clamp } from '../core/util.js';
-
-/** プレイヤーの部位。手の部位の属性語は近接武器の属性になる。 */
-export const PARTS = [
-  { name: '右手', hand: true },
-  { name: '左手', hand: true },
-  { name: '胴', hand: false },
-  { name: '頭', hand: false },
-];
-
-/** 部位の表示名に使う接頭辞。硬 → 硬い右手。それ以外は「〇〇の」。 */
-const PART_PRE = {
-  硬: '硬い', 強: '強い', 高: '高い', 深: '深い', 遠: '遠い', 広: '広い',
-  重: '重い', 柔: '柔らかい', 鋭: '鋭い', 巧: '巧い', 明: '明るい',
-  早: '早い', 遅: '遅い', 近: '近い', 長: '長い', 短: '短い', 多: '多い',
-  少: '少ない',
-};
-
-/** 部位の表示名を作る。「硬」+ 右手 → 硬い右手 /「炎」+ 左手 → 炎の左手。 */
-export function partLabel(i, word) {
-  const part = PARTS[i] || { name: `部位${i + 1}` };
-  if (!word) return part.name;
-  const pre = PART_PRE[word.text];
-  return pre ? `${pre}${part.name}` : `${word.text}の${part.name}`;
-}
-
-/** 手の属性が武器に与える状態異常。属性語 1 つぶんの最小限。 */
-const HAND_STATUS_VALUE = { burn: 2, chill: 0.15, shock: 0.12, poison: 2 };
-
-let statsRev = 0;
+import { evaluatePart, normPartEntries } from './parts.js';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {
   maxHp: 100,
   spd: 122,        // px/s
   atk: 1,          // 攻撃倍率
-  atkMul: 1,       // 攻撃倍率 (文から来る)
+  atkMul: 1,       // 攻撃倍率
   xpMul: 1,
   hpMul: 1,
-  armor: 0,        // 被ダメージ軽減 (%)
+  armor: 0,        // 被ダメージ軽減 (割合)
   crit: 0.05,
   critDmg: 1.5,    // 会心倍率
   magnet: 1.0,     // ピックアップ回収半径倍率
@@ -62,22 +44,91 @@ export const BASE_PLAYER = {
   reflect: 0,      // 被弾を返す割合
 };
 
-/** 語彙の buff 語がプレイヤーに与えるキー一覧。 */
+/** buff 語がプレイヤーに与えるキー一覧。 */
 const BUFF_KEYS = new Set([
   'hp', 'spd', 'atk', 'armor', 'crit', 'regen', 'lifesteal',
   'luck', 'magnet', 'xp', 'size', 'shield',
 ]);
 
 /**
- * 語彙と部位からプレイヤー能力を集計する。
- * @param {Array} lexicon 語彙
- * @param {Array<object>} selfSlots 部位に置いた語 (右手 / 左手 / 胴 / 頭)
+ * buff 以外の語を部位に入れたとき、プレイヤーに効くキー。
+ * 動詞の spd は弾速、大きさと攻撃は武器側のものなので、ここには入れない。
+ */
+const PART_KEYS = new Set([
+  'hp', 'armor', 'crit', 'regen', 'lifesteal', 'luck', 'magnet', 'shield',
+]);
+
+/**
+ * 文の力 → 体のボーナス。
+ * 成立した部位 1 つぶんの (文の力 - 1) を積み上げて、攻撃と体力に足す。
+ * 属性語のように語そのものに player 効果が無い語でも、接続詞を足して
+ * 文を整えれば体が強くなる。倍率は上限を置いて破綻させない。
+ */
+export const PART_POWER = {
+  atk: 0.25,      // (文の力 - 1) あたりの攻撃倍率
+  hp: 12,         // (文の力 - 1) あたりの最大体力
+  atkMax: 0.6,    // 全部位を合わせた上限
+  hpMax: 40,
+};
+
+/**
+ * buff 語の効果をプレイヤー能力へ写す。
+ * 語データの hp は絶対値、spd と xp は割合なので、行き先のキーが違う。
+ * @returns {boolean} 何か効いたか
+ */
+function applyBuffFx(s, src) {
+  let used = false;
+  for (const [k, v] of Object.entries(src)) {
+    if (typeof v !== 'number' || !BUFF_KEYS.has(k)) continue;
+    if (k === 'hp') s.maxHp += v;
+    else if (k === 'xp') s.xpMul += v;
+    else if (k === 'spd') s.spd *= 1 + v;
+    else s[k] = (s[k] || 0) + v;
+    used = true;
+  }
+  return used;
+}
+
+/**
+ * 部位 1 つぶんの効果をプレイヤー能力に足す。
+ * @param {object} s 集計中の能力
+ * @param {object} src 語・接続詞・熟語の効果
+ * @param {Set<string>} keys 通すキー
+ * @param {number} gain 文の力による倍率
+ * @param {boolean} buffForm buff 語の形か (hp / xp / spd の向きが違う)
+ * @returns {boolean} 何か効いたか
+ */
+function applyPartSrc(s, src, keys, gain, buffForm) {
+  let used = false;
+  for (const [k, v] of Object.entries(src || {})) {
+    if (typeof v !== 'number') continue;
+    if (buffForm) {
+      if (!BUFF_KEYS.has(k)) continue;
+      if (k === 'hp') s.maxHp += v * gain;
+      else if (k === 'xp') s.xpMul += v * gain;
+      else if (k === 'spd') s.spd *= 1 + v * gain;
+      else s[k] = (s[k] || 0) + v * gain;
+      used = true;
+      continue;
+    }
+    if (!keys.has(k)) continue;
+    if (k === 'hp') s.maxHp += v * gain;
+    else s[k] = (s[k] || 0) + v * gain;
+    used = true;
+  }
+  return used;
+}
+
+/**
+ * 部位に入れた語とセーブの恒久強化からプレイヤー能力を集計する。
+ * @param {Array} parts 部位。次のどれでも受けつける。
+ *   ・{ name, words:[{text,conn}] }   … 部位ごとの文 (いまの形)
+ *   ・'頑' / { text:'頑' }             … 語 1 つ (古い呼び出し。1 語 = 1 部位)
  * @param {Object} meta セーブ側の恒久強化
  * @returns {typeof BASE_PLAYER}
  */
-export function resolvePlayerStats(lexicon, selfSlots = [], meta = {}) {
+export function resolvePlayerStats(parts, meta = {}, opt = {}) {
   const s = { ...BASE_PLAYER };
-  s.rev = ++statsRev;
   s.maxHp += meta.hp || 0;
   s.atkMul += meta.atk || 0;
   s.xpMul += meta.xp || 0;
@@ -85,47 +136,62 @@ export function resolvePlayerStats(lexicon, selfSlots = [], meta = {}) {
   s.magnet += meta.magnet || 0;
   s.crit += meta.crit || 0;
 
-  // 語彙の buff 語。
-  for (const w of lexicon) {
-    if (!w || w.cat !== 'buff' || !w.player) continue;
-    for (const [k, v] of Object.entries(w.player)) {
-      if (!BUFF_KEYS.has(k)) continue;
-      s[k] = (s[k] || 0) + v;
-    }
-  }
+  s.partCount = 0;
+  s.partTexts = [];
+  s.partRows = [];      // 部位ごとの表示 (文・grade・文の力)
+  s.partBroken = [];    // 不成文の部位
+  s.partPowerBonus = 0; // 文の力から来たボーナス (文力 - 1 の合計)
 
-  // 部位に置いた語。効果は BUFF_KEYS の分だけそのまま足す。
-  // 手の部位の属性語は weapon.resolve が斬撃・薙ぎの武器に乗せる。
-  const parts = [];
-  let handElement = null;
-  let handStatus = null;
-  for (let i = 0; i < selfSlots.length; i++) {
-    const w = selfSlots[i];
-    if (!w) continue;
-    for (const [k, v] of Object.entries(w.fx || {})) {
-      if (!BUFF_KEYS.has(k)) continue;
-      s[k] = (s[k] || 0) + v;
+  for (const raw of parts || []) {
+    const isPart = raw && typeof raw === 'object' && Array.isArray(raw.words);
+    const words = isPart ? raw.words : [raw];
+    const name = isPart ? (raw.name || raw.id || '') : '';
+    const id = isPart ? (raw.id || raw.name || '') : '';
+    const p = evaluatePart(normPartEntries(words));
+    if (!p.sen.count) continue;
+
+    if (!p.valid) {
+      s.partBroken.push({ name, id, text: p.text, reasonText: p.reasonText });
+      continue;
     }
-    const part = PARTS[i] || { name: `部位${i + 1}`, hand: false };
-    if (part.hand && w.el && !handElement) {
-      handElement = w.el;
-      const status = ELEMENTS[w.el] && ELEMENTS[w.el].status;
-      if (status && status !== 'none') {
-        handStatus = { [status]: HAND_STATUS_VALUE[status] || 1 };
+    const gain = p.gain;
+    let used = 0;
+    // 語そのものの効果。
+    for (const e of p.sen.entries) {
+      const info = WORDS[e.word.text];
+      if (!info) continue;
+      const isBuff = info.cat === 'buff';
+      const ok = isBuff
+        ? applyPartSrc(s, info.player || info.fx || {}, BUFF_KEYS, gain, true)
+        : applyPartSrc(s, info.fx || {}, PART_KEYS, gain, false);
+      if (ok) { used++; s.partTexts.push(info.text); }
+      // 語の直後の接続詞。部位ではプレイヤーに効くキーだけを通す。
+      if (e.conn) {
+        if (applyPartSrc(s, CONNECTORS[e.conn.text]?.fx || {}, PART_KEYS, gain, false)) used++;
       }
     }
-    parts.push({
-      index: i,
-      name: part.name,
-      label: partLabel(i, w),
-      word: w.text,
-      element: w.el || null,
-      hand: !!part.hand,
+    // 熟語が成立していれば、その効果も乗る (発電 = 感電など)。
+    if (p.idiom) applyPartSrc(s, p.idiom.fx || {}, PART_KEYS, gain, false);
+    // 文の力そのものを体に写す。
+    s.partPowerBonus += Math.max(0, p.power - 1);
+    s.partCount += used;
+    s.partRows.push({
+      name, id, text: p.text, grade: p.ev.grade, gradeName: p.gradeInfo?.name || '',
+      power: p.power, gain, idiom: p.idiom?.name || null,
+      /** 語・接続詞から来た効果があったか (0 なら表示用の語)。 */
+      effects: used,
+      powerAtk: Math.min(PART_POWER.atkMax, Math.max(0, p.power - 1) * PART_POWER.atk),
+      powerHp: Math.min(PART_POWER.hpMax, Math.max(0, p.power - 1) * PART_POWER.hp),
     });
   }
-  s.parts = parts;
-  s.handElement = handElement;
-  s.handStatus = handStatus;
+
+  // 文の力ぶんのボーナス。ここも上限を置く。
+  // opt.powerBonus === false で切れる (語そのものの効きだけを見たいとき)。
+  const withPower = opt.powerBonus !== false;
+  s.partPowerAtk = withPower ? Math.min(PART_POWER.atkMax, s.partPowerBonus * PART_POWER.atk) : 0;
+  s.partPowerHp = withPower ? Math.min(PART_POWER.hpMax, s.partPowerBonus * PART_POWER.hp) : 0;
+  s.atkMul += s.partPowerAtk;
+  s.maxHp += s.partPowerHp;
 
   // 補正と上限。
   s.armor = clamp(s.armor, 0, 0.75);
@@ -145,8 +211,96 @@ export function resolvePlayerStats(lexicon, selfSlots = [], meta = {}) {
   return s;
 }
 
-/** 語彙の中で重複している語をまとめる (表示用)。 */
-export function lexiconSummary(lexicon) {
+/**
+ * 部位の効きを「差分」で見せるための表。
+ * key は resolvePlayerStats の戻り値、label は画面の名前、
+ * fmt は増加分の見せ方 (d = 増減量、v = その能力の絶対値)。
+ */
+const EFFECT_ROWS = [
+  { key: 'maxHp', label: '体力', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
+  { key: 'atkMul', label: '攻撃', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'armor', label: '装甲', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'crit', label: '会心', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'spd', label: '移動', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
+  { key: 'regen', label: '回復', fmt: (d) => `${d > 0 ? '+' : ''}${d.toFixed(1)}/s` },
+  { key: 'lifesteal', label: '吸血', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'shield', label: '盾', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
+  { key: 'magnet', label: '吸引', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'xpMul', label: '経験値', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'critDmg', label: '会心威力', fmt: (d) => `${d > 0 ? '+' : ''}${d.toFixed(2)}倍` },
+  { key: 'size', label: '大きさ', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
+  { key: 'luck', label: '幸運', fmt: (d) => `${d > 0 ? '+' : ''}${d.toFixed(2)}` },
+];
+
+/** 数値の差が、画面に出す意味を持つか。丸めると 0 になる差は出さない。 */
+function diffShown(key, d) {
+  const a = Math.abs(d);
+  if (a < 1e-9) return false;
+  if (key === 'maxHp' || key === 'spd' || key === 'shield') return Math.round(a) > 0;
+  if (key === 'regen') return Math.round(a * 10) > 0;
+  if (key === 'luck') return Math.round(a * 100) > 0;
+  return Math.round(a * 100) > 0;   // % と倍で見せるもの
+}
+
+/** 2 つの能力の差を、画面に出す行にする。 */
+function diffRows(a, b) {
+  const out = [];
+  for (const r of EFFECT_ROWS) {
+    const d = (a[r.key] || 0) - (b[r.key] || 0);
+    if (!diffShown(r.key, d)) continue;
+    out.push({ key: r.key, label: r.label, delta: d, text: r.fmt(d) });
+  }
+  return out;
+}
+
+/**
+ * 部位 1 つだけを取り替えたときの能力の差。
+ * 「この部位を入れると何がどれだけ変わるか」をそのまま出す。
+ * @param {Array} parts save.partEntries() の形
+ * @param {string} partId 取り替える部位
+ * @param {Object} [meta] 書庫の恒久強化
+ * @returns {Array<{key:string, label:string, delta:number, text:string}>}
+ */
+export function partEffectRows(parts, partId, meta = {}) {
+  const list = (parts || []).filter(Boolean);
+  const withPart = resolvePlayerStats(list, meta);
+  const rest = list.filter((p) => (p.id || p.name) !== partId);
+  const without = resolvePlayerStats(rest, meta);
+  return diffRows(withPart, without);
+}
+
+/**
+ * 全部位を合わせた効き (素の能力との差)。
+ * @returns {Array<{key:string, label:string, delta:number, text:string}>}
+ */
+export function partTotalRows(parts, meta = {}) {
+  return diffRows(resolvePlayerStats((parts || []).filter(Boolean), meta), resolvePlayerStats([], meta));
+}
+
+/**
+ * 語 1 つを部位に入れたときの効き (差分)。文の力ぶんも含む。
+ * @param {string} text
+ * @param {Object} [meta]
+ */
+export function wordEffectRows(text, meta = {}) {
+  return partEffectRows([{ id: 'tmp', name: 'tmp', words: [{ text, conn: null }] }], 'tmp', meta);
+}
+
+/**
+ * 語 1 つを部位に入れたときの **語そのもの** の効き。
+ * 文の力ぶんのボーナスを切って測るので、「この語が体に直接効くか」が分かる。
+ * 属性語・武器語は 0 件になる (武器の文で使う語)。
+ * @param {string} text
+ * @param {Object} [meta]
+ */
+export function wordDirectEffectRows(text, meta = {}) {
+  const part = { id: 'tmp', name: 'tmp', words: [{ text, conn: null }] };
+  const withPart = resolvePlayerStats([part], meta, { powerBonus: false });
+  const without = resolvePlayerStats([], meta, { powerBonus: false });
+  return diffRows(withPart, without);
+}
+
+/** 語彙の中で重複している語をまとめる (表示用)。 */export function lexiconSummary(lexicon) {
   const count = new Map();
   for (const w of lexicon) {
     if (!w) continue;
@@ -169,7 +323,6 @@ export function lexiconContentCount(lexicon) {
 
 /**
  * HUD に出す能力表示の並びを決める。
- * 部位は hud-self 側で出るので、ここには数値だけ。
  * 値が 0 のものは入れない。
  * @param {typeof BASE_PLAYER} s
  * @returns {Array<{key:string,label:string,value:string,kind:string}>}

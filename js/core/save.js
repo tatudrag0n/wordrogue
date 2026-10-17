@@ -5,27 +5,34 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { DRAWABLE_ALL, starterCollection } from '../data/words.js';
+import { WORDS, drawWord } from '../data/words.js';
+import { CONNECTORS } from '../data/words.connect.js';
 
 const KEY = 'wordrogue.save.v1';
 
 const DEFAULTS = {
   version: 1,
   clearedStages: [],   // クリア済みステージ ID
+  unlockedWeapons: ['sword', 'gun'],
   bestScore: 0,
   totalKills: 0,
   totalRuns: 0,
   totalBroken: 0,     // 文を崩した敵の累計
-  ink: 0,              // 書庫の通貨「墨」
-  collection: starterCollection(), // 持っている語 (ランに出る語彙の元)
-  meta: {},            // 恒久強化 (hp / atk / xp / armor / magnet / crit)
+  ink: 0,              // 書庫の通貨「言玉」
+  meta: {},            // 恒久強化 (hp / atk / xp / armor / magnet / crit / lexicon)
+  collection: null,    // 所持語 (言葉くじで増える)。null なら初期セットを付与
+  deck: null,          // 戦闘に持ち込む言葉デッキ (語の text の配列)
+  parts: {},           // 部位強化 { partId: [text, text] }
   settings: { volume: 0.5, screenShake: true, showDamage: true },
   seenIntro: false,
 };
 
 /**
  * 書庫で買える恒久強化。stats.js の resolvePlayerStats がそのまま読む。
- * cost は 1 段階あたりの墨。max は買える上限。
+ * cost は 1 段階あたりの言玉。max は買える上限。
+ *
+ * lexicon は特別: 語彙の枠を 1 つ増やす強化。
+ * per=1 なので meta.lexicon がそのまま追加した個数になる。
  */
 export const META_UPGRADES = {
   hp: { name: '体力', desc: '最大体力が上がる', cost: 30, max: 10, per: 4 },
@@ -34,10 +41,8 @@ export const META_UPGRADES = {
   xp: { name: '経験値', desc: 'レベルが早く上がる', cost: 40, max: 8, per: 0.06 },
   magnet: { name: '引き寄せ', desc: '経験値を引き寄せる', cost: 25, max: 6, per: 0.2 },
   crit: { name: '会心', desc: '会心率が上がる', cost: 50, max: 8, per: 0.02 },
+  lexicon: { name: '語彙', desc: '手持ちの語を 1 つ多く持つ', cost: 90, max: 18, per: 1 },
 };
-
-/** 言葉くじ 1 回の値段 (墨)。 */
-export const LOTTERY_COST = 25;
 
 function deepMerge(base, patch) {
   const out = Array.isArray(base) ? base.slice() : { ...base };
@@ -51,11 +56,71 @@ function deepMerge(base, patch) {
   return out;
 }
 
+/** プレイヤー強化の部位。1 部位に PART_SLOTS 語まで入る。 */
+export const PARTS = [
+  { id: 'head', name: '頭' },
+  { id: 'rarm', name: '右腕' },
+  { id: 'larm', name: '左腕' },
+  { id: 'rhnd', name: '右手' },
+  { id: 'lhnd', name: '左手' },
+  { id: 'rfot', name: '右足' },
+  { id: 'lfot', name: '左足' },
+  { id: 'chst', name: '胸' },
+  { id: 'trnk', name: '胴' },
+];
+export const PART_SLOTS = 2;    // 1 部位に入る語の数
+/**
+ * 部位の文の長さの上限 (接続詞込み)。
+ * 部位は武器より短くする — 武器は 10 文字なので、そこを真似ない。
+ */
+export const PART_MAX_LEN = 8;
+export const DECK_MIN = 20;     // デッキの最低語数 (戦闘開始時に満たなければ補充)
+export const DECK_MAX = 30;     // デッキの最大語数 (語彙の容量上限と同じ)
+export const GACHA_COST = 25;   // 言葉くじ 1 回の言玉
+export const GACHA_REFUND = 5;  // すでに持っている語が出たときの返却
+
+/**
+ * 部位の並びを整える。文字列だけの古いセーブ (['頑','健']) もここで吸収する。
+ * 持っていない語、空の枠は落とす。
+ *
+ * 接続詞は辞書にある送り仮名なら何でも通す (部位は自由に選べる)。
+ * 文として成り立っているかはここでは見ない — 不成文でも保存しておき、
+ * 画面が「不成文」と理由を出す。読めない文字列だけを落とす。
+ */
+function normalizePart(arr, collection) {
+  const out = [];
+  for (const raw of Array.isArray(arr) ? arr : []) {
+    if (!raw) continue;
+    const text = typeof raw === 'string' ? raw : raw.t;
+    if (!text || !collection.includes(text)) continue;
+    const conn = typeof raw === 'string' ? null : raw.c || null;
+    out.push({ t: text, c: conn && CONNECTORS[conn] ? conn : null });
+    if (out.length >= PART_SLOTS) break;
+  }
+  return out;
+}
+
+/** 枠の並びを詰める (後ろの空を落とし、語の無い枠は null のまま残す)。 */
+function compact(arr) {
+  const out = arr.slice(0, PART_SLOTS);
+  while (out.length && !out[out.length - 1]) out.pop();
+  return out;
+}
+
+/** 初期所持語。最初からデッキにも入っている。 */
+export const STARTER_WORDS = [
+  '炎', '焔', '氷', '電', '毒', '風', '水',
+  '強', '速', '硬', '静', '妙',
+  '斬', '燃', '貫',
+  '頑', '健', '癒', '聖', '鉄',
+];
+
 export class Save {
   constructor() {
     this.data = { ...DEFAULTS };
     this.available = true;
     this.load();
+    this.ensureCollection();
   }
 
   load() {
@@ -66,25 +131,9 @@ export class Save {
       this.available = false;
       this.data = { ...DEFAULTS };
     }
-    this.migrate();
+    // 古いセーブに残っている「恒久の語」は読み飛ばす。
+    delete this.data.startingWords;
     return this.data;
-  }
-
-  /**
-   * 古いセーブを今の形に合わせる。
-   * 初期の語は無料で全員に配り、昔の「恒久の語」は持ち物に移す。
-   */
-  migrate() {
-    const d = this.data;
-    if (!Array.isArray(d.collection)) d.collection = [];
-    for (const t of starterCollection()) {
-      if (!d.collection.includes(t)) d.collection.push(t);
-    }
-    for (const t of d.startingWords || []) {
-      if (!d.collection.includes(t)) d.collection.push(t);
-    }
-    delete d.startingWords;
-    delete d.unlockedWeapons;
   }
 
   save() {
@@ -99,6 +148,7 @@ export class Save {
   reset() {
     this.data = JSON.parse(JSON.stringify(DEFAULTS));
     this.save();
+    this.ensureCollection();
   }
 
   get d() { return this.data; }
@@ -122,36 +172,10 @@ export class Save {
     if (!this.data.clearedStages.includes(stageId)) this.data.clearedStages.push(stageId);
   }
 
-  // ── 語の持ち物 (言葉くじ) ─────────────────────────────────────────────────
-  hasWord(text) { return this.data.collection.includes(text); }
-
-  /** 語を 1 つ持ち物に加える。既にあれば false。 */
-  addWord(text) {
-    if (this.hasWord(text)) return false;
-    this.data.collection.push(text);
-    this.save();
-    return true;
+  unlockWeapon(id) {
+    if (!this.data.unlockedWeapons.includes(id)) this.data.unlockedWeapons.push(id);
   }
-
-  /** まだ持っていない、引ける語の数。 */
-  get lotteryRemaining() {
-    return DRAWABLE_ALL.filter((t) => !this.hasWord(t)).length;
-  }
-
-  /**
-   * 言葉くじを 1 回引く。墨を払って、まだ持っていない語を 1 つ得る。
-   * @returns {{ok:boolean, reason:string, text?:string}}
-   */
-  drawLottery(rng = Math.random) {
-    if (this.lotteryRemaining === 0) return { ok: false, reason: 'empty' };
-    if (this.ink < LOTTERY_COST) return { ok: false, reason: 'ink' };
-    const pool = DRAWABLE_ALL.filter((t) => !this.hasWord(t));
-    const text = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
-    this.data.ink -= LOTTERY_COST;
-    this.data.collection.push(text);
-    this.save();
-    return { ok: true, reason: '', text };
-  }
+  hasWeapon(id) { return this.data.unlockedWeapons.includes(id); }
 
   // ── 書庫 (恒久進行) ───────────────────────────────────────────────────────
   get ink() { return this.data.ink || 0; }
@@ -177,7 +201,7 @@ export class Save {
   /** 強化の最終値。stats.js がそのまま読む。 */
   metaValue(key) { return (this.data.meta || {})[key] || 0; }
 
-  /** 次の 1 段階を買うのに必要な墨。買えないなら null。 */
+  /** 次の 1 段階を買うのに必要な言玉。買えないなら null。 */
   metaCost(key) {
     const u = META_UPGRADES[key];
     if (!u) return null;
@@ -206,6 +230,9 @@ export class Save {
     return { ok: true, reason: '', level: lv };
   }
 
+  /** 言玉で広げた語彙の枠の数 (追加した個数)。 */
+  get lexiconBonus() { return Math.round(this.metaValue('lexicon') || 0); }
+
   // ── 走者記録 ─────────────────────────────────────────────────────────────
   recordRun({ score, kills, stageId, cleared, broken = 0, ink = 0 }) {
     const d = this.data;
@@ -217,6 +244,162 @@ export class Save {
     if (ink) this.data.ink = Math.max(0, (this.data.ink || 0) + ink);
     this.save();
   }
+
+  // ── 所持語・デッキ・部位強化 (プレイヤー強化) ──────────────────────────
+  /** 旧セーブに所持語が無ければ初期セットを付与し、壊れた値を直す。 */
+  ensureCollection() {
+    const d = this.data;
+    if (!Array.isArray(d.collection)) {
+      d.collection = STARTER_WORDS.filter((t) => WORDS[t]);
+    }
+    d.collection = d.collection.filter((t) => WORDS[t]);
+    if (!d.collection.length) d.collection = STARTER_WORDS.filter((t) => WORDS[t]);
+    // 旧セーブにも最低 20 語を保証。新しい語は初期語彙から補う。
+    for (const t of STARTER_WORDS) {
+      if (d.collection.length >= DECK_MIN) break;
+      if (WORDS[t] && !d.collection.includes(t)) d.collection.push(t);
+    }
+    if (!Array.isArray(d.deck)) d.deck = d.collection.slice(0, DECK_MAX);
+    d.deck = d.deck.filter((t) => d.collection.includes(t)).slice(0, DECK_MAX);
+    // デッキも常に最低数を保つ。既存ユーザーは所持語から順に補充。
+    for (const t of d.collection) {
+      if (d.deck.length >= DECK_MIN) break;
+      if (!d.deck.includes(t)) d.deck.push(t);
+    }
+    if (!d.parts || typeof d.parts !== 'object' || Array.isArray(d.parts)) d.parts = {};
+    for (const p of PARTS) {
+      d.parts[p.id] = normalizePart(d.parts[p.id], d.collection);
+    }
+    this.save();
+  }
+
+  /** 所持語の text 一覧。 */
+  get collection() { return this.data.collection || []; }
+  ownsWord(text) { return this.collection.includes(text); }
+  /** 戦闘デッキの text 一覧。 */
+  get deck() { return this.data.deck || []; }
+  inDeck(text) { return this.deck.includes(text); }
+
+  /** 部位に入っている語 (全部位ぶんの text 一覧)。古い呼び出し用の平坦な形。 */
+  partWordList() {
+    const out = [];
+    for (const p of PARTS) {
+      for (const e of this.partRaw(p.id)) if (e && e.text) out.push(e.text);
+    }
+    return out;
+  }
+
+  /** 部位の語 (整えた { text, conn } の並び)。 */
+  partRaw(partId) {
+    return (this.data.parts?.[partId] || []).map((e) => (e ? { text: e.t, conn: e.c || null } : null));
+  }
+
+  /**
+   * 部位ごとの中身。stats.js とメニューが同じものを読む。
+   * @returns {Array<{id:string,name:string,words:Array<{text:string,conn:string|null}>}>}
+   */
+  partEntries() {
+    return PARTS.map((p) => ({
+      id: p.id,
+      name: p.name,
+      words: this.partRaw(p.id).filter(Boolean),
+    }));
+  }
+
+  /** 部位の枠 1 つ。{ text, conn } か null。 */
+  partSlot(partId, i) {
+    const e = this.data.parts?.[partId]?.[i];
+    return e ? { text: e.t, conn: e.c || null } : null;
+  }
+
+  /** 部位の枠に入っている語の text (表示用)。 */
+  partSlotText(partId, i) { return this.partSlot(partId, i)?.text || null; }
+
+  /**
+   * 言葉くじ。言玉を払って戦闘と同じ語プールから 1 語引く。
+   * すでに持っている語なら言玉を少し返す。
+   * @returns {{ok:boolean, reason:string, word?:string, dup?:boolean, ink:number}}
+   */
+  drawGacha() {
+    if (this.ink < GACHA_COST) return { ok: false, reason: 'ink', ink: this.ink };
+    const w = drawWord(() => Math.random());
+    if (!w) return { ok: false, reason: 'empty', ink: this.ink };
+    this.data.ink -= GACHA_COST;
+    const dup = this.ownsWord(w.text);
+    if (dup) this.data.ink += GACHA_REFUND;
+    else this.data.collection.push(w.text);
+    this.save();
+    return { ok: true, reason: '', word: w.text, dup, ink: this.ink };
+  }
+
+  /** デッキへの出し入れ。@returns {boolean} いま入っているか */
+  toggleDeck(text) {
+    if (!this.ownsWord(text)) return false;
+    const d = this.data.deck;
+    const i = d.indexOf(text);
+    if (i >= 0) {
+      if (d.length <= DECK_MIN) return true;
+      d.splice(i, 1);
+    } else {
+      if (d.length >= DECK_MAX) return true;
+      d.push(text);
+    }
+    this.save();
+    return d.includes(text);
+  }
+
+  /**
+   * 部位の枠に語を入れる (text=null で外す)。
+   * 語を変えると、その語に付けない接続詞は落ちて当然なので枠ごと買い替える。
+   * @returns {boolean} 変わったか (枠が同じ語のままなら false)
+   */
+  setPart(partId, slot, text) {
+    if (!PARTS.some((p) => p.id === partId)) return false;
+    if (text && !this.ownsWord(text)) return false;
+    const arr = this.data.parts[partId] || (this.data.parts[partId] = []);
+    const was = arr[slot];
+    if (!text) {
+      if (!was) return false;            // もともと空
+      arr[slot] = null;
+      this.data.parts[partId] = compact(arr);
+      this.save();
+      return true;
+    }
+    // 同じ語が入っている枠をもう一度押したら、外す (取り外せない不具合の修正)。
+    if (was && was.t === text) {
+      arr[slot] = null;
+      this.data.parts[partId] = compact(arr);
+      this.save();
+      return true;
+    }
+    if (was && !was.t) return false;
+    arr[slot] = { t: text, c: null };
+    this.data.parts[partId] = compact(arr);
+    this.save();
+    return true;
+  }
+
+  /**
+   * 部位の語に接続詞を付ける (null で外す)。
+   *
+   * 部位は **どの接続詞でも選べる**。言葉鍛冶 (武器) はその語のプールの
+   * 送り仮名だけだが、部位は語が少なく、プールを絞ると「1 つも選べない」
+   * 語が出るため。文として成り立つかは選んだあとに画面が示す。
+   * @returns {{ok:boolean, reason:string}}
+   */
+  setPartConn(partId, slot, conn) {
+    const arr = this.data.parts?.[partId];
+    const e = arr && arr[slot];
+    if (!e || !e.t) return { ok: false, reason: 'empty' };
+    if (!conn) { e.c = null; this.save(); return { ok: true, reason: 'cleared' }; }
+    if (!CONNECTORS[conn]) return { ok: false, reason: 'unknown' };
+    e.c = conn;
+    this.save();
+    return { ok: true, reason: 'placed' };
+  }
+
+  /** 部位の枠を空にする (語も接続詞も外す)。 */
+  clearPart(partId, slot) { return this.setPart(partId, slot, null); }
 
   // ── 設定 ─────────────────────────────────────────────────────────────────
   setSetting(k, v) {

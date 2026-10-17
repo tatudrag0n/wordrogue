@@ -123,7 +123,7 @@ export class Audio {
   }
   levelup() { [0, 4, 7, 12].forEach((n, i) => this.tone({ freq: hz(69 + n), type: 'triangle', dur: 0.18, vol: 0.12, delay: i * 0.07 })); }
 
-  /** 文が成立したとき。pleasant な 2 音。 */
+  /** 文が成立したとき。気持ちよい 2 音。 */
   phrase() {
     this.tone({ freq: hz(76), type: 'triangle', dur: 0.13, vol: 0.11 });
     this.tone({ freq: hz(83), type: 'triangle', dur: 0.18, vol: 0.09, delay: 0.07 });
@@ -144,7 +144,7 @@ export class Audio {
   }
 
   /**
-   * BGM。简单な和声进行を循环，强度随战况上升。
+   * BGM。簡単な和音を繰り返し、強度で戦況に追従させる。
    * @param {number} intensity 0..1
    */
   musicTick(dt, intensity = 0) {

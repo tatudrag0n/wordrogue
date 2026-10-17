@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0a0d14">
+<meta name="theme-color" content="#f3eee1">
 <meta name="description" content="言葉を組み合わせて武装する 2D ローグライク。 combina 語で作った文が成立しなければ、武器は無効になる。">
 <title>ワードローグ — Wordrogue</title>
 <link rel="stylesheet" href="css/style.css">
@@ -73,6 +73,9 @@
 
     <div class="hud-weapons" id="hudWeapons"></div>
 
+    <!-- ダッシュ。タッチ端末だけ表示する (長押しで移動する指とは別)。 -->
+    <button class="hud-dash" id="btnDash" type="button" hidden>ダッシュ</button>
+
     <div class="hud-paused" id="hudPaused" hidden>
       <div class="paused-inner">
         <div class="paused-title">一時停止</div>
@@ -87,7 +90,7 @@
       <header class="panel-head">
         <h2>言葉鍛冶</h2>
         <p class="panel-sub">
-          語を武器の枠に並べる。<strong>文が成立しなければその武器は無効になる。</strong>
+          語を自由に並べて文にする。<strong>文が成立しなければその武器は無効になる。</strong>
         </p>
         <button class="btn btn-close" id="forgeClose" title="閉じる (Q / Esc)">✕</button>
       </header>
@@ -102,10 +105,19 @@
           </div>
           <div class="lexicon" id="forgeLexicon"></div>
 
+          <ul class="forge-how">
+            <li><b>語を置く</b><span>語彙の語をタップ → 文の語か <em>＋</em> をタップ</span></li>
+            <li><b>接続詞</b><span>語の右のマスをタップ → 使える接続詞を一覧から一発で選ぶ。語のタップで順に切り替え</span></li>
+            <li><b>戻す</b><span>「戻す」で直前の操作を 1 つ取り消す</span></li>
+            <li><b>外す</b><span>語の <em>✕</em> をタップ → 語彙へ。語彙へドラッグしてもよい</span></li>
+          </ul>
+
           <div class="forge-actions">
             <span class="forge-note">
               ことばは<strong>レベルアップで獲得</strong>する。引き直しはない。
             </span>
+            <button class="btn" id="btnForgeUndo" type="button"
+              title="直前の操作を 1 つ戻す">戻す</button>
             <button class="btn btn-forget" id="btnForgeForget" type="button"
               title="語彙の語をクリックして捨てる">忘れる</button>
             <button class="btn" id="btnForgeHint">文のヒント</button>
@@ -121,7 +133,8 @@
 
       <footer class="panel-foot">
         <span class="muted">
-          操作: 語をクリック → 枠をクリック で装着。枠クリックで語彙へ戻す。
+          ドラッグの判定は 7px。動かせば並べ替え、動かさなければタップ（接続詞の切り替え。
+          語の右のマスをタップすると一覧から選べる）。
         </span>
         <button class="btn btn-primary" id="forgeBack">戦闘へ戻る</button>
       </footer>
@@ -138,6 +151,7 @@
         <button class="btn btn-primary btn-lg" id="btnStart">はじめる</button>
         <button class="btn" id="btnStages">ステージ選択</button>
         <button class="btn" id="btnHowto">遊び方</button>
+        <button class="btn" id="btnGrow">部位強化</button>
         <button class="btn" id="btnArchive">書庫</button>
         <button class="btn" id="btnDict">辞書</button>
         <button class="btn" id="btnSettings">設定</button>
@@ -217,82 +231,109 @@
       <section>
       <h3>1. 文がそのまま武器の名前になる</h3>
       <p>
-      武器には<strong>枠</strong>がある。枠に語を並べると、それがそのまま
-      <strong>武器名</strong> になる。武器レベルに応じて <strong>4 から 7 枠</strong>。
+      <strong>並べるだけ。</strong>語を<strong>自由に並べて</strong>文にする。
+      文がそのまま<strong>武器名</strong> になり、<strong>10 文字まで</strong>。
       </p>
       <ul class="howto-list">
-      <li><b class="ok">成立</b> …「刃」+「必殺」→ <code>刃必殺剣</code></li>
-      <li><b class="ok">積み重ねる</b> …「爆裂」+「無双」+「迅早」→ <code>爆裂無双迅早剣</code></li>
-      <li><b class="ok">熟語</b> …「火」+「刃」→ <code>火刃剣</code> で追加ボーナス</li>
-      <li><b class="ng">不成文</b> … 実質語が足りない / 接続詞だけ / 分割できない → <strong>その武器は無効</strong></li>
+      <li><b class="ok">成立</b> …「焔」+「必」+「刃」→ <code>焔必刃</code></li>
+      <li><b class="ok">文にする</b> …「焔」<code>を</code>「斬」<code>られた</code>「硬」→ <code>焔を斬られた硬</code></li>
+      <li><b class="ok">並べ替え</b> … 文の中の語はドラッグで自由に入れ替えられる</li>
+      <li><b class="ng">不成文</b> … 実質語が足りない / 日本語として壊れている / 分割できない → <strong>その武器は無効</strong></li>
       </ul>
       <p>
-      成立条件は「語が辞書で完全に分割できて、<strong>実質語（接続詞でない語）を 2 つ以上</strong>含むこと」。
-      長い文ほど<strong>文の力</strong>が上がり、熟語を作るとさらに伸びる。
+      成立条件は「語が辞書で完全に分割できて、<strong>実質語（接続詞でない語）を 2 つ以上</strong>含み、
+      日本語として<strong>文になっている</strong>こと」。
+      <strong>自然なほど、完成しているほど、<span class="hi">文の力</span>が上がる</strong>（属性で始まり・格があり・述語がある）。
       </p>
       </section>
       <section>
-      <h3>2. 武器は基本の 15 種。末尾の語で攻撃が決まる</h3>
+      <h3>2. 武器語は自分で得る</h3>
       <p>
-      武器名の<strong>末尾の語</strong>は枠の外に固定で付く。並べ替えても動かない。
-      だから<strong>名前と攻撃の型が必ず一致する</strong>。
-      武器は<strong>剣・刃・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃・針</strong>の 15 種だけ。
+      攻撃を決める<strong>武器語</strong>は <code>刃</code> <code>剣</code> <code>刀</code> <code>斧</code>
+      <code>槍</code> <code>矛</code> <code>牙</code> <code>爪</code> <code>弓</code> <code>鞭</code>
+      <code>鎖</code> <code>杖</code> <code>拳</code> <code>銃</code> の <strong>14 語だけ</strong>。
+      <strong>自動で付かない</strong>ので、<strong>レベルアップの 3 択</strong>で
+      <strong>他の語より低い確率</strong>で引く。
       </p>
       <ul class="howto-list">
-      <li>剣 / 刃 / 刀 / 槍 / 矛 / 牙 / 拳 → <strong>斬撃</strong> ／ 銃 / 弓 / 針 → <strong>射撃</strong></li>
-      <li>斧 / 鞭 / 爪 → <strong>薙ぎ</strong> ／ 鎖 → <strong>還刃</strong> ／ 杖 → <strong>光線</strong></li>
-      <li>言葉鍛冶の<strong>「+ 武器を追加」</strong>からいつでも増やせる（4 つまで。同じ武器は 2 本持てない）</li>
+      <li>刃・剣・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃は、それだけで武器になる（基本武器）</li>
+      <li>炎・雷・光・渦のような属性・現象の語は、攻撃できる動詞が付いたときだけ武器になる（特殊武器）</li>
+      <li>弾・環・玉・壁・球のような語は<strong>武器語ではない</strong>。ただの語なので語彙から引けるし、文のどこに置いてもよい（文末も）</li>
+      <li>武器語を文に置くと、その武器語が攻撃を決める。武器語どうしは隣り合えない。同じ<strong>形</strong>を表す語どうしも隣り合えない</li>
+      <li>語彙が<strong>満杯</strong>でも、武器語を選べば古い語を 1 つ捨てて<strong>新しい文</strong>になる。作った文は鍛冶で「文を外す」と語が戻る</li>
       </ul>
       <p>
-      <strong>攻撃を決めるのは末尾の語だけ。</strong>
-      途中に「弾」「球」などを並べても攻撃は変わらず、効果（貫通・巨大・分裂など）だけが加わる。
-      「刃」+「必殺」+「弾」は <code>刃必殺弾剣</code> だが、この武器は<strong>斬撃のまま</strong>（弾の効果は付く）。
+      <strong>最初は武器が 1 つだけ。</strong>戦闘中に武器語を得ると
+      <strong>新しい文を作れる</strong>。持てる武器は<strong>最大 3 つ</strong>、各文は <strong>10 文字</strong>まで。
       </p>
       </section>
       <section>
       <h3>3. 語の種類</h3>
       <ul class="howto-list">
       <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
-      <li><b>形態</b> … 剣・銃・弓・斧・鞭・鎖など 15 種。武器の末尾語になる。</li>
-      <li><b>効果</b> … 巨大・貫通・弾・矢・球・環・壁など。数値を上げる。</li>
-      <li><b>動詞</b> … 燃える・貫く・凍るなど。1 枚で 1 つの動作になる。</li>
-      <li><b>接続</b> … <code>スル</code> <code>ノ</code> <code>サレタ</code> など。直前の語に結合する。</li>
-      <li><b>身体</b> … 硬・頑強・疾走など。部位（右手・左手・胴・頭）に置くとプレイヤーに効く。</li>
+      <li><b>形態</b> … 剣・銃・弓と、弾・矢・球・環・壁など。<strong>うち基本武器の 14 語だけが武器語</strong>で、語彙からは引けない。残りは語彙から引けるただの語（攻撃の型は決めない）</li>
+      <li><b>効果</b> … 貫・裂・散など。数値を上げる。</li>
+      <li><b>動詞</b> … <code>燃</code> <code>貫</code> <code>凍</code> など。1 枚で 1 つの動作になる。</li>
+      <li><b>接続</b> … <code>る</code> <code>の</code> <code>られた</code> など。語ごとに付く送り仮名が決まっている。
+      <strong>直前の語に結合する</strong>（下項）。</li>
+      <li><b>自身</b> … 頑・走など。プレイヤーに効く。</li>
       </ul>
       </section>
       <section>
-      <h3>4. 接続詞の規則</h3>
+      <h3>4. 接続詞は語の横。タップで切り替える</h3>
       <p>
-      接続詞は<strong>直前の語</strong>に結合して 1 語になる。
-      「律」+「スル」→「律スル」。結合すると文の力が上がる。
+      接続詞は<strong>語の後ろ</strong>に付く。語を並べ替えても、その語と接続詞は一緒に動く。
+      文の中の<strong>語をタップするたびに</strong>、その語に付く接続詞が
+      <strong>使えるものだけ</strong>切り替わる。
+      <strong>一周すると「接続詞なし」になり</strong>、また最初の接続詞から戻る。
+      </p>
+      <p>
+      例: <code>斬</code> なら <code>る</code> → <code>られた</code> → <code>り</code> → なし、
+      <code>凍</code> なら <code>る</code> → <code>える</code> → なし と回る。
       </p>
       <ul class="howto-list">
-      <li>接続詞は <strong>14 種類</strong>、すべて片仮名。
-      漢字語のあいだに挟むと <code>鋭イ剣</code> <code>強ク張ラレタ弓</code>
-      <code>改造サレタ銃</code> のようにリズムが生まれる</li>
-      <li><b class="ok">同じ接続詞は 1 回まで</b> …「風ノ海潮ノ銃」は<strong>不成立</strong>（ノが 2 回）</li>
-      <li><b class="ok">優先順位は昇順</b> …
-      サレタ/ワレタ/ラレタ/ク/ナ → スル/セシ/リ → ノ/イ/ツ/ニ/ヲ/ヘ</li>
-      <li><b class="ng">順序が逆は不成立</b> …「雷ノ浸食サレタ剣」は<strong>不成立</strong>。
-      「浸食サレタ雷ノ剣」なら成立する。</li>
-      <li>結合できる語は 300 語。<strong>実際に引くと約 10%</strong> で接続詞が出る</li>
+      <li><b>接続詞は語ごとに決まっている</b> … 語はそれぞれ<strong>自分の送り仮名（接続詞）</strong>を持ち、
+      それだけが付く。名詞は <code>の</code> <code>を</code> <code>に</code> <code>へ</code>。
+      <code>斬</code> は <code>斬る</code> <code>斬られた</code> <code>斬り</code>、
+      <code>滑</code> は <code>滑らかな</code> <code>滑る</code>、
+      <code>静</code> は <code>静かな</code> <code>静かに</code>。
+      「斬された」「凍ける」のような日本語に無い形は<strong>出てこない</strong>。
+      <strong>語彙の語はかならずどれかの接続詞に付く</strong>（行き止まりは無い）</li>
+      <li>接続詞は<strong>消費しない</strong>。語の横にあるだけなので、何度でも付け替えて使える</li>
+      <li><b class="ok">連体</b>（<code>斬る</code> <code>速い</code> <code>妙な</code>）と <code>の</code> のあとは名詞。
+      <b class="ok">連用</b>（<code>速く</code> <code>妙に</code> <code>斬り</code>）のあとは動詞か形容。
+      「速く剣」「妙に剣」は<strong>不成立</strong></li>
+      <li><b class="ng">「〜を」のあとには動作が要る</b> …「焔を剣」は<strong>不成立</strong>。「焔を斬る剣」なら成立</li>
+      <li><b class="ng">宙に浮くと不成立</b> … 接続詞は直前の語にだけ付く。
+      「刃剣」も日本語に無いので<strong>不成立</strong>。
+      そのときは<strong>属性や効果の語（<code>青</code> <code>焔</code> <code>必</code>）を間に入れる</strong></li>
+      <li><b class="ok">同じ接続詞を 2 回使ってもよい</b> …「風の潮の銃」は成立する。ただし少しくどいので文の力がやや下がる</li>
+      <li>語彙は<strong>すべて漢字 1 文字</strong>。動詞も「燃える」ではなく「燃」「斬」の
+      ように 1 個の漢字にして、送り仮名は接続詞で付ける</li>
+      <li><b class="ok">並べ直したいとき</b> … 文の右上の<strong>「空にする」</strong>で
+      語をまとめて語彙へ戻せる。語をひとつ戻したときの理由や、
+      接続詞を切り替えたときに<strong>その語に使える接続詞の一覧</strong>が下に出る。
+      10 文字不入らないときは「文字まで」と理由が表示される</li>
+      <li>熟語を作ると<strong>専用効果が乗って、文の力がさらに上がる</strong>。
+      例 <code>毒蝕弾の硬刃</code> (毒 + 蝕 + 弾 の熟語を含む)。二字熟語は効果が小さめ。例 <code>電熱</code> <code>凍結</code></li>
+      <li><b class="ok">熟語にも送り仮名が付く</b> … 「発」「電」と並べると「電」に
+      <code>する</code> が付けられて <code>発電する</code> になる（「電する」は不成立）</li>
       </ul>
-      <p>
-      結合元にない接続詞は宙に浮く（文は壊れないが効果が薄い）。
-      例「思考セシ天下無双ノ剣」— <code>思考</code> に<strong>セシ</strong>は付くが、
-      <code>無双</code> にノは付かないので最後のノは宙に浮く。
-      </p>
       </section>
       <section>
-<h3>5. 部位 — 身体にも語を置ける</h3>
+<h3>5. プレイヤーの強化はメニューで</h3>
       <p>
-      言葉鍛冶の一番上に<strong>部位</strong>の枠がある。右手・左手・胴・頭の 4 箇所に
-      語を 1 つずつ置ける。置くと <b>硬い左手</b>・<b>炎の左手</b> のように表示され、
-      効果がプレイヤーにそのまま乗る（硬 → <strong>装甲 +2</strong> など）。
-      </p>
-      <p>
-      <strong>手（右手・左手）に置いた属性語は、斬撃・薙ぎの武器に属性として乗る。</strong>
-      炎の右手なら、剣や斧の一撃に火が付く。
+      タイトルの<strong>部位強化</strong>で、頭・右腕・左腕・右手・左手・
+      右足・左足・胸・胴の 9 部位に語を入れると、その語の効果が能力に効く。
+      <strong>1 部位 = 1 文</strong>。語は 2 つまで入れられて、
+      語の右の<strong>「接続詞」</strong>を押すと付けられる形の一覧が開く。
+      部位は<strong>どの接続詞でも選べる</strong> — <strong>✓ は文が成る形</strong>（効きが伸びる）、
+      ✕ は不成文（何も効かない）。文の力は<strong>体そのもの</strong>（攻撃と体力）にも乗る。
+      <strong>何がどれだけ変わるか</strong>は、各部の下と「部位の合計」に数字で出る。
+      語は<strong>言玉</strong>を払う<strong>言葉くじ</strong>で手に入り、
+      戦闘で使う語と同じプールから出る。
+      <strong>言葉デッキ</strong>もここで組み替えられ、戦闘開始時の語彙になる。
+      戦闘中にプレイヤー自身が強化されることはない。
       </p>
       </section>
       <section>
@@ -309,16 +350,17 @@
       <strong>戦闘中のレベルアップ</strong>で入ります。引き直しボタンもありません。
       出るたびに <strong>3 個から 1 個</strong>選ぶ。7 秒以内に決めないと
       上の候補から 1 個入る（時間は止まらない）。
+      <strong>接続詞は 3 択に出ない</strong>。文の中の語をタップすれば付け替えられる。
       </p>
       <ul class="howto-list">
-      <li>ふつうのレベルアップ … <strong>3 択 1 個</strong>／<strong>1 / 5 / 9 …</strong> は部位に <strong>1 個</strong></li>
+      <li>ふつうのレベルアップ … <strong>3 択 1 個</strong>／<strong>1 / 5 / 9 …</strong> は自分の文に <strong>1 個</strong></li>
       <li><strong>5 の倍数</strong> … <strong>3 択が 2 回</strong>（順に選ぶ）</li>
-      <li><strong>5 の倍数</strong> … 部位の空き枠に <strong>1 個</strong>（自動で入る）</li>
+      <li><strong>5 の倍数</strong> … 自分の文の空きに <strong>1 個</strong>（自動で入る）</li>
       </ul>
       <p>
-      3 択に出る語は<strong>持っている語</strong>（書庫の言葉くじで増やす）から出る。
-      語彙は <strong>12 個</strong>から始まり、ステージ終わりに選べる
-      <strong>言玉</strong>で 1 個ずつ広がる（<strong>上限 30</strong>、次のステージへ持ち越す）。
+      語彙は <strong>12 個</strong>から始まり、書庫で<strong>言玉</strong>を使い
+      「語彙」を買うと 1 個ずつ広がる（<strong>上限 30</strong>、次のステージへ持ち越す）。
+      <strong>武器語</strong>は他の語より出にくい。選ぶと<strong>新しい文</strong>ができる（満杯なら古い語を 1 つ捨てる）。
       </p>
       </section>
       <section>
@@ -338,30 +380,40 @@
       <p>
       言葉鍛冶の<strong>「忘れる」</strong>を押すとモードが点る。
       このときは語彙の語をクリックするだけで <strong>捨てられる</strong>。
-      武器や部位にある語は対象にならない（それらは「忘れる」られない）。
+      武器や自分の文にある語は対象にならない（それらは「忘れる」られない）。
       </p>
       </section>
-      <section>
-<h3>10. 語はドラッグで移動・入れ替えできる</h3>
+      <section>      <h3>10. 語は自由に配置できる</h3>
       <p>
-      言葉鍛冶では語を<strong>枠へドラッグして装着</strong>でき、
-      語どうし・枠どうし・語彙とのあいだを<strong>入れ替え</strong>られる。
-      クリックで選んでから枠をクリックする古い手順は不要。
+      言葉鍛冶では語を<strong>文のあいだへドラッグして置く</strong>。
+      文の中に並べた語は<strong>どこへでも移動</strong>でき、語彙へ戻せば外れる。
+      <strong>タップだけで組むこともできる</strong>。
       </p>
       <ul class="howto-list">
-      <li>語彙 → 枠 … 装着。語彙の空きが 1 つ減る</li>
-      <li>枠 → 語彙 … 語彙へ戻す。満杯なら<strong>できない</strong></li>
-      <li>枠 ⇄ 枠 … 入れ替え。どちらの語も消えない</li>
-      <li>末尾語（<code>剣</code> など）は<strong>枠の外に固定</strong>なので動かない</li>
+      <li>語彙 → 文 … 語を差し込む。語彙の空きが 1 つ減る</li>
+      <li>文 → 文 … 並べ替え。どちらの語も消えない</li>
+      <li>文 → 語彙 … 語を外す。満杯なら<strong>語彙の最古の 1 語を捨てる</strong></li>
+      <li>語彙の語を<strong>タップ</strong> … 語を持ち上げる。文の隙間をタップで置ける</li>
+      <li>文の語の <strong>✕</strong> … 語彙へ戻す。<strong>語彙が満杯でもできる</strong>（最古の 1 語を捨てる）</li>
+      <li>文の語を<strong>タップ</strong> … 後ろの接続詞が順に切り替わる</li>
+      <li>文の語の<strong>右の接続詞マスをタップ</strong> … 使える接続詞を一覧から一発で選ぶ</li>
+      <li><strong>戻す</strong> … 直前の操作を 1 つ取り消す（最大 40 回）</li>
+      <li>文の語を<strong>長押し</strong> … 持ち上げてからタップだけで並べ替えられる</li>
+      <li>文は <strong>10 文字</strong>まで。入りきらない語は置けない</li>
       </ul>
       </section>
       <section>
 <h3>11. ステージクリア報酬</h3>
       <p>
-      ステージを終えると<strong>武器強化</strong>・<strong>言玉</strong>・<strong>休息</strong>から選べる。
-      武器レベルを 2 / 4 / 6 で上げると枠が 1 つずつ増える。
-      <strong>武器</strong>と<strong>ことば</strong>はここでは出ない。武器は言葉鍛冶の
-      <strong>「+ 武器を追加」</strong>から、ことばは<strong>言葉くじ</strong>（15 項）から。
+      ステージを終えると <strong>言玉</strong> がもらえる。
+      <strong>100 + ステージ番号 × 100</strong> が基本で、
+      攻撃の倍率で<strong>増える</strong>。
+      倒しきれずに負けたときは半分以下。クリアしたら<strong>一旦ホームへ戻る</strong>。
+      </p>
+      <p>
+      <strong>ことばはここでは出ない。</strong>
+      新しいことばは戦闘中の<strong>レベルアップ</strong>と、
+      タイトルの<strong>言葉くじ</strong>で得る。
       </p>
       </section>
       <section>
@@ -370,6 +422,7 @@
       <strong>辞書</strong>を開くと、使えるすべてのことばを一覧できる。
       カテゴリで絞り込んだり、名前で検索したりできる。
       開いている間は時間が止まる。
+      基本武器（剣・銃・弓 …）は<strong>武器語</strong>なので語彙から引けず、環・弾・玉のような語はただの語なので引ける。
       </p>
       <ul class="howto-list">
       <li>戦闘中 … HUD の <strong>「辞」</strong> ボタン</li>
@@ -394,7 +447,7 @@
       <p>
       つまり<strong>よく組んだ文ほど、敵の文を早く崩せる</strong>。
       威力で押し切るのとは別の、ことばの作り方で勝つ道がある。
-      <strong>ボスの文は斬れない</strong>。語を落とせないので、力で押し切るしかない。
+      ボスは倒れない。崩しても攻撃パターンが止まるだけ。
       </p>
       </section>
       <section>
@@ -409,18 +462,17 @@
       <section>
 <h3>15. 書庫 — 走った分が、次の走りに残る</h3>
       <p>
-      ステージをクリアすると<strong>墨</strong>が手に入る。
+      ステージをクリアすると<strong>言玉</strong>が手に入る。
       <strong>敵の文を崩す</strong>ときにも貯まる（行動が止まるぶん強いので刻み多く）。
       累計がタイトル画面に<strong>「文を崩した数」</strong>として出る。
       </p>
       <p>
-      書庫では<strong>恒久強化</strong>と<strong>言葉くじ</strong>が使える。
+      書庫では<strong>恒久強化</strong>が買える。
       </p>
       <ul class="howto-list">
       <li>恒久強化 … 体力 / 攻撃 / 装甲 / 経験値 / 引き寄せ / 会心。各 6 〜 10 段階</li>
+      <li><strong>語彙</strong> … 言玉で<strong>手持ちの語を 1 つ多く</strong>。最大 30 個</li>
       <li>段階を上げるほど<strong>値段が上がる</strong>。使い切りはできない</li>
-      <li>言葉くじ … 墨 25 で、まだ持っていない語を 1 つ引ける</li>
-      <li>引いた語は<strong>以後のランの語彙・3 択・部位に出る</strong>。最初は 1 文字語と接続詞を全部持っている</li>
       <li>どれも次のランに持ち越す。死んでも失わない</li>
       </ul>
       </section>
@@ -433,7 +485,8 @@
             <li><kbd>Q</kbd> … 言葉鍛冶の開閉</li>
             <li><kbd>Esc</kbd> … 一時停止 / 閉じる</li>
             <li>タッチ … 画面を長押ししてからドラッグで移動</li>
-            <li>言葉鍛冶 … 語を<strong>ドラッグ</strong>して装着・入れ替え（クリックでもできる）</li>
+            <li>タッチ … 右下の<strong>ダッシュ</strong>を押してダッシュ（タップでも効く）</li>
+            <li>言葉鍛冶 … 語を<strong>文へドラッグ</strong>、または<strong>タップで選んでから隙間をタップ</strong>。文の語を<strong>タップ</strong>で接続詞切替</li>
             <li>武器は<strong>自動で攻撃する</strong>。攻撃の向きは自動で選ぶ</li>
           </ul>
         </section>
@@ -451,7 +504,7 @@
       </header>
 
       <div class="archive-ink">
-        <span class="archive-ink-label">墨</span>
+        <span class="archive-ink-label">言玉</span>
         <b id="archiveInk">0</b>
         <span class="archive-ink-note">ステージクリアと、敵の<strong>文を崩す</strong>と貯まる</span>
       </div>
@@ -461,10 +514,64 @@
           <h3>恒久強化</h3>
           <div class="archive-list" id="archiveUpgrades"></div>
         </section>
+
+        <section>
+          <h3>語彙</h3>
+          <p class="archive-note">恒久の語は廃止。言玉は「語彙」の枠を買うか、恒久強化に使う。</p>
+          <div class="archive-words" id="archiveWords"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 部位強化 ══════════════════════════════════════════════════════ -->
+  <div id="grow" class="layer screen" hidden>
+    <div class="panel panel-grow">
+      <header class="panel-head">
+        <h2>部位強化</h2>
+        <button class="btn btn-close" data-close="grow">✕</button>
+      </header>
+
+      <div class="archive-ink">
+        <span class="archive-ink-label">言玉</span>
+        <b id="growInk">0</b>
+        <span class="archive-ink-note">言葉くじと書庫の強化に使う</span>
+      </div>
+
+      <div class="grow-body">
         <section>
           <h3>言葉くじ</h3>
-          <p class="archive-note">墨 25 で、まだ持っていない語を 1 つ引ける。引いた語だけが、以後のランの語彙・3 択・部位に出る。</p>
-          <div id="archiveWords"></div>
+          <p class="grow-note">言玉を払って、戦闘で使うのと同じ語を 1 つ引く。すでに持っている語なら言玉が少し戻る。</p>
+          <div class="grow-gacha">
+            <button class="btn btn-primary" id="gachaBtn">引く</button>
+            <span class="grow-gacha-result" id="gachaResult"></span>
+          </div>
+        </section>
+
+        <section>
+          <h3>部位の合計</h3>
+          <div class="grow-total" id="growTotal"></div>
+        </section>
+
+        <section>
+          <h3>部位</h3>
+          <p class="grow-note">下の「所持語」から語を選んで、各部位の枠を押すと入る。入っている枠を押すと外れる（語を 2 つまで）。
+          語の右の<strong>「接続詞」</strong>を押すと、その語に付けられる形の一覧が開く。どの接続詞でも選べて、
+          <strong>✓ は文が成る形</strong>（文の力が体に乗る）、✕ は不成文（効果なし）。
+          各部位の下に<strong>何がどれだけ変わるか</strong>が出る。</p>
+          <div class="grow-parts" id="growParts"></div>
+          <p class="grow-note" id="growSelNote">語を選んでください</p>
+        </section>
+
+        <section>
+          <h3>所持語 <span class="grow-deck-count">部位に入れると効く語には効果が出る</span></h3>
+          <div class="grow-words" id="growWords"></div>
+        </section>
+
+        <section>
+          <h3>言葉デッキ <span class="grow-deck-count" id="deckCount"></span></h3>
+          <p class="grow-note">戦闘開始時の語彙に入る語。押すと出し入れできる。最低 10 語に満たない分は、開始時に自動で補われる。接続詞はデッキに入らない。</p>
+          <div class="grow-words" id="deckWords"></div>
         </section>
       </div>
     </div>
@@ -519,7 +626,7 @@
 </div>
 
 <noscript>
-  <p style="color:#fff;padding:2rem;font-family:sans-serif">
+  <p style="color:#232a38;padding:2rem;font-family:sans-serif">
     このゲームは JavaScript を必要とします。ブラウザで JavaScript を有効にしてください。
   </p>
 </noscript>

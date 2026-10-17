@@ -10,7 +10,7 @@ import { ELEMENTS } from '../data/words.js';
 
 let eUid = 0;
 
-export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1) {
+export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1, rnd = Math.random) {
   const d = ENEMIES[id];
   return {
     kind: 'enemy',
@@ -32,22 +32,23 @@ export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1) {
     freeze: 0,
     stun: 0,
     // 描画
-    face: 0, wob: Math.random() * TAU, flash: 0,
+    face: 0, wob: rnd() * TAU, flash: 0,
     // 敵が持つ文。プレイヤーの文から語を斬り落とす。
     words: enemyWords(d),
     broken: false,
     cutFlash: 0,
     // AI
-    t: Math.random() * 2,
-    atkCd: 0, charging: 0, cdLeft: (d.charge?.cd || 2) * Math.random(),
-    phase: Math.random() * TAU,
+    t: rnd() * 2,
+    atkCd: 0, charging: 0, cdLeft: (d.charge?.cd || 2) * rnd(),
+    burrowed: false, burrowT: 1.2,
+    phase: rnd() * TAU,
     dead: false,
     spawned: 0,
   };
 }
 
 /**
- * 敵の文を現在まで評価した結果。语的表は変わらないので lazy に計算。
+ * 敵の文を現在まで評価した結果。語の表は変わらないので lazy に計算。
  * @param {object} e 敵
  */
 export function enemyEval(e) {
@@ -258,6 +259,25 @@ export function updateEnemy(en, w, dt) {
       case 'boss':
         bossMove(en, w, dt, dx, dy, d);
         break;
+      case 'burrow': {
+        const cfg = en.def.burrow || { dive: 1.0, surface: 1.0 };
+        en.burrowT -= dt;
+        if (en.burrowT <= 0) {
+          en.burrowed = !en.burrowed;
+          en.burrowT = en.burrowed ? cfg.dive : cfg.surface;
+          if (!en.burrowed) {
+            // 浮上時に弾を撃つ。
+            const shot = cfg.shot || { speed: 140, dmg: 6 };
+            w.spawnEnemyShot?.(en.x, en.y, Math.atan2(dy, dx), shot.speed, shot.dmg, en.def.color);
+          }
+        }
+        if (en.burrowed) {
+          mvx = dx * 1.4; mvy = dy * 1.4;
+        } else {
+          mvx = dx * 0.6; mvy = dy * 0.6;
+        }
+        break;
+      }
       default:
         mvx = dx; mvy = dy;
     }
@@ -276,7 +296,7 @@ export function updateEnemy(en, w, dt) {
     en.atkCd -= dt;
     if (en.atkCd <= 0 && d < 420) {
       en.atkCd = en.def.shot.cd;
-      w.spawnEnemyShot?.(en.x, en.y, Math.atan2(dy, dx), en.def.shot.speed, en.def.shot.dmg);
+      w.spawnEnemyShot?.(en.x, en.y, Math.atan2(dy, dx), en.def.shot);
     }
   }
 }
@@ -355,6 +375,9 @@ function bossMove(en, w, dt, dx, dy, d) {
       case 'drain':
         w.bossDrain?.(en);
         break;
+      case 'spiral':
+        w.bossSpiral?.(en);
+        break;
     }
     return;
   }
@@ -390,14 +413,12 @@ export function updateBullet(b, w, dt) {
 
   if (b.boomerang) {
     const p = w.player;
-    const d = Math.hypot(b.x - p.x, b.y - p.y) || 1;
+    const d = Math.hypot(b.x - p.x, b.y - p.y);
+    b.t += 0;
     if (b.ret) {
-      // 手元へ向かって加速する。行きより速く帰る。
-      b.vx += ((p.x - b.x) / d) * 2400 * dt;
-      b.vy += ((p.y - b.y) / d) * 2400 * dt;
-      const sp = Math.hypot(b.vx, b.vy);
-      if (sp > 950) { b.vx *= 950 / sp; b.vy *= 950 / sp; }
-      if (d < 24) b.dead = true;
+      b.x += (p.x - b.x) * Math.min(1, dt * 9);
+      b.y += (p.y - b.y) * Math.min(1, dt * 9);
+      if (d < 22) b.dead = true;
     }
   } else if (b.homing > 0) {
     const tgt = pickTarget(b, w);
@@ -414,12 +435,12 @@ export function updateBullet(b, w, dt) {
   b.px = b.x; b.py = b.y;
   b.x += b.vx * dt;
   b.y += b.vy * dt;
-  b.spin += (b.vx + b.vy) * 0.0008 + dt + (b.spinSpd || 0) * dt;
+  b.spin += (b.vx + b.vy) * 0.0008 + dt;
   b.traveled += Math.hypot(b.x - b.px, b.y - b.py);
 
-  if (b.boomerang && !b.ret && b.traveled > (b.range || 240)) { b.ret = true; b.spinSpd = (b.spinSpd || 8) * 1.6; }
+  if (b.boomerang && !b.ret && b.traveled > (b.range || 240)) b.ret = true;
 
-  if (b.range && b.traveled > b.range && !b.orbit && !b.boomerang) b.dead = true;
+  if (b.range && b.traveled > b.range && !b.orbit) b.dead = true;
 }
 
 /** 追尾の標的を選ぶ。 */

@@ -9,9 +9,14 @@
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { getStage } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { makeWord, drawWord, drawSimple, ELEMENTS } from '../data/words.js';
-import { WEAPONS, startingWeaponsFor } from '../data/weapons.js';
+import {
+  makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
+  WORDS, isWeaponWord, weaponHeadKind,
+} from '../data/words.js';
+import { isConnector } from '../data/words.connect.js';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
+import { normPartEntries } from './parts.js';
 import { WeaponInst } from './weapon.js';
 import { fireWeapon, damage as damageEnemy } from './combat.js';
 import {
@@ -35,6 +40,9 @@ export const WORD_CHOICES = 3;
 export const CHOICE_TIME = 7;         // 選べる秒数
 export const LEXICON_MAX = 30;        // 語彙の容量の上限 (言玉で拡張)
 
+/** レベルアップの 3 択に武器語 (剣・弾・銃…) が入る確率。他の語より低い。 */
+export const FORM_CHOICE_CHANCE = 0.22;
+
 export class Run {
   /**
    * @param {object} opt
@@ -42,9 +50,8 @@ export class Run {
    * @param {object}  opt.save
    * @param {object}  opt.audio
    * @param {number}  [opt.lexiconSize]
-   * @param {string[]}[opt.collection] 言葉くじで持っている語。ランに出る語はこれだけ。
+   * @param {string}[][opt.startingWords]
    * @param {string[]}[opt.weaponIds]
-   * @param {number}  [opt.weaponLevels] 武器 id ごとの開始レベル
    */
   constructor(opt) {
     this.stage = getStage(opt.stageId);
@@ -56,13 +63,22 @@ export class Run {
     this.lexiconBase = opt.lexiconSize ?? 12;
     this.lexiconGrown = bought;
     this.rand = opt.rng || rng;
-    // ランに出る語の源。言葉くじの持ち物。null なら全語 (テスト用)。
-    const collection = opt.collection || opt.startingWords || null;
-    this.wordPool = collection && collection.length ? new Set(collection) : null;
     // 描画側から毎フレーム更新される画面サイズ。
     this.viewW = opt.viewW || 960;
     this.viewH = opt.viewH || 600;
     this.viewR = 480;
+
+    // 部位強化の語 (メインメニューで設定)。戦闘中は変えられない。
+    // メニューからは { name, words:[{text,conn}] } の形 (部位 = 1 文) で貰う。
+    // 古い opt.partWords (語の flat な並び) もそのまま受けつける。
+    this.partEntries = (opt.partEntries || []).map((p) => ({
+      name: p?.name || '',
+      words: normPartEntries(p?.words),
+    })).filter((p) => p.words.length);
+    this.partWords = (opt.partWords || []).filter((t) => WORDS[t] && !CONNECTOR_SET.has(t));
+    if (!this.partEntries.length && this.partWords.length) {
+      this.partEntries = this.partWords.map((t) => ({ name: '', words: [{ text: t, conn: null }] }));
+    }
 
     this.player = {
       x: 0, y: 0, vx: 0, vy: 0,
@@ -75,8 +91,6 @@ export class Run {
       // スタミナとダッシュ
       stamina: 100, maxStamina: 100,
       dashing: false, dashCd: 0, dashTrail: [],
-      // 部位 (右手 / 左手 / 胴 / 頭)。語を 1 つずつ置ける。
-      selfSlots: new Array(opt.selfSlots ?? 4).fill(null),
       stats: { ...BASE_PLAYER },
       alive: true,
     };
@@ -90,9 +104,10 @@ export class Run {
     this.pendingChoices = [];
 
     // ── 武器 ──
+    // 最初は 1 つだけ。戦闘中に武器語を得ると新しい文を作れる (最大 3 つ)。
     this.weapons = [];
-    const avail = startingWeaponsFor();
-    const wantIds = (opt.weaponIds && opt.weaponIds.length ? opt.weaponIds : ['sword', 'gun']).slice(0, 4);
+    const avail = startingWeaponsFor(this.stage.id);
+    const wantIds = (opt.weaponIds && opt.weaponIds.length ? opt.weaponIds : ['sword']).slice(0, 1);
     for (const id of wantIds) {
       if (!WEAPONS[id]) continue;
       if (!avail.includes(id)) continue;
@@ -100,29 +115,26 @@ export class Run {
     }
     if (!this.weapons.length) this.weapons.push(new WeaponInst('sword', 1));
 
-    // 各武器の開始時の 2 語。末尾語と合わせても文にならないので最低 2 語必要。
+    // 開始時は武器名だけ。属性語などはデッキから選び、戦闘中に組み立てる。
     for (const wi of this.weapons) {
-      if (wi.def.startWord) wi.setSlot(0, makeWord(wi.def.startWord));
-      if (wi.def.startWord2) wi.setSlot(1, makeWord(wi.def.startWord2));
+      if (wi.def.tail) wi.sentence.push(makeWord(wi.def.tail));
     }
 
-    // 開始時は漢字だけの短い語。漢字だけの武器を組み立てる土台にする。
-    // 言葉くじの持ち物の中からだけ引く。
+    // 開始時の語彙。まず言葉デッキ (メニューで編成) を入れる。
+    // 接続詞はデッキに入らないので、ここでも弾く。
+    const deck = (opt.deckWords || []).filter((t) => WORDS[t] && !CONNECTOR_SET.has(t));
+    this.deckPool = new Set(deck);
+    for (const t of deck) {
+      if (this.lexiconFreeCount <= 0) break;
+      this.addWord(makeWord(t), true);
+    }
+    // デッキが最低語数に満たない分は、漢字だけの短い語で補う。
     const fill = opt.lexiconFill ?? 10;
-    const used = new Set();
-    for (let i = 0; i < fill; i++) {
-      const w = drawSimple(this.rand, used, this.wordPool);
-      if (!w) break;
-      this.addWord(w, true);
+    for (let i = this.lexicon.filter(Boolean).length; i < fill; i++) {
+      const w = drawSimple(this.rand);
+      if (w) this.addWord(w, true);
     }
     for (const w of (opt.extraWords || [])) this.addWord(makeWord(w.text), true, true);
-
-    // 部位の文。最初は何も入れない。
-    for (const t of (opt.selfWords || [])) {
-      const idx = this.player.selfSlots.indexOf(null);
-      if (idx < 0) break;
-      this.player.selfSlots[idx] = makeWord(t);
-    }
 
     // ── ワールド ──
     this.t = 0;
@@ -143,9 +155,8 @@ export class Run {
     this.beams = [];
     this.dmgTexts = [];
     this.corpses = [];
-    this.particles = [];
-    this.flashFx = 0;
-    this.hurtFlash = 0;
+    this.bossBursts = [];
+    this.bossVictoryPending = false;
 
     this.kills = 0;
     this.dmgDealt = 0;
@@ -168,7 +179,10 @@ export class Run {
   // 能力
   // ───────────────────────────────────────────────────────────────────────────
   refreshStats(full = false) {
-    const s = resolvePlayerStats(this.lexicon, this.player.selfSlots, this.save?.d.meta || {});
+    const s = resolvePlayerStats(
+      this.partEntries.length ? this.partEntries : this.partWords,
+      this.save?.d.meta || {},
+    );
     const p = this.player;
     const ratio = p.maxHp > 0 ? clamp(p.hp / p.maxHp, 0, 1) : 1;
     p.stats = s;
@@ -184,30 +198,6 @@ export class Run {
       if (p.hp <= 0 && ratio > 0) p.hp = 1;
     }
     p.r = 13 * s.size;
-  }
-
-  /** 武器を追加できるか。上限 4 本、同じ武器は 1 本まで。 */
-  canAddWeapon(id) {
-    if (!WEAPONS[id]) return false;
-    if (this.weapons.length >= 4) return false;
-    return !this.weapons.some((w) => w.defId === id);
-  }
-
-  /**
-   * 武器をその場で追加する。言葉鍛冶からいつでも呼べる。
-   * 開始時の 2 語 (startWord / startWord2) を枠に入れて渡す。
-   * @returns {boolean} 追加できたか
-   */
-  addWeapon(id, level = 1) {
-    if (!this.canAddWeapon(id)) return false;
-    const def = WEAPONS[id];
-    const wi = new WeaponInst(id, level);
-    if (def.startWord) wi.setSlot(0, makeWord(def.startWord));
-    if (def.startWord2) wi.setSlot(1, makeWord(def.startWord2));
-    this.weapons.push(wi);
-    this.refreshStats();
-    this.pushHint(`${def.name} を加えた`);
-    return true;
   }
 
   /**
@@ -226,8 +216,15 @@ export class Run {
       return true;
     }
     if (!force) return false;
-    // 満杯。最も古い 1 語を捨てる。
+    // 満杯。最も古い 1 語を捨ててそこに入れる。
+    // (枠が潰れてどの語か分からないときは末尾に足す — 昔のセーブの語彙など)
     const drop = this.oldestLexiconIndex();
+    if (drop < 0) {
+      this.lexicon[this.lexicon.length - 1] = word;
+      this.refreshStats();
+      this.pushHint(`「${word.text}」を手に入れた`);
+      return true;
+    }
     const lost = this.lexicon[drop];
     this.lexicon[drop] = word;
     this.refreshStats();
@@ -271,35 +268,41 @@ export class Run {
 
   /**
    * レベルアップ。3 つの候補から 1 つを選べるようにする。
-   * 選ばれている間は combat を止めない (時間制限つき)。
+   * 接続詞は鍛冶の接続詞プールから無限に使えるので、ここでは出さない。
    */
   grantLevelWords(level) {
     const n = level % 5 === 0 ? 2 : 1;   // 5 の倍数のときは 2 回
     for (let i = 0; i < n; i++) this.offerWordChoices();
-    // 部位にも入ることがある。
-    if (level % 4 === 1) {
-      const free = this.player.selfSlots.indexOf(null);
-      if (free >= 0) {
-        const w = drawWord(this.rand, { cat: 'buff', pool: this.wordPool });
-        if (w) {
-          w.t = ++this.wordSeq;
-          this.player.selfSlots[free] = w;
-          this.refreshStats();
-          this.pushHint(`部位に「${w.text}」を迎えた`);
-        }
-      }
-    }
+    // プレイヤー自身の強化はメニュー側 (部位強化) だけ。戦闘中は行わない。
   }
 
   /**
    * 3 つの候補を作って、選んでもらう。
+   * 接続詞は出ない (語の横にあるので、文を作るとき、切り替えるだけ)。
+   * 武器語 (基本武器 14 語) は他の語より低い確率で入る。
+   *   環・弾・玉 のような形態語は武器語ではないので、ここでは出ない (語側で引ける)。
    * 選んでいる間も時間は止まらない。時間切れなら 1 番目を自動で取る。
    */
   offerWordChoices() {
     const pool = [];
     const seen = new Set();
-    for (let i = 0; i < WORD_CHOICES * 3 && pool.length < WORD_CHOICES; i++) {
-      const w = drawWord(this.rand, { pool: this.wordPool });
+    // 実ゲームでは候補の母集団を編成済みデッキに限定する。
+    // テスト等でデッキ未指定の場合だけ従来の全語プールへフォールバック。
+    const deckWords = [...(this.deckPool || [])].filter((t) => WORDS[t] && !CONNECTOR_SET.has(t));
+    const candidateTexts = deckWords.length ? deckWords : null;
+    if (this.rand() < FORM_CHOICE_CHANCE) {
+      const weapons = (candidateTexts || Object.keys(WORDS)).filter((t) => isWeaponWord(t) && !this.ownedWeaponWords().has(t));
+      if (weapons.length) {
+        const text = weapons[Math.floor(this.rand() * weapons.length)];
+        pool.push(makeWord(text)); seen.add(text);
+      }
+    }
+    for (let i = 0; i < WORD_CHOICES * 8 && pool.length < WORD_CHOICES; i++) {
+      let w;
+      if (candidateTexts) {
+        const text = candidateTexts[Math.floor(this.rand() * candidateTexts.length)];
+        w = makeWord(text);
+      } else w = drawWord(this.rand);
       if (!w || seen.has(w.text)) continue;
       seen.add(w.text);
       pool.push(w);
@@ -312,6 +315,19 @@ export class Run {
     });
     this.onWordChoice?.(this.pendingChoices);
   }
+
+  /** すでに入っている武器語 (基本武器)。候補が重複しないように除外する。 */
+  ownedWeaponWords() {
+    const out = new Set();
+    for (const w of this.lexicon) if (w && isWeaponWord(w.text)) out.add(w.text);
+    for (const wi of this.weapons) {
+      for (const w of wi.sentence.words) if (isWeaponWord(w.text)) out.add(w.text);
+    }
+    return out;
+  }
+
+  /** @deprecated 名称が変わった。ownedWeaponWords を使うこと。 */
+  ownedFormWords() { return this.ownedWeaponWords(); }
 
   /**
    * 3 択のうち 1 つを選んだ。
@@ -340,6 +356,7 @@ export class Run {
         this.lexicon[drop] = word;
         this.refreshStats();
         this.pushHint(`「${word.text}」を手に入れた（「${lost.text}」は消えた）`);
+        this.absorbFormWord(word);
         this.onWordChoice?.(this.pendingChoices);
         return true;
       }
@@ -355,18 +372,106 @@ export class Run {
       this.lexicon[discardIndex] = word;
       this.refreshStats();
       this.pushHint(`「${victim.text}」を忘れて「${word.text}」を手に入れた`);
+      // ここでも武器語は新しい文にする。満杯かどうかで挙動が変わるのは不具合だった。
+      this.absorbWeaponWord(word);
       this.onWordChoice?.(this.pendingChoices);
       return true;
     }
 
     this.giveWord(word);
+    this.absorbFormWord(word);
     this.onWordChoice?.(this.pendingChoices);
     return true;
   }
 
   /**
+   * 武器語 (基本武器) を得ると、新しい文を作れる。
+   * 武器は最大 3 つまで。3 つ埋まっていれば語彙に置いたままになる
+   * (鍛冶で文を 1 つ外せば、そこから作れる)。
+   *   形態語 (弾・環・玉…) は武器語ではないので、文を作らない。
+   * @returns {{ok:boolean, reason:string, wi?:object}}
+   */
+  absorbWeaponWord(word) {
+    if (!word || !isWeaponWord(word.text)) return { ok: false, reason: 'notweapon' };
+    if (this.weapons.length >= WEAPON_MAX) {
+      this.pushHint(`武器は ${WEAPON_MAX} つまで。「${word.text}」は語彙に置いた — 鍛冶で文を 1 つ外すと作れる`);
+      return { ok: false, reason: 'max' };
+    }
+    return this.craftWeaponFrom(word);
+  }
+
+  /** @deprecated 武器語 = 基本武器だけになった。absorbWeaponWord を使うこと。 */
+  absorbFormWord(word) { return this.absorbWeaponWord(word); }
+
+  /**
+   * 語を 1 つ使って、新しい武器の文を作る。戦闘中の「文を鍛える」の核。
+   *
+   *   基本武器 (剣・銃・刃…) … 置いてすぐ攻撃の型が決まる。
+   *   属性語・現象語 (光・雷・渦…) … **特殊武器**。攻撃できる動詞を述語に
+   *     付けた瞬間から撃てる (文だけで成立していても動詞が無ければ撃たない)。
+   *   形態語 (弾・環・玉…) … 武器語ではないので作れない。
+   *
+   * 語彙から語を 1 つ取り出して新しい文の頭にする。語は消えない (文へ移る)。
+   * @param {object} word 語彙にある語
+   * @returns {{ok:boolean, reason:string, wi?:object}}
+   */
+  craftWeaponFrom(word) {
+    if (!word) return { ok: false, reason: 'noword' };
+    const can = canCraftFrom(word.text);
+    if (!can.ok) {
+      const why = can.reason === 'form'
+        ? `「${word.text}」は武器語ではない (形態語はただの語)。武器語は刃・剣・銃…だけ`
+        : `「${word.text}」からは文を作れない。属性語・現象語・基本武器の語だけ`;
+      this.pushHint(why);
+      return { ok: false, reason: can.reason, reasonText: why };
+    }
+    if (this.weapons.length >= WEAPON_MAX) {
+      const why = `武器は ${WEAPON_MAX} つまで。使っていない文を 1 つ外してから作って`;
+      this.pushHint(why);
+      return { ok: false, reason: 'max', reasonText: why };
+    }
+    const loc = this.findWordAnywhere(word);
+    if (loc) this.clearPlace(loc);
+    const wi = new WeaponInst(`form:${word.text}`, 1);
+    wi.sentence.push(word);
+    this.weapons.push(wi);
+    this.refreshStats();
+    this.pushHint(can.kind === 'special'
+      ? `特殊武器「${word.text}」の文を作った — 攻撃できる動詞を述べると撃てる`
+      : `武器語「${word.text}」を得た — 新しい文「${wi.title}」`);
+    return { ok: true, reason: 'made', kind: can.kind, wi };
+  }
+
+  /**
+   * 武器語から作った文 (武器) を外す。語は語彙へ戻るので消えない。
+   * ステージ開始から持っている固定の武器は外せない。
+   * 3 つの枠が埋まったままだと新しい武器語を取れないので、こっそり枠を
+   * 占有できないようにするための出口 (取り外せない不具合の修正)。
+   * @returns {{ok:boolean, reason:string, returned?:number}}
+   */
+  dropWeapon(wi) {
+    if (!wi) return { ok: false, reason: 'nowi' };
+    if (!wi.def.isForm) return { ok: false, reason: 'fixed' };
+    if (this.weapons.length <= 1) return { ok: false, reason: 'last' };
+    // 文の中の語は語彙へ戻す。満杯なら語彙の最古の 1 語を捨てる (toLexicon と同じ)。
+    let n = 0;
+    for (const w of [...wi.sentence.words]) if (this.toLexicon(w).ok) n++;
+    const i = this.weapons.indexOf(wi);
+    if (i >= 0) this.weapons.splice(i, 1);
+    this.refreshStats();
+    this.pushHint(`文「${wi.title || wi.def.name}」を外した${n ? ` — ${n} 語を語彙へ戻した` : ''}`);
+    return { ok: true, reason: 'dropped', returned: n };
+  }
+
+  /** この語から新しい文 (武器) を作れるか。UI の + ボタンが読む。 */
+  canCraftFromWord(word) {
+    if (!word) return false;
+    return canCraftFrom(word.text).ok && this.weapons.length < WEAPON_MAX;
+  }
+
+  /**
    * 語彙から 1 語を忘れる (捨てる)。
-   * 武器や部位にある語は入れない。
+   * 武器の文にある語は入れない。
    * @returns {string|null} 忘れた語
    */
   forgetWord(word) {
@@ -412,18 +517,127 @@ export class Run {
     const i = this.lexicon.indexOf(word);
     if (i >= 0) return { where: 'lexicon', index: i, wi: null };
     for (const wi of this.weapons) {
-      const k = wi.slots.indexOf(word);
+      const k = wi.sentence.indexOf(word);
       if (k >= 0) return { where: 'slot', index: k, wi };
     }
     return null;
   }
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // 接続詞 (枠と枠のあいだ)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 文の置き場か。
+   * slot / self = 語が置かれている場所、gap / selfgap = 語を入れる隙間。
+   * 隙間も同じ文に属するので、並べ替えの移動先可以作为。
+   */
+  static isSenPlace(p) {
+    return !!p && (p.kind === 'slot' || p.kind === 'gap');
+  }
+
+  /** 文の語がある置き場か (隙間は含まない)。 */
+  static isWordPlace(p) {
+    return !!p && p.kind === 'slot';
+  }
+
+  /** 置き場が属する文 (武器の文のみ)。 */
+  sentenceOf(place) {
+    if (!Run.isSenPlace(place)) return null;
+    if (!place.wi) return null;
+    return place.wi.sentence;
+  }
+
+  /** 置き場の語を取る。隙間に語は無いので null。 */
+  wordAtPlace(place) {
+    if (!Run.isWordPlace(place)) return null;
+    const sen = this.sentenceOf(place);
+    if (!sen) return null;
+    const e = sen.at(place.index);
+    return e ? e.word : null;
+  }
+
+  /** 置き場の接続詞を取る。語の直後に付いたもの。 */
+  connAt(place) {
+    if (!Run.isWordPlace(place)) return null;
+    const e = this.sentenceOf(place)?.at(place.index);
+    return e ? e.conn : null;
+  }
+
+  /**
+   * 置き場の直後に接続詞を置く (null で外す)。
+   * 戻り値は { ok, reason }。外すだけの操作も ok で返すので、
+   * 呼び出し側は「外せなかった」と誤報しない。
+   */
+  setConnAt(place, word) {
+    if (!Run.isWordPlace(place)) return { ok: false, reason: 'notconn' };
+    const sen = this.sentenceOf(place);
+    if (!sen) return { ok: false, reason: 'notconn' };
+    const r = sen.setConnAt(place.index, word ? word.text : null);
+    if (!r.ok) return r;
+    if (place.wi) place.wi._sig = null;
+    this.refreshStats();
+    return r;
+  }
+
+  /**
+   * 接続詞を枠と枠のあいだに置く。
+   * 語彙や他の置き場にある同じ語は、先に外してから移す。
+   */
+  placeConnector(place, word) {
+    if (!word) return { ok: false, reason: 'noword' };
+    if (!Run.isWordPlace(place)) return { ok: false, reason: 'notconn' };
+    const sen = this.sentenceOf(place);
+    if (!sen) return { ok: false, reason: 'notconn' };
+    if (!isConnector(word.text)) return { ok: false, reason: 'notconnector' };
+    const r = sen.setConnAt(place.index, word.text);
+    if (r.ok && place.wi) place.wi._sig = null;
+    this.refreshStats();
+    return r;
+  }
+
+  /**
+   * 語の直後の接続詞を 1 つ進める。
+   * 使える接続詞を順に回り、一周したら「接続詞なし」になる。
+   * 語をタップしたときに呼ぶ。
+   */
+  cycleConnector(place) {
+    if (!Run.isWordPlace(place)) return { ok: false, text: null, reason: 'notconn' };
+    const sen = this.sentenceOf(place);
+    if (!sen) return { ok: false, text: null, reason: 'notconn' };
+    const r = sen.cycleConnAt(place.index);
+    if (place.wi) place.wi._sig = null;
+    this.refreshStats();
+    return r;
+  }
+
+  /** 接続詞を外す。語は消えない。 */
+  clearConnector(place) {
+    if (!Run.isWordPlace(place)) return { ok: false, reason: 'notconn' };
+    const sen = this.sentenceOf(place);
+    if (!sen) return { ok: false, reason: 'notconn' };
+    const e = sen.at(place.index);
+    if (!e || !e.conn) return { ok: false, reason: 'empty' };
+    e.conn = null;
+    if (place.wi) place.wi._sig = null;
+    this.refreshStats();
+    return { ok: true, reason: 'cleared' };
+  }
+
+  /** 置き場から語を取り除く (語彙へは戻さない)。 */
+  clearPlace(loc) {
+    if (!loc) return;
+    if (loc.where === 'lexicon') this.lexicon[loc.index] = null;
+    else if (loc.wi) { loc.wi.sentence.removeAt(loc.index); loc.wi._sig = null; }
+  }
+
   /**
    * 語彙へ戻す。
    *
-   * 語彙が満杯のときは武器や部位から語を外せない。返回值 reason で理由を返す。
-   * 以前は空きがないのに外。結果として語が消えていた。
-   * @returns {{ok:boolean, reason:string}}
+   * 語彙が満杯でも、**語彙で最も古い 1 語を捨てて**空きを作る。
+   * 文から外せないと文を短くできないので、ここだけは必ず通す。
+   * `full` を返すのは語彙に 1 語も無いときだけ。
+   * @returns {{ok:boolean, reason:string, lost?:string|null}}
    */
   toLexicon(word) {
     const loc = this.findWordAnywhere(word);
@@ -431,16 +645,24 @@ export class Run {
     // もう語彙にあるなら何もしない。
     if (loc.where === 'lexicon') return { ok: true, reason: 'already' };
 
-    const free = this.lexicon.indexOf(null);
+    let free = this.lexicon.indexOf(null);
+    let lost = null;
     if (free < 0) {
-      this.pushHint('語彙が満杯。武器から語を外せない');
-      return { ok: false, reason: 'full' };
+      // 満杯。語彙で最も古い 1 語を捨てる (語を得るのと同じ規則)。
+      free = this.oldestLexiconIndex();
+      if (free < 0) {
+        this.pushHint('語彙が満杯。文から語を外せない');
+        return { ok: false, reason: 'full' };
+      }
+      lost = this.lexicon[free];
     }
-    if (loc.wi) loc.wi.setSlot(loc.index, null);
-    else if (loc.where === 'self') this.player.selfSlots[loc.index] = null;
+    this.clearPlace(loc);
     this.lexicon[free] = word;
     this.refreshStats();
-    return { ok: true, reason: 'moved' };
+    this.pushHint(lost
+      ? `「${word.text}」を語彙に戻した（「${lost.text}」は消えた）`
+      : `「${word.text}」を語彙に戻した`);
+    return { ok: true, reason: 'moved', lost: lost ? lost.text : null };
   }
 
   /**
@@ -448,77 +670,97 @@ export class Run {
    * @returns {{where:string, index:number, wi:object|null, self?:number}|null}
    */
   findWordAnywhere(word) {
-    const loc = this.findWord(word);
-    if (loc) return loc;
-    const i = this.player.selfSlots.indexOf(word);
-    if (i >= 0) return { where: 'self', index: i, wi: null };
-    return null;
+    return this.findWord(word);
   }
 
-  /** 語彙・武器・部位のうちどれかへ装着する。 */
+  /** 語を武器の文へ装着する。 */
   placeWordAnywhere(wi, slotIndex, word) {
-    if (!word) return { ok: false, reason: 'noword' };
-    if (slotIndex < 0 || slotIndex >= wi.slots.length) {
-      return { ok: false, reason: 'range' };
-    }
-    const prev = wi.slots[slotIndex] || null;
-    // 追い出す語の置き場がないなら動かさない。語を消さない。
-    if (prev && prev !== word && this.lexiconFreeCount <= 0) {
-      this.pushHint('語彙が満杯。「忘れる」で空きを作ると交換できる');
-      return { ok: false, reason: 'full' };
-    }
-    const loc = this.findWordAnywhere(word);
-    if (loc) {
-      if (loc.wi === wi && loc.index === slotIndex) return { ok: true, reason: 'same' };
-      if (loc.wi) loc.wi.setSlot(loc.index, null);
-      else if (loc.where === 'self') this.player.selfSlots[loc.index] = null;
-      else this.lexicon[loc.index] = null;
-    }
-    wi.setSlot(slotIndex, word);
-    // もともとあった語は、置き場があれば語彙へ戻す。
-    if (prev && prev !== word) this.lexicon[this.lexicon.indexOf(null)] = prev;
-    this.refreshStats();
-    return { ok: true, reason: 'placed' };
+    return this.insertInto(wi.sentence, slotIndex, word, wi);
   }
 
-  /** 部位に語を入れる。 */
-  placeSelfWord(index, word) {
-    const slots = this.player.selfSlots;
-    if (index < 0 || index >= slots.length) return { ok: false, reason: 'range' };
-    const prev = slots[index] || null;
-    if (prev && prev !== word && this.lexiconFreeCount <= 0) {
-      this.pushHint('語彙が満杯。「忘れる」で空きを作ると交換できる');
-      return { ok: false, reason: 'full' };
+  /**
+   * 文の index の位置に語を差し込む。
+   * 語彙や他の文から取り除き、10 文字に収まるときだけ置く。
+   * @param {Sentence} sen
+   * @param {number} index
+   * @param {object} word
+   * @param {object} [wi] 武器の文なら、その武器 (キャッシュ用)
+   */
+  insertInto(sen, index, word, wi = null) {
+    if (!word) return { ok: false, reason: 'noword' };
+    if (isConnector(word.text)) return { ok: false, reason: 'notword' };
+    const at = Math.max(0, Math.min(index, sen.count));
+    if (!sen.fits(word.text, at)) {
+      this.pushHint(`文は ${sen.maxLen} 文字まで。空きがない`);
+      return { ok: false, reason: 'len' };
     }
     const loc = this.findWordAnywhere(word);
     if (loc) {
-      if (loc.where === 'self' && loc.index === index) return { ok: true, reason: 'same' };
-      if (loc.wi) loc.wi.setSlot(loc.index, null);
-      else if (loc.where === 'self') slots[loc.index] = null;
-      else this.lexicon[loc.index] = null;
+      const sameSen = loc.where === 'slot' && loc.wi === wi;
+      if (sameSen && loc.index === at) return { ok: true, reason: 'same' };
+      this.clearPlace(loc);
     }
-    slots[index] = word || null;
-    if (prev && prev !== word) this.lexicon[this.lexicon.indexOf(null)] = prev;
+    const r = sen.insertAt(at, word);
+    if (!r.ok) return r;
+    if (wi) wi._sig = null;
     this.refreshStats();
     return { ok: true, reason: 'placed' };
   }
 
   /**
-   * 語を武器のスロットに入れる。語彙か部位から取り除く。
+   * 文の中の語を別の位置へ移す。文どうし、文と語彙の間。
+   *
+   * `to.index` はそのまま「挿入位置 (隙間)」として扱う。
+   * 文の内側の移動は拔出きのぶんを Sentence.moveTo が引き受けるので、
+   * ここで 1 を足し引きしてはいけない (二重になると並びがずれる)。
+   * @param {{kind:string,index:number,wi?:object}} from
+   * @param {{kind:string,index:number,wi?:object}} to
    */
+  moveWordTo(from, to) {
+    const word = this.wordAtPlace(from);
+    if (!word) return { ok: false, reason: 'empty' };
+    // 語彙へ戻す。落としたマスが埋まっていても、語彙の空きへ戻す。
+    if (to.kind === 'lexicon') return this.toLexicon(word);
+    const srcSen = this.sentenceOf(from);
+    const dstSen = this.sentenceOf(to);
+    if (!srcSen || !dstSen) return { ok: false, reason: 'range' };
+    const same = srcSen === dstSen;
+    if (!same && !dstSen.fits(word.text, to.index)) {
+      this.pushHint(`文は ${dstSen.maxLen} 文字まで。空きがない`);
+      return { ok: false, reason: 'len' };
+    }
+    if (same && to.index === from.index) return { ok: true, reason: 'same' };
+    const at = to.index;
+    if (same) {
+      const r = srcSen.moveTo(from.index, at);
+      if (r.ok && from.wi) from.wi._sig = null;
+      this.refreshStats();
+      return r;
+    }
+    srcSen.removeAt(from.index);
+    if (from.wi) from.wi._sig = null;
+    const r = dstSen.insertAt(Math.max(0, Math.min(at, dstSen.count)), word);
+    if (to.wi) to.wi._sig = null;
+    this.refreshStats();
+    return r.ok ? { ok: true, reason: 'moved' } : { ok: false, reason: 'len' };
+  }
+
+  /** 語を武器の文に入れる。 */
   placeWord(wi, slotIndex, word) {
     if (!word) return { ok: false, reason: 'noword' };
     return this.placeWordAnywhere(wi, slotIndex, word);
   }
 
   /**
-   * 2 つの置き場を丸ごと入れ替える。ドラッグの入れ替えに使う。
+   * 2 つの置き場を入れ替える。ドラッグの入れ替えに使う。
    *
    * 置き場の種類:
-   *   { kind: 'lexicon', index }   語彙
-   *   { kind: 'slot', wi, index } 武器
-   *   { kind: 'self', index }     部位
+   *   { kind: 'lexicon', index }    語彙
+   *   { kind: 'slot', wi, index }  武器の文の語
+   *   { kind: 'gap', wi, index }   武器の文の隙間 (語を入れる位置)
    *
+   * 文どうし (語 ↔ 隙間) は「並べ替え」として扱う。
+   * 文 → 語彙は moveWordTo が toLexicon に回すので、ここには来ない。
    * 語彙の空き数が増える入れ替えはしない (語が消えるため)。
    * @returns {{ok:boolean, reason:string}}
    */
@@ -528,15 +770,17 @@ export class Run {
       && (a.wi || null) === (b.wi || null);
     if (sameTarget) return { ok: true, reason: 'same' };
 
+    // 文どうし (語 ↔ 隙間) は「並べ替え」として扱う。
+    if (Run.isSenPlace(a) && Run.isSenPlace(b)) return this.moveWordTo(a, b);
+
     const get = (p) => {
       if (p.kind === 'lexicon') return this.lexicon[p.index] || null;
-      if (p.kind === 'self') return this.player.selfSlots[p.index] || null;
-      return p.wi.slots[p.index] || null;
+      return this.wordAtPlace(p);
     };
     const set = (p, w) => {
-      if (p.kind === 'lexicon') this.lexicon[p.index] = w;
-      else if (p.kind === 'self') this.player.selfSlots[p.index] = w;
-      else p.wi.setSlot(p.index, w);
+      if (p.kind === 'lexicon') { this.lexicon[p.index] = w; return; }
+      const sen = this.sentenceOf(p);
+      if (sen && sen.at(p.index)) sen.at(p.index).word = w;
     };
 
     const wa = get(a);
@@ -553,6 +797,8 @@ export class Run {
       this.pushHint('語彙が満杯。「忘れる」で空きを作ると入れ替えられる');
       return { ok: false, reason: 'full' };
     }
+    if (a.wi) a.wi._sig = null;
+    if (b.wi) b.wi._sig = null;
 
     set(a, wb);
     set(b, wa);
@@ -565,33 +811,6 @@ export class Run {
   // ───────────────────────────────────────────────────────────────────────────
   pushHint(text) { this.hint = text; this.hintT = 2.6; }
   shake(v) { if (this.shakeOn) this.shakeAmt = Math.min(26, this.shakeAmt + v); }
-
-  /**
-   * 粒を撒く。殺し・爆発・火花などの見た目はここに集約する。
-   * 乱数は Math.random を使い、遊びの乱数 (this.rand) には触れない。
-   */
-  burst(x, y, n, color, o = {}) {
-    if (!(n > 0)) return;
-    const spd = o.spd ?? 160;
-    const spdMin = o.spdMin ?? spd * 0.25;
-    const life = o.life ?? 0.55;
-    const r = o.r ?? 3.2;
-    const rMax = o.rMax ?? r * 1.4;
-    for (let i = 0; i < n; i++) {
-      const a = o.a != null ? o.a + (Math.random() - 0.5) * (o.spread ?? 0.8) : Math.random() * TAU;
-      const s = spdMin + Math.random() * (spd - spdMin);
-      const l = life * (0.6 + Math.random() * 0.8);
-      this.particles.push({
-        x, y,
-        vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-        r: r + Math.random() * (rMax - r),
-        life: l, maxLife: l,
-        color, grav: o.grav || 0, drag: o.drag ?? 3.2,
-        shape: o.shape || 'dot',
-      });
-    }
-    if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
-  }
 
   damageNumbers(x, y, v, crit) {
     if (!this.showDamage || this.dmgTexts.length > 70) return;
@@ -663,7 +882,8 @@ export class Run {
     const dmgScale = 1 + (st - 1) * 0.20;
 
     const pos = at || this.edgeSpawn(d.r + 24);
-    const e = makeEnemy(id, pos.x, pos.y, hpScale, dmgScale);
+    // 乱数はランのシード付き乱数から引く。再現性のため Math.random は使わない。
+    const e = makeEnemy(id, pos.x, pos.y, hpScale, dmgScale, this.rand);
     e.spawned = 0;
     if (d.boss) { e.atkCd = 2.4; e.patIdx = 0; e.ring = 0; e.spawned = 1; }
     this.enemies.push(e);
@@ -691,17 +911,6 @@ export class Run {
     this.kills++;
     this.corpses.push({ x: e.x, y: e.y, r: e.r, color: e.def.color, life: 0.4, maxLife: 0.4 });
     this.audio.kill();
-    this.burst(e.x, e.y, e.boss ? 42 : Math.min(20, 8 + Math.round(e.r)), e.def.color, {
-      spd: e.boss ? 340 : 210,
-      life: e.boss ? 0.9 : 0.55,
-      r: e.boss ? 5 : 3.2,
-    });
-    this.rings.push({
-      x: e.x, y: e.y, r: e.r + 6,
-      life: 0.28, maxLife: 0.28, color: e.def.color, w: 0.55,
-    });
-    if (e.boss) this.flashFx = Math.min(1, this.flashFx + 0.55);
-    else this.flashFx = Math.min(0.5, this.flashFx + 0.05);
 
     const xp = e.xp * (1 + (this.stage.id - 1) * 0.12);
     const n = clamp(Math.floor(xp / 2.5), 1, 6);
@@ -710,11 +919,12 @@ export class Run {
     if (this.rand.chance(0.025)) this.pickups.push(makePickup(e.x, e.y, 'heal', 14));
 
     if (e.boss) {
+      this.bossBursts.push({ x: e.x, y: e.y, life: 2.2, maxLife: 2.2, color: e.def.color || '#d39a35' });
       this.shake(26);
       this.audio.explode();
       this.pushHint(`${e.def.name} を討伐した!`);
+      this.bossVictoryPending = true;
       for (let i = 0; i < 30; i++) this.pickups.push(makePickup(e.x, e.y, 'xp', Math.ceil(e.xp / 30)));
-      this.finish(true);
     }
 
     if (st && st.split > 0) this.spawnSplit(e, st);
@@ -758,8 +968,6 @@ export class Run {
     p.invuln = 0.6;
     p.flash = 1;
     this.dmgTaken += dmg;
-    this.hurtFlash = 1;
-    this.burst(p.x, p.y, 10, '#ff5470', { spd: 180, life: 0.4, r: 2.6 });
     this.shake(7);
     this.audio.hurt();
     this.slowmo = 0.06;
@@ -886,14 +1094,6 @@ export class Run {
     if (p.dashing) {
       p.dashTrail.push({ x: p.x, y: p.y, a: p.face, life: 0.22, maxLife: 0.22 });
       if (p.dashTrail.length > 14) p.dashTrail.shift();
-      p.dustT = (p.dustT || 0) - dt;
-      if (p.dustT <= 0) {
-        p.dustT = 0.035;
-        this.burst(p.x - Math.cos(p.face) * 10, p.y - Math.sin(p.face) * 10, 1, '#ffd43b', {
-          spd: 60, spdMin: 10, life: 0.3, r: 2.4, drag: 6,
-          a: p.face + Math.PI, spread: 1.2,
-        });
-      }
     }
     for (let i = p.dashTrail.length - 1; i >= 0; i--) {
       p.dashTrail[i].life -= dt;
@@ -977,9 +1177,6 @@ export class Run {
       });
       b.st = st; b.wi = wi; b.continuous = true;
       this.bullets.push(b);
-      if (Math.random() < 0.12 && this.particles.length < 380) {
-        this.burst(b.x, b.y, 1, col, { spd: 40, spdMin: 0, life: 0.32, r: 2, drag: 5 });
-      }
     }
   }
 
@@ -1024,28 +1221,13 @@ export class Run {
 
       // 爆弾は敵に触れたら炸る。
       if (b.kindName === 'bomb') {
-        if (Math.random() < 0.5 && this.particles.length < 400) {
-          this.burst(b.x - b.vx * 0.02, b.y - b.vy * 0.02, 1, '#2a2028', {
-            spd: 24, spdMin: 0, life: 0.5, r: 3.4, drag: 2,
-          });
-          this.burst(b.x, b.y, 1, b.color || '#fff', { spd: 40, spdMin: 0, life: 0.22, r: 1.8, drag: 6 });
-        }
         if (this.nearestEnemy(b.x, b.y, null, 20 + b.r)) {
           this.explode(b, b.st);
           this.bullets.splice(i, 1);
           continue;
         }
       }
-      if (b.enemy) {
-        // 敵弾はプレイヤーに当たる。
-        const rr = b.r + this.player.r;
-        if (dist2(b.x, b.y, this.player.x, this.player.y) <= rr * rr) {
-          this.hurtPlayer(b.dmg || 10);
-          b.dead = true;
-        }
-        if (b.dead) this.bullets.splice(i, 1);
-        continue;
-      }
+      if (b.enemy) { this.bullets.splice(i, 1); continue; }
 
       const st = b.st || {
         dmg: b.dmg || 5, crit: 0, critDmg: 1.5, lifesteal: 0, pierce: 0, knock: 0, size: 1, el: 'none',
@@ -1065,13 +1247,6 @@ export class Run {
           burn: b.burn, poison: b.poison, chill: b.chill, shock: b.shock, freeze: b.freeze,
         });
         this.audio.hit();
-        if (this.particles.length < 380) {
-          const col = (ELEMENTS[b.element || st.el] || ELEMENTS.none).color;
-          this.burst(b.x, b.y, 3, col, {
-            spd: 140, life: 0.26, r: 2,
-            a: Math.atan2(-(b.vy || -1), -(b.vx || 0.001)), spread: 1.6,
-          });
-        }
 
         if (b.pierce > 0) b.pierce--;
         else b.dead = true;
@@ -1096,17 +1271,12 @@ export class Run {
 
   explode(b, st) {
     const r = 40 + (st?.area || 0) + (b.explode || 0) * 0.55;
-    const col = (ELEMENTS[b.element] || ELEMENTS.none).color;
     this.fields.push(makeField(b.x, b.y, r, Math.max(1, (st?.dmg || 6) * 0.8), {
       life: 0.3,
       element: b.element || st?.el,
       burn: b.burn, poison: b.poison, chill: b.chill, shock: b.shock, freeze: b.freeze,
       knock: st?.knock,
     }));
-    this.burst(b.x, b.y, 18, col, { spd: 300, life: 0.65, r: 3.6, grav: 90 });
-    this.burst(b.x, b.y, 8, '#1c1618', { spd: 90, life: 1.1, r: 6, rMax: 9, drag: 1.6 });
-    this.rings.push({ x: b.x, y: b.y, r: r * 0.92, life: 0.26, maxLife: 0.26, color: col, w: 0.8 });
-    this.flashFx = Math.min(1, this.flashFx + 0.12 + (b.explode || 0) * 0.004);
     this.audio.explode();
     this.shake(5 + (b.explode || 0) * 0.07);
   }
@@ -1184,24 +1354,16 @@ export class Run {
     if (q.type === 'xp') {
       p.xp += q.value * (p.stats.xpMul || 1);
       this.audio.xp();
-      this.burst(q.x, q.y, 3, '#ffd43b', { spd: 90, life: 0.3, r: 2 });
       while (p.xp >= p.xpNext) {
         p.xp -= p.xpNext;
         p.level++;
         p.xpNext = Math.round(5 + p.level * 4 + p.level ** 1.7);
         this.grantLevelWords(p.level);
-        this.burst(p.x, p.y, 30, '#ffd43b', { spd: 300, life: 0.8, r: 3.6, grav: -40 });
-        this.rings.push({
-          x: p.x, y: p.y, r: p.r * 2.4,
-          life: 0.5, maxLife: 0.5, color: '#ffd43b', w: 1.6,
-        });
-        this.flashFx = Math.min(1, this.flashFx + 0.16);
         this.onLevelUp?.(p.level);
       }
     } else if (q.type === 'heal') {
       this.healPlayer(q.value);
       this.audio.pickup();
-      this.burst(q.x, q.y, 12, '#7dff9b', { spd: 130, life: 0.55, r: 2.8, grav: -60 });
       this.pushHint(`回復 ${q.value}`);
     }
   }
@@ -1209,7 +1371,7 @@ export class Run {
   contactTick() {
     const p = this.player;
     for (const e of this.enemies) {
-      if (e.dead || e.spawned < 1) continue;
+      if (e.dead || e.spawned < 1 || e.burrowed) continue;
       const rr = p.r + e.r;
       if (dist2(e.x, e.y, p.x, p.y) > rr * rr) continue;
       this.hurtPlayer(e.dmg);
@@ -1240,25 +1402,15 @@ export class Run {
       t.vy *= Math.pow(0.06, this._lastDt);
       if (t.life <= 0) this.dmgTexts.splice(i, 1);
     }
-
-    const pd = this._lastDt;
-    if (pd > 0) {
-      for (let i = this.particles.length - 1; i >= 0; i--) {
-        const q = this.particles[i];
-        q.life -= pd;
-        if (q.life <= 0) { this.particles.splice(i, 1); continue; }
-        const dr = Math.exp(-(q.drag || 3) * pd);
-        q.vx *= dr; q.vy *= dr;
-        if (q.grav) q.vy += q.grav * pd;
-        q.x += q.vx * pd;
-        q.y += q.vy * pd;
-      }
-    }
   }
 
-  fxTick(dt) {
-    if (this.flashFx > 0) this.flashFx = Math.max(0, this.flashFx - dt * 3.2);
-    if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - dt * 2.4);
+  fxTick(dt = 0) {
+    for (const fx of this.bossBursts || []) fx.life = Math.max(0, fx.life - dt);
+    this.bossBursts = (this.bossBursts || []).filter((fx) => fx.life > 0);
+    if (this.bossVictoryPending && !this.bossBursts.length) {
+      this.bossVictoryPending = false;
+      this.finish(true);
+    }
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -1266,16 +1418,24 @@ export class Run {
   // ───────────────────────────────────────────────────────────────────────────
   bossRing(b) {
     const n = 14;
-    for (let i = 0; i < n; i++) this.spawnEnemyShot(b.x, b.y, (i / n) * TAU, 210, 14, '#fff');
+    for (let i = 0; i < n; i++) this.spawnEnemyShot(b.x, b.y, (i / n) * TAU, 210, 14, '#5f3dc4');
     this.shake(6);
   }
 
   bossBreath(b) {
     const a = Math.atan2(this.player.y - b.y, this.player.x - b.x);
     for (let i = -3; i <= 3; i++) {
-      this.spawnEnemyShot(b.x, b.y, a + i * 0.17, 210, 16, '#ff9a6a');
+      this.spawnEnemyShot(b.x, b.y, a + i * 0.17, 210, 16, '#cf4a12');
     }
     this.shake(8);
+  }
+  bossSpiral(b) {
+    const n = 24;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + (this.time || 0) * 2;
+      this.spawnEnemyShot(b.x, b.y, a, 160 + i * 4, 12, '#7048b8');
+    }
+    this.shake(10);
   }
 
   bossSummon(b) {
@@ -1305,14 +1465,14 @@ export class Run {
       this.damageNumbers(p.x, p.y, 8, false);
     }
     this.lightnings.push({
-      x1: b.x, y1: b.y, x2: p.x, y2: p.y, life: 0.25, maxLife: 0.25, color: '#b47bff',
+      x1: b.x, y1: b.y, x2: p.x, y2: p.y, life: 0.25, maxLife: 0.25, color: '#7048b8',
     });
   }
 
   spawnEnemyShot(x, y, a, speed, dmg, color) {
     this.bullets.push(makeBullet({
       x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
-      r: 9, size: 1, life: 5, pierce: 0, dmg: dmg || 12,
+      r: 9, size: 1, life: 5, pierce: 0,
       color: color || '#f88', kindName: 'eshot', enemy: true,
     }));
   }

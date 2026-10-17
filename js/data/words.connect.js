@@ -1,378 +1,152 @@
 // ============================================================================
-// ワードローグ — 接続詞
+// ワードローグ — 接続詞 (語ごとの接続詞プール)
 //
 // 接続詞は「直前の語」に結合する。結合すると 1 つの合成語になる。
-//   例 「律」+「スル」 -> 律スル
+//   例 「斬」+「る」 -> 斬る / 「滑」+「らかな」 -> 滑らかな
 //
-// 規則は 2 つ。
+// どの接続詞が付くかは **語ごとのプール** (words.pool.js) で決まる。
+// 品詞の規則や例外表は持たない。語が持っている送り仮名だけが付く。
+//   斬 … る・られた・り   → 斬された ✗ / 斬られた ✓
+//   凍 … る・える          → 凍ける ✗ / 凍える ✓
+//   名詞 … の・を・に・へ (NOUN_POOL)
 //
-// 1. 同じ接続詞は 1 文に 1 回まで。
-//      NG 「風ノ海ノ銃」 … ノが 2 回出ている。
+// 文の判定は「選んだ形の役割」で見る。接続詞の文字列そのものでは見ない。
+//   同じ「に」でも、焔に (格) と 妙に (連用) は役割が違う。
+//   同じ「く」でも、速く (連用) と 貫く (連体・終止) は役割が違う。
 //
-// 2. 接続詞には優先順位があり、下位の接続詞は上位の接続詞より前に置けない。
-//      NG 「雷ノ浸食サレタ剣」 … ノ (下位) が サレタ (上位) より先。
-//      OK 「浸食サレタ雷ノ剣」 … サレタ (上位) が ノ (下位) より先。
+// 文が壊れるのは次のときだけ。
+//   1. 接続詞が直前の語に結べない (その語のプールに無い / 直前が接続詞・先頭)。
+//        NG「斬された」「焔する」「焔の斬く」
+//   2. 連体 (adn) と 格「の」 のあとは名詞句。連用の語や裸の動詞は来ない。
+//        NG「斬る速く…」
+//      (動詞が連体形で続く「斬る燃える刃」「焔の斬られた剣」は名詞句として認める)
+//   3. 連用 (adv) のあとは動詞か形容。名詞は来ない。
+//        NG「速く剣」「妙に剣」「急に焔」
+//   4. 格「を」のあとは動作 (述語の形を持つ語)。「に」「へ」は動作か形容。
+//        NG「焔を剣」
 //
-// 結合元にない接続詞は宙に浮く (どの語とも結合せず、効果だけを少し得る)。
-// 「無双」は接続詞を使えない語なので「思考セシ天下無双ノ剣」の ノは宙に浮く。
+// 同じ接続詞を 2 回使うのは **不成立ではなく自然さの減点** にした。
+//   「風の潮の銃」は日本語として読めるので成立する (少し弱い)。
+//
+// 熟語の接続詞:
+//   接続詞の直前の語列 (接続詞を挟まずに続いた語) が熟語になっていて、
+//   その熟語がプール (words.phrase.js の pool) を持つなら、熟語の形も付く。
+//     発 電 する → 熟語「発電」+ する = 発電する (述語・連体)
+//     電 する    → 「電」は名詞で する を持たない → 宙に浮く (不成立)
+//   熟語の形と語の形の両方にあるときは熟語の形を使う (役割は熟語のもの)。
 // ============================================================================
 
-/**
- * 接続詞と、その優先順位。
- *   pri 1 … 述語・受身。文を閉じるので最上位。
- *   pri 2 … 説明。
- *   pri 3 … 格。語を修飾するので最下位。
- * 数が小さいほど優先順位が高い。文は昇順出现在해야 成立する。
- */
-export const CONNECTORS = {
-  // pri 1 … 述語・受身・断定。文を閉じるので最上位。
-  サレタ: { pri: 1, desc: '受身・状態。「〜された」', fx: { dmg: 2 } },
-  ワレタ: { pri: 1, desc: '受身。「〜われた」', fx: { dmg: 2, armor: 0.02 } },
-  ラレタ: { pri: 1, desc: '能動。「〜られる」', fx: { dmg: 2, rate: 0.1 } },
-  ク:     { pri: 1, desc: '断定・区切り。「〜く」', fx: { dmg: 3, crit: 0.02 } },
-  ナ:     { pri: 1, desc: '断定。「〜だ」', fx: { dmg: 2, area: 4 } },
+import {
+  poolOfText, posOfText, WORD_POOLS, NOUN_POOL, COMPOUND_POOLS, MAX_COMPOUND_POOL_LEN,
+  compoundPoolOf,
+} from './words.pool.js';
+import { PHRASE_BONUS } from './words.phrase.js';
 
-  // pri 2 … 説明
-  スル:   { pri: 2, desc: '説明。「〜する」', fx: { dmg: 3, rate: 0.15 } },
-  セシ:   { pri: 2, desc: '説明。「〜し」', fx: { dmg: 3, rate: 0.1 } },
-  リ:     { pri: 2, desc: '理由・并列。「〜り」', fx: { dmg: 2, spread: 0.12 } },
+export { NOUN_POOL, WORD_POOLS, COMPOUND_POOLS };
 
-  // pri 3 … 格・接尾
-  ノ:     { pri: 3, desc: '格。「〜の」', fx: { dmg: 1, size: 0.05 } },
-  イ:     { pri: 3, desc: '接尾。「〜しい」', fx: { dmg: 2, crit: 0.01 } },
-  ツ:     { pri: 3, desc: '接尾。「〜つ」', fx: { dmg: 2, rate: 0.1 } },
-  ニ:     { pri: 3, desc: '格。「〜に」', fx: { dmg: 1, homing: 0.1 } },
-  ヲ:     { pri: 3, desc: '格。「〜を」', fx: { dmg: 2, knock: 12 } },
-  ヘ:     { pri: 3, desc: '方向。「〜へ」', fx: { dmg: 1, speed: 22 } },
+/** 品詞。自然さの採点 (形容の連体・裸の形容) と末尾語の判定に使う。 */
+export const POS = {
+  noun: '体言',
+  adj: '形容',
+  naadj: '形動',
+  verb: '用言',
+};
+
+/** 役割の表示名。 */
+export const ROLE_LABEL = {
+  adn: '連体',
+  adv: '連用',
+  case: '格',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 接続詞の効果
+//
+// 旧来の接続詞の効果はそのまま残す。新しい送り仮名は、役割と語尾から
+// いちばん近い旧来の接続詞の効果を借りる (fxFor)。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 旧来からある接続詞の効果と説明。 */
+const LEGACY = {
+  された: { desc: '受身。「〜された」', fx: { dmg: 2 } },
+  われた: { desc: '受身。「〜われた」', fx: { dmg: 2, armor: 0.02 } },
+  られた: { desc: '受身。「〜られた」', fx: { dmg: 2, rate: 0.1 } },
+  る:     { desc: '連体・終止。「〜る」', fx: { dmg: 3, rate: 0.12 } },
+  く:     { desc: '連用 (形容) / 連体 (動詞)。「〜く」', fx: { dmg: 3, crit: 0.02 } },
+  な:     { desc: '連体。「〜な」', fx: { dmg: 2, area: 4 } },
+  かな:   { desc: '連体。「〜かな」', fx: { dmg: 2, area: 4 } },
+  い:     { desc: '連体。「〜い」', fx: { dmg: 2, crit: 0.01 } },
+  する:   { desc: '述語。「〜する」', fx: { dmg: 3, rate: 0.15 } },
+  む:     { desc: '連体・終止。「〜む」', fx: { dmg: 5, crit: 0.02 } },
+  ける:   { desc: '連体・終止。「〜ける」', fx: { dmg: 4, pierce: 1 } },
+  り:     { desc: '連用。「〜り」', fx: { dmg: 2, spread: 0.12 } },
+  つ:     { desc: '連体・終止。「〜つ」', fx: { dmg: 2, rate: 0.1 } },
+  の:     { desc: '格。「〜の」', fx: { dmg: 1, size: 0.05 } },
+  に:     { desc: '格 / 連用。「〜に」', fx: { dmg: 1, homing: 0.1 } },
+  を:     { desc: '格。「〜を」', fx: { dmg: 2, knock: 12 } },
+  へ:     { desc: '方向。「〜へ」', fx: { dmg: 1, speed: 22 } },
 };
 
 /**
- * 結合元。接続詞と組にして合成語になる語。
- * ここに無い語は結合できない (接続詞は宙に浮く)。
- * 値は接続詞 1 つか配列。「破壊」は「スル」でも「サレタ」でも結べる。
+ * 新しい送り仮名の効果。いちばん近い旧来の接続詞から借りる。
+ *   〜た (受身・完了)   → された
+ *   格 (いの / いを)    → 語尾の格 (の / を / に)
+ *   連用                → く
+ *   形容の連体 〜な     → な   / それ以外の形容 → い
+ *   動詞の連体          → る
+ *   それ以外の連体      → な   (疾き・奇なる …)
  */
-export const CONNECT_SOURCES = {
-  暗: ['ノ', 'ツ', 'ニ'],
-  闇影: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  闇黒: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  一: 'ノ',
-  稲妻: ['ノ', 'ツ', 'ニ'],
-  引力: 'スル',
-  韻人: 'ノ',
-  韻律: ['ラレタ', 'スル', 'セシ', 'イ'],
-  渦巻く: ['スル', 'リ'],
-  影: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  鋭: ['ク', 'イ'],
-  鋭利: ['ク', 'ナ', 'イ'],
-  炎: ['ノ', 'ツ', 'ニ'],
-  殴る: ['スル', 'リ'],
-  王冠: 'ノ',
-  黄金: ['ノ', 'ツ', 'ニ'],
-  穏: ['ク', 'イ'],
-  加速: ['ク', 'スル', 'イ'],
-  火: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  火傷: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  花: ['ノ', 'ツ', 'ニ'],
-  牙: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  回帰: ['ラレタ', 'スル'],
-  回転: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  回転刃: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  回避: ['ラレタ', 'セシ'],
-  塊: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  改造: 'サレタ',
-  海潮: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  鎧: 'ノ',
-  鎧甲: 'ノ',
-  角: ['ノ', 'ツ'],
-  冠: 'ノ',
-  寒冷: ['ノ', 'ツ', 'ニ'],
-  感知: ['ラレタ', 'セシ'],
-  感電: ['ノ', 'ツ', 'ニ'],
-  環: ['ナ', 'ノ', 'ツ', 'ヲ', 'ヘ'],
-  環刃: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  貫く: ['スル', 'リ'],
-  貫穿: 'リ',
-  貫通: ['サレタ', 'スル', 'ノ', 'ツ', 'ヲ', 'ヘ'],
-  貫徹: ['サレタ', 'リ'],
-  岩: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  岩塊: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  頑: 'ノ',
-  頑強: 'ノ',
-  頑健: 'ノ',
-  輝光: ['ノ', 'ツ', 'ニ'],
-  技巧: ['ク', 'イ'],
-  吸う: ['スル', 'リ'],
-  弓: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  急所: ['スル', 'ニ'],
-  救: 'ワレタ',
-  球: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  巨岩: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  巨躯: 'ノ',
-  巨樹: ['ノ', 'ツ', 'ニ'],
-  巨大: ['ク', 'ナ', 'ツ'],
-  巨大化: ['ク', 'ナ', 'スル', 'ツ', 'ニ'],
-  強: ['ク', 'イ'],
-  強健: 'ノ',
-  強力: ['ク', 'イ'],
-  響く: ['スル', 'リ'],
-  業火: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  極: ['ナ', 'ノ'],
-  極小: ['ク', 'ナ', 'ノ'],
-  極大: ['ク', 'ナ', 'ノ', 'ツ'],
-  玉: ['ナ', 'ノ'],
-  金: ['ノ', 'ツ', 'ニ'],
-  軽装: ['ワレタ', 'ク', 'ナ', 'イ'],
-  撃: ['サレタ', 'ワレタ', 'ラレタ', 'リ', 'ニ'],
-  撃退: ['サレタ', 'ラレタ', 'リ', 'ニ'],
-  血: ['ノ', 'ツ', 'ニ'],
-  健: 'ノ',
-  剣: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  堅: 'ノ',
-  堅固: ['ク', 'ナ', 'イ'],
-  堅守: 'ノ',
-  賢者: 'ノ',
-  減速: ['ク', 'スル', 'イ'],
-  古書: 'ノ',
-  虎: 'ノ',
-  御: 'ノ',
-  護符: 'ノ',
-  光: ['ノ', 'ツ', 'ニ'],
-  光線: ['ノ', 'ツ', 'ニ'],
-  厚土: ['ノ', 'ツ', 'ニ'],
-  巧: ['ク', 'イ'],
-  広: 'イ',
-  広域: ['ナ', 'イ'],
-  硬: ['サレタ', 'ク', 'イ'],
-  硬化: ['サレタ', 'ワレタ', 'ク', 'イ'],
-  紅蓮: ['ノ', 'ツ', 'ニ'],
-  鋼: ['ノ', 'ツ', 'ニ'],
-  鋼鉄: ['ノ', 'ツ', 'ニ'],
-  高: ['ク', 'イ'],
-  剛硬: ['サレタ', 'ク', 'ナ', 'イ'],
-  剛利: ['ク', 'ナ', 'イ'],
-  黒: ['ノ', 'ツ', 'ニ'],
-  黒魔: ['ノ', 'ツ', 'ニ'],
-  砂金: 'ノ',
-  砂塵: ['ノ', 'ツ', 'ニ'],
-  催眠: ['サレタ', 'ノ', 'ツ', 'ニ'],
-  砕く: ['スル', 'リ'],
-  財宝: ['ノ', 'ツ', 'ニ'],
-  散る: ['スル', 'リ'],
-  散弾: 'リ',
-  斬る: ['スル', 'リ'],
-  思考: ['ラレタ', 'セシ'],
-  指輪: 'ノ',
-  死: ['ノ', 'ツ', 'ニ'],
-  治癒: 'ノ',
-  磁石: 'ノ',
-  磁力: 'スル',
-  自律: ['ラレタ', 'スル', 'セシ', 'イ'],
-  鹿: 'ノ',
-  失落: 'ワレタ',
-  疾走: 'ノ',
-  疾速: ['ク', 'イ'],
-  疾風: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  射る: ['スル', 'リ'],
-  灼熱: ['ノ', 'ツ', 'ニ'],
-  寂: ['ク', 'イ'],
-  呪: ['ノ', 'ツ', 'ニ'],
-  呪イ: ['ノ', 'ツ', 'ニ'],
-  呪縛: ['セシ', 'ノ', 'ツ', 'ニ'],
-  十: 'ノ',
-  柔: ['ク', 'イ'],
-  重: ['ク', 'イ', 'ツ'],
-  重圧: ['サレタ', 'ラレタ', 'ク', 'イ', 'ツ', 'ニ'],
-  重装: ['サレタ', 'ワレタ', 'ク', 'ナ', 'イ', 'ツ'],
-  重力: ['ノ', 'ツ', 'ニ'],
-  銃: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  縮む: ['スル', 'リ'],
-  瞬殺: ['ク', 'スル'],
-  瞬発: ['ク', 'スル'],
-  盾: 'ノ',
-  小的: 'ク',
-  小柄: 'ノ',
-  少: 'ク',
-  焦げる: ['スル', 'セシ', 'リ'],
-  城: 'ノ',
-  蒸す: ['スル', 'リ'],
-  伸びる: ['スル', 'リ'],
-  侵蝕: ['サレタ', 'ワレタ', 'ニ'],
-  侵入: ['サレタ', 'スル'],
-  心意: ['ラレタ', 'セシ'],
-  心眼: ['ラレタ', 'セシ'],
-  浸食: ['サレタ', 'ワレタ'],
-  深: ['ク', 'イ', 'ツ'],
-  深根: ['ノ', 'ツ', 'ニ'],
-  神: ['ノ', 'ツ', 'ニ'],
-  神聖: ['ノ', 'ツ', 'ニ'],
-  針: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  人: 'ノ',
-  刃: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  刃物: ['ノ', 'ツ', 'ニ'],
-  尽: 'ワレタ',
-  迅捷: ['ラレタ', 'スル', 'セシ', 'リ'],
-  迅早: ['ク', 'ナ', 'イ'],
-  迅雷: ['ラレタ', 'スル', 'セシ', 'リ'],
-  水: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  水晶: 'ノ',
-  成長: ['スル', 'ノ'],
-  星: ['ナ', 'ノ'],
-  精神: ['スル', 'ニ'],
-  聖: ['ノ', 'ツ', 'ニ'],
-  青苔: ['ノ', 'ツ', 'ニ'],
-  静: ['ク', 'イ'],
-  斉唱: 'セシ',
-  石: ['ノ', 'ツ', 'ニ'],
-  雪: ['ノ', 'ツ', 'ニ'],
-  絶: 'ワレタ',
-  千: 'ノ',
-  尖牙: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  旋風: ['スル', 'ノ', 'ツ', 'ニ', 'ヘ'],
-  双牙: 'ノ',
-  早: ['ク', 'イ'],
-  荘厳: 'ナ',
-  蒼: 'ノ',
-  走る: ['スル', 'リ'],
-  束縛: ['サレタ', 'ラレタ', 'リ', 'ニ'],
-  速: ['ク', 'イ'],
-  多: 'ク',
-  多重: ['ク', 'イ', 'ツ'],
-  多数: 'ク',
-  太刀: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  打: ['サレタ', 'ワレタ', 'ニ'],
-  台: 'ノ',
-  大: ['ク', 'ツ'],
-  大剣: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  大地: ['ノ', 'ツ', 'ニ'],
-  短: ['ク', 'イ'],
-  短刀: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  弾: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  断続: ['サレタ', 'ワレタ'],
-  地: 'ノ',
-  智慧: ['ラレタ', 'セシ'],
-  遅: ['ク', 'イ'],
-  張: ['ラレタ', 'ク', 'イ'],
-  潮流: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  跳ね回る: ['スル', 'リ'],
-  跳ぶ: ['スル', 'リ'],
-  長: ['ク', 'イ'],
-  鳥: 'ノ',
-  追影: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  追尾: 'スル',
-  爪: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  鉄: ['ノ', 'ツ', 'ニ'],
-  鉄壁: ['ノ', 'ツ', 'ニ'],
-  天下: ['ナ', 'ノ'],
-  伝説: 'ラレタ',
-  電: ['ノ', 'ツ', 'ニ'],
-  電撃: ['ノ', 'ツ', 'ニ'],
-  吐く: ['スル', 'リ'],
-  怒: 'ツ',
-  怒涛: ['ノ', 'ツ', 'ニ'],
-  凍えつく: ['ラレタ', 'スル', 'セシ', 'リ'],
-  凍る: ['スル', 'セシ', 'リ'],
-  凍結: ['サレタ', 'ノ', 'ツ', 'ニ'],
-  洞察: 'ノ',
-  特攻: ['スル', 'ニ'],
-  毒: ['ク', 'ノ', 'イ', 'ツ', 'ニ', 'ヘ'],
-  毒液: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  毒化: ['サレタ', 'ワレタ', 'ク', 'イ', 'ニ'],
-  毒草: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  毒霧: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  毒瘴: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  突破: ['ノ', 'ツ', 'ニ'],
-  二: 'ノ',
-  熱: ['ノ', 'ツ', 'ニ'],
-  燃える: ['スル', 'セシ', 'リ'],
-  燃やす: ['スル', 'セシ', 'リ'],
-  波: ['ノ', 'ツ', 'ニ'],
-  破壊: ['サレタ', 'ワレタ', 'スル'],
-  破裂: ['スル', 'セシ', 'リ'],
-  馬: 'ノ',
-  這う: ['スル', 'リ'],
-  白化: ['サレタ', 'ナ'],
-  爆ぜさせる: ['ラレタ', 'スル', 'セシ', 'リ'],
-  爆轟: ['ラレタ', 'スル', 'セシ', 'リ'],
-  爆弾: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  爆発: ['スル', 'リ'],
-  爆裂: ['ラレタ', 'スル', 'セシ', 'リ'],
-  反射: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  秘匿: ['ラレタ', 'セシ'],
-  百花: ['ノ', 'ツ', 'ニ'],
-  氷: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  氷結: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  不死: 'ノ',
-  腐蝕: ['ノ', 'ツ', 'ニ'],
-  風: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  複製: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  沸く: ['スル', 'リ'],
-  沸騰: ['スル', 'リ'],
-  分裂: ['サレタ', 'スル', 'リ'],
-  壁: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  鞭: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  宝玉: 'ノ',
-  泡沫: ['ノ', 'ツ', 'ニ'],
-  万: 'ノ',
-  無形: ['ナ', 'ノ'],
-  無双: ['ラレタ', 'スル', 'セシ', 'リ'],
-  無敵: 'ナ',
-  明: ['ク', 'イ'],
-  猛毒: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  矢: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  薬: 'ノ',
-  癒: 'ノ',
-  融ける: ['スル', 'リ'],
-  溶ける: ['スル', 'セシ', 'リ'],
-  溶鋼: ['ノ', 'ツ', 'ニ'],
-  陽: ['ノ', 'ツ', 'ニ'],
-  雷: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  雷神: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  雷鳴: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  落石: ['ノ', 'ツ', 'ニ'],
-  乱: 'ツ',
-  乱打: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  嵐: ['ノ', 'ツ', 'ニ'],
-  利爪: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  律: ['ラレタ', 'スル', 'イ'],
-  律則: ['ラレタ', 'ナ', 'スル', 'イ'],
-  流水: ['ノ', 'ツ', 'ニ', 'ヘ'],
-  竜頭: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  龍: 'ノ',
-  零: 'ワレタ',
-  霊薬: 'ノ',
-  烈: ['ク', 'ツ'],
-  裂ける: ['スル', 'リ'],
-  連鎖: ['ク', 'スル'],
-  夾撃: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  彗星: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  棘壁: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  殲滅: ['ノ', 'ツ', 'ヲ', 'ヘ'],
-  炸裂: ['ラレタ', 'スル', 'セシ', 'リ'],
-  穹: 'ノ',
-  絆縛: ['サレタ', 'ラレタ', 'リ', 'ニ'],
-  韋駄天: 'ノ',
-  荆棘: ['ノ', 'ツ', 'ニ'],
-};
+function fxFor(k, e) {
+  if (LEGACY[k]) return LEGACY[k].fx;
+  if (k.endsWith('た')) return LEGACY['された'].fx;
+  if (e.role === 'case') return (LEGACY[k.slice(-1)] || LEGACY['の']).fx;
+  if (e.role === 'adv') return LEGACY['く'].fx;
+  if (e.adj) return (k.endsWith('な') ? LEGACY['な'] : LEGACY['い']).fx;
+  if (e.pred) return LEGACY['る'].fx;
+  return LEGACY['な'].fx;
+}
 
-/** 結合元を「接続詞 -> 結合できる語」に裏返す。 */
-export const SOURCES_BY_CONNECTOR = (() => {
+const priOf = (e) => (e.role === 'case' ? 3 : e.role === 'adv' ? 2 : 1);
+
+/**
+ * 接続詞の一覧。全部の語のプールに出てくる送り仮名から作る。
+ *   pri   … 並び順 (1 連体 / 2 連用 / 3 格)。判定には使わない。
+ *   roles … この送り仮名がとる役割 (語によって違うことがある)。
+ *   fx    … 合成したときに得る効果。
+ */
+export const CONNECTORS = (() => {
   const out = Object.create(null);
-  for (const c of Object.keys(CONNECTORS)) out[c] = [];
-  for (const [src, v] of Object.entries(CONNECT_SOURCES)) {
-    for (const c of [].concat(v)) {
-      if (out[c]) out[c].push(src);
+  const add = (e) => {
+    if (!out[e.k]) {
+      out[e.k] = {
+        pri: priOf(e),
+        desc: LEGACY[e.k]?.desc || `${ROLE_LABEL[e.role]}。「〜${e.k}」`,
+        fx: fxFor(e.k, e),
+        roles: new Set(),
+      };
     }
-  }
-  for (const c of Object.keys(out)) out[c].sort((a, b) => a.localeCompare(b, 'ja'));
+    out[e.k].roles.add(e.role);
+    if (priOf(e) < out[e.k].pri) out[e.k].pri = priOf(e);
+  };
+  for (const e of NOUN_POOL) add(e);
+  for (const t of Object.keys(WORD_POOLS)) for (const e of WORD_POOLS[t].pool) add(e);
+  for (const t of Object.keys(COMPOUND_POOLS)) for (const e of COMPOUND_POOLS[t].pool) add(e);
   return out;
 })();
 
-/**
- * 接続詞の優先順 (優先順位の高い順)。
- * 文の判定とヒントの並びで使う。
- */
+/** 接続詞の並び (表示用)。 */
 export const CONNECT_ORDER = Object.keys(CONNECTORS).sort(
-  (a, b) => CONNECTORS[a].pri - CONNECTORS[b].pri || a.localeCompare(b, 'ja'),
+  (a, b) => CONNECTORS[a].pri - CONNECTORS[b].pri || a.length - b.length || a.localeCompare(b, 'ja'),
+);
+
+/** どれかの語で述語 (動詞の形) になる送り仮名。参考用。 */
+export const PREDICATE_CONNECTORS = new Set(
+  Object.values(WORD_POOLS).flatMap((p) => p.pool.filter((e) => e.pred).map((e) => e.k)),
+);
+
+/** どの語でも名詞を修飾しない送り仮名 (連用だけの形)。参考用。 */
+export const NON_ADNOMINAL_CONNECTORS = new Set(
+  Object.keys(CONNECTORS).filter((k) => [...CONNECTORS[k].roles].every((r) => r === 'adv')),
 );
 
 /** 接続詞かどうか。 */
@@ -380,94 +154,301 @@ export function isConnector(text) {
   return Object.prototype.hasOwnProperty.call(CONNECTORS, text);
 }
 
-/** 接続詞の優先順位。接続詞でなければ null。 */
+/** 連体として使える語があるか (参考)。 */
+export function isAdnominal(text) {
+  const c = CONNECTORS[text];
+  return !!(c && (c.roles.has('adn') || c.roles.has('case')));
+}
+
+/** 接続詞の並び順の値。接続詞でなければ null。 */
 export function connectorPri(text) {
   const c = CONNECTORS[text];
   return c ? c.pri : null;
 }
 
-/** この語が使える接続詞 (結合先)。複数なら配列。 */
-export function connectorFor(source) {
-  const v = CONNECT_SOURCES[source];
-  if (!v) return [];
-  const list = [].concat(v).filter((c) => CONNECTORS[c]);
-  return list;
+/**
+ * 語の接続詞プール。
+ * @param {{text:string, pool?:Array}|null} word
+ */
+export function poolOf(word) {
+  if (!word || !word.text || isConnector(word.text)) return [];
+  return word.pool || poolOfText(word.text);
 }
+
+/** 語のプールの中で、その送り仮名の項目。無ければ null。 */
+export function formOf(word, k) {
+  return poolOf(word).find((e) => e.k === k) || null;
+}
+
+/**
+ * この語に結合できる接続詞の一覧 (プールの順)。
+ * 言葉鍛冶の切り替え・一覧とテストで使う。
+ */
+export function connectorFor(word) {
+  return poolOf(word).map((e) => e.k);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 熟語の接続詞
+//
+// run … 接続詞の直前に、接続詞を挟まずに続いた語のテキスト (古い順)。
+//   「炎の発電する」なら する の run は ['発', '電']。
+// run の末尾 (後ろ寄りの部分列) が熟語になっていれば、その熟語の形が付く。
+// 長い熟語から先に見る。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * run の末尾にできている熟語のうち、接続詞プールを持つものを長い順に。
+ * @param {string[]} run
+ * @returns {Array<{text:string, n:number, pool:ReadonlyArray<object>}>}
+ *   n … 熟語を作っている語の数。
+ */
+export function compoundsEndingIn(run) {
+  const out = [];
+  if (!run || run.length < 2) return out;
+  for (let n = run.length; n >= 2; n--) {
+    const text = run.slice(run.length - n).join('');
+    if (text.length > MAX_COMPOUND_POOL_LEN) continue;
+    const pool = compoundPoolOf(text);
+    if (pool) out.push({ text, n, pool });
+  }
+  return out;
+}
+
+/**
+ * run の直後に接続詞 k を付けたときの形。熟語の形を先に見て、無ければ最後の語の形。
+ * @param {string[]} run
+ * @param {string} k
+ * @returns {{source:string, n:number, form:object, compound:boolean}|null}
+ */
+export function formAfter(run, k) {
+  if (!run || !run.length || !isConnector(k)) return null;
+  for (const c of compoundsEndingIn(run)) {
+    const form = c.pool.find((e) => e.k === k);
+    if (form) return { source: c.text, n: c.n, form, compound: true };
+  }
+  const last = run[run.length - 1];
+  const form = formOf({ text: last }, k);
+  return form ? { source: last, n: 1, form, compound: false } : null;
+}
+
+/**
+ * run の直後に置ける接続詞の一覧。熟語の形 (長い熟語から) → 最後の語のプールの順。
+ * @param {string[]} run
+ * @returns {string[]}
+ */
+export function connectorsAfter(run) {
+  if (!run || !run.length) return [];
+  const out = [];
+  for (const c of compoundsEndingIn(run)) for (const e of c.pool) out.push(e.k);
+  out.push(...connectorFor({ text: run[run.length - 1] }));
+  return [...new Set(out)];
+}
+
+/**
+ * この語の直後にこの接続詞を置けるか。プールにあるかどうかだけ。
+ * @param {{text:string}|null} source 直前の語
+ * @param {string} connector
+ * @param {string[]} [before] source の前に接続詞を挟まずに続いた語 (熟語の判定用)。
+ *   canConnect(電, 'する', ['発']) … 発電する → true / canConnect(電, 'する') → false
+ */
+export function canConnect(source, connector, before = []) {
+  if (!source || !isConnector(connector)) return false;
+  if (formOf(source, connector)) return true;
+  return !!formAfter([...before, source.text], connector);
+}
+
+/** 語が動作 (述語の形) を持つか。「〜を」の受け先になれる。 */
+export function isVerbal(word) {
+  if (!word) return false;
+  return word.pos === POS.verb || poolOf(word).some((e) => e.pred);
+}
+
+/** 語が形容 (形容の形) を持つか。 */
+export function isAdjectival(word) {
+  if (!word) return false;
+  return word.pos === POS.adj || word.pos === POS.naadj || poolOf(word).some((e) => e.adj);
+}
+
+/**
+ * 末尾語 (剣・銃・環 …) の直前に置いてよい語か。
+ *
+ * @param {string|null} lastText 末尾語の直前の語。接続詞ならその語。
+ * @param {string|null} pos その品詞。接続詞なら null。
+ * @param {boolean} isConn 接続詞かどうか。
+ * @param {Set<string>} unmodifiable 末尾語を直接修飾できない語。
+ * @param {boolean} [adn] 接続詞のとき、その場の役割が名詞を修飾できるか。
+ * @returns {{ok:boolean, reason:string, reasonText:string}}
+ */
+export function checkTailModifier(lastText, pos, isConn, unmodifiable, adn) {
+  if (!lastText) return { ok: true, reason: '', reasonText: '' };
+  if (isConn) {
+    if (adn) return { ok: true, reason: '', reasonText: '' };
+    return {
+      ok: false,
+      reason: 'tailparticle',
+      reasonText: `接続詞「${lastText}」は末尾語を修飾できない。`
+        + '連用形 (〜く・〜に・〜り) の後ろに名詞は来ない。連体の形を選ぶこと。',
+    };
+  }
+  if (pos === POS.verb) {
+    return {
+      ok: false,
+      reason: 'tailverb',
+      reasonText: `「${lastText}」は動詞。末尾語を直接修飾できない。`
+        + '動詞のあとは連体の形 (〜る・〜られた など) を置くこと。',
+    };
+  }
+  if (unmodifiable && unmodifiable.has(lastText)) {
+    return {
+      ok: false,
+      reason: 'tailform',
+      reasonText: `「${lastText}」は形を表す語。末尾語を直接修飾できない。`
+        + '「刃剣」のような重複は日本語に無い。属性や効果の語を挟むこと。',
+    };
+  }
+  return { ok: true, reason: '', reasonText: '' };
+}
+
+const fail = (reason, reasonText, acc) => ({
+  ok: false, reason, reasonText,
+  compounds: acc.compounds, floats: acc.floats, used: acc.used, order: acc.order, dups: acc.dups,
+});
 
 /**
  * 分割結果に接続詞の規則を適用する。
  *
  * @param {string[]} segs 分割結果
+ * @param {Record<string, {pos?:string, cat?:string, pool?:Array}>} [dict] 語の情報
  * @returns {{
- *   ok: boolean,
- *   reason: string,
- *   reasonText: string,
- *   compounds: Array<{text:string, source:string, connector:string, pri:number}>,
- *   floats: string[],
- *   used: string[],
- *   order: number[],
+ *   ok: boolean, reason: string, reasonText: string,
+ *   compounds: Array<{text:string, source:string, connector:string, pri:number, pos:string,
+ *     role:string, next?:string, pred:boolean, adj:boolean, idx:number}>,
+ *   floats: string[], used: string[], order: number[], dups: string[],
  * }}
  */
-export function checkConnectors(segs) {
-  const compounds = [];
-  const floats = [];
-  const used = [];
-  const order = [];
+export function checkConnectors(segs, dict) {
+  const acc = { compounds: [], floats: [], used: [], order: [], dups: [] };
   const seen = new Map();
-  let prevPri = 0;
-  let prevName = '';
+  const info = (s) => (s && !isConnector(s) ? { text: s, ...(dict?.[s] || {}), pos: dict?.[s]?.pos || posOfText(s) } : null);
+
+  // j の位置で終わる、接続詞を挟まない語の並び (熟語の判定用)。
+  const runBefore = (j) => {
+    const out = [];
+    for (let t = j; t >= 0 && segs[t] && !isConnector(segs[t]) && out.length < 8; t--) out.unshift(segs[t]);
+    return out;
+  };
+  // 位置 i の接続詞が結ぶ相手と形。熟語なら熟語ごと。
+  //   → { src: 語の情報 (熟語なら熟語), e: 形, start: 結ぶ相手の先頭の位置, compound }
+  const bindAt = (i) => {
+    const s = segs[i];
+    if (!s || !isConnector(s)) return null;
+    const src = info(segs[i - 1]);
+    if (!src) return null;
+    const hit = formAfter(runBefore(i - 1), s);
+    if (!hit) return null;
+    if (!hit.compound) return { src, e: hit.form, start: i - 1, compound: false };
+    return {
+      src: { text: hit.source, pos: POS.noun, pool: compoundPoolOf(hit.source) },
+      e: hit.form, start: i - hit.n, compound: true,
+    };
+  };
+  // j から始まる語 (接続詞の直後に来る語) と、その語に付いた形。
+  // j から始まる熟語に接続詞が付いていれば熟語ごと見る (炎の 爆 発 する 剣)。
+  const headAt = (j) => {
+    if (!segs[j] || isConnector(segs[j])) return { w: null, f: null };
+    let c = j;
+    while (c < segs.length && !isConnector(segs[c])) c++;
+    if (c < segs.length && c > j + 1) {
+      const b = bindAt(c);
+      if (b && b.compound && b.start === j) return { w: b.src, f: b.e };
+    }
+    // 語列が熟語になっていれば、熟語ごと名詞句の頭として扱う (滅亡の光 の「滅亡」)。
+    if (c > j + 1) {
+      const runText = segs.slice(j, c).join('');
+      if (PHRASE_BONUS[runText]) {
+        const b = bindAt(c);
+        return { w: { text: runText, pos: POS.noun }, f: b ? b.e : null };
+      }
+    }
+    const w = info(segs[j]);
+    const b = c === j + 1 ? bindAt(c) : null;
+    return { w, f: b ? b.e : null };
+  };
 
   for (let i = 0; i < segs.length; i++) {
     const s = segs[i];
     if (!isConnector(s)) continue;
 
-    const { pri } = CONNECTORS[s];
-    order.push(pri);
+    // 1. 直前の語 (か、直前の語列でできた熟語) と結合する。
+    //    プールに無ければ宙に浮く = 壊れた文。
+    const prev = segs[i - 1];
+    const bound = bindAt(i);
+    const src = bound ? bound.src : info(prev);
+    const e = bound ? bound.e : null;
+    if (!e) {
+      acc.floats.push(s);
+      const who = src ? src.text : (prev ?? '(先頭)');
+      const mine = src ? connectorsAfter(runBefore(i - 1)) : [];
+      return fail('floatconn',
+        `接続詞「${s}」が直前の「${who}」に結べない。`
+        + (mine.length ? `「${who}」に付くのは ${mine.join('・')}。` : '接続詞は語のあとにだけ付く。'),
+        acc);
+    }
 
-    // 規則 1 … 同じ接続詞は 1 回まで。
     const n = (seen.get(s) || 0) + 1;
     seen.set(s, n);
-    if (n > 1) {
-      return {
-        ok: false,
-        reason: 'dupconn',
-        reasonText: `接続詞「${s}」を 2 回使っている。同じ接続詞は 1 文に 1 回まで。`,
-        compounds, floats, used, order,
-      };
+    if (n > 1) acc.dups.push(s);
+
+    acc.order.push(CONNECTORS[s].pri);
+    acc.compounds.push({
+      text: src.text + s,
+      source: bound.compound ? src.text : prev, connector: s, pri: CONNECTORS[s].pri, pos: src.pos,
+      role: e.role, next: e.next, pred: !!e.pred, adj: !!e.adj, passive: !!e.passive, idx: i,
+      // 熟語に付いた形なら true。start は結んだ相手の先頭の位置。
+      phrase: bound.compound, start: bound.start,
+    });
+    acc.used.push(s);
+
+    // 次の語と、その語に付いた形。
+    const { w: nw, f: nf } = headAt(i + 1);
+    const next = nw ? nw.text : segs[i + 1];
+
+    // 2. 連体と「の」のあとは名詞句。
+    if (e.role === 'adn' || (e.role === 'case' && e.next === 'noun')) {
+      if (nw && ((nw.pos === POS.verb && !nf) || (nf && nf.role === 'adv'))) {
+        return fail('connnoun',
+          `「${src.text}${s}」のあとに「${next}${nf ? nf.k : ''}」は置けない。`
+          + '連体の形や「の」のあとは名詞 (か連体の形) が来る。',
+          acc);
+      }
     }
 
-    // 規則 2 … 優先順位は昇順。降になったら脱落。
-    if (pri < prevPri) {
-      return {
-        ok: false,
-        reason: 'connorder',
-        reasonText: `接続詞「${prevName}」の後に「${s}」は置けない。`
-          + '上位の接続詞 (〜サレタ / 〜スル) を先に置くこと。',
-        compounds, floats, used, order,
-      };
+    // 3. 連用のあとは動詞か形容。名詞は来ない。
+    if (e.role === 'adv') {
+      const okNext = nw && (isVerbal(nw) || isAdjectival(nw))
+        && (!nf || nf.pred || nf.adj || nf.role === 'adv');
+      if (nw && !okNext) {
+        return fail('connnoun',
+          `連用形「${src.text}${s}」のあとに名詞「${next}」は置けない。`
+          + '連用形は動詞か形容を修飾する。名詞の前は連体の形 (〜い・〜な・〜る) にすること。',
+          acc);
+      }
     }
-    prevPri = pri;
-    prevName = s;
 
-    // 直前の語と結合を試みる。直前が接続詞なら結べない。
-    const src = segs[i - 1];
-    const binds = src && !isConnector(src) && connectorFor(src).includes(s);
-    if (binds) {
-      compounds.push({ text: src + s, source: src, connector: s, pri });
-      used.push(s);
-    } else {
-      // 結合先が無い。宙に浮くが、文の成立を妨げはしない。
-      floats.push(s);
+    // 4. 「を」は動作、「に」「へ」は動作か形容が要る。
+    if (e.role === 'case' && (e.next === 'verb' || e.next === 'pred')) {
+      const wantAdj = e.next === 'pred';
+      const capable = nw && (isVerbal(nw) || (wantAdj && isAdjectival(nw)));
+      const formOk = !nf || nf.pred || nf.role === 'adv' || (wantAdj && nf.adj);
+      if (!capable || !formOk) {
+        return fail('noobject',
+          `接続詞「${s}」のあとに${wantAdj ? '動作か形容' : '動作'}が無い。`
+          + `「〜${s}」のあとには ${wantAdj ? '斬る・強い' : '斬る・燃える'} のような語が要る。`,
+          acc);
+      }
     }
   }
 
-  return {
-    ok: true,
-    reason: '',
-    reasonText: '',
-    compounds,
-    floats,
-    used,
-    order,
-  };
+  return { ok: true, reason: '', reasonText: '', ...acc };
 }

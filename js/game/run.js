@@ -446,6 +446,21 @@ export class Run {
     return { ok: true, reason: 'made', kind: can.kind, wi };
   }
 
+  /** 任意タイミングで空の武器スロットを作る (自由追加)。 */
+  createBlankWeapon() {
+    if (this.weapons.length >= WEAPON_MAX) {
+      this.pushHint(`武器は ${WEAPON_MAX} つまで。使っていない文を 1 つ外してから作って`);
+      return { ok: false, reason: 'max' };
+    }
+    const wi = new WeaponInst('sword', 1);
+    // 初期の武器語 (刃) は外して空の文にする。語は語彙へ戻す。
+    wi.sentence.clear();
+    this.weapons.push(wi);
+    this.refreshStats();
+    this.pushHint('新しい武器の文を作った — 語を並べて文を組み立てると攻撃できる');
+    return { ok: true, reason: 'blank', wi };
+  }
+
   /**
    * 武器語から作った文 (武器) を外す。語は語彙へ戻るので消えない。
    * ステージ開始から持っている固定の武器は外せない。

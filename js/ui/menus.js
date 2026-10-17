@@ -5,7 +5,7 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
 import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js';
 import { evaluatePart, partConnChoices, partWordForms } from '../game/parts.js';
 import {
@@ -653,6 +653,8 @@ export class Menus {
 
     for (const id of Object.keys(WEAPONS)) {
       const d = WEAPONS[id];
+      // 基本武器 (武器語) のみ選択可能。形態語由来の武器は除外。
+      if (!BASIC_WEAPONS.has(d.tail)) continue;
       const usable = avail.includes(id);
       const on = this.picked.includes(id);
       const lockedByProgress = !!d.unlock && d.unlock.stage > this.stageId;

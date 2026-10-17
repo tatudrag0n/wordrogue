@@ -512,9 +512,17 @@ export class Forge {
     clear(list);
 
     if (this.run.weapons.length < WEAPON_MAX) {
-      list.append(el('div', { class: 'wrow wrow-empty' },
-        el('span', { class: 'muted' },
-          `武器語 (剣・弾・銃…) をレベルアップで得るたびに、文を 1 つ増やせる。あと ${WEAPON_MAX - this.run.weapons.length} つ。`)));
+      const row = el('div', { class: 'wrow wrow-empty' });
+      const btn = el('button', { class: 'btn btn-primary', type: 'button' },
+        `＋ 新しい武器を作る（あと ${WEAPON_MAX - this.run.weapons.length} つ）`);
+      this.makeTappable(btn, () => {
+        const r = this.run.createBlankWeapon();
+        if (r.ok) { this.opt.audio?.tap?.(); this.render(); }
+      });
+      row.append(btn);
+      row.append(el('span', { class: 'muted' },
+        '作った文は空。語彙の語を並べて文を組み立てると攻撃できる。'));
+      list.append(row);
     }
 
     let anyBorn = false;

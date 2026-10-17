@@ -187,6 +187,7 @@ export const FORM_SHAPE = {
   // 射撃
   銃: ['shot', 'shot'], 杖: ['orb', 'shot'],
   弓: ['arrow', 'shot'], 槍: ['arrow', 'shot'], 矛: ['arrow', 'shot'],
+  針: ['shot', 'shot'],
   // 薙ぎ
   鞭: ['blade', 'whip'], 鎖: ['blade', 'whip'],
 };

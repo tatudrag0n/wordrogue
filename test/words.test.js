@@ -20,7 +20,7 @@ for (const w of WEAPON_WORDS) {
   ok(!DRAWABLE_ALL.includes(w), `武器語「${w}」が語彙 (動詞込み) から引ける`);
   ok(!SIMPLE_POOL.includes(w), `武器語「${w}」が開始語彙の補充に出る`);
 }
-for (const w of ['弾', '環', '玉', '壁', '球', '塊', '石', '輪', '盾', '網', '針', '矢', '珠', '還', '戈']) {
+for (const w of ['弾', '環', '玉', '壁', '球', '塊', '石', '輪', '盾', '網', '矢', '珠', '還', '戈']) {
   ok(WORDS[w] && WORDS[w].cat === 'form', `形態語「${w}」が形態として無い`);
   ok(!isWeaponWord(w), `形態語「${w}」が武器語として登録されている`);
   ok(DRAWABLE_ALL.includes(w), `形態語「${w}」が語彙から引けない (ただの語のはず)`);

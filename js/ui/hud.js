@@ -95,7 +95,7 @@ export class Hud {
       e.stopPropagation();
       input.setTouchDash(true);
       b.classList.add('on');
-      b.setPointerCapture?.(e.pointerId);
+       try { b.setPointerCapture?.(e.pointerId); } catch {}
     };
     const up = () => {
       input.setTouchDash(false);

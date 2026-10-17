@@ -115,8 +115,11 @@ export class Run {
     }
     if (!this.weapons.length) this.weapons.push(new WeaponInst('sword', 1));
 
-    // 開始時は武器名だけ。属性語などはデッキから選び、戦闘中に組み立てる。
+    // 最初の武器の開始語。武器語も 1 つ入れておくので、最初から攻撃の型が決まる。
+    // 文はここから自由に組み替えられるので、組み替えても外してもよい。
     for (const wi of this.weapons) {
+      if (wi.def.startWord) wi.sentence.push(makeWord(wi.def.startWord));
+      if (wi.def.startWord2) wi.sentence.push(makeWord(wi.def.startWord2));
       if (wi.def.tail) wi.sentence.push(makeWord(wi.def.tail));
     }
 

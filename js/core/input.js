@@ -48,7 +48,7 @@ export class Input {
     };
     window.addEventListener('keydown', kd, { passive: false });
     window.addEventListener('keyup', ku);
-    window.addEventListener('blur', () => { this.keys.clear(); this._resetStick(); });
+    window.addEventListener('blur', () => { this._resetStick(); });
   }
 
   _resetStick() {

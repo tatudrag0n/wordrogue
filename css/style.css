@@ -1418,6 +1418,18 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 }
 .title-record span { font-size: .7rem; color: var(--fg-mute); letter-spacing: .08em; }
 
+.title-version {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  font-family: var(--mono);
+  font-size: .7rem;
+  color: var(--fg-mute);
+  letter-spacing: .06em;
+  opacity: .7;
+  pointer-events: none;
+}
+
 /* ══ ステージ選択 ════════════════════════════════════════════════════ */
 
 .panel-stages { width: min(760px, 100%); }

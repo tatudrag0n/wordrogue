@@ -1921,7 +1921,7 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 .grow-conn-legend i.no { color: var(--fg-mute); }
 
 /* 部位の文の評価。**何がどれだけ変わるか** を数字で出す */
-.grow-part-note { font-size: .7rem; line-height: 1.45; color: var(--fg-mute); }
+.grow-part-note { font-size: .8rem; line-height: 1.5; color: var(--fg-mute); }
 .grow-part-note.plain { color: var(--ok); }
 .grow-part-note.idiom { color: var(--idiom); font-weight: 700; }
 .grow-part-note.great { color: var(--great); font-weight: 700; }
@@ -1935,7 +1935,7 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
   gap: 5px;
   margin-bottom: 3px;
 }
-.grow-part-head b { font-size: .82rem; color: var(--word); letter-spacing: .04em; }
+.grow-part-head b { font-size: .95rem; color: var(--word); letter-spacing: .04em; font-weight: 900; }
 .grow-part-grade { font-weight: 700; }
 .grow-part-idiom { color: var(--idiom); font-weight: 700; }
 .grow-part-eff { display: flex; flex-wrap: wrap; gap: 3px; }

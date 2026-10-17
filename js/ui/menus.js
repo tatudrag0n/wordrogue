@@ -525,7 +525,8 @@ export class Menus {
     }
 
     // 言葉デッキ。押すと出し入れ。戦闘開始時の語彙になる。
-    this.deckCount.textContent = `${save.deck.length} / ${DECK_MAX} 語 (最低 ${DECK_MIN})`;
+    const maxLabel = Number.isFinite(DECK_MAX) ? `${DECK_MAX}` : '∞';
+    this.deckCount.textContent = `${save.deck.length} / ${maxLabel} 語 (最低 ${DECK_MIN})`;
     clear(this.deckWords);
     for (const t of save.collection) {
       const inDeck = save.inDeck(t);

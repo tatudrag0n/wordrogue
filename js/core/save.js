@@ -75,7 +75,7 @@ export const PART_SLOTS = 2;    // 1 部位に入る語の数
  */
 export const PART_MAX_LEN = 8;
 export const DECK_MIN = 10;     // デッキの最低語数 (戦闘開始時に満たなければ補充)
-export const DECK_MAX = 30;     // デッキの最大語数 (語彙の容量上限と同じ)
+export const DECK_MAX = Infinity;     // デッキの最大語数 (上限撤廃)
 export const GACHA_COST = 25;   // 言葉くじ 1 回の言玉
 export const GACHA_REFUND = 5;  // すでに持っている語が出たときの返却
 

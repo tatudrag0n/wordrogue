@@ -417,7 +417,7 @@ export class Menus {
     }
 
     const head = el('div', { class: 'grow-part-head' },
-      el('b', {}, `「${p.text}」`),
+      el('b', {}, `「${p.text}${part.name}」`),
       el('span', { class: `grow-part-grade grade-${p.ev.grade}` }, p.gradeInfo?.name || ''),
       el('span', {}, `文の力 ${p.power.toFixed(2)}`),
       el('span', {}, `効き ×${p.gain.toFixed(2)}`),

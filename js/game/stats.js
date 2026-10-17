@@ -19,7 +19,7 @@
 // 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
-import { WORDS, CONNECTOR_SET, CONNECTORS } from '../data/words.js';
+import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js';
 import { clamp } from '../core/util.js';
 import { evaluatePart, normPartEntries } from './parts.js';
 
@@ -141,6 +141,8 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
   s.partRows = [];      // 部位ごとの表示 (文・grade・文の力)
   s.partBroken = [];    // 不成文の部位
   s.partPowerBonus = 0; // 文の力から来たボーナス (文力 - 1 の合計)
+  s.handElement = null;
+  s.handStatus = null;
 
   for (const raw of parts || []) {
     const isPart = raw && typeof raw === 'object' && Array.isArray(raw.words);
@@ -150,9 +152,22 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
     const p = evaluatePart(normPartEntries(words));
     if (!p.sen.count) continue;
 
-    if (!p.valid) {
-      s.partBroken.push({ name, id, text: p.text, reasonText: p.reasonText });
-      continue;
+    const isHand = id === 'rhnd' || id === 'lhnd' || /手/.test(name);
+    // 手の部位に属性語があれば、その属性を手の属性として記録する (右手優先)。
+    if (isHand && !s.handElement) {
+      for (const e of (p.sen.entries || [])) {
+        const info = WORDS[e.word.text];
+        const el = info && info.el;
+        if (el && el !== 'none') {
+          s.handElement = el;
+          const status = ELEMENTS[el] && ELEMENTS[el].status;
+          if (status && status !== 'none') {
+            const HAND_STATUS_VALUE = { burn: 2, chill: 0.15, shock: 0.12, poison: 2 };
+            s.handStatus = { [status]: HAND_STATUS_VALUE[status] || 1 };
+          }
+          break;
+        }
+      }
     }
     const gain = p.gain;
     let used = 0;

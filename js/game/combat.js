@@ -304,6 +304,10 @@ export function damage(run, e, st, opt = {}) {
   e.hp -= dmg;
   e.flash = 1;
 
+  // ヒットの火花。
+  if (run && run.burst) run.burst(e.x, e.y, 3, (st && st.el && st.el !== 'none')
+    ? (ELEMENTS[st.el]?.color || '#ffd43b') : '#ffd43b', { spd: 120, life: 0.25, r: 1.8 });
+
   // 手の部位に属性語があると、接触する近接武器 (斬撃・薙ぎ) がその属性を纏う。
   // 武器側に属性が無いときだけ。手の属性は部位強化が由来。
   if (st.el === 'none' && run.player && run.player.stats && run.player.stats.handElement) {

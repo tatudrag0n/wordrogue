@@ -158,6 +158,7 @@ export class Run {
     this.beams = [];
     this.dmgTexts = [];
     this.corpses = [];
+    this.particles = [];
     this.bossBursts = [];
     this.bossVictoryPending = false;
 
@@ -815,6 +816,29 @@ export class Run {
   pushHint(text) { this.hint = text; this.hintT = 2.6; }
   shake(v) { if (this.shakeOn) this.shakeAmt = Math.min(26, this.shakeAmt + v); }
 
+  burst(x, y, n, color, o = {}) {
+    if (!(n > 0)) return;
+    const spd = o.spd ?? 160;
+    const spdMin = o.spdMin ?? spd * 0.25;
+    const life = o.life ?? 0.55;
+    const r = o.r ?? 3.2;
+    const rMax = o.rMax ?? r * 1.4;
+    for (let i = 0; i < n; i++) {
+      const a = o.a != null ? o.a + (Math.random() - 0.5) * (o.spread ?? 0.8) : Math.random() * Math.PI * 2;
+      const s = spdMin + Math.random() * (spd - spdMin);
+      const l = life * (0.6 + Math.random() * 0.8);
+      this.particles.push({
+        x, y,
+        vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+        r: r + Math.random() * (rMax - r),
+        life: l, maxLife: l,
+        color, grav: o.grav || 0, drag: o.drag ?? 3.2,
+        shape: o.shape || 'dot',
+      });
+    }
+    if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
+  }
+
   damageNumbers(x, y, v, crit) {
     if (!this.showDamage || this.dmgTexts.length > 70) return;
     this.dmgTexts.push({
@@ -913,6 +937,11 @@ export class Run {
     e.dead = true;
     this.kills++;
     this.corpses.push({ x: e.x, y: e.y, r: e.r, color: e.def.color, life: 0.4, maxLife: 0.4 });
+    this.burst(e.x, e.y, e.boss ? 42 : Math.min(20, 8 + Math.round(e.r)), e.def.color, {
+      spd: e.boss ? 340 : 210,
+      life: e.boss ? 0.9 : 0.55,
+      r: e.boss ? 5 : 3.2,
+    });
     this.audio.kill();
 
     const xp = e.xp * (1 + (this.stage.id - 1) * 0.12);
@@ -1398,6 +1427,18 @@ export class Run {
     dec(this.lightnings);
     dec(this.beams);
     dec(this.corpses);
+    // 粒子 (burst) の移動と寿命。
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const q = this.particles[i];
+      q.life -= this._lastDt;
+      q.x += q.vx * this._lastDt;
+      q.y += q.vy * this._lastDt;
+      q.vy += (q.grav || 0) * this._lastDt;
+      const drag = Math.pow(0.06, (q.drag ?? 3.2) * this._lastDt);
+      q.vx *= drag;
+      q.vy *= drag;
+      if (q.life <= 0) this.particles.splice(i, 1);
+    }
     for (let i = this.dmgTexts.length - 1; i >= 0; i--) {
       const t = this.dmgTexts[i];
       t.life -= this._lastDt;

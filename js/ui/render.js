@@ -72,6 +72,7 @@ export class Renderer {
     this.step('pickups', () => this.drawPickups(run));
     this.step('slashes', () => this.drawSlashes(run));
     this.step('rings', () => this.drawRings(run));
+    this.step('particles', () => this.drawParticles(run));
     this.step('boss-burst', () => this.drawBossBursts(run));
     this.step('beams', () => this.drawBeams(run));
     this.step('enemies', () => this.drawEnemies(run));
@@ -347,6 +348,21 @@ export class Renderer {
       g.beginPath();
       g.arc(s.x, s.y, s.r * (1.04 - t * 0.12), 0, TAU);
       g.stroke();
+    }
+    g.restore();
+  }
+
+  drawParticles(run) {
+    const g = this.ctx;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    for (const p of run.particles || []) {
+      const t = p.life / p.maxLife;
+      g.globalAlpha = t * 0.85;
+      g.fillStyle = p.color;
+      g.beginPath();
+      g.arc(p.x, p.y, p.r * (0.6 + t * 0.4), 0, TAU);
+      g.fill();
     }
     g.restore();
   }

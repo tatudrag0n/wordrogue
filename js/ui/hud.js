@@ -4,13 +4,14 @@
 
 import { $, el, clear, clamp, fmtNum, fmtTime } from '../core/util.js';
 import { KIND_LABEL } from '../data/weapons.js';
-import { WORDS, CATEGORIES } from '../data/words.js';
+import { WORDS, CATEGORIES, ELEMENTS } from '../data/words.js';
 import { statRows } from '../game/stats.js';
 import { FX_LABEL, fxLine as makeFxLine } from './labels.js';
 
 export class Hud {
   constructor() {
     this.root = $('#hud');
+    this.hpBar = $('#hpFill').parentElement;
     this.hpFill = $('#hpFill');
     this.shieldFill = $('#shieldFill');
     this.hpText = $('#hpText');
@@ -64,6 +65,8 @@ export class Hud {
     // HP / シールド
     const hpPct = clamp(p.hp / p.maxHp, 0, 1) * 100;
     this.hpFill.style.width = `${hpPct}%`;
+    // 3 割を切ったら点滅。シールドの有無に関わらず、本体が減ったら気づかせる。
+    this.hpBar.classList.toggle('low', p.hp > 0 && hpPct < 30);
     const shPct = clamp(p.shield / Math.max(1, p.maxHp), 0, 1) * 100;
     this.shieldFill.style.width = `${shPct}%`;
     this.hpText.textContent = p.shield > 0.5
@@ -81,20 +84,22 @@ export class Hud {
     this.staFill.classList.toggle('dashing', p.dashing);
     this.staFill.classList.toggle('empty', p.stamina < 12);
 
-    // プレイヤー自身の文 (称号)。
-    const selfTitle = p.stats.selfTitle || '';
-    if (selfTitle) {
+    // 部位 (右手 / 左手 / 胴 / 頭)。語を置くと「硬い左手」のように出る。
+    const parts = s.parts || [];
+    if (parts.length) {
       this.hudSelf.hidden = false;
       clear(this.hudSelf);
-      this.hudSelf.append(
-        el('span', { class: 'hud-self-mark' }, '称号'),
-        el('b', { class: 'hud-self-text' }, selfTitle),
-        el('span', { class: 'hud-self-pow' }, `文の力 x${p.stats.selfPower.toFixed(2)}`),
-      );
-      this.hudSelf.classList.toggle('invalid', p.stats.selfValid === false);
-      this.hudSelf.title = p.stats.selfValid
-        ? `自身の文「${selfTitle}」— 文の力が攻撃と防御に効く`
-        : `自身の文「${selfTitle}」— 不成文。枠の語を 2 つ以上並べよう`;
+      this.hudSelf.append(el('span', { class: 'hud-self-mark' }, '部位'));
+      for (const part of parts) {
+        const color = part.element ? (ELEMENTS[part.element] || ELEMENTS.none).color : null;
+        this.hudSelf.append(el('b', {
+          class: 'hud-self-text' + (part.hand && part.element ? ' el' : ''),
+          style: color ? { color } : undefined,
+        }, part.label));
+      }
+      this.hudSelf.classList.remove('invalid');
+      this.hudSelf.title = parts.map((x) => x.label).join(' ')
+        + (s.handElement ? ' — 手の属性が斬撃・薙ぎの武器に乗る' : '');
     } else {
       this.hudSelf.hidden = true;
     }
@@ -166,6 +171,12 @@ export class Hud {
         + (res.active ? '' : ' broken')
         + (res.active && res.grade === 'great' ? ' great' : '')
         + (res.active && res.grade === 'idiom' ? ' idiom' : '');
+      // 属性が乗っている武器は縁を属性色にする。
+      const elInfo = res.active && res.element !== 'none'
+        ? (ELEMENTS[res.element] || ELEMENTS.none) : null;
+      node.classList.toggle('eled', !!elInfo);
+      if (elInfo) node.style.setProperty('--el', elInfo.color);
+      else node.style.removeProperty('--el');
       node.querySelector('.wchip-lv').textContent = `Lv${wi.level}`;
       // 武器名はそのまま文面。基本の型も添えてどちらの武器か分かるようにする。
       const txt = node.querySelector('.wchip-txt');
@@ -177,7 +188,7 @@ export class Hud {
       txt.textContent = res.active ? ` ${wi.title}` : ` ${wi.title || ''} — ${res.reasonText}`;
       node.title = res.active
         ? `${wi.def.name}「${res.fullText}」 — ${res.gradeInfo.name} / `
-          + `${KIND_LABEL[res.kind] || res.kind} / 威力 ${res.stats.dmg.toFixed(0)}`
+          + `${KIND_LABEL[res.kind] || res.kind}${elInfo ? ` / ${elInfo.name}` : ''} / 威力 ${res.stats.dmg.toFixed(0)}`
         : `不成文: ${res.reasonText}`;
     }
   }

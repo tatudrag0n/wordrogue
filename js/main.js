@@ -69,10 +69,7 @@ function boot() {
   window.addEventListener('resize', () => app.renderer.resize());
   window.addEventListener('orientationchange', () => setTimeout(() => app.renderer.resize(), 120));
 
-  // セーブの初期化
-  if (app.save.d.unlockedWeapons.length < 2) {
-    app.save.d.unlockedWeapons = ['sword', 'gun'];
-  }
+  // セーブの初期化。古い形は save 側の migrate が直す。
   app.save.save();
 
   app.menus.show('title');
@@ -104,7 +101,7 @@ function startRun(weaponIds) {
     save: app.save,
     audio: app.audio,
     weaponIds: app.lastLoadout,
-    startingWords: app.save.d.startingWords,
+    collection: app.save.d.collection,
     lexiconSize: 12,
   });
   run.shakeOn = app.save.setting('screenShake') !== false;

@@ -276,7 +276,7 @@ export function updateEnemy(en, w, dt) {
     en.atkCd -= dt;
     if (en.atkCd <= 0 && d < 420) {
       en.atkCd = en.def.shot.cd;
-      w.spawnEnemyShot?.(en.x, en.y, Math.atan2(dy, dx), en.def.shot);
+      w.spawnEnemyShot?.(en.x, en.y, Math.atan2(dy, dx), en.def.shot.speed, en.def.shot.dmg);
     }
   }
 }
@@ -390,12 +390,14 @@ export function updateBullet(b, w, dt) {
 
   if (b.boomerang) {
     const p = w.player;
-    const d = Math.hypot(b.x - p.x, b.y - p.y);
-    b.t += 0;
+    const d = Math.hypot(b.x - p.x, b.y - p.y) || 1;
     if (b.ret) {
-      b.x += (p.x - b.x) * Math.min(1, dt * 9);
-      b.y += (p.y - b.y) * Math.min(1, dt * 9);
-      if (d < 22) b.dead = true;
+      // 手元へ向かって加速する。行きより速く帰る。
+      b.vx += ((p.x - b.x) / d) * 2400 * dt;
+      b.vy += ((p.y - b.y) / d) * 2400 * dt;
+      const sp = Math.hypot(b.vx, b.vy);
+      if (sp > 950) { b.vx *= 950 / sp; b.vy *= 950 / sp; }
+      if (d < 24) b.dead = true;
     }
   } else if (b.homing > 0) {
     const tgt = pickTarget(b, w);
@@ -412,12 +414,12 @@ export function updateBullet(b, w, dt) {
   b.px = b.x; b.py = b.y;
   b.x += b.vx * dt;
   b.y += b.vy * dt;
-  b.spin += (b.vx + b.vy) * 0.0008 + dt;
+  b.spin += (b.vx + b.vy) * 0.0008 + dt + (b.spinSpd || 0) * dt;
   b.traveled += Math.hypot(b.x - b.px, b.y - b.py);
 
-  if (b.boomerang && !b.ret && b.traveled > (b.range || 240)) b.ret = true;
+  if (b.boomerang && !b.ret && b.traveled > (b.range || 240)) { b.ret = true; b.spinSpd = (b.spinSpd || 8) * 1.6; }
 
-  if (b.range && b.traveled > b.range && !b.orbit) b.dead = true;
+  if (b.range && b.traveled > b.range && !b.orbit && !b.boomerang) b.dead = true;
 }
 
 /** 追尾の標的を選ぶ。 */

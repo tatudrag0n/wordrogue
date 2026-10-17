@@ -95,7 +95,7 @@ if (syntaxBad) {
   const pkeys = new Set();
   for (const k in WORDS) {
     const w = WORDS[k];
-    // 「自身」向けの語は fx と player が同じ内容。player 側だけで見る。
+    // 「身体」向けの語は fx と player が同じ内容。player 側だけで見る。
     if (w.cat !== 'buff') for (const a in (w.fx || {})) keys.add(a);
     for (const a in (w.player || {})) pkeys.add(a);
   }
@@ -104,9 +104,9 @@ if (syntaxBad) {
   const notJa = (k) => !/[぀-ヿ一-鿿]/.test(k);
   const badJa = [...keys, ...pkeys]
     .filter((k) => (FX_LABEL[k] || PS_LABEL[k]) && notJa(FX_LABEL[k] || PS_LABEL[k]));
-  console.log(`== 効果キーのラベル ==\n  武器 ${keys.size} / 自身 ${pkeys.size} / 未定義 ${missFx.length + missPs.length} / 日本語なし ${badJa.length}`);
+  console.log(`== 効果キーのラベル ==\n  武器 ${keys.size} / 身体 ${pkeys.size} / 未定義 ${missFx.length + missPs.length} / 日本語なし ${badJa.length}`);
   if (missFx.length) console.log('  武器: ' + missFx.join(', '));
-  if (missPs.length) console.log('  自身: ' + missPs.join(', '));
+  if (missPs.length) console.log('  身体: ' + missPs.join(', '));
   if (badJa.length) console.log('  日本語なし: ' + badJa.join(', '));
   if (missFx.length || missPs.length || badJa.length) {
     console.log('\n=== 失敗したテストがあります ===');
@@ -119,10 +119,9 @@ if (syntaxBad) {
 {
   const { WORDS, PHRASE_BONUS, segment } = await import(new URL('../js/data/words.js', import.meta.url));
   const { WEAPONS } = await import(new URL('../js/data/weapons.js', import.meta.url));
-  const { SELF_TAIL } = await import(new URL('../js/game/stats.js', import.meta.url));
   const PHRASE_KEYS = new Set(Object.keys(PHRASE_BONUS));
   // 文の例に現れるので、語とみなしてよいやつ。
-  const TAILS = new Set([SELF_TAIL, ...Object.values(WEAPONS).map((w) => w.tail)]);
+  const TAILS = new Set(Object.values(WEAPONS).map((w) => w.tail));
   const STARTERS = new Set(Object.values(WEAPONS)
     .flatMap((w) => [w.startWord, w.startWord2]).filter(Boolean));
 
@@ -183,13 +182,12 @@ if (syntaxBad) {
 }
 
 // ステージのウェーブが実在する敵を指していること。
-//  bosses も、解放される武器のステージ番号も範囲内であること。
+//  bosses も範囲内であること。武器は解放制ではなく 15 種が最初から使える。
 {
   const { STAGES } = await import(new URL('../js/data/stages.js', import.meta.url));
   const { ENEMIES, BOSS_IDS } = await import(new URL('../js/data/enemies.js', import.meta.url));
   const { WEAPONS } = await import(new URL('../js/data/weapons.js', import.meta.url));
 
-  const maxStage = STAGES.length;
   const unknown = [];
   for (const s of STAGES) {
     for (const w of s.waves) {
@@ -202,20 +200,18 @@ if (syntaxBad) {
     if (s.boss && !BOSS_IDS.includes(s.boss)) unknown.push(`${s.name}: ボス「${s.boss}」が無い`);
     if (!s.waves.length) unknown.push(`${s.name}: ウェーブが空`);
   }
-  const badUnlock = Object.values(WEAPONS)
-    .filter((w) => w.unlock && (w.unlock.stage < 1 || w.unlock.stage > maxStage))
-    .map((w) => `${w.name}: 解放ステージ ${w.unlock.stage} が範囲外`);
 
-  // 武器が 1 つも無いステージがあると、中間が飛ばされる。
-  const covered = new Set(Object.values(WEAPONS).map((w) => (w.unlock ? w.unlock.stage : 1)));
-  for (let i = 1; i <= maxStage; i++) {
-    if (!covered.has(i)) unknown.push(`ステージ ${i}: 解放される武器が無い`);
-  }
+  // 基本武器は 15 種。解放制は無い。
+  const weapons = Object.values(WEAPONS);
+  if (weapons.length !== 15) unknown.push(`武器の数が 15 でない: ${weapons.length}`);
+  const locked = weapons.filter((w) => w.unlock).map((w) => w.name);
+  if (locked.length) unknown.push(`解放制の武器が残っている: ${locked.join(' ')}`);
+  const noStarter = weapons.filter((w) => !w.startWord || !w.startWord2).map((w) => w.name);
+  if (noStarter.length) unknown.push(`開始語の無い武器: ${noStarter.join(' ')}`);
 
-  const all = [...unknown, ...badUnlock];
-  console.log(`== ステージ ==\n  ${STAGES.length} 面 / 敵 ${Object.keys(ENEMIES).length} 種 / 問題 ${all.length}`);
-  for (const p of all) console.log(`\x1b[31m  ${p}\x1b[0m`);
-  if (all.length) {
+  console.log(`== ステージ ==\n  ${STAGES.length} 面 / 敵 ${Object.keys(ENEMIES).length} 種 / 武器 ${weapons.length} 種 / 問題 ${unknown.length}`);
+  for (const p of unknown) console.log(`\x1b[31m  ${p}\x1b[0m`);
+  if (unknown.length) {
     console.log('\n=== 失敗したテストがあります ===');
     process.exit(1);
   }

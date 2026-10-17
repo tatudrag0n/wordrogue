@@ -214,7 +214,6 @@
         <button class="btn btn-close" data-close="howto">✕</button>
       </header>
       <div class="howto-body">
-        <section>
       <section>
       <h3>1. 文がそのまま武器の名前になる</h3>
       <p>
@@ -224,8 +223,7 @@
       <ul class="howto-list">
       <li><b class="ok">成立</b> …「刃」+「必殺」→ <code>刃必殺剣</code></li>
       <li><b class="ok">積み重ねる</b> …「爆裂」+「無双」+「迅早」→ <code>爆裂無双迅早剣</code></li>
-      <li><b class="ok">成立</b> …「刃」+「必殺」→ <code>刃必殺剣</code></li>
-      <li><b class="ok">熟語</b> …「火」+「球」→ <code>火球剣</code> で追加ボーナス</li>
+      <li><b class="ok">熟語</b> …「火」+「刃」→ <code>火刃剣</code> で追加ボーナス</li>
       <li><b class="ng">不成文</b> … 実質語が足りない / 接続詞だけ / 分割できない → <strong>その武器は無効</strong></li>
       </ul>
       <p>
@@ -234,33 +232,32 @@
       </p>
       </section>
       <section>
-      <h3>2. 末尾の語は武器ごとに固定</h3>
+      <h3>2. 武器は基本の 15 種。末尾の語で攻撃が決まる</h3>
       <p>
       武器名の<strong>末尾の語</strong>は枠の外に固定で付く。並べ替えても動かない。
       だから<strong>名前と攻撃の型が必ず一致する</strong>。
+      武器は<strong>剣・刃・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃・針</strong>の 15 種だけ。
       </p>
       <ul class="howto-list">
-      <li>剣 → <code>剣</code> 斬撃 ／ 銃 → <code>銃</code> 射撃 ／ 弓 → <code>弓</code> 射撃</li>
-      <li>爆弾 → <code>爆弾</code> 爆弾 ／ 雷 → <code>雷</code> 連鎖 ／ 鞭 → <code>鞭</code> 薙ぎ</li>
-      <li>回転刃 → <code>環</code> 軌道 ／ 棘壁 → <code>壁</code> 城壁</li>
-      <li>環刃 → <code>環刃</code> 還刃 ／ 光線 → <code>光線</code> 光線</li>
+      <li>剣 / 刃 / 刀 / 槍 / 矛 / 牙 / 拳 → <strong>斬撃</strong> ／ 銃 / 弓 / 針 → <strong>射撃</strong></li>
+      <li>斧 / 鞭 / 爪 → <strong>薙ぎ</strong> ／ 鎖 → <strong>還刃</strong> ／ 杖 → <strong>光線</strong></li>
+      <li>言葉鍛冶の<strong>「+ 武器を追加」</strong>からいつでも増やせる（4 つまで。同じ武器は 2 本持てない）</li>
       </ul>
       <p>
       <strong>攻撃を決めるのは末尾の語だけ。</strong>
-      途中に別の形態語を並べても攻撃は変わらず、効果（貫通・巨大・分裂など）だけが加わる。
-      「刃」+「必殺」+「爆弾」は <code>刃必殺爆弾剣</code> だが、この武器は<strong>斬撃のまま</strong>（爆発は付く）。
+      途中に「弾」「球」などを並べても攻撃は変わらず、効果（貫通・巨大・分裂など）だけが加わる。
+      「刃」+「必殺」+「弾」は <code>刃必殺弾剣</code> だが、この武器は<strong>斬撃のまま</strong>（弾の効果は付く）。
       </p>
       </section>
       <section>
       <h3>3. 語の種類</h3>
       <ul class="howto-list">
       <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
-      <li><b>形態</b> … 剣・銃・弓・弾・矢・球・環・壁など。効果と末尾語になる。</li>
-      <li><b>効果</b> … 巨大・貫通・分裂・散弾など。数値を上げる。</li>
+      <li><b>形態</b> … 剣・銃・弓・斧・鞭・鎖など 15 種。武器の末尾語になる。</li>
+      <li><b>効果</b> … 巨大・貫通・弾・矢・球・環・壁など。数値を上げる。</li>
       <li><b>動詞</b> … 燃える・貫く・凍るなど。1 枚で 1 つの動作になる。</li>
-      <li><b>接続</b> … <code>スル</code> <code>ノ</code> <code>サレタ</code> など。
-      <strong>直前の語に結合する</strong>（下項）。</li>
-      <li><b>自身</b> … 頑強・疾走など。プレイヤーに効く。</li>
+      <li><b>接続</b> … <code>スル</code> <code>ノ</code> <code>サレタ</code> など。直前の語に結合する。</li>
+      <li><b>身体</b> … 硬・頑強・疾走など。部位（右手・左手・胴・頭）に置くとプレイヤーに効く。</li>
       </ul>
       </section>
       <section>
@@ -287,12 +284,15 @@
       </p>
       </section>
       <section>
-<h3>5. プレイヤー自身も文にする</h3>
+<h3>5. 部位 — 身体にも語を置ける</h3>
       <p>
-      言葉鍛冶の一番上に<strong>自身の枠</strong>がある。武器と同じく、
-      文の<strong>末尾は「人」で固定</strong>。並べ替えても末尾は動かない。
-      「頑強」+「疾走」なら <code>頑強疾走人</code> のように称号になり、
-      文の力が<strong>攻撃と防御</strong>に効く。
+      言葉鍛冶の一番上に<strong>部位</strong>の枠がある。右手・左手・胴・頭の 4 箇所に
+      語を 1 つずつ置ける。置くと <b>硬い左手</b>・<b>炎の左手</b> のように表示され、
+      効果がプレイヤーにそのまま乗る（硬 → <strong>装甲 +2</strong> など）。
+      </p>
+      <p>
+      <strong>手（右手・左手）に置いた属性語は、斬撃・薙ぎの武器に属性として乗る。</strong>
+      炎の右手なら、剣や斧の一撃に火が付く。
       </p>
       </section>
       <section>
@@ -311,11 +311,12 @@
       上の候補から 1 個入る（時間は止まらない）。
       </p>
       <ul class="howto-list">
-      <li>ふつうのレベルアップ … <strong>3 択 1 個</strong>／<strong>1 / 5 / 9 …</strong> は自分の文に <strong>1 個</strong></li>
+      <li>ふつうのレベルアップ … <strong>3 択 1 個</strong>／<strong>1 / 5 / 9 …</strong> は部位に <strong>1 個</strong></li>
       <li><strong>5 の倍数</strong> … <strong>3 択が 2 回</strong>（順に選ぶ）</li>
-      <li><strong>5 の倍数</strong> … 自分の文の空き枠に <strong>1 個</strong>（自動で入る）</li>
+      <li><strong>5 の倍数</strong> … 部位の空き枠に <strong>1 個</strong>（自動で入る）</li>
       </ul>
       <p>
+      3 択に出る語は<strong>持っている語</strong>（書庫の言葉くじで増やす）から出る。
       語彙は <strong>12 個</strong>から始まり、ステージ終わりに選べる
       <strong>言玉</strong>で 1 個ずつ広がる（<strong>上限 30</strong>、次のステージへ持ち越す）。
       </p>
@@ -337,7 +338,7 @@
       <p>
       言葉鍛冶の<strong>「忘れる」</strong>を押すとモードが点る。
       このときは語彙の語をクリックするだけで <strong>捨てられる</strong>。
-      武器や自分の文にある語は対象にならない（それらは「忘れる」られない）。
+      武器や部位にある語は対象にならない（それらは「忘れる」られない）。
       </p>
       </section>
       <section>
@@ -357,10 +358,10 @@
       <section>
 <h3>11. ステージクリア報酬</h3>
       <p>
-      ステージを終えると<strong>武器</strong>・<strong>武器強化</strong>・
-      <strong>言玉</strong>・<strong>休息</strong>から選べる。
+      ステージを終えると<strong>武器強化</strong>・<strong>言玉</strong>・<strong>休息</strong>から選べる。
       武器レベルを 2 / 4 / 6 で上げると枠が 1 つずつ増える。
-      ことばはここでは出ない。
+      <strong>武器</strong>と<strong>ことば</strong>はここでは出ない。武器は言葉鍛冶の
+      <strong>「+ 武器を追加」</strong>から、ことばは<strong>言葉くじ</strong>（15 項）から。
       </p>
       </section>
       <section>
@@ -392,8 +393,8 @@
       </ul>
       <p>
       つまり<strong>よく組んだ文ほど、敵の文を早く崩せる</strong>。
-      威力で押し切るのとは別の、词语の作り方で勝つ道がある。
-      ボスは倒れない。崩しても攻撃パターンが止まるだけ。
+      威力で押し切るのとは別の、ことばの作り方で勝つ道がある。
+      <strong>ボスの文は斬れない</strong>。語を落とせないので、力で押し切るしかない。
       </p>
       </section>
       <section>
@@ -413,12 +414,13 @@
       累計がタイトル画面に<strong>「文を崩した数」</strong>として出る。
       </p>
       <p>
-      書庫では<strong>恒久強化</strong>と<strong>恒久の語</strong>が買える。
+      書庫では<strong>恒久強化</strong>と<strong>言葉くじ</strong>が使える。
       </p>
       <ul class="howto-list">
       <li>恒久強化 … 体力 / 攻撃 / 装甲 / 経験値 / 引き寄せ / 会心。各 6 〜 10 段階</li>
       <li>段階を上げるほど<strong>値段が上がる</strong>。使い切りはできない</li>
-      <li>恒久の語 … 買った語は<strong>毎回ランの最初から語彙に入る</strong></li>
+      <li>言葉くじ … 墨 25 で、まだ持っていない語を 1 つ引ける</li>
+      <li>引いた語は<strong>以後のランの語彙・3 択・部位に出る</strong>。最初は 1 文字語と接続詞を全部持っている</li>
       <li>どれも次のランに持ち越す。死んでも失わない</li>
       </ul>
       </section>
@@ -460,9 +462,9 @@
           <div class="archive-list" id="archiveUpgrades"></div>
         </section>
         <section>
-          <h3>恒久の語</h3>
-          <p class="archive-note">買った語は、毎回ランの最初から語彙に入る。</p>
-          <div class="archive-words" id="archiveWords"></div>
+          <h3>言葉くじ</h3>
+          <p class="archive-note">墨 25 で、まだ持っていない語を 1 つ引ける。引いた語だけが、以後のランの語彙・3 択・部位に出る。</p>
+          <div id="archiveWords"></div>
         </section>
       </div>
     </div>

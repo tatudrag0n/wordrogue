@@ -137,7 +137,7 @@ sec('タイトル画面');
 ok(await evalJs('!document.getElementById("title").hidden'), 'タイトルが表示されている');
 ok(await evalJs('document.getElementById("btnStart") !== null'), '開始ボタンがある');
 
-sec('書庫で墨を使い、恒久強化と語を買える');
+sec('書庫で墨を使い、恒久強化と語を引ける');
 {
   await evalJs('window.__wordrogue.menus.show("archive")');
   await sleep(250);
@@ -145,13 +145,15 @@ sec('書庫で墨を使い、恒久強化と語を買える');
     hidden: document.getElementById('archive').hidden,
     ink: document.getElementById('archiveInk').textContent,
     up: document.querySelectorAll('#archiveUpgrades .up-row').length,
-    words: document.querySelectorAll('#archiveWords .shop-word').length,
+    hasLottery: !!document.querySelector('#archiveWords .lottery-btn'),
+    chips: document.querySelectorAll('#archiveWords .lottery-chip').length,
   }))()`);
   ok(!a.hidden, '書庫が開いていない');
   ok(a.up === 6, `恒久強化の行数: ${a.up} (6 のはず)`);
-  ok(a.words >= 3, `恒久の語の数: ${a.words}`);
+  ok(a.hasLottery, '言葉くじが無い');
+  ok(a.chips >= 100, `所持語の一覧が少ない: ${a.chips}`);
 
-  // 墨充分的Gyros 買会有所。
+  // 墨が充分なら買えるし、くじも引ける。
   const buy = await evalJs(`(() => {
     const app = window.__wordrogue;
     app.save.data.ink = 5000;
@@ -161,38 +163,45 @@ sec('書庫で墨を使い、恒久強化と語を買える');
     row.querySelector('.up-buy').click();
     const lv = app.save.metaLevel('hp');
     const spent = ink0 - app.save.ink;
-    // 語も買う。
-    const w0 = document.querySelector('#archiveWords .shop-word:not(.owned)');
-    const text = w0.textContent.split(' ')[0];
-    const inkBeforeWord = app.save.ink;
-    w0.click();
+    // 言葉くじを 1 回引く。
+    const inkBeforeDraw = app.save.ink;
+    const before = app.save.d.collection.length;
+    document.querySelector('#archiveWords .lottery-btn').click();
+    const after = app.save.d.collection.length;
+    const drawn = app.save.d.collection[after - 1];
     return {
-      lv, spent, text,
-      owned: app.save.hasStartingWord(text),
-      ink: app.save.ink,
-      wordCost: inkBeforeWord - app.save.ink,
+      lv, spent,
+      drew: after === before + 1,
+      drawnOk: app.save.hasWord(drawn),
+      wordCost: inkBeforeDraw - app.save.ink,
       metaHp: app.save.metaValue('hp'),
+      result: document.querySelector('#archiveWords .lottery-result')?.textContent || '',
     };
   })()`);
   ok(buy.lv === 1, `強化の段階が上がっていない: ${buy.lv}`);
   ok(buy.spent > 0, `墨が減っていない: ${buy.spent}`);
   ok(buy.metaHp > 0, `強化の最終値が 0: ${buy.metaHp}`);
-  ok(buy.owned, `語を買っても入っていない: ${buy.text}`);
-  ok(buy.wordCost > 0, `語を買っても墨が減っていない: ${buy.wordCost}`);
-  console.log(`    書庫: 強化を 1 段階 / 「${buy.text}」を ${buy.wordCost} 墨で購入`);
+  ok(buy.drew, 'くじを引いても語が増えない');
+  ok(buy.drawnOk, '引いた語が持ち物に入っていない');
+  ok(buy.wordCost > 0, `くじで墨が減っていない: ${buy.wordCost}`);
+  ok(buy.result.includes('を引いた'), `引いた語の表示が無い: ${buy.result}`);
+  console.log(`    書庫: 強化を 1 段階 / くじで「${buy.result.replace('を引いた', '')}」を ${buy.wordCost} 墨で`);
 
-  // 買えない 提高。保険。
+  // 墨が無ければ引けないし、買えない。保険。
   const no = await evalJs(`(() => {
     const app = window.__wordrogue;
     app.save.data.ink = 0;
     app.menus.renderArchive();
     const btn = [...document.querySelectorAll('#archiveUpgrades .up-buy')][1];
     const off = btn.classList.contains('off');
-    const lv0 = Object.keys(app.save.d.meta).length;
+    const lbtn = document.querySelector('#archiveWords .lottery-btn');
+    const lotOff = lbtn.disabled || lbtn.classList.contains('off');
     btn.click();
-    return { off, lv0, ink: app.save.ink };
+    lbtn.click();
+    return { off, lotOff, ink: app.save.ink };
   })()`);
   ok(no.off, '買えないのにボタンが有効');
+  ok(no.lotOff, '墨が無いのにくじが引ける');
   ok(no.ink === 0, `買えないのに墨が減った: ${no.ink}`);
 }
 await evalJs('window.__wordrogue.menus.show("title")');
@@ -284,13 +293,14 @@ await sleep(400);
 ok(await evalJs('!document.getElementById("forge").hidden'), '言葉鍛冶が開いた');
 ok(await evalJs('window.__wordrogue.run.paused === true'), '時間が止まった');
 const rows = await evalJs('document.querySelectorAll("#forgeWeapons .wrow").length');
-ok(rows === 3, `行の数: ${rows} (自身 1 + 武器 2)`);
+ok(rows === 4, `行の数: ${rows} (部位 1 + 武器 2 + 武器を追加 1)`);
 const selfRow = await evalJs('!!document.querySelector("#forgeWeapons .wrow-self")');
-ok(selfRow, 'プレイヤー自身の文の行が無い');
+ok(selfRow, 'プレイヤーの部位の行が無い');
 const slots = await evalJs('document.querySelectorAll("#forgeWeapons .slot").length');
-// 自身 4 + 武器 2 x (枠 4 + 末尾語 1)
-// 自身 4 + 末尾語 1、武器 2 x (枠 4 + 末尾語 1)
-ok(slots === 15, `枠の数: ${slots} (自身 5 + 武器 2 x 5 = 15)`);
+const addRow = await evalJs('!!document.querySelector("#forgeWeapons .wrow-add")');
+ok(addRow, '武器を追加の行が無い');
+// 部位 4 + 武器 2 x (枠 4 + 末尾語 1)
+ok(slots === 14, `枠の数: ${slots} (部位 4 + 武器 2 x 5 = 14)`);
 
 sec('末尾語が枠の外に固定で出ていること');
 {
@@ -302,9 +312,9 @@ sec('末尾語が枠の外に固定で出ていること');
       texts: [...document.querySelectorAll('#forgeWeapons .sn-text')].map(n => n.textContent),
     };
   })()`);
-  // 自身 1 + 武器 2 = 3 つ。
-  ok(tails.shown.length === 3, `末尾語が ${tails.shown.length} 個 (自身 1 + 武器 2)`);
-  ok(tails.shown.includes('人'), `自身の末尾語「人」が表示されていない: ${tails.shown.join(',')}`);
+  // 部位の行に末尾語は無い。武器 2 つぶんだけ。
+  ok(tails.shown.length === 2, `末尾語が ${tails.shown.length} 個 (武器 2)`);
+  ok(!tails.shown.includes('人'), `部位の行に「人」が残っている: ${tails.shown.join(',')}`);
   for (const w of tails.defs) {
     ok(tails.shown.includes(w.tail), `末尾語「${w.tail}」が表示されていない: ${tails.shown.join(',')}`);
     ok(w.title.endsWith(w.tail), `名前が末尾語で終わっていない: ${w.title}`);
@@ -315,7 +325,7 @@ sec('末尾語が枠の外に固定で出ていること');
   console.log(`    末尾語: ${tails.shown.join(' / ')} / 文面: ${tails.texts.join(' | ')}`);
 }
 const sent = await evalJs('document.querySelectorAll("#forgeWeapons .sentence").length');
-ok(sent === 3, `文面表示の数: ${sent}`);
+ok(sent === 2, `文面表示の数: ${sent} (武器 2 つぶん)`);
 const sentText = await evalJs(
   '[...document.querySelectorAll("#forgeWeapons .sn-text")].map(n => n.textContent).join(" | ")');
 ok(sentText.includes('|'), `文面 nonempty: ${sentText}`);
@@ -903,54 +913,72 @@ sec('ダッシュでスタミナが消費される');
   ok(sta1 > mid.sta, `回復しない: ${mid.sta.toFixed(0)} -> ${sta1.toFixed(0)}`);
 }
 
-sec('プレイヤー自身の文で称号ができる');
+sec('部位に語を置くと表示と効果が変わる');
 {
   const res = await evalJs(`(async () => {
     const m = await import(new URL('js/data/words.js', document.baseURI).href);
     const run = window.__wordrogue.run;
     const p = run.player;
     p.selfSlots.fill(null);
-    // 「人」は枠の外に固定で付くので、枠には入れない。
-    p.selfSlots[0] = m.makeWord('頑強');
-    p.selfSlots[1] = m.makeWord('疾走');
+    p.selfSlots[0] = m.makeWord('硬');
+    p.selfSlots[1] = m.makeWord('炎');
     run.refreshStats();
     return {
-      title: p.stats.selfTitle,
-      valid: p.stats.selfValid,
-      power: p.stats.selfPower,
-      atk: p.stats.atkMul,
+      labels: p.stats.parts.map((x) => x.label),
       armor: p.stats.armor,
+      hand: p.stats.handElement,
       hudHidden: document.getElementById("hudSelf").hidden,
     };
   })()`);
-  ok(res.title === '頑強疾走人', `称号が「${res.title}」`);
-  ok(res.valid === true, '自身の文が不成文');
-  ok(res.power > 1, `文の力が上がっていない: ${res.power}`);
+  ok(res.labels[0] === '硬い右手', `右手が「${res.labels[0]}」`);
+  ok(res.labels[1] === '炎の左手', `左手が「${res.labels[1]}」`);
   ok(res.armor > 0, `装甲が乗っていない: ${res.armor}`);
+  ok(res.hand === 'fire', `手の属性が「${res.hand}」`);
   await sleep(200);
+  ok(await evalJs('document.getElementById("hudSelf").hidden === false'), 'HUD の部位が隠れている');
   const shown = await evalJs('document.getElementById("hudSelf").textContent');
-  ok(shown.includes('頑強疾走人'), `HUD に称号が出ていない: ${shown}`);
-  ok(shown.includes('称号'), `HUD の称号ラベルが無い: ${shown}`);
-  ok(/文の力 x[\d.]+/.test(shown), `HUD に文の力が出ていない: ${shown}`);
-  console.log(`    称号「${res.title}」 文の力 x${res.power.toFixed(2)} / 装甲 ${res.armor.toFixed(2)} / HUD ${shown.trim()}`);
+  ok(shown.includes('硬い右手'), `HUD に右手が出ていない: ${shown}`);
+  ok(shown.includes('炎の左手'), `HUD に左手が出ていない: ${shown}`);
+  ok(shown.includes('部位'), `HUD の部位ラベルが無い: ${shown}`);
+  console.log(`    部位「${res.labels.join(' / ')}」 装甲 ${res.armor.toFixed(2)} / 手 ${res.hand} / HUD ${shown.trim()}`);
 
-  // 末尾の「人」は固定。並べ替えても外れない。
-  const tail = await evalJs(`(async () => {
+  // 手の属性は斬撃武器に乗る。
+  const fire = await evalJs(`(async () => {
+    const m = await import(new URL('js/data/words.js', document.baseURI).href);
+    const run = window.__wordrogue.run;
+    const wi = run.weapons[0];
+    wi.slots.fill(null);
+    wi.setSlot(0, m.makeWord('刃'));
+    wi.setSlot(1, m.makeWord('必殺'));
+    const res = wi.resolve(run.player.stats);
+    return { el: res.stats.el, burn: res.stats.burn, title: wi.title, active: res.active };
+  })()`);
+  ok(fire.active, '武器が不成文');
+  ok(fire.el === 'fire' && fire.burn > 0, `手の属性が武器に乗らない: ${fire.el} burn=${fire.burn}`);
+  console.log(`    武器「${fire.title}」 属性 ${fire.el} / 炎上 ${fire.burn}`);
+
+  // 場所を入れ替えると名前も入れ替わる。手の属性は右手優先。
+  const swap = await evalJs(`(async () => {
     const m = await import(new URL('js/data/words.js', document.baseURI).href);
     const run = window.__wordrogue.run;
     const p = run.player;
     p.selfSlots[0] = m.makeWord('鋼');
-    p.selfSlots[1] = m.makeWord('疾速');
+    p.selfSlots[1] = m.makeWord('氷');
     run.refreshStats();
-    const a = p.stats.selfTitle;
+    const a = p.stats.parts.map((x) => x.label).join('/');
+    const hand = p.stats.handElement;
     [p.selfSlots[0], p.selfSlots[1]] = [p.selfSlots[1], p.selfSlots[0]];
     run.refreshStats();
-    return { a, b: p.stats.selfTitle, slots: p.selfSlots.filter(Boolean).length };
+    return {
+      a, b: p.stats.parts.map((x) => x.label).join('/'),
+      hand, hand2: p.stats.handElement,
+      slots: p.selfSlots.filter(Boolean).length,
+    };
   })()`);
-  ok(tail.a === '鋼疾速人', `末尾の「人」が付かない: ${tail.a}`);
-  ok(tail.b === '疾速鋼人', `入れ替えると末尾が変わる: ${tail.b}`);
-  ok(tail.slots === 2, `枠に「人」を入れてしまった: ${tail.slots}`);
-  console.log(`    並べ替え → 「${tail.a}」→「${tail.b}」 末尾は人固定`);
+  ok(swap.a === '鋼の右手/氷の左手', `部位名が「${swap.a}」`);
+  ok(swap.b === '氷の右手/鋼の左手', `入れ替え後の部位名が「${swap.b}」`);
+  ok(swap.slots === 2, `部位の数が変わった: ${swap.slots}`);
+  console.log(`    並べ替え → 「${swap.a}」→「${swap.b}」`);
 }
 
 sec('敵の文が表示される');
@@ -1143,7 +1171,7 @@ sec('遊び方の説明が実装と矛盾していないこと');
     ok(!doc.includes(needle), `玩法説明に古い記述「${needle}」が残っている (${why})`);
   }
   // 例の武器名は現在の形 (末尾語つき) であるべき。
-  for (const t of ['刃必殺剣', '爆裂無双迅早剣', '火球剣']) {
+  for (const t of ['刃必殺剣', '爆裂無双迅早剣', '火刃剣']) {
     ok(doc.includes(t), `玩法説明に例「${t}」が無い`);
   }
   // 末尾語と接続詞の記述があるはず。
@@ -1184,7 +1212,7 @@ sec('ステージ報酬にことばは出ない');
     .map(c => c.dataset.kind)`);
   ok(!kinds.includes('word'), `報酬にことばがある: ${kinds.join(', ')}`);
   for (const k of kinds) {
-    ok(['weapon', 'weaponup', 'self', 'rest'].includes(k), `知らない報酬の種類: ${k}`);
+    ok(['weaponup', 'gem', 'rest'].includes(k), `知らない報酬の種類: ${k}`);
   }
   const dom = await evalJs(`({
     swap: !!document.getElementById('rewardSwap'),

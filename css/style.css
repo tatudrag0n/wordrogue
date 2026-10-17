@@ -193,9 +193,20 @@ code {
 }
 
 .hud-col { min-width: 0; }
-.hud-left  { display: flex; flex-direction: column; gap: 5px; }
+/* 左列は 380px で頭打ちにする。1fr のまま伸ばすと、バーが画面中央の
+   時間表示の手前まで伸びて、ラベルと重なって見える。 */
+.hud-left  { display: flex; flex-direction: column; gap: 5px; width: min(380px, 100%); }
 .hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.hud-center { text-align: center; }
+.hud-center {
+  text-align: center;
+  justify-self: center;
+  padding: 2px 18px 5px;
+  border-radius: 12px;
+  background: rgba(8, 11, 18, .55);
+  border: 1px solid rgba(58, 71, 97, .65);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
 
 .bar {
   position: relative;
@@ -205,25 +216,26 @@ code {
   border-radius: 5px;
   /* 文字を外に出るので切り詰めない。丸い角は fill 側で確保する。 */
   overflow: visible;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .5);
 }
 .bar-fill {
   position: absolute; inset: 0 auto 0 0;
   width: 100%;
-  border-radius: 4px 0 0 4px;
+  border-radius: 4px;
   background: linear-gradient(180deg, #ff6b81, #d92d47);
   transition: width .12s linear;
 }
 .bar-shield {
   position: absolute; inset: 0 auto 0 0;
   width: 0;
-  border-radius: 4px 0 0 4px;
+  border-radius: 4px;
   background: linear-gradient(180deg, #9ae6ff, #3aa9d8);
   opacity: .85;
   transition: width .12s linear;
 }
 .bar-xp { height: 14px; }
 .bar-xp .bar-fill { background: linear-gradient(180deg, #ffe98a, #e8b425); }
-.bar-sta { height: 10px; }
+.bar-sta { height: 12px; }
 .bar-sta .bar-fill {
   background: linear-gradient(180deg, #a8f0c0, #3fbf6a);
   transition: width .06s linear;
@@ -232,10 +244,18 @@ code {
 .bar-sta .bar-fill.empty { background: linear-gradient(180deg, #ff9a9a, #d94848); }
 .bar-sta .bar-text { font-size: .62rem; }
 
+/* 体力が減ったら点滅させる。数値を読む前に気づけるように。 */
+.bar-hp.low { border-color: rgba(255, 84, 112, .7); }
+.bar-hp.low .bar-fill { animation: hpLow 1.1s ease-in-out infinite; }
+@keyframes hpLow {
+  50% { filter: brightness(1.5); }
+}
+
 .hud-self {
   align-self: flex-start;
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 8px;
   max-width: 100%;
   font-size: .92rem;
@@ -253,6 +273,7 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.hud-self-text.el { font-weight: 800; }
 .hud-self-mark {
   font-size: .64rem;
   font-weight: 600;
@@ -280,18 +301,12 @@ code {
   text-shadow: 0 1px 2px rgba(0,0,0,.85);
   letter-spacing: .04em;
 }
-/* 細いバー (経験値 / スタミナ) には、中に文字を入れると読めない。
-   右の外へ出して、横に並べる。 */
+/* 細いバー (経験値 / スタミナ) の文字も中に入れる。外に出すと
+   画面が狭いとき、中央の時間表示に重なって読めなくなる。 */
 .bar-xp .bar-text,
 .bar-sta .bar-text {
-  inset: 50% auto auto 100%;
-  transform: translate(7px, -50%);
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(8, 11, 18, .8);
-  font-size: .68rem;
-  color: #e8f0ff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .95);
+  font-size: .6rem;
+  letter-spacing: .08em;
   white-space: nowrap;
 }
 
@@ -359,6 +374,17 @@ code {
 .hud-num { display: flex; align-items: baseline; gap: 5px; }
 .hud-num b { font-family: var(--mono); font-size: 1.05rem; }
 .hud-num span { font-size: .7rem; color: var(--fg-mute); }
+/* 広い画面ではスコアにも土台を敷いて、左のバーと釣り合わせる。 */
+@media (min-width: 861px) {
+  .hud-num {
+    background: rgba(8, 11, 18, .55);
+    border: 1px solid rgba(58, 71, 97, .65);
+    border-radius: 7px;
+    padding: 1px 9px;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+  }
+}
 
 .hud-btns { display: flex; gap: 6px; margin-top: 2px; }
 .hud-btns .btn-icon { pointer-events: auto; }
@@ -367,6 +393,8 @@ code {
   align-self: center;
   margin-top: 4px;
   padding: 7px 18px;
+  max-width: calc(100vw - 24px);
+  text-align: center;
   background: rgba(10, 14, 22, .92);
   border: 1px solid var(--line-2);
   border-radius: 999px;
@@ -388,6 +416,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 7px;
+  max-width: min(96vw, 600px);
   padding: 10px 12px;
   border-radius: 12px;
   background: rgba(8, 11, 18, .93);
@@ -422,7 +451,7 @@ code {
   text-align: right;
 }
 .hud-choice-timer.urgent { color: #ff9a9a; }
-.hud-choice-list { display: flex; gap: 8px; }
+.hud-choice-list { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .hud-choice-list.small { flex-wrap: wrap; max-width: 420px; }
 .hud-choice-note {
   margin: 0 0 5px;
@@ -548,6 +577,9 @@ code {
 .wchip.broken .wchip-txt { text-decoration: line-through; text-decoration-thickness: 1px; }
 .wchip.idiom { border-color: var(--idiom); }
 .wchip.great { border-color: var(--great); box-shadow: 0 0 0 1px rgba(255,107,139,.35); }
+/* 手の属性が乗っている武器は縁と名前を属性色にする。 */
+.wchip.eled { border-color: var(--el); }
+.wchip.eled .wchip-base { color: var(--el); }
 
 .hud-paused {
   position: absolute; inset: 0;
@@ -556,7 +588,15 @@ code {
   backdrop-filter: blur(2px);
   pointer-events: auto;
 }
-.paused-inner { text-align: center; }
+.paused-inner {
+  text-align: center;
+  padding: 22px 40px;
+  border-radius: 14px;
+  background: rgba(10, 14, 22, .88);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--shadow);
+  animation: rise .18s ease-out;
+}
 .paused-title { font-size: 2rem; font-weight: 700; letter-spacing: .2em; }
 .paused-hint { color: var(--fg-dim); font-size: .84rem; margin-top: 6px; }
 
@@ -653,7 +693,7 @@ code {
 .slot.hinted { border-color: var(--accent); animation: hintPulse 1.1s infinite; }
 @keyframes hintPulse { 50% { box-shadow: 0 0 0 3px rgba(255,212,59,.25); } }
 .slot.drop { border-color: var(--ok); background: #14261a; }
-.slot .empty-mark { color: var(--fg-mute); font-size: 1.1rem; font-weight: 400; }
+.slot .empty-mark { color: var(--fg-mute); font-size: .92rem; font-weight: 600; opacity: .85; }
 
 /* ドラッグ */
 .slot.filled, .pword { cursor: grab; }
@@ -699,6 +739,57 @@ code {
 .sn-empty { color: #3a4459; font-weight: 400; }
 
 .wrow-self { border-color: rgba(255, 212, 59, .35); background: #14120a; }
+
+/* 部位 (右手 / 左手 / 胴 / 頭)。表示は「硬い左手」のように長くなる。 */
+.slots-parts .slot-part {
+  width: auto;
+  min-width: 76px;
+  padding: 0 10px;
+  font-size: .92rem;
+  letter-spacing: .04em;
+}
+.slot-part .part-empty {
+  color: var(--fg-mute);
+  font-size: .84rem;
+  font-weight: 600;
+  opacity: .8;
+}
+
+/* 武器の追加 */
+.wrow-add { border-style: dashed; background: #0d1119; }
+.add-weapon-btn { width: 100%; }
+.add-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.add-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 7px 9px;
+  min-height: 44px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: #131a28;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.add-card:hover { border-color: var(--accent); background: #1a2233; }
+.add-name { font-weight: 700; font-size: .95rem; }
+.add-kind { font-size: .68rem; color: var(--accent); letter-spacing: .06em; }
+.add-desc {
+  font-size: .72rem;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.add-empty { font-size: .82rem; color: var(--fg-mute); }
+.add-close { align-self: flex-start; }
 .wrow-kind {
   font-size: .7rem;
   color: var(--fg-mute);
@@ -894,10 +985,10 @@ code {
 
 .title-record {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
   gap: 10px;
   margin: 30px auto 0;
-  max-width: 480px;
+  max-width: 620px;
 }
 .title-record div { text-align: center; }
 .title-record b {
@@ -1125,22 +1216,35 @@ code {
 .up-buy { font-size: .78rem; padding: 6px 11px; }
 .up-buy.off { opacity: .45; cursor: not-allowed; }
 
-.archive-words { display: flex; gap: 6px; flex-wrap: wrap; }
-.shop-word {
+/* 言葉くじ */
+.lottery-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
   background: #0b0f18;
-  border: 1.5px solid;
+  border: 1px solid var(--line);
   border-radius: var(--r-s);
-  color: var(--fg);
-  font-family: inherit;
+}
+.lottery-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lottery-btn { min-height: 44px; }
+.lottery-btn.off { opacity: .45; cursor: not-allowed; }
+.lottery-count { font-family: var(--mono); font-size: .78rem; color: var(--fg-mute); }
+.lottery-note { font-size: .76rem; color: var(--fg-dim); }
+.lottery-result {
   font-size: .88rem;
   font-weight: 700;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: background .12s;
+  color: var(--accent);
+  letter-spacing: .04em;
 }
-.shop-word:hover { background: #161e2e; }
-.shop-word.can { box-shadow: 0 0 0 2px rgba(255, 212, 59, .22); }
-.shop-word.owned { opacity: .55; cursor: default; color: var(--ok); }
+.lottery-words { display: flex; gap: 5px; flex-wrap: wrap; max-height: 180px; overflow-y: auto; }
+.lottery-chip {
+  font-size: .8rem;
+  font-weight: 700;
+  border: 1.5px solid;
+  border-radius: 6px;
+  padding: 3px 8px;
+}
 
 /* ══ 辞書 ══════════════════════════════════════════════════════════════ */
 
@@ -1243,9 +1347,37 @@ code {
   .hud-timer { font-size: 1.5rem; }
   .hud-top { padding: 8px 10px; gap: 8px; }
   .hud-stats { display: none; }
-  .title-record { grid-template-columns: repeat(2, 1fr); }
+  .hud-center { padding: 1px 10px 3px; border-radius: 10px; }
   .panel { padding: 16px; gap: 12px; }
   .result-stats { grid-template-columns: 1fr; }
+}
+
+/* 携帯。ステージ名は timer の上で幅を食うだけなので畳む。 */
+@media (max-width: 640px) {
+  .hud-stage { display: none; }
+  .hud-timer { font-size: 1.6rem; }
+  .hud-center { padding: 1px 9px 2px; }
+  .bar-hp .bar-text { font-size: .64rem; }
+  .hud-btns { gap: 5px; }
+  .hud-choice { bottom: 84px; padding: 8px 10px; }
+  .choice-card { min-width: 64px; padding: 6px 8px; font-size: .95rem; }
+}
+
+/* 触る端末ではボタンを少し大きく。40px は指には小さすぎる。 */
+@media (pointer: coarse) {
+  .hud-btns .btn-icon { width: 46px; height: 46px; font-size: 1.15rem; }
+}
+
+/* キーボードで操作している間だけ、はっきりした枠を出す。 */
+:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* 動きを減らす設定のひとには、点滅とスライドを見せない。 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001s !important;
+  }
 }
 
 @media (max-height: 560px) {

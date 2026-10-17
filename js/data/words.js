@@ -107,6 +107,14 @@ export const SIMPLE_POOL = Object.keys(WORDS).filter((w) => {
   return !KANA_RE.test(w) && w.length <= 2;
 });
 
+/**
+ * 最初から持っている語。一文字の語と接続詞のすべて。
+ * これ以外の語は言葉くじで引いて増やす。言葉くじは save.js が持つ。
+ */
+export function starterCollection() {
+  return DRAWABLE_ALL.filter((w) => w.length === 1 || WORDS[w].cat === 'connect');
+}
+
 /** 種別ごとの語配列。 */
 export const WORDS_BY_CAT = {
   element: [], form: [], modifier: [], verb: [], buff: [], connect: [],
@@ -383,11 +391,17 @@ export function possibleCompounds(available, limit = 16) {
 /**
  * 語彙から重み付き抽選で語を引く。
  * 接続詞も引けるが、比重は少し下げてある。
+ * opts.pool を渡すと、その中の語だけから引く (言葉くじの所持語)。
  */
 export function drawWord(rng, opts = {}) {
   const cat = opts.cat;
-  const pool = cat ? WORDS_BY_CAT[cat] : DRAWABLE_ALL;
+  let pool = cat ? WORDS_BY_CAT[cat] : DRAWABLE_ALL;
   if (!pool || !pool.length) return null;
+  if (opts.pool) {
+    const allow = opts.pool instanceof Set ? opts.pool : new Set(opts.pool);
+    pool = pool.filter((w) => allow.has(w));
+    if (!pool.length) return null;
+  }
 
   // 重み付き抽選。種別ごとの重みを読む。
   // 接続詞は 14 倍する。語彙が増えても出る確率が下がり続けないようにするためで、
@@ -415,13 +429,21 @@ export function drawWord(rng, opts = {}) {
 /**
  * 開始時に使う語を引く。漢字だけで短い語だけから。
  * 1 語ずつ重複を避けて取る。
+ * pool を渡すと、その中の語だけから引く (言葉くじの所持語)。
  * @param {Function} rng
+ * @param {Set<string>} used
+ * @param {Set<string>|Array<string>|null} pool
  * @returns {object|null}
  */
-export function drawSimple(rng, used = new Set()) {
-  if (!SIMPLE_POOL.length) return null;
+export function drawSimple(rng, used = new Set(), pool = null) {
+  let src = SIMPLE_POOL;
+  if (pool) {
+    const allow = pool instanceof Set ? pool : new Set(pool);
+    src = SIMPLE_POOL.filter((w) => allow.has(w));
+  }
+  if (!src.length) return null;
   for (let tries = 0; tries < 24; tries++) {
-    const w = SIMPLE_POOL[Math.floor(rng() * SIMPLE_POOL.length)];
+    const w = src[Math.floor(rng() * src.length)];
     if (!used.has(w)) { used.add(w); return makeWord(w); }
   }
   return null;

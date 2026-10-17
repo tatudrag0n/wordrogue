@@ -4,15 +4,15 @@
 // 語をクリックして選ぶ -> 枠をクリックで装着。戦闘中でも使える。
 // 開いている間、時間は止まる。
 //
-// 武器の枠のほか、プレイヤー自身の文の枠もある。
-// 武器名はその文そのもの (「爆裂無双雷剣」) になる。
+// 武器の枠のほか、部位 (右手 / 左手 / 胴 / 頭) の枠がある。
+// 武器は言葉鍛冶からいつでも追加できる。
 // ============================================================================
 
 import { $, el, clear } from '../core/util.js';
-import { WORDS, CATEGORIES, CONNECTOR_SET, possibleCompounds, evaluate, makeWord } from '../data/words.js';
+import { WORDS, ELEMENTS, CATEGORIES, CONNECTOR_SET, possibleCompounds } from '../data/words.js';
 import { CONNECTORS, SOURCES_BY_CONNECTOR } from '../data/words.connect.js';
-import { KIND_LABEL } from '../data/weapons.js';
-import { SELF_TAIL } from '../game/stats.js';
+import { WEAPONS, KIND_LABEL } from '../data/weapons.js';
+import { PARTS, partLabel, BUFF_KEYS } from '../game/stats.js';
 import { keyStats } from '../game/weapon.js';
 
 /**
@@ -48,6 +48,8 @@ export class Forge {
     /** 「忘れる」モード。語彙の語をクリックすると捨てる。 */
     this.forgetMode = false;
     this.hintOn = false;
+    /** 武器追加の選択が開いているか。 */
+    this.addOpen = false;
 
     /** ドラッグ中の置き場。{kind, index, wi} */
     this.dragFrom = null;
@@ -77,11 +79,12 @@ export class Forge {
     });
   }
 
-  setRun(run) { this.run = run; this.armed = null; this.forgetMode = false; }
+  setRun(run) { this.run = run; this.armed = null; this.forgetMode = false; this.addOpen = false; }
 
   open() {
     this.armed = null;
     this.forgetMode = false;
+    this.addOpen = false;
     this.forgetBtn.classList.remove('on');
     this.root.hidden = false;
     this.run.paused = true;
@@ -117,7 +120,7 @@ export class Forge {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 武器と自身の文
+  // 武器と部位
   // ───────────────────────────────────────────────────────────────────────────
   renderWeapons() {
     const list = this.listEl;
@@ -162,6 +165,70 @@ export class Forge {
       row.append(this.renderStats(res));
       list.append(row);
     }
+
+    if (this.run.weapons.length < 4) list.append(this.renderAddWeapon());
+  }
+
+  /**
+   * 武器の追加。開いている間だけ 15 種の一覧を出す。
+   * 追加した武器には開始時の 2 語 (startWord / startWord2) が入る。
+   */
+  renderAddWeapon() {
+    const wrap = el('div', { class: 'wrow wrow-add' });
+
+    if (!this.addOpen) {
+      const b = el('button', { class: 'btn add-weapon-btn', type: 'button' },
+        `＋ 武器を追加 (${this.run.weapons.length} / 4)`);
+      b.addEventListener('click', () => {
+        this.opt.audio?.tap?.();
+        this.addOpen = true;
+        this.render();
+      });
+      wrap.append(b);
+      return wrap;
+    }
+
+    wrap.append(el('div', { class: 'wrow-head' },
+      el('span', { class: 'wrow-name' }, '武器を追加'),
+      el('span', { class: 'wrow-kind' }, '基本の 15 種'),
+      el('span', { class: 'wrow-grade grade-plain' }, `${this.run.weapons.length} / 4`),
+    ));
+
+    const grid = el('div', { class: 'add-grid' });
+    for (const id of Object.keys(WEAPONS)) {
+      if (this.run.weapons.some((w) => w.defId === id)) continue;
+      const d = WEAPONS[id];
+      const card = el('button', { class: 'add-card', type: 'button', title: d.desc },
+        el('span', { class: 'add-name' }, d.name),
+        el('span', { class: 'add-kind' }, KIND_LABEL[d.kind] || d.kind),
+        el('span', { class: 'add-desc' }, `開始「${d.startWord}${d.startWord2}」・末尾「${d.tail}」`),
+      );
+      card.addEventListener('click', () => {
+        if (this.run.addWeapon(id)) {
+          const wi = this.run.weapons.at(-1);
+          this.opt.audio?.worn?.(wi.resolve(this.run.player.stats));
+          this.addOpen = false;
+          this.opt.onChange?.();
+        } else {
+          this.opt.audio?.broken?.();
+        }
+        this.render();
+      });
+      grid.append(card);
+    }
+    if (!grid.childElementCount) {
+      grid.append(el('div', { class: 'add-empty' }, '全部の武器を持っている。'));
+    }
+    wrap.append(grid);
+
+    const close = el('button', { class: 'btn add-close', type: 'button' }, 'やめる');
+    close.addEventListener('click', () => {
+      this.opt.audio?.tap?.();
+      this.addOpen = false;
+      this.render();
+    });
+    wrap.append(close);
+    return wrap;
   }
 
   /**
@@ -179,10 +246,10 @@ export class Forge {
         + (word ? ' filled' : '')
         + (this.armed ? ' drop' : '')
         + (isArmed ? ' armed' : '');
-      const node = el('div', { class: cls, title: word ? `${word.text} を戻す` : '空の枠' },
+      const node = el('div', { class: cls, title: word ? `${word.text} を戻す` : '空の枠 — 語をドラッグして装着' },
         word
           ? el('span', {}, word.text)
-          : el('span', { class: 'empty-mark' }, '＿'));
+          : el('span', { class: 'empty-mark' }, '＋'));
       const place = { kind, index: i, wi: wi.wi, wIdx: wi.wIdx };
       // 入ってる語は「タップで選択 + ドラッグで移動」、空の枠はタップのみ。
       if (word) this.makeDraggable(node, place, () => onClick(i));
@@ -203,55 +270,63 @@ export class Forge {
   }
 
   /**
-   * プレイヤー自身の文。「頑強疾走人」のような称号を作る。
+   * 部位 (右手 / 左手 / 胴 / 頭)。語を 1 つずつ置ける。
+   * 表示は「硬い左手」「炎の左手」のようになる。
    */
   renderSelfRow() {
     const p = this.run.player;
     const filled = p.selfSlots.filter(Boolean);
-    // 末尾の「人」も含めて文を評価する (resolvePlayerStats と同じ)。
-    const ev = evaluate([...filled, makeWord(SELF_TAIL)], { minContent: 3 });
-    const row = el('div', { class: 'wrow wrow-self' + (ev.valid ? ' ' + ev.grade : ' broken') });
+    const row = el('div', { class: 'wrow wrow-self' });
 
     row.append(el('div', { class: 'wrow-head' },
-      el('span', { class: 'wrow-name' }, p.stats.selfTitle || '自身'),
-      el('span', { class: 'wrow-kind' }, '称号'),
-      el('span', { class: 'wrow-grade grade-' + (ev.valid ? ev.grade : 'broken') },
-        ev.valid ? ev.gradeInfo.name : '不成文'),
+      el('span', { class: 'wrow-name' }, '部位'),
+      el('span', { class: 'wrow-kind' }, '身体'),
+      el('span', { class: 'wrow-grade grade-plain' },
+        `${filled.length} / ${PARTS.length} 箇所`),
     ));
 
-    if (!ev.valid && filled.length) {
-      row.append(el('div', { class: 'wrow-why' },
-        `${ev.reasonText} — 枠の語を 2 つ以上並べると文になる。`));
-    }
+    row.append(el('div', { class: 'wrow-why' },
+      '語を 1 つずつ置ける。手（右手・左手）の属性語は斬撃・薙ぎの武器に乗る。'));
 
-    row.append(this.renderSlots(
-      { slots: p.selfSlots, tail: SELF_TAIL, kind: 'self' },
-      (i) => this.onSelfSlotClick(i)));
+    const slots = el('div', { class: 'slots slots-parts' });
+    p.selfSlots.forEach((word, i) => {
+      const isArmed = this.armed && word && this.armed === word;
+      const cls = 'slot slot-part'
+        + (word ? ' filled' : '')
+        + (this.armed ? ' drop' : '')
+        + (isArmed ? ' armed' : '');
+      const label = partLabel(i, word);
+      const info = word ? WORDS[word.text] : null;
+      const color = word && info?.el ? ELEMENTS[info.el]?.color : null;
+      const node = el('div', {
+        class: cls,
+        title: word
+          ? `${label} — ${partFxLine(word) || '効果なし'}。タップで選ぶ / ドラッグで移動。`
+          : `${PARTS[i]?.name || `部位${i + 1}`} — 空き。語をドラッグして置く。`,
+        style: color ? { borderColor: color, color } : undefined,
+      }, el('span', {}, word ? label : (PARTS[i]?.name || `部位${i + 1}`)));
+      if (!word) node.firstChild.classList.add('part-empty');
+      const place = { kind: 'self', index: i };
+      if (word) this.makeDraggable(node, place, () => this.onSelfSlotClick(i));
+      else this.makeTappable(node, () => this.onSelfSlotClick(i));
+      this.makeDropTarget(node, place);
+      slots.append(node);
+    });
+    row.append(slots);
 
-    // 文面。末尾の「人」は枠の外に固定で付く。
-    const joined = p.selfSlots.filter(Boolean).map((w) => w.text).join('') + SELF_TAIL;
-    const right = el('span', { class: 'sn-res' },
-      el('span', { class: 'sn-eq' }, '= '),
-      el('b', { class: 'sn-text' }, joined || '—'),
-    );
-    if (ev.valid) {
-      right.append(el('span', { class: 'sn-seg' },
-        ev.segments.map((s) => el('i', { class: `sg ${catClass({ text: s })}` }, s))));
-    }
-    row.append(el('div', { class: 'sentence' }, right));
-
-    // 乗っている自身の効果。
-    const fx = [];
-    for (const w of p.selfSlots) {
-      if (!w || !w.player) continue;
-      for (const [k, v] of Object.entries(w.player)) {
-        fx.push(`${PS_LABEL[k] || k}${v > 0 ? '+' : ''}${Math.round(v * 100) / 100}`);
+    // 乗っている部位の効果。プレイヤーに効くキーだけ並べる。
+    const stats = el('div', { class: 'wrow-stats' });
+    for (const w of filled) {
+      for (const [k, v] of Object.entries(w.fx || {})) {
+        if (!BUFF_KEYS.has(k) || !v) continue;
+        stats.append(el('span', { class: 'stat up' },
+          `${PS_LABEL[k] || k}${v > 0 ? '+' : ''}${round(v)}`));
       }
     }
-    const stats = el('div', { class: 'wrow-stats' });
-    for (const t of fx) stats.append(el('span', { class: 'stat up' }, t));
-    if (ev.valid) {
-      stats.append(el('span', { class: 'stat idom' }, `文の力 x${p.stats.selfPower.toFixed(2)}`));
+    if (p.stats.handElement) {
+      const elInfo = ELEMENTS[p.stats.handElement] || ELEMENTS.none;
+      stats.append(el('span', { class: 'stat idom' },
+        `手の属性 → 接触武器に ${elInfo.name}`));
     }
     if (stats.childNodes.length) row.append(stats);
     return row;
@@ -372,7 +447,7 @@ export class Forge {
     const sel = this.armed;
     if (!sel) {
       d.append(el('span', { class: 'dt' }, '語を選んでから枠をクリック'));
-      d.append(el('span', { class: 'dl' }, '語彙か武器か自身の枠。枠を空けると文が崩れる。'));
+      d.append(el('span', { class: 'dl' }, '語彙か武器か部位の枠。枠を空けると文が崩れる。'));
       return;
     }
 
@@ -387,7 +462,7 @@ export class Forge {
     }
     if (info?.player) {
       for (const [k, v] of Object.entries(info.player)) {
-        parts.push(`自身 ${PS_LABEL[k] || k} ${v > 0 ? '+' : ''}${round(v)}`);
+        parts.push(`身体 ${PS_LABEL[k] || k} ${v > 0 ? '+' : ''}${round(v)}`);
       }
     }
     d.append(el('span', { class: 'dl' }, parts.length ? parts.join('  ') : '効果なし'));
@@ -720,6 +795,16 @@ export class Forge {
 }
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
+
+/** 部位 1 つの効果を 1 行にまとめる。プレイヤーに効くキーだけ。 */
+function partFxLine(w) {
+  const out = [];
+  for (const [k, v] of Object.entries(w.fx || {})) {
+    if (!BUFF_KEYS.has(k) || !v) continue;
+    out.push(`${PS_LABEL[k] || k}${v > 0 ? '+' : ''}${round(v)}`);
+  }
+  return out.join(' ');
+}
 
 /** この接続詞に結合できる語を並べる。 */
 function CONNECTOR_SOURCES_OF(conn) {

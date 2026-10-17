@@ -42,8 +42,9 @@ export class Run {
    * @param {object}  opt.save
    * @param {object}  opt.audio
    * @param {number}  [opt.lexiconSize]
-   * @param {string}[][opt.startingWords]
+   * @param {string[]}[opt.collection] 言葉くじで持っている語。ランに出る語はこれだけ。
    * @param {string[]}[opt.weaponIds]
+   * @param {number}  [opt.weaponLevels] 武器 id ごとの開始レベル
    */
   constructor(opt) {
     this.stage = getStage(opt.stageId);
@@ -55,6 +56,9 @@ export class Run {
     this.lexiconBase = opt.lexiconSize ?? 12;
     this.lexiconGrown = bought;
     this.rand = opt.rng || rng;
+    // ランに出る語の源。言葉くじの持ち物。null なら全語 (テスト用)。
+    const collection = opt.collection || opt.startingWords || null;
+    this.wordPool = collection && collection.length ? new Set(collection) : null;
     // 描画側から毎フレーム更新される画面サイズ。
     this.viewW = opt.viewW || 960;
     this.viewH = opt.viewH || 600;
@@ -71,7 +75,7 @@ export class Run {
       // スタミナとダッシュ
       stamina: 100, maxStamina: 100,
       dashing: false, dashCd: 0, dashTrail: [],
-      // プレイヤー自身の文
+      // 部位 (右手 / 左手 / 胴 / 頭)。語を 1 つずつ置ける。
       selfSlots: new Array(opt.selfSlots ?? 4).fill(null),
       stats: { ...BASE_PLAYER },
       alive: true,
@@ -87,7 +91,7 @@ export class Run {
 
     // ── 武器 ──
     this.weapons = [];
-    const avail = startingWeaponsFor(this.stage.id);
+    const avail = startingWeaponsFor();
     const wantIds = (opt.weaponIds && opt.weaponIds.length ? opt.weaponIds : ['sword', 'gun']).slice(0, 4);
     for (const id of wantIds) {
       if (!WEAPONS[id]) continue;
@@ -102,17 +106,18 @@ export class Run {
       if (wi.def.startWord2) wi.setSlot(1, makeWord(wi.def.startWord2));
     }
 
-    // 語彙に語を渡す。セーブの恒久語 → 抽選の順。
-    for (const w of (opt.startingWords || [])) this.addWord(makeWord(w), true);
     // 開始時は漢字だけの短い語。漢字だけの武器を組み立てる土台にする。
+    // 言葉くじの持ち物の中からだけ引く。
     const fill = opt.lexiconFill ?? 10;
-    for (let i = this.lexicon.filter(Boolean).length; i < fill; i++) {
-      const w = drawSimple(this.rand);
-      if (w) this.addWord(w, true);
+    const used = new Set();
+    for (let i = 0; i < fill; i++) {
+      const w = drawSimple(this.rand, used, this.wordPool);
+      if (!w) break;
+      this.addWord(w, true);
     }
     for (const w of (opt.extraWords || [])) this.addWord(makeWord(w.text), true, true);
 
-    // プレイヤー自身の文。最初は何も入れない。
+    // 部位の文。最初は何も入れない。
     for (const t of (opt.selfWords || [])) {
       const idx = this.player.selfSlots.indexOf(null);
       if (idx < 0) break;
@@ -138,6 +143,9 @@ export class Run {
     this.beams = [];
     this.dmgTexts = [];
     this.corpses = [];
+    this.particles = [];
+    this.flashFx = 0;
+    this.hurtFlash = 0;
 
     this.kills = 0;
     this.dmgDealt = 0;
@@ -176,6 +184,30 @@ export class Run {
       if (p.hp <= 0 && ratio > 0) p.hp = 1;
     }
     p.r = 13 * s.size;
+  }
+
+  /** 武器を追加できるか。上限 4 本、同じ武器は 1 本まで。 */
+  canAddWeapon(id) {
+    if (!WEAPONS[id]) return false;
+    if (this.weapons.length >= 4) return false;
+    return !this.weapons.some((w) => w.defId === id);
+  }
+
+  /**
+   * 武器をその場で追加する。言葉鍛冶からいつでも呼べる。
+   * 開始時の 2 語 (startWord / startWord2) を枠に入れて渡す。
+   * @returns {boolean} 追加できたか
+   */
+  addWeapon(id, level = 1) {
+    if (!this.canAddWeapon(id)) return false;
+    const def = WEAPONS[id];
+    const wi = new WeaponInst(id, level);
+    if (def.startWord) wi.setSlot(0, makeWord(def.startWord));
+    if (def.startWord2) wi.setSlot(1, makeWord(def.startWord2));
+    this.weapons.push(wi);
+    this.refreshStats();
+    this.pushHint(`${def.name} を加えた`);
+    return true;
   }
 
   /**
@@ -244,16 +276,16 @@ export class Run {
   grantLevelWords(level) {
     const n = level % 5 === 0 ? 2 : 1;   // 5 の倍数のときは 2 回
     for (let i = 0; i < n; i++) this.offerWordChoices();
-    // 自分自身の文にも入ることがある。
+    // 部位にも入ることがある。
     if (level % 4 === 1) {
       const free = this.player.selfSlots.indexOf(null);
       if (free >= 0) {
-        const w = drawWord(this.rand, { cat: 'buff' });
+        const w = drawWord(this.rand, { cat: 'buff', pool: this.wordPool });
         if (w) {
           w.t = ++this.wordSeq;
           this.player.selfSlots[free] = w;
           this.refreshStats();
-          this.pushHint(`自身の文に「${w.text}」を迎えた`);
+          this.pushHint(`部位に「${w.text}」を迎えた`);
         }
       }
     }
@@ -267,7 +299,7 @@ export class Run {
     const pool = [];
     const seen = new Set();
     for (let i = 0; i < WORD_CHOICES * 3 && pool.length < WORD_CHOICES; i++) {
-      const w = drawWord(this.rand);
+      const w = drawWord(this.rand, { pool: this.wordPool });
       if (!w || seen.has(w.text)) continue;
       seen.add(w.text);
       pool.push(w);
@@ -334,7 +366,7 @@ export class Run {
 
   /**
    * 語彙から 1 語を忘れる (捨てる)。
-   * 武器や自身の文にある語は入れない。
+   * 武器や部位にある語は入れない。
    * @returns {string|null} 忘れた語
    */
   forgetWord(word) {
@@ -389,7 +421,7 @@ export class Run {
   /**
    * 語彙へ戻す。
    *
-   * 語彙が満杯のときは武器や自身から語を外せない。返回值 reason で理由を返す。
+   * 語彙が満杯のときは武器や部位から語を外せない。返回值 reason で理由を返す。
    * 以前は空きがないのに外。結果として語が消えていた。
    * @returns {{ok:boolean, reason:string}}
    */
@@ -423,7 +455,7 @@ export class Run {
     return null;
   }
 
-  /** 語彙・武器・自身のうちどれかへ装着する。 */
+  /** 語彙・武器・部位のうちどれかへ装着する。 */
   placeWordAnywhere(wi, slotIndex, word) {
     if (!word) return { ok: false, reason: 'noword' };
     if (slotIndex < 0 || slotIndex >= wi.slots.length) {
@@ -449,7 +481,7 @@ export class Run {
     return { ok: true, reason: 'placed' };
   }
 
-  /** プレイヤーの文に語を入れる。 */
+  /** 部位に語を入れる。 */
   placeSelfWord(index, word) {
     const slots = this.player.selfSlots;
     if (index < 0 || index >= slots.length) return { ok: false, reason: 'range' };
@@ -472,7 +504,7 @@ export class Run {
   }
 
   /**
-   * 語を武器のスロットに入れる。語彙か自身の文から取り除く。
+   * 語を武器のスロットに入れる。語彙か部位から取り除く。
    */
   placeWord(wi, slotIndex, word) {
     if (!word) return { ok: false, reason: 'noword' };
@@ -485,7 +517,7 @@ export class Run {
    * 置き場の種類:
    *   { kind: 'lexicon', index }   語彙
    *   { kind: 'slot', wi, index } 武器
-   *   { kind: 'self', index }     自身の文
+   *   { kind: 'self', index }     部位
    *
    * 語彙の空き数が増える入れ替えはしない (語が消えるため)。
    * @returns {{ok:boolean, reason:string}}
@@ -533,6 +565,33 @@ export class Run {
   // ───────────────────────────────────────────────────────────────────────────
   pushHint(text) { this.hint = text; this.hintT = 2.6; }
   shake(v) { if (this.shakeOn) this.shakeAmt = Math.min(26, this.shakeAmt + v); }
+
+  /**
+   * 粒を撒く。殺し・爆発・火花などの見た目はここに集約する。
+   * 乱数は Math.random を使い、遊びの乱数 (this.rand) には触れない。
+   */
+  burst(x, y, n, color, o = {}) {
+    if (!(n > 0)) return;
+    const spd = o.spd ?? 160;
+    const spdMin = o.spdMin ?? spd * 0.25;
+    const life = o.life ?? 0.55;
+    const r = o.r ?? 3.2;
+    const rMax = o.rMax ?? r * 1.4;
+    for (let i = 0; i < n; i++) {
+      const a = o.a != null ? o.a + (Math.random() - 0.5) * (o.spread ?? 0.8) : Math.random() * TAU;
+      const s = spdMin + Math.random() * (spd - spdMin);
+      const l = life * (0.6 + Math.random() * 0.8);
+      this.particles.push({
+        x, y,
+        vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+        r: r + Math.random() * (rMax - r),
+        life: l, maxLife: l,
+        color, grav: o.grav || 0, drag: o.drag ?? 3.2,
+        shape: o.shape || 'dot',
+      });
+    }
+    if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
+  }
 
   damageNumbers(x, y, v, crit) {
     if (!this.showDamage || this.dmgTexts.length > 70) return;
@@ -632,6 +691,17 @@ export class Run {
     this.kills++;
     this.corpses.push({ x: e.x, y: e.y, r: e.r, color: e.def.color, life: 0.4, maxLife: 0.4 });
     this.audio.kill();
+    this.burst(e.x, e.y, e.boss ? 42 : Math.min(20, 8 + Math.round(e.r)), e.def.color, {
+      spd: e.boss ? 340 : 210,
+      life: e.boss ? 0.9 : 0.55,
+      r: e.boss ? 5 : 3.2,
+    });
+    this.rings.push({
+      x: e.x, y: e.y, r: e.r + 6,
+      life: 0.28, maxLife: 0.28, color: e.def.color, w: 0.55,
+    });
+    if (e.boss) this.flashFx = Math.min(1, this.flashFx + 0.55);
+    else this.flashFx = Math.min(0.5, this.flashFx + 0.05);
 
     const xp = e.xp * (1 + (this.stage.id - 1) * 0.12);
     const n = clamp(Math.floor(xp / 2.5), 1, 6);
@@ -688,6 +758,8 @@ export class Run {
     p.invuln = 0.6;
     p.flash = 1;
     this.dmgTaken += dmg;
+    this.hurtFlash = 1;
+    this.burst(p.x, p.y, 10, '#ff5470', { spd: 180, life: 0.4, r: 2.6 });
     this.shake(7);
     this.audio.hurt();
     this.slowmo = 0.06;
@@ -814,6 +886,14 @@ export class Run {
     if (p.dashing) {
       p.dashTrail.push({ x: p.x, y: p.y, a: p.face, life: 0.22, maxLife: 0.22 });
       if (p.dashTrail.length > 14) p.dashTrail.shift();
+      p.dustT = (p.dustT || 0) - dt;
+      if (p.dustT <= 0) {
+        p.dustT = 0.035;
+        this.burst(p.x - Math.cos(p.face) * 10, p.y - Math.sin(p.face) * 10, 1, '#ffd43b', {
+          spd: 60, spdMin: 10, life: 0.3, r: 2.4, drag: 6,
+          a: p.face + Math.PI, spread: 1.2,
+        });
+      }
     }
     for (let i = p.dashTrail.length - 1; i >= 0; i--) {
       p.dashTrail[i].life -= dt;
@@ -897,6 +977,9 @@ export class Run {
       });
       b.st = st; b.wi = wi; b.continuous = true;
       this.bullets.push(b);
+      if (Math.random() < 0.12 && this.particles.length < 380) {
+        this.burst(b.x, b.y, 1, col, { spd: 40, spdMin: 0, life: 0.32, r: 2, drag: 5 });
+      }
     }
   }
 
@@ -941,13 +1024,28 @@ export class Run {
 
       // 爆弾は敵に触れたら炸る。
       if (b.kindName === 'bomb') {
+        if (Math.random() < 0.5 && this.particles.length < 400) {
+          this.burst(b.x - b.vx * 0.02, b.y - b.vy * 0.02, 1, '#2a2028', {
+            spd: 24, spdMin: 0, life: 0.5, r: 3.4, drag: 2,
+          });
+          this.burst(b.x, b.y, 1, b.color || '#fff', { spd: 40, spdMin: 0, life: 0.22, r: 1.8, drag: 6 });
+        }
         if (this.nearestEnemy(b.x, b.y, null, 20 + b.r)) {
           this.explode(b, b.st);
           this.bullets.splice(i, 1);
           continue;
         }
       }
-      if (b.enemy) { this.bullets.splice(i, 1); continue; }
+      if (b.enemy) {
+        // 敵弾はプレイヤーに当たる。
+        const rr = b.r + this.player.r;
+        if (dist2(b.x, b.y, this.player.x, this.player.y) <= rr * rr) {
+          this.hurtPlayer(b.dmg || 10);
+          b.dead = true;
+        }
+        if (b.dead) this.bullets.splice(i, 1);
+        continue;
+      }
 
       const st = b.st || {
         dmg: b.dmg || 5, crit: 0, critDmg: 1.5, lifesteal: 0, pierce: 0, knock: 0, size: 1, el: 'none',
@@ -967,6 +1065,13 @@ export class Run {
           burn: b.burn, poison: b.poison, chill: b.chill, shock: b.shock, freeze: b.freeze,
         });
         this.audio.hit();
+        if (this.particles.length < 380) {
+          const col = (ELEMENTS[b.element || st.el] || ELEMENTS.none).color;
+          this.burst(b.x, b.y, 3, col, {
+            spd: 140, life: 0.26, r: 2,
+            a: Math.atan2(-(b.vy || -1), -(b.vx || 0.001)), spread: 1.6,
+          });
+        }
 
         if (b.pierce > 0) b.pierce--;
         else b.dead = true;
@@ -991,12 +1096,17 @@ export class Run {
 
   explode(b, st) {
     const r = 40 + (st?.area || 0) + (b.explode || 0) * 0.55;
+    const col = (ELEMENTS[b.element] || ELEMENTS.none).color;
     this.fields.push(makeField(b.x, b.y, r, Math.max(1, (st?.dmg || 6) * 0.8), {
       life: 0.3,
       element: b.element || st?.el,
       burn: b.burn, poison: b.poison, chill: b.chill, shock: b.shock, freeze: b.freeze,
       knock: st?.knock,
     }));
+    this.burst(b.x, b.y, 18, col, { spd: 300, life: 0.65, r: 3.6, grav: 90 });
+    this.burst(b.x, b.y, 8, '#1c1618', { spd: 90, life: 1.1, r: 6, rMax: 9, drag: 1.6 });
+    this.rings.push({ x: b.x, y: b.y, r: r * 0.92, life: 0.26, maxLife: 0.26, color: col, w: 0.8 });
+    this.flashFx = Math.min(1, this.flashFx + 0.12 + (b.explode || 0) * 0.004);
     this.audio.explode();
     this.shake(5 + (b.explode || 0) * 0.07);
   }
@@ -1074,16 +1184,24 @@ export class Run {
     if (q.type === 'xp') {
       p.xp += q.value * (p.stats.xpMul || 1);
       this.audio.xp();
+      this.burst(q.x, q.y, 3, '#ffd43b', { spd: 90, life: 0.3, r: 2 });
       while (p.xp >= p.xpNext) {
         p.xp -= p.xpNext;
         p.level++;
         p.xpNext = Math.round(5 + p.level * 4 + p.level ** 1.7);
         this.grantLevelWords(p.level);
+        this.burst(p.x, p.y, 30, '#ffd43b', { spd: 300, life: 0.8, r: 3.6, grav: -40 });
+        this.rings.push({
+          x: p.x, y: p.y, r: p.r * 2.4,
+          life: 0.5, maxLife: 0.5, color: '#ffd43b', w: 1.6,
+        });
+        this.flashFx = Math.min(1, this.flashFx + 0.16);
         this.onLevelUp?.(p.level);
       }
     } else if (q.type === 'heal') {
       this.healPlayer(q.value);
       this.audio.pickup();
+      this.burst(q.x, q.y, 12, '#7dff9b', { spd: 130, life: 0.55, r: 2.8, grav: -60 });
       this.pushHint(`回復 ${q.value}`);
     }
   }
@@ -1122,9 +1240,26 @@ export class Run {
       t.vy *= Math.pow(0.06, this._lastDt);
       if (t.life <= 0) this.dmgTexts.splice(i, 1);
     }
+
+    const pd = this._lastDt;
+    if (pd > 0) {
+      for (let i = this.particles.length - 1; i >= 0; i--) {
+        const q = this.particles[i];
+        q.life -= pd;
+        if (q.life <= 0) { this.particles.splice(i, 1); continue; }
+        const dr = Math.exp(-(q.drag || 3) * pd);
+        q.vx *= dr; q.vy *= dr;
+        if (q.grav) q.vy += q.grav * pd;
+        q.x += q.vx * pd;
+        q.y += q.vy * pd;
+      }
+    }
   }
 
-  fxTick() { /* 画面上の告诉了は描画側 */ }
+  fxTick(dt) {
+    if (this.flashFx > 0) this.flashFx = Math.max(0, this.flashFx - dt * 3.2);
+    if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - dt * 2.4);
+  }
 
   // ───────────────────────────────────────────────────────────────────────────
   // ボス行動
@@ -1177,7 +1312,7 @@ export class Run {
   spawnEnemyShot(x, y, a, speed, dmg, color) {
     this.bullets.push(makeBullet({
       x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
-      r: 9, size: 1, life: 5, pierce: 0,
+      r: 9, size: 1, life: 5, pierce: 0, dmg: dmg || 12,
       color: color || '#f88', kindName: 'eshot', enemy: true,
     }));
   }

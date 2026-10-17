@@ -19,37 +19,17 @@ let wUid = 0;
 
 /**
  * 末尾語を描画用の形と攻撃の種類に対応させる。
- * 武器の tail だけがここを通るので、名前と攻撃が必ず一致する。
+ * 基本の 15 武器語だけ。武器の tail だけがここを通るので、
+ * 名前と攻撃が必ず一致する。
  */
 const FORM_INFO = {
-  // 斬撃
-  剣: ['blade', 'slash'], 刃: ['blade', 'slash'], 短刀: ['blade', 'slash'],
-  太刀: ['blade', 'slash'], 大剣: ['blade', 'slash'],
-  利爪: ['blade', 'slash'], 尖牙: ['blade', 'slash'],
-  // 射撃
-  弾: ['shot', 'shot'], 矢: ['arrow', 'shot'], 針: ['arrow', 'shot'],
-  球: ['orb', 'shot'], 岩塊: ['orb', 'shot'], 竜頭: ['arrow', 'shot'],
-  夾撃: ['arrow', 'shot'], 乱打: ['shot', 'shot'], 殲滅: ['orb', 'shot'],
-  貫通: ['arrow', 'shot'], 複製: ['orb', 'shot'],
-  銃: ['shot', 'shot'], 弓: ['arrow', 'shot'],
-  // 爆弾
-  爆弾: ['bomb', 'bomb'], 彗星: ['orb', 'bomb'],
-  // 連鎖
-  雷: ['shot', 'chain'], 雷神: ['shot', 'chain'],
-  // 軌道
-  環: ['blade', 'orbit'], 回転: ['blade', 'orbit'], 回転刃: ['blade', 'orbit'],
-  // 環刃 (戻る刃)
-  環刃: ['blade', 'boomerang'],
-  // 薙ぎ
-  鞭: ['blade', 'whip'], 嵐: ['orb', 'whip'],
-  // 城壁
-  壁: ['orb', 'aura'], 棘壁: ['orb', 'aura'],
-  // 光線
-  光線: ['arrow', 'beam'], 反射: ['blade', 'beam'],
-  // 追加武器の末尾語
-  太刀: ['blade', 'slash'], 針: ['arrow', 'shot'], 岩塊: ['orb', 'bomb'],
-  利爪: ['blade', 'whip'], 竜頭: ['arrow', 'shot'], 複製: ['orb', 'shot'],
-  大剣: ['blade', 'whip'], 夾撃: ['arrow', 'shot'], 乱打: ['shot', 'shot'],
+  剣: ['blade', 'slash'], 刃: ['blade', 'slash'], 刀: ['blade', 'slash'],
+  槍: ['blade', 'slash'], 矛: ['blade', 'slash'], 牙: ['blade', 'slash'],
+  拳: ['blade', 'slash'],
+  斧: ['blade', 'whip'], 爪: ['blade', 'whip'], 鞭: ['blade', 'whip'],
+  鎖: ['blade', 'boomerang'],
+  杖: ['arrow', 'beam'],
+  銃: ['shot', 'shot'], 弓: ['arrow', 'shot'], 針: ['arrow', 'shot'],
 };
 
 /**
@@ -150,7 +130,8 @@ export class WeaponInst {
    *   evalResult:object, text:string, dps:number}}
    */
   resolve(ps) {
-    const sig = this.level + '|' + this.slots.map((s) => (s ? s.uid : '-')).join(',');
+    const sig = this.level + '|' + this.slots.map((s) => (s ? s.uid : '-')).join(',')
+      + '|' + (ps.rev || 0);
     if (this._sig === sig && this._cache) return this._cache;
 
     const e = this.evaluate();
@@ -191,11 +172,7 @@ export class WeaponInst {
     // 文の効果を base に加算する。
     for (const [k, v] of Object.entries(fx)) {
       if (k === 'power' || k === 'atkMul' || k === 'xpMul' || k === 'hpMul' || k === 'slowImmune') continue;
-      if (k === 'split' || k === 'bounce' || k === 'chain' || k === 'count' || k === 'pierce' || k === 'orbit') {
-        st[k] = (st[k] || 0) + v;
-      } else {
-        st[k] = (st[k] || 0) + v;
-      }
+      st[k] = (st[k] || 0) + v;
     }
 
     // プレイヤー能力との合成。
@@ -243,6 +220,15 @@ export class WeaponInst {
     st.reflect = st.reflect || 0;
     // 弾・分裂・フィールドが参照する属性。
     st.el = e.element;
+    // 手の部位に属性語があると、接触する近接武器 (斬撃・薙ぎ) がその属性を纏う。
+    // 文の側に属性が無いときだけ。手の属性は部位強化が担う。
+    if (st.el === 'none' && ps.handElement
+      && (out.kind === 'slash' || out.kind === 'whip')) {
+      st.el = ps.handElement;
+      if (ps.handStatus) {
+        for (const [k, v] of Object.entries(ps.handStatus)) st[k] = (st[k] || 0) + v;
+      }
+    }
     // 描画用の形。形態語が鍵になる。
     st.shape = form.shape;
     st.kind = out.kind;

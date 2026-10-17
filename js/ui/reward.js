@@ -1,13 +1,12 @@
 // ============================================================================
 // ワードローグ — 報酬画面
 //
-// ステージクリア時に「武器 / 武器強化 / 休息」から 1 つ選ぶ。
+// ステージクリア時に「武器強化 / 言玉 / 休息」から 1 つ選ぶ。
+// 武器の追加は言葉鍛冶で自由にできるので、ここには出さない。
 // ことばは戦闘中のレベルアップで入るので、ここでは配らない。
 // ============================================================================
 
 import { $, el, clear } from '../core/util.js';
-import { WEAPONS, slotsForLevel } from '../data/weapons.js';
-import { WeaponInst } from '../game/weapon.js';
 import { LEXICON_MAX } from '../game/run.js';
 
 /** 言玉 1 個で増える語彙の容量。 */
@@ -77,7 +76,6 @@ export class RewardScreen {
 }
 
 const KIND_LABEL = {
-  weapon:   '武器',
   weaponup: '武器強化',
   gem:      '言玉',
   rest:     '休息',
@@ -92,14 +90,7 @@ const KIND_LABEL = {
 export function rollRewards(run, save, opts = {}) {
   const rand = run.rand;
   const out = [];
-  const stageId = run.stage.id;
   const poolSize = opts.count || 3;
-
-  const has = (id) => run.weapons.some((w) => w.defId === id);
-  const unlocked = (id) => {
-    const u = WEAPONS[id].unlock;
-    return !u || u.stage <= stageId;
-  };
 
   // ── 武器強化。持ってる武器は 1 枚ずつ候補に出す ──
   // 強化できる武器が 1 つしかないとカードの枠が空くので、
@@ -124,29 +115,6 @@ export function rollRewards(run, save, opts = {}) {
       fx: `威力 +${w.def.grow.dmg.toFixed(1)}  攻撃/秒 +${w.def.grow.rate.toFixed(2)}`,
       apply: () => {
         w.levelUp();
-        run.refreshStats();
-      },
-    });
-  }
-
-  // ── 新武器 ──
-  const newWeapons = Object.keys(WEAPONS)
-    .filter((id) => unlocked(id) && !has(id) && run.weapons.length < 4);
-  if (newWeapons.length && out.length < poolSize) {
-    const id = newWeapons[rand.int(newWeapons.length)];
-    const d = WEAPONS[id];
-    out.push({
-      kind: 'weapon',
-      id: `new:${id}`,
-      word: null,
-      glyph: d.name,
-      color: 'var(--thunder)',
-      name: `${d.name} を手に入れる`,
-      desc: `${d.desc} 開始「${d.startWord}${d.startWord2}」・末尾「${d.tail}」`,
-      fx: `枠 ${slotsForLevel(d, 1)} 個`,
-      apply: () => {
-        run.weapons.push(new WeaponInst(id, 1));
-        save.unlockWeapon(id);
         run.refreshStats();
       },
     });

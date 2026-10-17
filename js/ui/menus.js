@@ -5,10 +5,10 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, startingWeaponsFor, slotsForLevel, KIND_LABEL } from '../data/weapons.js';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js';
+import { WEAPONS, slotsForLevel, KIND_LABEL } from '../data/weapons.js';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS, DRAWABLE_ALL } from '../data/words.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { META_UPGRADES, SHOP_WORDS } from '../core/save.js';
+import { META_UPGRADES, LOTTERY_COST } from '../core/save.js';
 
 export class Menus {
   /** @param {{save:object, audio:object}} opt */
@@ -43,10 +43,12 @@ export class Menus {
     this.dictQuery = '';
     this.dictCat = 'all';
 
-    /** @type {number[]} 選択中のステージ */
-    this.picked = [];
+    /** @type {number[]} 選択中の武器 */
+    this.picked = ['sword', 'gun'];
     /** @type {number} いま選んでいるステージ */
     this.stageId = 1;
+    /** 直近に引いた言葉くじの語。 */
+    this.lastDrawn = '';
     this.cb = {};
 
     this.bind();
@@ -143,24 +145,54 @@ export class Menus {
     }
 
     clear(this.archiveWords);
-    for (const w of SHOP_WORDS) {
-      const owned = save.hasStartingWord(w.text);
-      const can = !owned && save.ink >= w.cost;
-      const word = WORDS[w.text];
-      const b = el('button', {
-        class: 'shop-word' + (owned ? ' owned' : '') + (can ? ' can' : ''),
-        style: { borderColor: (CATEGORIES[word?.cat] || {}).color || '#8ab4ff' },
-        title: `${w.text} [${(CATEGORIES[word?.cat] || {}).name || '?'}]`,
-      }, owned ? `${w.text} ✓` : `${w.text}  ${w.cost}`);
-      b.addEventListener('click', () => {
-        if (owned) return;
-        const r = this.save.buyWord(w.text);
-        if (r.ok) this.audio?.phrase?.();
-        else this.audio?.broken?.();
-        this.renderArchive();
-      });
-      this.archiveWords.append(b);
+    // 言葉くじ。墨を払って、まだ持っていない語を 1 つ引く。
+    const total = DRAWABLE_ALL.length;
+    const remaining = save.lotteryRemaining;
+    const canDraw = remaining > 0 && save.ink >= LOTTERY_COST;
+    const box = el('div', { class: 'lottery-box' },
+      el('div', { class: 'lottery-line' },
+        el('button', {
+          class: 'btn lottery-btn' + (canDraw ? '' : ' off'),
+          type: 'button',
+          disabled: !canDraw,
+        }, remaining > 0 ? `くじを引く（${LOTTERY_COST} 墨）` : '全部引いた'),
+        el('span', { class: 'lottery-count' }, `所持 ${total - remaining} / ${total} 語`),
+      ),
+      el('div', { class: 'lottery-note' },
+        '引いた語だけがラン中の語彙・3 択・部位に出る。'),
+    );
+    box.querySelector('.lottery-btn').addEventListener('click', () => {
+      const r = this.save.drawLottery();
+      if (r.ok) {
+        this.lastDrawn = r.text;
+        this.audio?.phrase?.();
+      } else {
+        this.audio?.broken?.();
+      }
+      this.renderArchive();
+    });
+    if (this.lastDrawn) {
+      box.append(el('div', { class: 'lottery-result' }, `「${this.lastDrawn}」を引いた`));
     }
+    // 持っている語の一覧。種別の色で並べる。
+    const chips = el('div', { class: 'lottery-words' });
+    const order = Object.keys(CATEGORIES);
+    const own = save.d.collection.slice().sort((a, b) => {
+      const wa = WORDS[a], wb = WORDS[b];
+      const d = order.indexOf(wa?.cat) - order.indexOf(wb?.cat);
+      return d !== 0 ? d : a.localeCompare(b, 'ja');
+    });
+    for (const text of own) {
+      const w = WORDS[text];
+      const cat = CATEGORIES[w?.cat] || { name: '?', color: '#8ab4ff' };
+      chips.append(el('span', {
+        class: 'lottery-chip',
+        style: { borderColor: cat.color, color: cat.color },
+        title: cat.name,
+      }, text));
+    }
+    box.append(chips);
+    this.archiveWords.append(box);
   }
 
   // ── タイトル ────────────────────────────────────────────────────────────
@@ -214,14 +246,12 @@ export class Menus {
   // ── 武器選択 ────────────────────────────────────────────────────────────
   showLoadout(stageId) {
     this.stageId = stageId;
-    this.picked = this.save.d.unlockedWeapons
-      .filter((id) => WEAPONS[id])
-      .slice(0, 2);
+    this.picked = this.picked.filter((id) => WEAPONS[id]).slice(0, 4);
     if (!this.picked.length) this.picked = ['sword', 'gun'];
 
     const st = STAGES.find((s) => s.id === stageId);
     this.loadoutTitle.textContent = `第 ${stageId} 戦・${st.name}`;
-    this.loadoutSub.textContent = '武器を 1〜4 つ選べ。武器ごとに末尾の語が決まっている。';
+    this.loadoutSub.textContent = '武器を 1〜4 つ選べ。基本の 15 種はいつでも使える。';
 
     this.renderLoadout();
     this.hideAll();
@@ -231,33 +261,25 @@ export class Menus {
   renderLoadout() {
     const list = this.loadoutList;
     clear(list);
-    const avail = startingWeaponsFor(this.stageId);
 
     for (const id of Object.keys(WEAPONS)) {
       const d = WEAPONS[id];
-      const usable = avail.includes(id);
       const on = this.picked.includes(id);
-      const lockedByProgress = !!d.unlock && d.unlock.stage > this.stageId;
 
       const card = el('button', {
         class: `lo-card${on ? ' on' : ''}`, type: 'button',
-        disabled: !usable,
-        title: lockedByProgress ? `第 ${d.unlock.stage} 戦で解放` : d.desc,
+        title: d.desc,
       },
         el('div', { class: 'lo-name' },
           el('span', {}, d.name),
           el('span', { class: 'lo-kind' }, KIND_LABEL[d.kind] || d.kind)),
         el('div', { class: 'lo-core' },
           `枠 ${slotsForLevel(d, 1)}・開始「${d.startWord}${d.startWord2}」・末尾「${d.tail}」`),
-        el('div', { class: 'lo-desc' },
-          lockedByProgress ? `第 ${d.unlock.stage} 戦で解放される` : (usable ? d.desc : '使用不可')),
+        el('div', { class: 'lo-desc' }, d.desc),
       );
       if (on) card.append(el('span', { class: 'lo-check' }, '✓'));
-      else if (this.save.hasWeapon(id)) card.append(el('span', { class: 'lo-lv' }, '所持'));
 
-      if (usable) {
-        card.addEventListener('click', () => { this.audio?.tap?.(); this.togglePick(id); });
-      }
+      card.addEventListener('click', () => { this.audio?.tap?.(); this.togglePick(id); });
       list.append(card);
     }
 
@@ -333,7 +355,7 @@ export class Menus {
   /** 語的效果を短い文にまとめる。ラベルの表は labels.js を共有する。 */
   static fxLine(w) {
     const out = [];
-    // 「自身」向けの語は fx と player が同じ内容。そっち側にだけ出す。
+    // 身体向けの語は fx と player が同じ内容。そっち側にだけ出す。
     const own = w.cat === 'buff';
     if (w.fx && !own) {
       for (const [k, v] of Object.entries(w.fx)) {
@@ -344,7 +366,7 @@ export class Menus {
     if (w.player) {
       for (const [k, v] of Object.entries(w.player)) {
         if (!v) continue;
-        out.push(`自身 ${PS_LABEL[k] || k} ${v}`);
+        out.push(`身体 ${PS_LABEL[k] || k} ${v}`);
       }
     }
     return out;

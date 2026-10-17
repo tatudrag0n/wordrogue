@@ -5,19 +5,19 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
+import { DRAWABLE_ALL, starterCollection } from '../data/words.js';
 
 const KEY = 'wordrogue.save.v1';
 
 const DEFAULTS = {
   version: 1,
   clearedStages: [],   // クリア済みステージ ID
-  unlockedWeapons: ['sword', 'gun'],
   bestScore: 0,
   totalKills: 0,
   totalRuns: 0,
   totalBroken: 0,     // 文を崩した敵の累計
   ink: 0,              // 書庫の通貨「墨」
-  startingWords: [],  // 恒久的に手に入れた語 (リスポーン時に語彙に入る)
+  collection: starterCollection(), // 持っている語 (ランに出る語彙の元)
   meta: {},            // 恒久強化 (hp / atk / xp / armor / magnet / crit)
   settings: { volume: 0.5, screenShake: true, showDamage: true },
   seenIntro: false,
@@ -36,15 +36,8 @@ export const META_UPGRADES = {
   crit: { name: '会心', desc: '会心率が上がる', cost: 50, max: 8, per: 0.02 },
 };
 
-/** 書庫で買える恒久の語。ラン開始時の語彙に入る。 */
-export const SHOP_WORDS = [
-  { text: '火', cost: 20 },
-  { text: '刃', cost: 20 },
-  { text: '必殺', cost: 40 },
-  { text: '業火', cost: 70 },
-  { text: '雷神', cost: 70 },
-  { text: '凍刃', cost: 90 },
-];
+/** 言葉くじ 1 回の値段 (墨)。 */
+export const LOTTERY_COST = 25;
 
 function deepMerge(base, patch) {
   const out = Array.isArray(base) ? base.slice() : { ...base };
@@ -73,7 +66,25 @@ export class Save {
       this.available = false;
       this.data = { ...DEFAULTS };
     }
+    this.migrate();
     return this.data;
+  }
+
+  /**
+   * 古いセーブを今の形に合わせる。
+   * 初期の語は無料で全員に配り、昔の「恒久の語」は持ち物に移す。
+   */
+  migrate() {
+    const d = this.data;
+    if (!Array.isArray(d.collection)) d.collection = [];
+    for (const t of starterCollection()) {
+      if (!d.collection.includes(t)) d.collection.push(t);
+    }
+    for (const t of d.startingWords || []) {
+      if (!d.collection.includes(t)) d.collection.push(t);
+    }
+    delete d.startingWords;
+    delete d.unlockedWeapons;
   }
 
   save() {
@@ -111,20 +122,36 @@ export class Save {
     if (!this.data.clearedStages.includes(stageId)) this.data.clearedStages.push(stageId);
   }
 
-  unlockWeapon(id) {
-    if (!this.data.unlockedWeapons.includes(id)) this.data.unlockedWeapons.push(id);
-  }
-  hasWeapon(id) { return this.data.unlockedWeapons.includes(id); }
+  // ── 語の持ち物 (言葉くじ) ─────────────────────────────────────────────────
+  hasWord(text) { return this.data.collection.includes(text); }
 
-  addStartingWord(text) {
-    if (!this.data.startingWords.includes(text)) {
-      this.data.startingWords.push(text);
-      this.save();
-      return true;
-    }
-    return false;
+  /** 語を 1 つ持ち物に加える。既にあれば false。 */
+  addWord(text) {
+    if (this.hasWord(text)) return false;
+    this.data.collection.push(text);
+    this.save();
+    return true;
   }
-  hasStartingWord(text) { return this.data.startingWords.includes(text); }
+
+  /** まだ持っていない、引ける語の数。 */
+  get lotteryRemaining() {
+    return DRAWABLE_ALL.filter((t) => !this.hasWord(t)).length;
+  }
+
+  /**
+   * 言葉くじを 1 回引く。墨を払って、まだ持っていない語を 1 つ得る。
+   * @returns {{ok:boolean, reason:string, text?:string}}
+   */
+  drawLottery(rng = Math.random) {
+    if (this.lotteryRemaining === 0) return { ok: false, reason: 'empty' };
+    if (this.ink < LOTTERY_COST) return { ok: false, reason: 'ink' };
+    const pool = DRAWABLE_ALL.filter((t) => !this.hasWord(t));
+    const text = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
+    this.data.ink -= LOTTERY_COST;
+    this.data.collection.push(text);
+    this.save();
+    return { ok: true, reason: '', text };
+  }
 
   // ── 書庫 (恒久進行) ───────────────────────────────────────────────────────
   get ink() { return this.data.ink || 0; }
@@ -177,17 +204,6 @@ export class Save {
     this.data.meta[key] = lv * u.per;
     this.save();
     return { ok: true, reason: '', level: lv };
-  }
-
-  /** 書庫で語を買う。買えた語は次のランの語彙に入る。 */
-  buyWord(text) {
-    const w = SHOP_WORDS.find((x) => x.text === text);
-    if (!w) return { ok: false, reason: 'unknown' };
-    if (this.hasStartingWord(text)) return { ok: false, reason: 'owned' };
-    if (this.ink < w.cost) return { ok: false, reason: 'ink' };
-    this.data.ink -= w.cost;
-    this.addStartingWord(text);
-    return { ok: true, reason: '' };
   }
 
   // ── 走者記録 ─────────────────────────────────────────────────────────────

@@ -1,18 +1,45 @@
 // ============================================================================
 // ワードローグ — プレイヤー能力の解決
 //
-// 語彙の中の「自身強化語」と、プレイヤー自身の文、セーブの恒久強化から
-// 最終ステータスを作る。
+// 語彙の中の「身体語」と、プレイヤーの部位 (右手 / 左手 / 胴 / 頭)、
+// セーブの恒久強化から最終ステータスを作る。
 //
-// 自身の文は武器と同じく、末尾の語 (人) が枠の外に固定で付く。
-// 語を並べ替えても末尾は動かないので、称号は必ず「○○人」になる。
+// 部位には語を 1 つずつ置ける。語の効果はそのままプレイヤーに足される。
+// 手の部位 (右手 / 左手) に属性語を置くと、斬撃・薙ぎの武器がその属性を纏う。
+//   例 「硬」を左手に -> 硬い左手 (減傷 +2) / 「炎」を左手に -> 炎の左手
 // ============================================================================
 
-import { WORDS, CONNECTOR_SET, evaluate, makeWord } from '../data/words.js';
+import { WORDS, ELEMENTS, CONNECTOR_SET } from '../data/words.js';
 import { clamp } from '../core/util.js';
 
-/** プレイヤー自身の文の末尾語。枠の外に固定で付く。 */
-export const SELF_TAIL = '人';
+/** プレイヤーの部位。手の部位の属性語は近接武器の属性になる。 */
+export const PARTS = [
+  { name: '右手', hand: true },
+  { name: '左手', hand: true },
+  { name: '胴', hand: false },
+  { name: '頭', hand: false },
+];
+
+/** 部位の表示名に使う接頭辞。硬 → 硬い右手。それ以外は「〇〇の」。 */
+const PART_PRE = {
+  硬: '硬い', 強: '強い', 高: '高い', 深: '深い', 遠: '遠い', 広: '広い',
+  重: '重い', 柔: '柔らかい', 鋭: '鋭い', 巧: '巧い', 明: '明るい',
+  早: '早い', 遅: '遅い', 近: '近い', 長: '長い', 短: '短い', 多: '多い',
+  少: '少ない',
+};
+
+/** 部位の表示名を作る。「硬」+ 右手 → 硬い右手 /「炎」+ 左手 → 炎の左手。 */
+export function partLabel(i, word) {
+  const part = PARTS[i] || { name: `部位${i + 1}` };
+  if (!word) return part.name;
+  const pre = PART_PRE[word.text];
+  return pre ? `${pre}${part.name}` : `${word.text}の${part.name}`;
+}
+
+/** 手の属性が武器に与える状態異常。属性語 1 つぶんの最小限。 */
+const HAND_STATUS_VALUE = { burn: 2, chill: 0.15, shock: 0.12, poison: 2 };
+
+let statsRev = 0;
 
 /** 素の能力。 */
 export const BASE_PLAYER = {
@@ -42,14 +69,15 @@ const BUFF_KEYS = new Set([
 ]);
 
 /**
- * 語彙と「自身の文」からプレイヤー能力を集計する。
+ * 語彙と部位からプレイヤー能力を集計する。
  * @param {Array} lexicon 語彙
- * @param {Array<object>} selfSlots プレイヤーの文
+ * @param {Array<object>} selfSlots 部位に置いた語 (右手 / 左手 / 胴 / 頭)
  * @param {Object} meta セーブ側の恒久強化
  * @returns {typeof BASE_PLAYER}
  */
 export function resolvePlayerStats(lexicon, selfSlots = [], meta = {}) {
   const s = { ...BASE_PLAYER };
+  s.rev = ++statsRev;
   s.maxHp += meta.hp || 0;
   s.atkMul += meta.atk || 0;
   s.xpMul += meta.xp || 0;
@@ -66,31 +94,38 @@ export function resolvePlayerStats(lexicon, selfSlots = [], meta = {}) {
     }
   }
 
-  // プレイヤー自身の文。末尾語 (人) も一緒に評価する。
-  // 中の語が player を持っていれば足す。文が成立していれば文の力が半分だけ効く。
-  const selfFilled = selfSlots.filter(Boolean);
-  const selfAll = [...selfFilled, makeWord(SELF_TAIL)];
-  const selfTitle = selfAll.map((w) => w.text).join('');
-  // 末尾語はプレイヤーが置いた語ではないので、実質語の要求を 1 つ増やす。
-  const ev = evaluate(selfAll, { minContent: 3 });
-  const selfValid = ev.valid;
-  const selfPower = selfValid ? 1 + (ev.fx.power - 1) * 0.5 : 1;
-  for (const w of selfFilled) {
-    const p = w.player || (w.cat === 'buff' ? w.fx : null);
-    if (!p) continue;
-    for (const [k, v] of Object.entries(p)) {
+  // 部位に置いた語。効果は BUFF_KEYS の分だけそのまま足す。
+  // 手の部位の属性語は weapon.resolve が斬撃・薙ぎの武器に乗せる。
+  const parts = [];
+  let handElement = null;
+  let handStatus = null;
+  for (let i = 0; i < selfSlots.length; i++) {
+    const w = selfSlots[i];
+    if (!w) continue;
+    for (const [k, v] of Object.entries(w.fx || {})) {
       if (!BUFF_KEYS.has(k)) continue;
       s[k] = (s[k] || 0) + v;
     }
+    const part = PARTS[i] || { name: `部位${i + 1}`, hand: false };
+    if (part.hand && w.el && !handElement) {
+      handElement = w.el;
+      const status = ELEMENTS[w.el] && ELEMENTS[w.el].status;
+      if (status && status !== 'none') {
+        handStatus = { [status]: HAND_STATUS_VALUE[status] || 1 };
+      }
+    }
+    parts.push({
+      index: i,
+      name: part.name,
+      label: partLabel(i, w),
+      word: w.text,
+      element: w.el || null,
+      hand: !!part.hand,
+    });
   }
-  s.selfTitle = selfFilled.length ? selfTitle : '';
-  s.selfValid = selfFilled.length ? selfValid : false;
-  s.selfPower = selfPower;
-  s.selfPowerFx = ev.fx.power;
-  s.selfSegments = ev.segments;
-  // 自身の文の力は、攻撃と防御に効く。
-  s.atkMul *= selfPower;
-  s.armor = clamp(s.armor * selfPower, 0, 0.8);
+  s.parts = parts;
+  s.handElement = handElement;
+  s.handStatus = handStatus;
 
   // 補正と上限。
   s.armor = clamp(s.armor, 0, 0.75);
@@ -134,7 +169,7 @@ export function lexiconContentCount(lexicon) {
 
 /**
  * HUD に出す能力表示の並びを決める。
- * 称号は hud-self 側で出るので、ここには数値だけ。
+ * 部位は hud-self 側で出るので、ここには数値だけ。
  * 値が 0 のものは入れない。
  * @param {typeof BASE_PLAYER} s
  * @returns {Array<{key:string,label:string,value:string,kind:string}>}

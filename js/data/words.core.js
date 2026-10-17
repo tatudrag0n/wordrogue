@@ -1,7 +1,7 @@
 // ============================================================================
 // ワードローグ — 語テーブル (属性)
 // フォーマット: 語  種別  属性  効果(半角スペース区切り)
-//   種別: element / form / modifier / buff / grammar / core
+//   種別: element / form / modifier / verb / buff / connect
 //   属性: element のときだけ必須。それ以外は -
 //   効果: key+数値 の並び。buff は player のステータス。
 // ============================================================================
@@ -30,7 +30,7 @@ export const CATEGORIES = {
   form:     { name: '形態', color: '#7ad7ff', weight: 26 },
   modifier: { name: '効果', color: '#9dff5c', weight: 24 },
   verb:     { name: '動詞', color: '#ff8fab', weight: 18 },
-  buff:     { name: '自身', color: '#b47bff', weight: 12 },
+  buff:     { name: '身体', color: '#b47bff', weight: 12 },
   connect:  { name: '接続', color: '#8ab4ff', weight: 18 },
 };
 
@@ -117,42 +117,26 @@ const RAW_ELEMENT = `
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 形態語: 何を一般に撃つかを決める核
+// 形態語: 武器の末尾語になる基本の 15 語。
+// 武器はこの語を tail に持ち、攻撃の形と種類をこれだけで決める。
+// 途中の枠に入れても、効果だけを足す。
 // ─────────────────────────────────────────────────────────────────────────────
 const RAW_FORM = `
-弾       form  -  dmg+6  count+1
-矢       form  -  dmg+5  speed+90  pierce+1
 剣       form  -  dmg+8  size+0.20
-短刀           form  -  dmg+7  crit+0.04  speed+40
-太刀     form  -  dmg+9  arc+0.5  size+0.30
-大剣     form  -  dmg+11  speed-10  size+0.35  knock+30
-針       form  -  dmg+3  speed+130  count+2  pierce+1
-球       form  -  dmg+6  area+6  size+0.15
-岩塊           form  -  dmg+8  speed-25  size+0.30  knock+25
 刃       form  -  dmg+5  speed+60  pierce+2
-利爪           form  -  dmg+4  count+2  speed+25
-尖牙           form  -  dmg+6  size+0.10  crit+0.03
-環       form  -  orbit+1  count+2  dmg+5
-回転     form  -  orbit+1  dmg+6  rate+0.3
-回転刃   form  -  orbit+2  dmg+6  size+0.05
+刀       form  -  dmg+7  crit+0.05  speed+30
+斧       form  -  dmg+10  knock+45  speed-10
+槍       form  -  dmg+8  pierce+2  range+20
+矛       form  -  dmg+9  range+30  size+0.10
+牙       form  -  dmg+6  crit+0.03
+爪       form  -  dmg+4  count+2  speed+20
+拳       form  -  dmg+9  rate+0.2
 鞭       form  -  dmg+7  area+12  range+40
-爆弾     form  -  dmg+10  explode+26  speed-20  size+0.30
-複製     form  -  dmg+3  split+2  count+1
-貫通     form  -  dmg+4  pierce+4  speed+30
-反射     form  -  dmg+4  bounce+4  speed+40  pierce+2
-殲滅     form  -  dmg+8  area+18  count+1
-竜頭     form  -  dmg+7  pierce+5  crit+0.06  speed+30
-彗星     form  -  dmg+9  explode+20  size+0.35  area+16  speed-20
-夾撃     form  -  dmg+5  count+2  spread+0.9  speed+20
-乱打     form  -  dmg+4  count+3  spread+0.7  rate+0.5
-壁       form  -  dmg+6  shield+18  area+10
-棘壁     form  -  dmg+5  area+14  slowImmune+1
+鎖       form  -  dmg+6  bounce+2  pierce+1
+杖       form  -  dmg+7  crit+0.04  speed+25
 銃       form  -  dmg+7  count+1  speed+40
 弓       form  -  dmg+5  speed+110  pierce+1
-環刃     form  -  dmg+8  pierce+2  bounce+2
-
-牙    form     -      dmg+6  crit+0.03
-爪    form     -      dmg+4  count+2  speed+20
+針       form  -  dmg+3  speed+130  count+2  pierce+1
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -234,10 +218,36 @@ const RAW_MODIFIER = `
 短    modifier -      range-15
 多    modifier -      count+2  spread+0.18
 少    modifier -      count-1
+
+弾     modifier -      dmg+6  count+1
+矢     modifier -      dmg+5  speed+90  pierce+1
+短刀   modifier -      dmg+7  crit+0.04  speed+40
+太刀   modifier -      dmg+9  arc+0.5  size+0.30
+大剣   modifier -      dmg+11  speed-10  size+0.35  knock+30
+球     modifier -      dmg+6  area+6  size+0.15
+岩塊   modifier -      dmg+8  speed-25  size+0.30  knock+25
+利爪   modifier -      dmg+4  count+2  speed+25
+尖牙   modifier -      dmg+6  size+0.10  crit+0.03
+環     modifier -      orbit+1  count+2  dmg+5
+回転   modifier -      orbit+1  dmg+6  rate+0.3
+回転刃 modifier -      orbit+2  dmg+6  size+0.05
+爆弾   modifier -      dmg+10  explode+26  speed-20  size+0.30
+複製   modifier -      dmg+3  split+2  count+1
+貫通   modifier -      dmg+4  pierce+4  speed+30
+反射   modifier -      dmg+4  bounce+4  speed+40  pierce+2
+殲滅   modifier -      dmg+8  area+18  count+1
+竜頭   modifier -      dmg+7  pierce+5  crit+0.06  speed+30
+彗星   modifier -      dmg+9  explode+20  size+0.35  area+16  speed-20
+夾撃   modifier -      dmg+5  count+2  spread+0.9  speed+20
+乱打   modifier -      dmg+4  count+3  spread+0.7  rate+0.5
+壁     modifier -      dmg+6  shield+18  area+10
+棘壁   modifier -      dmg+5  area+14  slowImmune+1
+環刃   modifier -      dmg+8  pierce+2  bounce+2
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 自身強化語: 語彙に置いてある間、プレイヤーに常時効く
+// 身体語: 語彙に置いてある間はプレイヤーに常時効く。
+// 部位 (右手 / 左手 / 胴 / 頭) に置くとそこに乗る。
 // ─────────────────────────────────────────────────────────────────────────────
 const RAW_BUFF = `
 頑健           buff  -  hp+12
@@ -398,7 +408,6 @@ const RAW_EXTRA = `
 豊     modifier  -  xpMul+0.25  count+1
 饒     modifier  -  xpMul+0.30  area+12
 化     modifier  -  split+2
-拳     modifier  -  dmg+9  rate+0.2
 軍     modifier  -  count+4  spread+0.25
 色     modifier  -  count+3  atkMul+0.04
 `;

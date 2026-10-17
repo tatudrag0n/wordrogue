@@ -7,9 +7,9 @@ import { ENEMIES } from '../js/data/enemies.js';
 import { WeaponInst } from '../js/game/weapon.js';
 import { makePickup, makeEnemy } from '../js/game/entities.js';
 import { damage } from '../js/game/combat.js';
-import { SELF_TAIL, resolvePlayerStats } from '../js/game/stats.js';
+import { resolvePlayerStats, PARTS } from '../js/game/stats.js';
 import { STAGES } from '../js/data/stages.js';
-import { Save, META_UPGRADES, SHOP_WORDS } from '../js/core/save.js';
+import { Save, META_UPGRADES, LOTTERY_COST } from '../js/core/save.js';
 import { makeRng } from '../js/core/util.js';
 
 let pass = 0, fail = 0;
@@ -32,15 +32,15 @@ function freshWeapon(stageId = 1, weaponIds) {
 
 /** セーブの初期値。テストごとに分けて、言玉などの持ち越しが混ざらないようにする。 */
 function freshSave() {
-  return { d: { meta: {} }, unlockWeapon() {} };
+  return { d: { meta: {} } };
 }
 
 function newRun(stageId, weaponIds, sv) {
   const save = sv || freshSave();
   return new Run({
     stageId, audio, save, weaponIds,
-    // 本番 (main.js) と同じく、恒久の語を渡す。
-    startingWords: save.d.startingWords || [],
+    // 持ち物を渡さないときは全語から引く (テスト用)。
+    collection: save.d.collection || null,
     rng: makeRng(stageId * 7919 + 13),
   });
 }
@@ -463,51 +463,59 @@ sec('入力なし・移動を止められる');
   ok(!r4.player.dashing, 'スタミナ切れでもダッシュしたまま');
 }
 
-sec('自身の文の末尾は「人」で固定');
+sec('部位に語を置くと効果が乗り、表示が「硬い左手」になる');
 {
   const r = freshWeapon(1);
   const p = r.player;
   p.selfSlots.fill(null);
-
-  // 称号は空。
   r.refreshStats();
-  ok(p.stats.selfTitle === '', `称号が最初から入っている: ${p.stats.selfTitle}`);
 
-  // 1 語では不成文。末尾の「人」だけでは文にならない。
-  p.selfSlots[0] = makeWord('頑強');
+  // 何も置かなければ部位は空。
+  ok(p.stats.parts.length === 0, `部位が最初から入っている: ${p.stats.parts.length}`);
+  ok(p.stats.handElement === null, `手の属性が最初からある: ${p.stats.handElement}`);
+
+  // 硬 → 硬い右手。装甲が上がる。
+  p.selfSlots[0] = makeWord('硬');
   r.refreshStats();
-  ok(p.stats.selfValid === false, '1 語で称号が成立している');
-  ok(p.stats.selfTitle === '頑強人', `称号が「${p.stats.selfTitle}」`);
+  ok(p.stats.parts.length === 1, `部位の数: ${p.stats.parts.length}`);
+  ok(p.stats.parts[0].label === '硬い右手', `表示が「${p.stats.parts[0].label}」`);
+  ok(p.stats.parts[0].name === PARTS[0].name, `部位名が「${p.stats.parts[0].name}」`);
+  ok(p.stats.armor > 0, `装甲が乗っていない: ${p.stats.armor}`);
 
-  // 2 語で成立。末尾は「人」。
-  p.selfSlots[1] = makeWord('疾走');
+  // 炎 → 炎の左手。手の属性になり、斬撃武器に乗る。
+  p.selfSlots[1] = makeWord('炎');
   r.refreshStats();
-  ok(p.stats.selfValid === true, '2 語で称号が成立しない');
-  ok(p.stats.selfTitle === '頑強疾走人', `称号が「${p.stats.selfTitle}」`);
-  ok(p.stats.selfTitle.endsWith(SELF_TAIL), `末尾が「${SELF_TAIL}」でない: ${p.stats.selfTitle}`);
+  ok(p.stats.parts[1].label === '炎の左手', `表示が「${p.stats.parts[1].label}」`);
+  ok(p.stats.handElement === 'fire', `手の属性が「${p.stats.handElement}」`);
 
-  // 並べ替えても末尾は動かない。
-  [p.selfSlots[0], p.selfSlots[1]] = [p.selfSlots[1], p.selfSlots[0]];
+  const wi = r.weapons[0];
+  wi.slots.fill(null);
+  wi.setSlot(0, makeWord('刃'));
+  wi.setSlot(1, makeWord('必殺'));
+  const res = wi.resolve(p.stats);
+  ok(res.active, `剣が不成文: ${res.reasonText}`);
+  ok(res.stats.el === 'fire', `武器に手の属性が乗っていない: ${res.stats.el}`);
+  ok(res.stats.burn > 0, `炎上値が付いていない: ${res.stats.burn}`);
+
+  // 射撃武器には乗らない。
+  const gun = new WeaponInst('gun', 1);
+  gun.setSlot(0, makeWord('弾'));
+  gun.setSlot(1, makeWord('速'));
+  const gres = gun.resolve(p.stats);
+  ok(gres.active, `銃が不成文: ${gres.reasonText}`);
+  ok(gres.stats.el === 'none', `射撃に手の属性が乗った: ${gres.stats.el}`);
+
+  // 右手と左手の両方に属性があれば右手が優先。
+  p.selfSlots[0] = makeWord('氷');
   r.refreshStats();
-  ok(p.stats.selfTitle === '疾走頑強人', `並べ替えで称号が変わらない: ${p.stats.selfTitle}`);
+  ok(p.stats.handElement === 'ice', `右手優先になっていない: ${p.stats.handElement}`);
 
-  // 「人」を枠に入れても二重にはならない (末尾は別枠)。
-  const n = p.selfSlots.filter(Boolean).length;
-  ok(n === 2, `枠の数が変わっている: ${n}`);
-
-  // 称号の力がattackと防御に効く。
-  ok(p.stats.atkMul > 1, `攻撃に称号の力が乗っていない: ${p.stats.atkMul}`);
-  ok(p.stats.armor > 0, `防御に称号の力が乗っていない: ${p.stats.armor}`);
-
-  // 分割の最後が「人」。
-  const seg = p.stats.selfSegments;
-  ok(seg[seg.length - 1] === SELF_TAIL, `分割の最後が「${SELF_TAIL}」でない: ${seg.join('/')}`);
-
-  // resolvePlayerStats を直接呼んでも同じ称号。
+  // resolvePlayerStats を直接呼んでも同じ。
   const direct = resolvePlayerStats([], p.selfSlots, {});
-  ok(direct.selfTitle === '疾走頑強人', `直接呼んだ称号が「${direct.selfTitle}」`);
+  ok(direct.parts.length === 2, `直接呼んだ部位数: ${direct.parts.length}`);
+  ok(direct.parts[1].label === '炎の左手', `直接呼んだ表示: ${direct.parts[1].label}`);
 
-  console.log(`  「${p.stats.selfTitle}」 文の力 x${p.stats.selfPower.toFixed(2)} / ${seg.join('/')} / 攻撃 x${p.stats.atkMul.toFixed(2)}`);
+  console.log(`  ${p.stats.parts.map((x) => x.label).join(' / ')} — 手の属性 ${p.stats.handElement}`);
 }
 
 sec('経験値の吸引が暴れない');
@@ -596,11 +604,11 @@ sec('レベルアップは 3 択 1 択');
   r2.grantLevelWords(5);
   ok(r2.pendingChoices.length === 2, `5 の倍数で 2 回出ていない: ${r2.pendingChoices.length}`);
 
-  // 4 レベルごとに自身の文に 1 語 (これは自動)。
+  // 4 レベルごとに部位に 1 語 (これは自動)。
   const r3 = newRun(1);
   r3.grantLevelWords(5);
   const selfFilled = r3.player.selfSlots.filter(Boolean).length;
-  ok(selfFilled === 1, `自身の文に語が入らない: ${selfFilled}`);
+  ok(selfFilled === 1, `部位に語が入らない: ${selfFilled}`);
 
   // 時間切れなら 1 番目が自動で入る。
   const r4 = newRun(1);
@@ -893,28 +901,31 @@ sec('語彙が満杯なら語を消さない');
 
 sec('形と攻撃は末尾語だけが決める');
 {
-  // 武器ごとに末尾語を移し替えれば、攻撃の型が変わる。
-  // 語を並べ替えても、末尾語は動かない。
+  // 武器ごとに末尾語が攻撃の型を決める。語を並べ替えても末尾語は動かない。
   for (const [id, wantShape, wantKind] of [
     ['sword', 'blade', 'slash'],
-    ['gun', 'shot', 'shot'],
-    ['arrow', 'arrow', 'shot'],
-    ['bomb', 'bomb', 'bomb'],
-    ['orbit', 'blade', 'orbit'],
-    ['thunder', 'shot', 'chain'],
+    ['blade', 'blade', 'slash'],
+    ['katana', 'blade', 'slash'],
+    ['spear', 'blade', 'slash'],
+    ['halberd', 'blade', 'slash'],
+    ['fang', 'blade', 'slash'],
+    ['fist', 'blade', 'slash'],
+    ['axe', 'blade', 'whip'],
+    ['claw', 'blade', 'whip'],
     ['whip', 'blade', 'whip'],
-    ['aura', 'orb', 'aura'],
-    ['boomerang', 'blade', 'boomerang'],
-    ['beam', 'arrow', 'beam'],
+    ['chain', 'blade', 'boomerang'],
+    ['staff', 'arrow', 'beam'],
+    ['gun', 'shot', 'shot'],
+    ['bow', 'arrow', 'shot'],
+    ['needle', 'arrow', 'shot'],
   ]) {
-    // 解放されているステージで始める。
-    const stage = WEAPONS[id].unlock ? WEAPONS[id].unlock.stage : 1;
-    const r = freshWeapon(stage, [id]);
+    const r = freshWeapon(1, [id]);
     const wi = r.weapons[0];
-    ok(wi && wi.defId === id, `${id}: 武器=${wi && wi.defId} (ステージ ${stage})`);
+    ok(wi && wi.defId === id, `${id}: 武器=${wi && wi.defId}`);
     wi.setSlot(0, makeWord(WEAPONS[id].startWord));
     wi.setSlot(1, makeWord(WEAPONS[id].startWord2));
     const res = wi.resolve(r.player.stats);
+    ok(res.active, `${id}: 開始語で不成文: ${res.reasonText}`);
     ok(res.shape === wantShape, `${id}: 形 ${res.shape} が ${wantShape} でない`);
     ok(res.kind === wantKind, `${id}: 攻撃 ${res.kind} が ${wantKind} でない`);
   }
@@ -1154,7 +1165,7 @@ sec('武器の文で敵の文を斬れる');
   ok(e.speed < e.def.speed, '崩れた敵が動く');
 }
 
-sec('熟語か述語なら、一撃で 2 語斬る');
+sec('強い文は 1 撃で敵を崩し、ボスは崩せない');
 {
   const r = newRun(1);
   const wi = r.weapons[0];
@@ -1167,16 +1178,24 @@ sec('熟語か述語なら、一撃で 2 語斬る');
   const strong = set('刃', '必殺', '火', '球');
   ok(strong.stats.cutPower === 2, `斬り数が 2 でない: ${strong.stats.cutPower}`);
 
-  // 3 語の敵を 1 撃で 2 語斬れる。
-  const e = makeEnemy('boss_slime', 0, 0);
-  ok(e.words.length === 3, `敵の文が 3 語でない: ${e.words.length}`);
-  // ボスは 0.3 倍。即使概率很低也会失败。把 cutChance 设为 10 で必斩。
-  strong.stats.cutChance = 10;
+  // 崩れるまで斬る。2 語の敵は 1 斬りで止まる (崩れた後は斬らない)。
+  const e = makeEnemy('wraith', 0, 0);
+  ok(e.words.length === 2, `敵の文が 2 語でない: ${e.words.length}`);
+  strong.stats.cutChance = 10;   // 必ず斬らせる
   damage(r, e, strong.stats, {});
-  ok(e.words.length === 1, `2 語斬れていない: ${e.words.join('')}`);
-  ok(e.broken, '3 語 -> 1 語 で崩れていない');
-  console.log(`  ${ENEMIES.boss_slime.name}「${ENEMIES.boss_slime.words.join('')}」`
-    + ` → 熟語 1 撃で 2 斬り → 「${e.words.join('')}」${e.broken ? ' (崩れた)' : ''}`);
+  ok(e.words.length === 1, `崩れるまで斬れていない: ${e.words.join('')}`);
+  ok(e.broken, '敵が崩れていない');
+  console.log(`  ${ENEMIES.wraith.name}「${ENEMIES.wraith.words.join('')}」`
+    + ` → 熟語 1 撃で崩れる → 「${e.words.join('')}」`);
+
+  // ボスの文は斬れない。cutChance を上げても落ちない。
+  const b = makeEnemy('boss_slime', 0, 0);
+  const bText = b.words.join('');
+  strong.stats.cutChance = 10;
+  damage(r, b, strong.stats, {});
+  ok(b.words.join('') === bText, `ボスの文が斬られた: ${b.words.join('')}`);
+  ok(!b.broken, 'ボスが崩れた');
+  console.log(`  ${ENEMIES.boss_slime.name}「${bText}」 → ボスは斬れない (保った)`);
 }
 
 sec('書庫の墨で恒久強化を買える');
@@ -1251,28 +1270,55 @@ sec('買った恒久強化がプレイヤーに効く');
   ok(r.player.maxHp === buffed.maxHp, `ランに体力が反映されない: ${r.player.maxHp} != ${buffed.maxHp}`);
 }
 
-sec('買った恒久の語が次のランの語彙に入る');
+sec('言葉くじで語が増える');
 {
   const save = new Save();
   save.reset();
-  save.addInk(1000);
-  const w = SHOP_WORDS[0];
-  const r = save.buyWord(w.text);
-  ok(r.ok, `買えない: ${r.reason}`);
-  ok(save.hasStartingWord(w.text), '買っても入っていない');
-  const r2 = save.buyWord(w.text);
-  ok(!r2.ok && r2.reason === 'owned', `2 回買えてしまった: ${r2.reason}`);
+  const startLen = save.d.collection.length;
+  // 初期の持ち物は 1 文字語と接続詞。
+  ok(save.hasWord('火'), '初期の持ち物に「火」が無い');
+  ok(startLen >= 100, `初期の持ち物が少なすぎる: ${startLen}`);
+  ok(!save.hasWord('爆裂'), '初期から強い語を持っている');
 
+  // 墨がないと引けない。
+  let r = save.drawLottery(() => 0);
+  ok(!r.ok && r.reason === 'ink', `墨がないのに引けた: ${r.reason}`);
+
+  save.addInk(8000);
+  const before = save.d.collection.length;
+  r = save.drawLottery(() => 0);
+  ok(r.ok, `引けない: ${r.reason}`);
+  ok(save.d.collection.length === before + 1, '引いた語が持ち物に入っていない');
+  ok(save.ink === 8000 - LOTTERY_COST, `墨が減っていない: ${save.ink}`);
+  ok(save.hasWord(r.text), `引いた語「${r.text}」が持ち物に無い`);
+
+  // 同じ語は二度引けない (未所持からしか引かない)。
+  const dup = save.drawLottery(() => 0);
+  ok(dup.ok && dup.text !== r.text, `同じ語を引いた: ${r.text}`);
+
+  // ランでは持ち物の語だけが出る。
   const run = newRun(1, undefined, save);
-  const inLex = run.lexicon.some((x) => x && x.text === w.text);
-  ok(inLex, `ランの語彙に入っていない: ${run.lexicon.map((x) => x && x.text).join(' ')}`);
-  // 語彙の空きを全部埋めても入れる。
-  const r3 = newRun(1, undefined, save);
-  while (r3.lexicon.includes(null)) r3.addWord(makeWord('剣'), true);
-  ok(!r3.addWord(makeWord('鋼')), '満杯なのに追加できた');
-  r3.giveWord(makeWord(w.text));
-  ok(r3.lexicon.some((x) => x && x.text === w.text), '満杯で語が入らない');
-  console.log(`  「${w.text}」を買って次のランの語彙に入る`);
+  ok(run.wordPool instanceof Set, 'ランに持ち物が渡っていない');
+  const starterSet = new Set(save.d.collection);
+  ok(run.lexicon.filter(Boolean).every((w) => starterSet.has(w.text)),
+    '持ち物に無い語彙が入った');
+
+  // 全部引くと empty。
+  let guard = 0;
+  while (save.lotteryRemaining > 0 && guard++ < 1000) save.drawLottery(() => 0);
+  r = save.drawLottery(() => 0);
+  ok(!r.ok && r.reason === 'empty', `全部引いても引けた: ${r.reason}`);
+
+  // 古いセーブの恒久の語は持ち物へ移る。
+  const old = new Save();
+  old.reset();
+  old.data.startingWords = ['爆裂', '業火'];
+  old.data.unlockedWeapons = ['sword', 'gun', 'axe'];
+  old.migrate();
+  ok(old.hasWord('爆裂') && old.hasWord('業火'), '旧セーブの恒久の語が移っていない');
+  ok(old.data.startingWords === undefined, '旧 startingWords が残っている');
+  ok(old.data.unlockedWeapons === undefined, '旧 unlockedWeapons が残っている');
+  console.log(`  初期 ${startLen} 語 → 所持 ${save.d.collection.length} 語`);
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

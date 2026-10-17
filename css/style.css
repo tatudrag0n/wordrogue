@@ -684,14 +684,14 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 
 /* ══ 言葉鍛冶 ════════════════════════════════════════════════════════ */
 
-.panel-forge { width: min(1000px, 100%); height: min(760px, 100%); }
+.panel-forge { width: min(1180px, 100%); height: min(820px, 100%); }
 
 .forge-body {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 320px;
-  gap: 16px;
+  gap: 20px;
 }
 
 .forge-weapons {
@@ -1191,7 +1191,7 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 
 .lexicon {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
   overflow-y: auto;
   align-content: start;
@@ -1199,7 +1199,7 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
   background: #f1f5fb;
   border: 1px solid var(--line);
   border-radius: var(--r-s);
-  min-height: 150px;
+  min-height: 200px;
   flex: 1;
 }
 
@@ -1213,7 +1213,7 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
   background: linear-gradient(180deg, #ffffff, #f1f5fb);
   color: var(--ink);
   box-shadow: 0 1px 0 rgba(255, 255, 255, .85) inset;
-  font-size: .95rem;
+  font-size: 1.05rem;
   font-weight: 700;
   cursor: pointer;
   user-select: none;

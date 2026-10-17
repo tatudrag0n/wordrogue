@@ -301,11 +301,11 @@ ok(rows.weapon === 1, `武器の文の行の数: ${rows.weapon}`);
 ok(rows.hint === 1, `武器を追加できる旨の行が無い: ${JSON.stringify(rows)}`);
 console.log(`    行: 自身 ${rows.self} / 武器 ${rows.weapon} / 追加案内 ${rows.hint}`);
 const words = await evalJs('document.querySelectorAll("#forgeWeapons .sen-word").length');
-ok(words >= 3, `文の中の語が表示されない: ${words}`);
+ok(words >= 1, `文の中の語が表示されない: ${words}`);
 const gaps = await evalJs('document.querySelectorAll("#forgeWeapons .sen-gap").length');
-ok(gaps >= 2, `語の後ろの置き場 (＋) が出ていない: ${gaps}`);
+ok(gaps >= 1, `語の後ろの置き場 (＋) が出ていない: ${gaps}`);
 const conns = await evalJs('document.querySelectorAll("#forgeWeapons .sen-conn").length');
-ok(conns >= 2, `接続詞の表示がない: ${conns}`);
+ok(conns >= 1, `接続詞の表示がない: ${conns}`);
 
 sec('語をタップすると直後の接続詞が切り替わる');
 {

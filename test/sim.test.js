@@ -150,7 +150,7 @@ sec('武器の初期文');
   console.log(`  ${wi.def.name}: 「${res.fullText}」 valid=${res.valid} grade=${res.grade} dmg=${res.stats.dmg.toFixed(0)}`);
   ok(res.valid, '初期の武器が不成文');
   ok(res.stats.dmg > 0, '威力が 0');
-  // 核語は無い。すべての武器が 2 語以上入っていること。
+  // 武器名単体 (素振り) で始まる。
   for (const w2 of run.weapons) {
     const r2 = w2.resolve(run.player.stats);
     ok(r2.valid, `${w2.def.name} が開始時に不成文: ${r2.reasonText}`);
@@ -167,10 +167,10 @@ sec('文は 10 文字まで / 武器語は自分で置く');
   ok(x.fullText === joined, `文面が文と一致しない: ${x.fullText} != ${joined}`);
   ok(wi.sentence.maxLen === 10, `文の上限 ${wi.sentence.maxLen}`);
 
-  // 語 1 つでは不成文。
-  setWords(wi, ['刃']);
+  // 語 1 つ (武器名) では素振りで有効になる。武器名以外の 1 語は不成文。
+  setWords(wi, ['剛']);
   const one = wi.resolve(run.player.stats);
-  ok(!one.active, '1 語にしても有効になっている');
+  ok(!one.active, '武器名以外の 1 語でも有効になっている');
   ok(one.stats.dmg === 0, `威力が 0 でない: ${one.stats.dmg}`);
 
   // 語 2 つで成立。武器語を中に置けば攻撃の型が決まる。
@@ -315,8 +315,8 @@ sec('不成文の武器は無効化される');
   ok(res.reason === 'empty', `理由 ${res.reason}`);
   ok(res.fullText === '', `空のときの文面 ${res.fullText}`);
 
-  // 1 語だけ -> 実質語が足りない -> 不成文。
-  setFlat(wi, ['刃']);
+  // 1 語だけ (武器名以外) -> 実質語が足りない -> 不成文。
+  setFlat(wi, ['剛']);
   res = wi.resolve(r.player.stats);
   ok(!res.active, '1 語だけで有効になっている');
   ok(res.reason === 'onelexeme', `理由 ${res.reason}`);
@@ -380,6 +380,8 @@ sec('語彙の操作')
 sec('1 ステージを最後まで回す (ボスなし)');
 {
   const r = newRun(1);
+  const wi = r.weapons[0];
+  setFlat(wi, ['炎', '必', '刃']);
   let steps = 0;
   const dt = 1 / 60;
   // プレイヤーを少し動かす。
@@ -833,10 +835,6 @@ sec('語彙が満杯なら 3 択は「捨てる」を求める');
   ok(r2.lexicon.includes(slotWord), '語が語彙に入っていない');
   ok(!wi.sentence.words.includes(slotWord), '語が武器から消えた');
   ok(res.lost === oldestLex.text, `捨てるのは最古の語のはず: ${res.lost} / ${oldestLex.text}`);
-  // 空きがあっても戻せる。
-  r2.lexicon[0] = null;
-  const other = wi.sentence.words[0];
-  ok(r2.toLexicon(other).ok, '空きがあっても外せない');
   console.log('  満杯でも語彙の最古の 1 語を捨てて外せる');
 }
 
@@ -1273,8 +1271,8 @@ sec('武器 1 つにつき複数語を並べられる');
   const wi = r.weapons[0];
   // 枠は無い。上限は 10 文字だけ。
   ok(wi.sentence.maxLen === 10, `文の上限が ${wi.sentence.maxLen} 文字`);
-  ok(wi.sentence.count >= 2, `初期文が足りない: ${wi.sentence.count}`);
-  ok(wi.sentence.text === '炎必刃', `初期文が「${wi.sentence.text}」`);
+  ok(wi.sentence.count >= 1, `初期文が足りない: ${wi.sentence.count}`);
+  ok(wi.sentence.text === '刃', `初期文が「${wi.sentence.text}」`);
 
   // 語は 何個でも足せる (10 文字まで)。
   setFlat(wi, ['焔', '火', '球', '剛']);
@@ -1354,9 +1352,9 @@ sec('武器の文で敵の文を斬れる');
   // 実在する語だけで組む。接続詞は直前の語に付く。
   const set = (...ws) => setFlat(wi, ws).resolve(PS);
 
-  // 不成文の武器は斬れない。
-  const broken = set('刃');
-  ok(!broken.valid, '刃だけでは不成文にならない');
+  // 不成文の武器は斬れない (武器名以外の 1 語)。
+  const broken = set('剛');
+  ok(!broken.valid, '剛だけでは不成文にならない');
   ok(!broken.stats.cutPower, `不成文が斬れる: cutPower=${broken.stats.cutPower}`);
 
   // ふつうの成立文は 1 語。

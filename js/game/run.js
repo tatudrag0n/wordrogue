@@ -115,11 +115,9 @@ export class Run {
     }
     if (!this.weapons.length) this.weapons.push(new WeaponInst('sword', 1));
 
-    // 最初の武器の開始語。武器語も 1 つ入れておくので、最初から攻撃の型が決まる。
-    // 文はここから自由に組み替えられるので、組み替えても外してもよい。
+    // ステージ開始時は武器名だけ。素振り (武器名単体) で攻撃できる。
+    // 語を足すと文が強くなる。
     for (const wi of this.weapons) {
-      if (wi.def.startWord) wi.sentence.push(makeWord(wi.def.startWord));
-      if (wi.def.startWord2) wi.sentence.push(makeWord(wi.def.startWord2));
       if (wi.def.tail) wi.sentence.push(makeWord(wi.def.tail));
     }
 

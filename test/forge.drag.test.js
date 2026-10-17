@@ -37,6 +37,10 @@ const newRun = () => new Run({ stageId: 1, audio, save, rng: makeRng(99) });
 /** 語彙を「語が 1 つ残った」状態にしてから鍛冶を開く。 */
 const openForge = () => {
   const run = newRun();
+  // 素振り (武器名 1 語) で始まるので、ドラッグテスト用に語を足す。
+  const wi = run.weapons[0];
+  wi.sentence.clear();
+  for (const w of ['炎', '剛', '速']) wi.sentence.push(makeWord(w));
   const forge = new Forge(run, { onChange: () => {}, onClose: () => {}, audio: null });
   forge.open();
   return { run, forge };

@@ -121,20 +121,8 @@ export class Run {
       if (wi.def.tail) wi.sentence.push(makeWord(wi.def.tail));
     }
 
-    // 開始時の語彙。まず言葉デッキ (メニューで編成) を入れる。
-    // 接続詞はデッキに入らないので、ここでも弾く。
-    const deck = (opt.deckWords || []).filter((t) => WORDS[t] && !CONNECTOR_SET.has(t));
-    this.deckPool = new Set(deck);
-    for (const t of deck) {
-      if (this.lexiconFreeCount <= 0) break;
-      this.addWord(makeWord(t), true);
-    }
-    // デッキが最低語数に満たない分は、漢字だけの短い語で補う。
-    const fill = opt.lexiconFill ?? 10;
-    for (let i = this.lexicon.filter(Boolean).length; i < fill; i++) {
-      const w = drawSimple(this.rand);
-      if (w) this.addWord(w, true);
-    }
+    // 開始時の語彙は空。語はレベルアップやくじで得て、自由に組み立てる。
+    this.deckPool = new Set((opt.deckWords || []).filter((t) => WORDS[t] && !CONNECTOR_SET.has(t)));
     for (const w of (opt.extraWords || [])) this.addWord(makeWord(w.text), true, true);
 
     // ── ワールド ──
@@ -1540,6 +1528,8 @@ export class Run {
   finish(cleared) {
     if (this.state !== 'playing') return;
     this.state = cleared ? 'clear' : 'dead';
+    this.pendingChoices = [];
+    this.onWordChoice?.([]);
     if (cleared) { this.audio.win(); this.onClear?.(); }
   }
 

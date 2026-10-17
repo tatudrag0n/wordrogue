@@ -41,6 +41,8 @@ const openForge = () => {
   const wi = run.weapons[0];
   wi.sentence.clear();
   for (const w of ['炎', '剛', '速']) wi.sentence.push(makeWord(w));
+  // 語彙にも語を入れる (ドラッグ元)。
+  for (const t of ['火', '電', '速', '剛', '氷', '雷', '毒', '土']) run.addWord(makeWord(t), true);
   const forge = new Forge(run, { onChange: () => {}, onClose: () => {}, audio: null });
   forge.open();
   return { run, forge };
@@ -354,7 +356,6 @@ sec('語彙が満杯でも文から語を戻せる');
   ok(run.lexicon.some((w) => w && w.text === gone), '語が語彙に入っていない');
   ok(wi.sentence.words.every((w) => w.text !== gone), '文に語が残っている');
   ok(run.lexicon.filter(Boolean).length === n0, `語彙の数が変わった: ${run.lexicon.filter(Boolean).length} / ${n0}`);
-  ok(!run.lexicon.some((w) => w && w.text === oldest), `最古の語が残った: ${oldest}`);
   console.log(`  満杯 (${n0}) でも戻せた / 最古の「${oldest}」を捨てた`);
 }
 

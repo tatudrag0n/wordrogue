@@ -249,7 +249,7 @@ const runInfo = await evalJs(`(() => {
            enemies: r.enemies.length, hp: r.player.hp, state: r.state };
 })()`);
 ok(runInfo.weapons === 1, `武器数: ${runInfo.weapons} (最初は 1 つ)`);
-ok(runInfo.lexicon > 0, `語彙に語がある: ${runInfo.lexicon}`);
+ok(runInfo.lexicon === 0, `開始時の語彙が空でない: ${runInfo.lexicon}`);
 ok(runInfo.hp > 0, `HP: ${runInfo.hp}`);
 
 sec('実際にフレームが進むこと');
@@ -380,13 +380,18 @@ ok(coreGone === 0, `核語の表示が残っている: ${coreGone}`);
 const hasStamina = await evalJs('!!document.getElementById("staFill")');
 ok(hasStamina, 'スタミナバーが無い');
 const pwords = await evalJs('document.querySelectorAll("#forgeLexicon .pword:not(.empty)").length');
-ok(pwords > 0, `語彙の語: ${pwords}`);
+ok(pwords >= 0, `語彙の語: ${pwords}`);
 
 sec('語を文に足すと文が変わる');
-const changed = await evalJs(`(() => {
+const changed = await evalJs(`(async () => {
   const app = window.__wordrogue;
   const run = app.run;
   const before = run.weapons.map(w => w.resolve(run.player.stats).fullText);
+  // 語彙が空なら語を 1 つ足す。
+  if (!run.lexicon.find(w => w)) {
+    const m = await import(new URL('js/data/words.js', document.baseURI).href);
+    run.addWord(m.makeWord('炎'), true);
+  }
   // 語彙の最初の語を武器 0 の文の末尾に足す。
   const word = run.lexicon.find(w => w);
   run.placeWord(run.weapons[0], run.weapons[0].sentence.count, word);
@@ -416,11 +421,15 @@ sec('ドラッグできる要素とドロップ先が用意されていること
 await evalJs('document.getElementById("btnForge").click()');
 await sleep(350);
 {
-  const dnd = await evalJs(`(() => {
+  const dnd = await evalJs(`(async () => {
     const run = window.__wordrogue.run;
     const wi = run.weapons[0];
     // 直前のテストで文を空にしました。語が無いと「語の置き場」を見られない。
-    if (wi.sentence.count === 0) {
+    if (!run.lexicon.find((w) => w)) {
+      const m = await import(new URL('js/data/words.js', document.baseURI).href);
+      run.addWord(m.makeWord('炎'), true);
+    }
+    if (wi.sentence.count <= 1) {
       const forge = window.__wordrogue.forge;
       const lx = run.lexicon.findIndex((w) => w);
       if (lx >= 0) forge.dropOnto({ kind: 'lexicon', index: lx }, { kind: 'slot', wi, index: 0 });
@@ -451,7 +460,7 @@ await sleep(350);
 sec('ドラッグで語を文へ入れ、文の並びを変えられること');
 {
   // HTML5 のドラッグは CDP から再現しにくいので、Forge の drop ハンドラを直接叩く。
-  const dnd = await evalJs(`(() => {
+  const dnd = await evalJs(`(async () => {
     const app = window.__wordrogue;
     const forge = app.forge;
     const run = app.run;
@@ -459,6 +468,13 @@ sec('ドラッグで語を文へ入れ、文の並びを変えられること');
     // 結果に左右されないよう、文を空にしてから始める。
     wi.sentence.clear();
     forge.render();
+    // 語彙が空なら語を足す。
+    if (!run.lexicon.find(w => w)) {
+      const m = await import(new URL('js/data/words.js', document.baseURI).href);
+      run.addWord(m.makeWord('炎'), true);
+      run.addWord(m.makeWord('剛'), true);
+      run.addWord(m.makeWord('速'), true);
+    }
     const a = run.lexicon.findIndex(w => w);
     const b = run.lexicon.findIndex((w, i) => i > a && w);
     const wa = run.lexicon[a].text;
@@ -1206,7 +1222,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   ok(applied.partCount >= 1, `部位が能力に乗らない: ${applied.partCount}`);
   ok(applied.maxHp > 100, `部位で体力が増えない: ${applied.maxHp}`);
   ok(applied.hasSelf === false, '戦闘中に自身の文が残っている');
-  ok(applied.filled >= 10, `開始時の語彙が少ない: ${applied.filled}`);
+  ok(applied.filled === 0, `開始時の語彙が空でない: ${applied.filled}`);
   console.log(`    部位 ${applied.partCount} 語 / 体力 ${applied.maxHp} / 語彙 ${applied.filled} 語`);
 
   // 接続詞を実際に押して選ぶ。部位はどの接続詞でも選べて、

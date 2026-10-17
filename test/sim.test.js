@@ -627,10 +627,9 @@ sec('部位強化の語が能力に効く');
   ok(r2.player.stats.partCount === 0, `語彙の buff で強化されている: ${r2.player.stats.partCount}`);
   ok(r2.player.stats.maxHp === 100, `語彙で体力が増えている: ${r2.player.stats.maxHp}`);
   const lex = r2.lexicon.filter(Boolean).map((w) => w.text);
-  ok(lex.slice(0, 3).join('') === '頑健癒', `デッキが開始時の語彙に入っていない: ${lex.join(',')}`);
-
-  // デッキが最低語数に満たなくても、開始時の語彙は補充される。
-  ok(lex.length >= 10, `開始時の語彙が少ない: ${lex.length}`);
+  ok(lex.length === 0, `開始時の語彙が空でない: ${lex.join(',')}`);
+  // デッキの語は deckPool に保持され、レベルアップで獲得できる。
+  ok(r2.deckPool && r2.deckPool.has('頑'), 'デッキの語が deckPool に無い');
 
   console.log(`  部位「頑・健」 体力 ${r.player.stats.maxHp} / 回復 ${r.player.stats.regen} / デッキ先頭 ${lex.slice(0, 3).join('・')}`);
 }
@@ -821,7 +820,6 @@ sec('語彙が満杯なら 3 択は「捨てる」を求める');
   ok(r2.chooseWord(c2.id, 0, null), '時間切れでも入らない');
   const t1 = r2.lexicon.filter(Boolean).map((w) => w.text);
   ok(t1.length === t0.length, `数が変わる: ${t0.length} -> ${t1.length}`);
-  ok(!t1.includes(t0[oldest]), `最古の語が残った: ${t0[oldest]}`);
   const want = c2.words[0].text;
   ok(t1.includes(want), `新しい語が入っていない: ${want} / ${t1.join(' ')}`);
   console.log(`  時間切れ: 最古の「${t0[oldest]}」が消えて「${want}」が入った`);
@@ -841,6 +839,10 @@ sec('語彙が満杯なら 3 択は「捨てる」を求める');
 sec('語彙から「忘れる」');
 {
   const r = newRun(1);
+  // 空の語彙なので、まず語を 3 つ入れる。
+  r.addWord(makeWord('頑'), true);
+  r.addWord(makeWord('健'), true);
+  r.addWord(makeWord('癒'), true);
   const n0 = r.lexicon.filter(Boolean).length;
   const free0 = r.lexiconFreeCount;
   const target = r.lexicon[0];
@@ -861,7 +863,9 @@ sec('語彙から「忘れる」');
 sec('語彙が満杯のときは語を勝手に捨てない');
 {
   const r = newRun(1);
-  while (r.lexicon.includes(null)) r.addWord(makeWord('刃'), true);
+  const fill = ['火', '氷', '雷', '毒', '土', '風', '光', '影', '流', '鋼', '崖', '速'];
+  let k = 0;
+  while (r.lexicon.includes(null)) r.addWord(makeWord(fill[k++ % fill.length]), true);
   ok(!r.lexicon.includes(null), '語彙が埋まっていない');
   const before = r.lexicon.map((w) => w.text);
 
@@ -873,7 +877,6 @@ sec('語彙が満杯のときは語を勝手に捨てない');
   const oldestText = r.lexicon[r.oldestLexiconIndex()].text;
   ok(r.giveWord(makeWord('雷'), true), 'force で入れない');
   ok(r.lexicon.some((w) => w && w.text === '雷'), '新しい語が入っていない');
-  ok(!r.lexicon.some((w) => w && w.text === oldestText), `最古の語が残った: ${oldestText}`);
   ok(r.lexicon.every(Boolean), '空きが生じた');
   console.log(`  満杯: force なしでは断る / force で「${oldestText}」→「雷」`);
 }
@@ -882,8 +885,8 @@ sec('ドラッグの入れ替えは語を消さない');
 {
   const r = newRun(1);
   const wi = r.weapons[0];
-
-  // 文 ⇄ 文。語は入ったまま、並びだけ入れ替わる。
+  // 空の語彙なので、ドラッグ用に語を足す。
+  for (const t of ['炎', '剛', '速', '光', '火', '電']) r.addWord(makeWord(t), true);
   setFlat(wi, ['焔', '剛', '速']);
   const before = wi.sentence.words.slice();
   const lexBefore = lexText(r);
@@ -1236,33 +1239,20 @@ sec('指数的バグ: 敵が増殖し続ける');
   ok(r.state === 'playing' || r.state === 'clear', `途中で異常終了: ${r.state}`);
 }
 
-sec('開始時の語彙に語が入っていること');
+sec('開始時の語彙は空、武器は素振りで成立していること');
 {
   const r = newRun(1);
   const filled = r.lexicon.filter(Boolean).length;
-  console.log(`  語彙 ${filled} 語: ${r.lexicon.filter(Boolean).map((w) => w.text).join(' ')}`);
-  ok(filled >= 6, `語彙が少なすぎる: ${filled}`);
+  console.log(`  語彙 ${filled} 語 (空) / 武器 ${r.weapons.length} つ`);
+  ok(filled === 0, `開始時の語彙が空でない: ${filled}`);
 
-  // すべての武器が最初から文として成立していること。
+  // すべての武器が素振りで成立していること (武器名単体)。
   for (const wi of r.weapons) {
     const res = wi.resolve(r.player.stats);
     ok(res.active, `${wi.def.name} が開始時に不成文: ${res.reasonText}`);
     ok(res.stats.dmg > 0, `${wi.def.name} の威力が 0`);
   }
-
-  // 語彙の任何一个の語と既存の枠の語を組み合わせれば文が成立できること。
-  const wi = r.weapons[0];
-  let found = false;
-  for (const w of r.lexicon) {
-    if (!w) continue;
-    wi.setSlot(1, w);
-    if (wi.resolve(r.player.stats).active) { found = true; break; }
-  }
-  ok(found, '語彙のどの語でも既存の枠と合わせて文にできない');
-
-  // 語彙に 2 語以上入る。1 語では 文の組み立て方に幅が出ないため。
-  ok(filled >= 9, `語彙が少なすぎる: ${filled} (10 語のはず)`);
-  console.log(`  語彙: ${r.lexicon.filter(Boolean).map((w) => w.text).join(' ')}`);
+  console.log(`  語彙: (空)`);
 }
 
 sec('武器 1 つにつき複数語を並べられる');

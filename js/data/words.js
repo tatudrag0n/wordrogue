@@ -676,7 +676,7 @@ export function evaluate(words, opt = {}) {
       if (!prev) continue;
       const pool = prev.pool || [];
       const stemOnly = prev.pos === POS.adj || prev.pos === POS.naadj
-        || prev.cat === 'verb' || pool.some((e) => e.pred)
+        || pool.some((e) => e.pred)
         || !pool.some((e) => e.role === 'adn' || (e.role === 'case' && e.next === 'noun'));
       if (!stemOnly) continue;
       if (inPhrase(segOff[j], segOff[j] + segs[j].length + segs[i].length)) continue;

@@ -255,10 +255,10 @@ const rollCrit = (st) => rng() < (st.crit || 0);
  * @param {object} run
  */
 function cutByWeapon(e, st, run) {
-  if (!e.words || e.broken) return;
+  if (!e.words || e.broken || e.boss) return;
   const power = st.cutPower || 0;
   if (power <= 0) return;
-  const chance = (st.cutChance || 0) * (e.boss ? 0.3 : 1);
+  const chance = st.cutChance || 0;
   if (chance <= 0 || rng() >= chance) return;
 
   const r = cutEnemyWords(e, power);

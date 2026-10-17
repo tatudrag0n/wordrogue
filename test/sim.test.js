@@ -1416,16 +1416,24 @@ sec('熟語か述語なら、一撃で 2 語斬る');
   ok(strong.valid, `比較用の文が成立しない: ${strong.evalResult.reasonText}`);
   ok(strong.stats.cutPower === 2, `斬り数が 2 でない: ${strong.stats.cutPower}`);
 
-  // 3 語の敵を 1 撃で 2 語斬れる。
+  // 3 語の敵を 1 撃で 2 語斬れる (ボス以外)。
   const e = makeEnemy('boss_slime', 0, 0);
+  e.boss = false;
   ok(e.words.length === 3, `敵の文が 3 語でない: ${e.words.length}`);
-  // ボスは 0.3 倍。即使概率很低也会失败。把 cutChance 设为 10 で必斩。
   strong.stats.cutChance = 10;
   damage(r, e, strong.stats, {});
   ok(e.words.length === 1, `2 語斬れていない: ${e.words.join('')}`);
   ok(e.broken, '3 語 -> 1 語 で崩れていない');
   console.log(`  ${ENEMIES.boss_slime.name}「${ENEMIES.boss_slime.words.join('')}」`
     + ` → 熟語 1 撃で 2 斬り → 「${e.words.join('')}」${e.broken ? ' (崩れた)' : ''}`);
+
+  // ボスの文は斬れない (免疫)。
+  const b = makeEnemy('boss_slime', 0, 0);
+  ok(b.words.length === 3, `ボスの文が 3 語でない: ${b.words.length}`);
+  strong.stats.cutChance = 10;
+  damage(r, b, strong.stats, {});
+  ok(b.words.length === 3, `ボスの文が斬られてしまった: ${b.words.join('')}`);
+  ok(!b.broken, 'ボスが崩れてしまった');
 }
 
 sec('書庫の言玉で恒久強化を買える');

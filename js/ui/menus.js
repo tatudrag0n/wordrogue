@@ -632,8 +632,9 @@ export class Menus {
   showLoadout(stageId) {
     this._tabFrom = null;
     this.stageId = stageId;
-    const unlocked = this.save.d.unlockedWeapons.filter((id) => WEAPONS[id]);
-    this.picked = (unlocked.length ? unlocked : ['sword']).slice(0, 1);
+    const avail = startingWeaponsFor(stageId);
+    const unlocked = this.save.d.unlockedWeapons.filter((id) => WEAPONS[id] && avail.includes(id));
+    this.picked = (unlocked.length ? unlocked : (avail.length ? [avail[0]] : ['sword'])).slice(0, 1);
 
     const st = STAGES.find((s) => s.id === stageId);
     this.loadoutTitle.textContent = `第 ${stageId} 戦・${st.name}`;

@@ -14,7 +14,7 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, SPECIAL_SHAPE } from '../data/weapons.js';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js';
 import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS } from '../data/words.js';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
@@ -116,6 +116,16 @@ export class WeaponInst {
       return !!WORDS[c.source]?.cats?.includes('verb');
     });
   }
+  hasHealVerb(e) {
+    return (e?.compounds || []).some((c) => c.pred && c.source === '癒');
+  }
+  lastAttackVerb(e) {
+    let v = null;
+    for (const c of (e?.compounds || [])) {
+      if (c.pred && WORDS[c.source]?.cats?.includes('verb')) v = c.source;
+    }
+    return v;
+  }
   get tailWord() { return this.tail ? makeWord(this.tail) : null; }
 
   /** 文の並び (evaluate に渡す配列)。 */
@@ -199,6 +209,26 @@ export class WeaponInst {
         gradeInfo: GRADES.broken,
       };
     }
+    // 形語 (形態・属性・現象の語) が文にあるときは、文末が形語で締まらねば不成文。
+    {
+      const ws = this.sentence.words;
+      let shapeIdx = -1;
+      for (let i = ws.length - 1; i >= 0; i--) {
+        const c = WORDS[ws[i].text]?.cat;
+        if (c === 'form' || c === 'element' || c === 'phenom') { shapeIdx = i; break; }
+      }
+      if (shapeIdx >= 0 && shapeIdx !== ws.length - 1) {
+        return {
+          ...e,
+          valid: false,
+          reason: 'tailshape',
+          reasonText: '「' + ws[shapeIdx].text + '」の形が文を締めていない。'
+            + '形を表す語 (刃・弾・炎など) を含む文は、その語で終わること。',
+          grade: 'broken',
+          gradeInfo: GRADES.broken,
+        };
+      }
+    }
     // 形態語 (弾・環・玉…) はただの語なので、置く場所は自由。
     // 「文は武器語で締める」という制約はやめた — 文末にこられると
     // 攻撃の型を失って不利益になるので、そこは型だけで判断する。
@@ -239,8 +269,10 @@ export class WeaponInst {
         info = SPECIAL_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null;
       }
     }
-    const kind = (info && info[1]) || this.def.kind;
-    const shape = (info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade';
+    let kind = (info && info[1]) || this.def.kind;
+    let shape = (info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade';
+    const verb = special ? this.lastAttackVerb(e) : null;
+    if (verb && VERB_SHAPE[verb]) { kind = VERB_SHAPE[verb]; shape = KIND_SHAPE[kind]; }
     // 属性語を頭にした文は、動詞が無くても不成文ではない。ただ撃てない。
     const pending = e.valid && this.pendingSpecialVerb(e);
     const active = e.valid && !pending;
@@ -262,6 +294,7 @@ export class WeaponInst {
       shape,
       tail,
       special,
+      heal: active && this.hasHealVerb(e),
       title: this.title,
       text: this.fullText,
       fullText: e.text,

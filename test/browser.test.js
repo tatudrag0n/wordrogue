@@ -419,7 +419,7 @@ sec('語をタップすると直後の接続詞が切り替わる');
     // 文を自由に作り直す。語 2 つ。
     wi.sentence.clear();
     wi.sentence.push(m.makeWord('炎'));
-    wi.sentence.push(m.makeWord('斬'));
+    wi.sentence.push(m.makeWord('刃'));
     forge.render();
     const opts = wi.sentence.connOptions(0);
     const seen = [];
@@ -1576,7 +1576,7 @@ sec('遊び方の説明が実装と矛盾していないこと');
   }
   // 例の文は現在の形 (10 文字まで自由に並べた文) であるべき。
   // test/all.mjs が「index.html の例は辞書の語だけで作れるもの」と照合するので同じ語を使う。
-  for (const t of ['焔必刃', '焔を斬られた硬']) {
+  for (const t of ['焔必刃', '焔を斬られた硬刃']) {
     ok(doc.includes(t), `玩法説明に例「${t}」が無い`);
   }
   // 文の長さ・武器語・接続詞の記述があるはず。

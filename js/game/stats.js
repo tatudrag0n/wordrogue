@@ -186,7 +186,25 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
       }
     }
     // 熟語が成立していれば、その効果も乗る (発電 = 感電など)。
-    if (p.idiom) applyPartSrc(s, p.idiom.fx || {}, PART_KEYS, gain, false);
+    if (p.idiom) {
+      if (applyPartSrc(s, p.idiom.fx || {}, PART_KEYS, gain, false)) used++;
+    }
+    // どんな語でも何かしら体に効くように、直接効果が無ければ汎用ボーナスを与える
+    // 武器系語（炎・弾・強など）も部位で無効にならないようにする。
+    // 文の力があればそちらで体に乗るので、力が無いときだけ最低保証を入れる。
+    if (used === 0 && p.sen.count > 0 && p.power <= 1.01) {
+      const fb = gain > 0 ? gain : 0.6;
+      s.maxHp += 8 * fb;
+      s.atkMul += 0.02 * fb;
+      used = 1;
+      const first = p.sen.entries[0]?.word?.text;
+      if (first && !s.partTexts.includes(first)) s.partTexts.push(first);
+    } else if (used === 0 && p.sen.count > 0) {
+      // 力はあるが直接効果が無い場合もカウントして部位が「効いた」扱いにする
+      used = 1;
+      const first = p.sen.entries[0]?.word?.text;
+      if (first && !s.partTexts.includes(first)) s.partTexts.push(first);
+    }
     // 文の力そのものを体に写す。
     s.partPowerBonus += Math.max(0, p.power - 1);
     s.partCount += used;
@@ -233,6 +251,7 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
  */
 const EFFECT_ROWS = [
   { key: 'maxHp', label: '体力', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
+  { key: 'atk', label: '攻撃', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'atkMul', label: '攻撃', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'armor', label: '装甲', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'crit', label: '会心', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },

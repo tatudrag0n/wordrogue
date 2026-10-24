@@ -816,5 +816,36 @@ sec('文が実際に読める形で作れること');
   }
 }
 
+sec('自然な文が不自然な文より弱くならないこと');
+{
+  // ランダムな文を生成して、自然さ（natural）が高いのに威力（power）が低い逆転が無いか確認
+  const pool = Object.keys(WORDS).filter((w) => WORDS[w].cat !== 'connect' && w.length === 1);
+  const E = (ws) => evaluate(ws.map((t) => ({ text: t })), { minContent: 2, tail: ws[ws.length - 1] });
+  let violations = 0;
+  let sample = 0;
+  // 決定的な RNG（再現性のため）
+  let seed = 0x9e3779b9;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 0xffffffff; };
+  for (let i = 0; i < 3000; i++) {
+    const la = 2 + Math.floor(rnd() * 3);
+    const lb = 2 + Math.floor(rnd() * 3);
+    const a = []; const b = [];
+    for (let k = 0; k < la; k++) a.push(pool[Math.floor(rnd() * pool.length)]);
+    for (let k = 0; k < lb; k++) b.push(pool[Math.floor(rnd() * pool.length)]);
+    const ea = E(a); const eb = E(b);
+    if (!ea.valid || !eb.valid) continue;
+    sample++;
+    // 自然さは熟語ボーナスを含めた総合で比べる（熟語は自然な文の一部）
+    const effA = ea.natural * 0.38 + ea.phraseBonus;
+    const effB = eb.natural * 0.38 + eb.phraseBonus;
+    if (effA > effB + 1e-9 && ea.fx.power < eb.fx.power - 1e-9) {
+      violations++;
+      if (violations <= 3) console.log(`  逆転例: 「${ea.text}」 natural=${ea.natural.toFixed(2)} phrase=${ea.phraseBonus.toFixed(2)} power=${ea.fx.power.toFixed(2)} < 「${eb.text}」 natural=${eb.natural.toFixed(2)} phrase=${eb.phraseBonus.toFixed(2)} power=${eb.fx.power.toFixed(2)}`);
+    }
+  }
+  console.log(`  チェック ${sample} 件 / 逆転 ${violations} 件`);
+  ok(violations === 0, `自然なのに弱い文が ${violations} 件ある（power が natural に勝てていない）`);
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

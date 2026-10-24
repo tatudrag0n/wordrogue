@@ -750,7 +750,9 @@ export function evaluate(words, opt = {}) {
   const phraseBonus = idiom ? (idiom.power ?? 0.2) : 0;
   const bonusWords = Math.max(0, content - 1);
   const predicated = hasPredicate;
-  fx.power = 1 + bonusWords * 0.05 + natural * 0.30 + phraseBonus;
+  // 自然さが本命。ボーナスは自然さに勝たないよう小さくする。
+  // 要求: 自然な文が不自然な文より弱くならない（bonus 0.05→0.008で長さの影響を抑え、自然 0.30→0.38で重み付け）
+  fx.power = 1 + bonusWords * 0.008 + natural * 0.38 + phraseBonus;
 
   // 評価。自然さと完成度で決まる。
   let grade = 'plain';

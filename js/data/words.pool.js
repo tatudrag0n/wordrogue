@@ -36,7 +36,7 @@
 import { PHRASE_BONUS } from './words.phrase.js';
 
 /** 名詞が共通で持つ格の接続詞。 */
-export const NOUN_POOL_SPEC = 'の:case>noun を:case>verb に:case>pred へ:case>pred';
+export const NOUN_POOL_SPEC = 'の:case>noun を:case>verb に:case>pred へ:case>pred は:case>noun';
 
 const RAW_POOL = `
 # ── 属性 (既定は体言 +N。形を持つ語だけ書く) ──

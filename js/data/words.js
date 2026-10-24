@@ -553,6 +553,19 @@ export function evaluate(words, opt = {}) {
       }
     }
   }
+  // 矛盾する属性の並び (氷の炎)。日本語として読めるが意味が噛み合わない。
+  {
+    const CLASH = { fire: 'ice', ice: 'fire', water: 'thunder', thunder: 'water', light: 'dark', dark: 'light' };
+    const els = segs.filter((t) => !CONNECTOR_SET.has(t)).map((t) => WORDS[t]?.el || null);
+    let clashHit = false;
+    for (let i = 0; i < els.length && !clashHit; i++) {
+      if (!els[i]) continue;
+      for (let j = i + 1; j < els.length; j++) {
+        if (els[j] && CLASH[els[i]] === els[j]) { clashHit = true; break; }
+      }
+    }
+    if (clashHit) parts.push({ key: 'clash', label: '矛盾する属性の並び', v: -0.5 });
+  }
   // 実体語が 4 つ以上続けて並ぶと羅列になる。
   //   「業火剛利必殺吸血剣」… 修飾が重なると名詞の列であって文ではない。
   //   「業火の鋭く斬る剣」  … 係り結びがあるので羅列にならない。

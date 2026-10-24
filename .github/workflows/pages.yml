@@ -10,6 +10,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 # 同時実行を避けるため、concurrency group を分ける。
 concurrency:

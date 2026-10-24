@@ -882,5 +882,25 @@ sec('自然な文が不自然な文より弱くならないこと');
   ok(violations === 0, `自然なのに弱い文が ${violations} 件ある（power が natural に勝てていない）`);
 }
 
+sec('新しい語 — 気・己・皆と敵のは');
+{
+  const E2 = (...ws) => evaluate(ws.map((w) => ({ text: w })));
+  for (const t of ['気', '己', '皆', '敵']) {
+    ok(!!WORDS[t], `「${t}」が辞書に無い`);
+    ok(WORDS[t].cat === 'modifier', `「${t}」の種類: ${WORDS[t].cat}`);
+    ok(!WORDS[t].player, `「${t}」に体に効く効果が残っている`);
+  }
+  ok(WORDS['気'].fx.homing > 0, '気に追尾が無い');
+  ok(WORDS['己'].fx.regen > 0, '己に回復が無い');
+  ok(WORDS['皆'].fx.count > 0 && WORDS['皆'].fx.area > 0, '皆の効果が無い');
+  ok(WORDS['敵'].fx.dmg > 0, '敵の効果が無い');
+  ok(CONNECTOR_SET.has('は'), '「は」が接続詞に入っていない');
+  const r = E2('敵', 'は', '皆', '燃', 'える');
+  ok(r.valid, `「敵は皆燃える」が不成立: ${r.reasonText}`);
+  const r2 = E2('己', 'を', '癒', 'す', '剣');
+  ok(r2.valid, `「己を癒す剣」が不成立: ${r2.reasonText}`);
+  console.log('  気・己・皆 追加:「敵は皆燃える」・「己を癒す剣」 成立');
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

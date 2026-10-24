@@ -256,51 +256,58 @@ sec('語を選んで文の語をタップで置ける');
   console.log(`  語を選択「${text}」-> 文の語をタップ -> 「${wi.sentence.text}」`);
 }
 
-sec('語を長押しで持ち上げ、タップだけで並べ替えられる');
+sec('文の語を長押しすると接続詞の一覧が出る (スクロールで選ぶ)');
 {
   const { run, forge } = openForge();
   const wi = run.weapons[0];
   const text0 = wi.sentence.text;
   const first = chipsOf(forge)[0].querySelector('span').textContent;
   await longPress(chipsOf(forge)[0]);
-  ok(forge.held, '長押しで持ち上がらない');
-  ok(forge.held && forge.held.word.text === first, `持ち上がった語が違う: ${forge.held?.word.text}`);
-  ok(wi.sentence.text === text0, `持ち上がりで文が変わった: ${wi.sentence.text}`);
-  // 末尾の隙間をタップで移動。
-  tap(gapsOf(forge).at(-1));
-  ok(forge.held === null, '持ち上がりが残る');
-  ok(wi.sentence.words.at(-1).text === first, `末尾に移っていない: ${wi.sentence.text}`);
-  ok(wi.sentence.count === chipsOf(forge).length, `語が失われた: ${wi.sentence.count}`);
-  console.log(`  長押し「${first}」-> 末尾の隙間をタップ -> 「${wi.sentence.text}」`);
+  const menu = dom.doc.querySelector('.conn-picker');
+  ok(menu && menu.classList.contains('conn-picker'), '長押しで接続詞メニューが開かない');
+  const head = menu.querySelector('.conn-picker-head').textContent;
+  ok(head.startsWith(first), `見出しがその語でない: "${head}" (期待 ${first} …)`);
+  ok(wi.sentence.text === text0, `長押しで文が変わった: ${wi.sentence.text}`);
+  // いま付いている接続詞 (無ければ「なし」) を選ぶと、文は変わらずに閉じる。
+  const cur = [...menu.querySelectorAll('.conn-pick')].find((b) => b.classList.contains('cur'));
+  ok(!!cur, 'いまの状態の候補がメニューに無い');
+  cur.dispatchEvent({ type: 'click', preventDefault() {}, stopPropagation() {} });
+  ok(wi.sentence.text === text0, `同じ接続詞を選んだのに文が変わった: ${wi.sentence.text}`);
+  ok(!dom.doc.querySelector('.conn-picker'), '選んだのにメニューが残る');
+  console.log(`  長押し「${first}」→ 一覧「${head}」→ 文は「${wi.sentence.text}」のまま`);
 }
 
-sec('持ち上げた語は語彙のタップで戻せる');
+sec('文の語はドラッグで語彙へ戻せる');
 {
   const { run, forge } = openForge();
   const wi = run.weapons[0];
   const free0 = run.lexiconFreeCount;
   const text = chipsOf(forge)[0].querySelector('span').textContent;
-  await longPress(chipsOf(forge)[0]);
-  ok(forge.held, '長押しで持ち上がらない');
-  tap(lexWords()[0]);
-  ok(forge.held === null, '持ち上がりが残る');
+  drag(chipsOf(forge)[0], lexWords()[0]);
+  await settle();
   ok(wi.sentence.words.every((w) => w.text !== text), `文に語が残っている: ${wi.sentence.text}`);
   ok(run.lexicon.some((w) => w && w.text === text), '語彙に戻っていない');
   ok(run.lexiconFreeCount === free0 - 1, `空きが増えていない: ${free0} -> ${run.lexiconFreeCount}`);
-  console.log(`  長押し -> 語彙をタップ -> 語彙へ戻った (空き ${free0} -> ${run.lexiconFreeCount})`);
+  ok(forge.dragFrom === null, 'dragFrom が残った');
+  console.log(`  文の語をドラッグ -> 語彙へ戻った (空き ${free0} -> ${run.lexiconFreeCount})`);
 }
 
-sec('長押しした語をもう一度タップすると元のまま');
+sec('長押しの一覧を出したまま、ほかの語はふつうにタップできる');
 {
   const { run, forge } = openForge();
   const wi = run.weapons[0];
   const text0 = wi.sentence.text;
   await longPress(chipsOf(forge)[0]);
-  ok(forge.held, '長押しで持ち上がらない');
-  tap(chipsOf(forge)[0]);
-  ok(forge.held === null, '持ち上がりが残る');
-  ok(wi.sentence.text === text0, `文が変わった: ${text0} -> ${wi.sentence.text}`);
-  console.log('  持ち上げてから同じ語をタップで元に戻った');
+  ok(!!dom.doc.querySelector('.conn-picker'), '長押しで接続詞メニューが開かない');
+  // 一覧を出したまま、ほかの語をふつうのタップで操作できる (接続詞が回る)。
+  tap(chipsOf(forge)[1]);
+  ok(wi.sentence.text !== text0, `ふつうのタップで接続詞が回らない: ${text0} -> ${wi.sentence.text}`);
+  ok(!!dom.doc.querySelector('.conn-picker'), 'ほかをタップしただけで一覧が閉じた');
+  // 「なし」を選ぶと一覧が閉じる。
+  const pick = dom.doc.querySelector('.conn-picker .conn-pick');
+  pick.dispatchEvent({ type: 'click', preventDefault() {}, stopPropagation() {} });
+  ok(!dom.doc.querySelector('.conn-picker'), '選んだのに一覧が残る');
+  console.log(`  一覧を出しつつ「${wi.sentence.text}」へ・選んで閉じる`);
 }
 
 sec('長押し時間までに動かすと持ち上がらない');

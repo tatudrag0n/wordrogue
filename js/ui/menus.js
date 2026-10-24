@@ -83,6 +83,12 @@ export class Menus {
     this.growSel = null;
     /** 接続詞の一覧を開いている枠 { part, slot }。 */
     this.growConn = null;
+    // チュートリアル。初回の 1 回だけ自動で出す (save.d.seenIntro)。
+    // #tutorial が無い環境 (テストの最小 DOM) でも死なないように取っておく。
+    this.tutorial = $('#tutorial');
+    this.tutStepEl = this.tutorial ? $('#tutStep') : null;
+    this.tutSteps = this.tutorial ? [...this.tutorial.querySelectorAll('.tut-step')] : [];
+    this.tutIdx = 0;
     /** 「ほかの接続詞」を開いている枠 ("part:slot")。 */
     this.growConnAll = null;
     /** 詳細 note に出す一次性のメッセージ。renderGrow で消す。 */
@@ -148,6 +154,11 @@ export class Menus {
     for (const b of document.querySelectorAll('[data-close]')) {
       b.addEventListener('click', () => {
         tap();
+        // チュートリアルは初回だけ。閉じたら以後は自動で出さない。
+        if (b.dataset.close === 'tutorial' && this.save?.d) {
+          this.save.d.seenIntro = true;
+          this.save.save();
+        }
         // ゲーム中の辞書は main.js が時間を戻すので、そちらに任せる。
         // 閉じたあと main.toggleDict が hide() を呼ぶので、
         // タイトル系の戻し先は hide('dict') 側で復元する。
@@ -170,12 +181,26 @@ export class Menus {
     this.resultNext.addEventListener('click', () => { tap(); this.cb.onNext?.(); });
 
     this.loadoutGo.addEventListener('click', () => { tap(); this.cb.onStart?.(this.picked.slice()); });
+
+    // ── チュートリアル ──
+    $('#btnTutorial')?.addEventListener('click', () => { tap(); this.show('tutorial'); });
+    $('#tutNext')?.addEventListener('click', () => {
+      tap();
+      if (this.tutIdx >= this.tutSteps.length - 1) this.closeTutorial();
+      else { this.tutIdx++; this.renderTutorialSteps(); }
+    });
+    $('#tutBack')?.addEventListener('click', () => {
+      tap();
+      if (this.tutIdx > 0) { this.tutIdx--; this.renderTutorialSteps(); }
+    });
   }
 
   hideAll() {
     for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'archive', 'grow']) {
       this[k].hidden = true;
     }
+    // #tutorial は DOM ごと無い環境があるので、存在するときだけ伏せる。
+    if (this.tutorial) this.tutorial.hidden = true;
   }
 
   /** 辞書を閉じる。ゲーム中は main.js 側で時間を戻す。 */
@@ -193,7 +218,7 @@ export class Menus {
 
   show(name) {
     // タブ系 (遊び方/書庫/辞書/設定) を開くときは、下に見えている画面を覚える。
-    if (['howto', 'archive', 'dict', 'settings', 'grow'].includes(name)) {
+    if (['howto', 'archive', 'dict', 'settings', 'grow', 'tutorial'].includes(name)) {
       const base = ['title', 'stages', 'loadout', 'result']
         .find((k) => !this[k].hidden);
       this._tabFrom = base || null;
@@ -207,7 +232,40 @@ export class Menus {
     if (name === 'dict') this.renderDict();
     if (name === 'archive') this.renderArchive();
     if (name === 'grow') this.renderGrow();
+    if (name === 'tutorial') this.renderTutorial();
   }
+
+  // ── チュートリアル ─────────────────────────────────────────────────────────
+
+  /** 開くときは最初の 1 枚目から。 */
+  renderTutorial() {
+    this.tutIdx = 0;
+    this.renderTutorialSteps();
+  }
+
+  /** いまの歩みに合わせて枚とボタンを整える。 */
+  renderTutorialSteps() {
+    if (!this.tutorial) return;
+    const last = this.tutSteps.length - 1;
+    this.tutSteps.forEach((s, i) => s.classList.toggle('is-on', i === this.tutIdx));
+    if (this.tutStepEl) this.tutStepEl.textContent = String(this.tutIdx + 1) + ' / ' + String(this.tutSteps.length);
+    const back = $('#tutBack');
+    const next = $('#tutNext');
+    if (back) back.disabled = this.tutIdx <= 0;
+    if (next) next.textContent = this.tutIdx >= last ? 'とじる' : 'つぎへ';
+  }
+
+  /** 最後まで進んだ (または途中で閉じた)。以後は自動で出さない。 */
+  closeTutorial() {
+    if (!this.tutorial) return;
+    if (this.save?.d) { this.save.d.seenIntro = true; this.save.save(); }
+    const back = this._tabFrom;
+    this._tabFrom = null;
+    this.hide('tutorial');
+    if (back && back !== 'tutorial') this[back].hidden = false;
+    else this.show('title');
+  }
+
 
   // ── 部位強化 (言葉くじ・部位・言葉デッキ) ──────────────────────────────
   //
@@ -591,6 +649,8 @@ export class Menus {
     $('#recRuns').textContent = String(d.totalRuns);
     const broken = $('#recBroken');
     if (broken) broken.textContent = fmtNum(d.totalBroken || 0);
+    // タイトルの 1 回目でチュートリアルを出す。閉じた瞬間に seenIntro が立つ。
+    if (this.tutorial && this.save?.d && !this.save.d.seenIntro) this.show('tutorial');
   }
 
   // ── ステージ選択 ────────────────────────────────────────────────────────

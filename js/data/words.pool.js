@@ -166,14 +166,12 @@ const RAW_POOL = `
 結  n   ぶ:adn* ばれた:adn*p
 穿  n   つ:adn*
 通  n   る:adn* す:adn*
-敵  n   は:case>noun +N
 
 # ── 核語 ──
 志  n   す:adn* +N
 巧  na  みな:adn+ みに:adv+
 守  n   る:adn*
 感  n   じる:adn*
-気  n   +N
 
 # ── 動詞 (全部書く) ──
 爆  v   ぜる:adn* ぜて:adv

@@ -99,9 +99,7 @@ for (const table of RAW_TABLES) {
 }
 
 // 接続詞 (送り仮名) も分割のために辞書へ入れる。効果は CONNECTORS が正。
-// 「は」は generated connector だが、旧接続語テストの互換のため辞書には入れない。
 for (const k of CONNECT_ORDER) {
-  if (k === 'は') continue;
   if (WORDS[k]) { DUPLICATES.push(k); continue; }
   WORDS[k] = {
     text: k, cat: 'connect', cats: ['connect'], el: null, fx: CONNECTORS[k].fx, player: null, pos: null, pool: [],
@@ -118,7 +116,6 @@ export function posOf(text) { return WORDS[text]?.pos || null; }
 
 /** 分割判定に使う語集合。 */
 const DICT = new Set(Object.keys(WORDS));
-DICT.add('は');
 
 /** 語にかな (平仮名・片仮名) が含まれるか。 */
 const KANA_RE = /[ぁ-んァ-ヶー]/;
@@ -156,7 +153,6 @@ export const DRAWABLE_ALL = Object.keys(WORDS).filter(
 export const CONNECTOR_SET = new Set(
   Object.keys(WORDS).filter((w) => WORDS[w].cat === 'connect'),
 );
-CONNECTOR_SET.add('は');
 
 /**
  * 接続詞の一覧。鍛冶の接続詞プールが無限に出す。
@@ -182,12 +178,7 @@ for (const w of Object.keys(WORDS)) WORDS_BY_CAT[WORDS[w].cat].push(w);
 
 /** 語を「インスタンス」として引くためのプロトタイプをキャッシュ。 */
 export function makeWord(text) {
-  let base = WORDS[text];
-  // 「は」のような generated connector は辞書 (WORDS) には無いが、
-  // インスタンスとしては接続詞として扱えるようにする。
-  if (!base && CONNECTOR_SET.has(text)) {
-    base = { text, cat: 'connect', cats: ['connect'], el: null, fx: CONNECTORS[text]?.fx || {}, player: null };
-  }
+  const base = WORDS[text];
   if (!base) throw new Error(`未知の語: ${text}`);
   return {
     uid: wordUid++,
@@ -561,19 +552,6 @@ export function evaluate(words, opt = {}) {
         parts.push({ key: 'dupword', label: `同じ語「${t}」が ${bare} 回`, v: -0.5 * (bare - 1) });
       }
     }
-  }
-  // 矛盾する属性の並び (氷の炎)。日本語として読めるが意味が噛み合わない。
-  {
-    const CLASH = { fire: 'ice', ice: 'fire', water: 'thunder', thunder: 'water', light: 'dark', dark: 'light' };
-    const els = segs.filter((t) => !CONNECTOR_SET.has(t)).map((t) => WORDS[t]?.el || null);
-    let clashHit = false;
-    for (let i = 0; i < els.length && !clashHit; i++) {
-      if (!els[i]) continue;
-      for (let j = i + 1; j < els.length; j++) {
-        if (els[j] && CLASH[els[i]] === els[j]) { clashHit = true; break; }
-      }
-    }
-    if (clashHit) parts.push({ key: 'clash', label: '矛盾する属性の並び', v: -0.5 });
   }
   // 実体語が 4 つ以上続けて並ぶと羅列になる。
   //   「業火剛利必殺吸血剣」… 修飾が重なると名詞の列であって文ではない。

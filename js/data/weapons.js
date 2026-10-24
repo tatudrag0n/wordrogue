@@ -111,8 +111,8 @@ export const WEAPONS = {
   needle: {
     id: 'needle', name: '針', kind: 'shot', glyph: '針', tail: '針',
     desc: '細くて速い。連射で削り、貫通する。',
-    base: { dmg: 4, rate: 4.0, speed: 540, count: 2, pierce: 1, size: 0.7, crit: 0.06, spread: 0.05 },
-    grow: { dmg: 1.3, rate: 0.28, count: 0.2, pierce: 0.2 },
+    base: { dmg: 3, rate: 3.0, speed: 480, count: 1, pierce: 0, size: 0.7, crit: 0.05, spread: 0.08 },
+    grow: { dmg: 1.0, rate: 0.2, count: 0.15, pierce: 0.15 },
     startWord: '毒', startWord2: '蝕', maxLevel: 8, unlock: { stage: 3 },
   },
   boulder: {

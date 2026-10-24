@@ -224,7 +224,7 @@ const RAW_FORM = `
 銃     form  -  dmg+7  count+1  speed+40
 玉     form  -  dmg+4  count+2  spread+0.3
 矢     form  -  dmg+5  speed+90  pierce+1
-針     form  -  dmg+3  speed+130  count+2  pierce+1
+針     form  -  dmg+2  speed+90  count+1
 弓     form  -  dmg+5  speed+110  pierce+1
 杖     form  -  dmg+6  pierce+2  speed+30
 球     form  -  dmg+6  area+6  size+0.15

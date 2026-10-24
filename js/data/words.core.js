@@ -387,6 +387,9 @@ const RAW_MODIFIER = `
 // ─────────────────────────────────────────────────────────────────────────────
 const RAW_CORE = `
 志    modifier  -  dmg+3   rate+0.20
+気    modifier  -  dmg+2   homing+0.08
+己    modifier  -  dmg+1   regen+0.3
+皆    modifier  -  area+8   count+1
 力    modifier  -  dmg+6
 巧    modifier  -  crit+0.08  dmg+2
 守    modifier  -  shield+20  regen+0.4

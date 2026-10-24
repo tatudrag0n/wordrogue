@@ -2,8 +2,9 @@
 // ワードローグ — 言葉鍛冶 (文の組み立て画面)
 //
 // 枠に語を嵌めるのではない。語を自由に並べて文にする。
-//   語彙や文から語をドラッグして、文のあいだに落とす。
+//   語彙の語を文の語へドラッグすると、その手前に差し込まれる (置き換えはしない)。
 //   文の中の語はドラッグで並べ替えられる。語彙へ戻せば外れる。
+//   文は語と語のあいだに空間を置かず、そのまま連結して見せる。
 //
 // 接続詞は語の直後に付く。語の横にあるだけなので、
 // 文の並びを動かしても骨組みはそのまま残る。
@@ -32,18 +33,6 @@ function placeKey(place) {
   return `W${place.wIdx ?? '?'}_${place.index}`;
 }
 
-/** 語の種類から CSS クラスを作る。接続詞と動詞を区別する。 */
-function catClass(w) {
-  const info = WORDS[w?.text];
-  if (!info) return 'sn-x';
-  if (info.cat === 'connect') return 'sn-conn';
-  if (info.cat === 'verb') return 'sn-verb';
-  // 分類としての「自身」語は無い。体側 (p.) の効果を持つ語に印を付けるだけ。
-  if (info.player) return 'sn-self';
-  return 'sn-n';
-}
-
-// 効果の日本語名は labels.js 1 つだけ (ここにも書くと片方が古くなる)。
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
 
 /** 語の体側の効果 (p.) を一行に。部位強化でだけ効く分。 */
@@ -268,30 +257,32 @@ export class Forge {
     return r;
   }
 
-  /** 文を 1 行に並べる。語と、その直後の接続詞。 */
+  /**
+   * 文を 1 行に並べる。語と、その直後の接続詞。
+   * 語と語のあいだには何も置かない (隙間も「＋」も出さない)。
+   * 語を足す位置は文の末尾だけ。
+   */
   renderSentenceRow(sen, opt = {}) {
     const row = el('div', { class: 'sen-row' });
     const wordKind = 'slot';
-    const gapKind = 'gap';
 
-    const mkGap = (index) => {
-      const place = { kind: gapKind, index, wi: opt.wi || null, wIdx: opt.wIdx };
-      const node = el('div', {
-        class: 'sen-gap',
-        title: 'ここに語を置ける (ドラッグ / タップ)',
-      });
-      this.makeDropTarget(node, place);
-      this.makeTappable(node, () => this.onGapTap(place));
-      return node;
+    // 文の末尾にだけ置く追加位置。ドラッグでの語の置き換えはしない。
+    const appendPlace = {
+      kind: 'gap', index: sen.entries.length, wi: opt.wi || null, wIdx: opt.wIdx,
     };
+    const addNode = el('div', {
+      class: 'sen-gap sen-add',
+      title: 'タップ / ドロップで末尾に語を足す',
+    }, el('span', {}, '＋'));
+    this.makeDropTarget(addNode, appendPlace);
+    this.makeTappable(addNode, () => this.onGapTap(appendPlace));
 
-    row.append(mkGap(0));
     sen.entries.forEach((e, i) => {
       const place = { kind: wordKind, index: i, wi: opt.wi || null, wIdx: opt.wIdx };
       row.append(this.renderWordChip(e, place, opt.idiomIdx?.has(i), opt.idiomName));
-      row.append(mkGap(i + 1));
     });
-    // 末尾語 (武器語) は枠の外に固定で付く。
+    row.append(addNode);
+    // 末尾語 (「人」) は枠の外に固定で付く。
     if (sen.tailText) {
       row.append(el('div', {
         class: 'sen-word sen-tail',
@@ -316,7 +307,7 @@ export class Forge {
         + (inIdiom ? `\n熟語「${idiomName}」を構成する語` : '')
         + `\nタップ: 後ろの接続詞を切り替える`
         + `\n長押し: 接続詞の一覧 (スクロールで選ぶ)`
-        + `\nドラッグ: 並べ替える / 語彙へ戻す`
+        + `\nドラッグ: 並べ替える / 語彙へ戻す (語の置き換えはしない)`
         + `\n使える接続詞: ${this.connListText(entry, place)}`,
     }, el('span', {}, w.text));
     // 長押しは「持ち上げ」から接続詞の一覧へ (要求)。並べ替えはドラッグで行う。
@@ -325,16 +316,17 @@ export class Forge {
     // 接続詞は語の直後に置く。語と同じタップで切り替わる。
     const connChip = renderConnector(this, place, conn);
 
-    // 語彙へ戻すボタン。ドラッグや長押しが使えないときの代用。
+    // 語彙へ戻すボタン。語の上に重ねるので、語と語のあいだに空間を作らない。
     const outBtn = el('button', {
       class: 'sen-out', type: 'button', title: '語彙へ戻す',
       'aria-label': `${w.text} を語彙へ戻す`,
     }, el('span', {}, '✕'));
     this.makeTappable(outBtn, () => this.returnWord(place));
+    chip.append(outBtn);
 
-    // 「語 + 接続詞 + ✕」をひとまとまりの語として扱う。
-    // data-place もここに乗せるので、接続詞や ✕ に指针が出ても語として拾う。
-    const item = el('div', { class: 'sen-item' }, chip, connChip, outBtn);
+    // 「語 + 接続詞」をひとまとまりの語として扱う。
+    // data-place もここに乗せるので、接続詞にポインタが出ても語として拾う。
+    const item = el('div', { class: 'sen-item' }, chip, connChip);
     this.makeDropTarget(item, place);
     return item;
   }
@@ -619,41 +611,12 @@ export class Forge {
         idiomName: res.evalResult.idiom?.name || '',
       }));
       if (res.active) row.append(this.renderNatural(res.evalResult));
-      row.append(this.renderSentenceText(res));
       row.append(this.renderStats(res));
       list.append(row);
     }
     if (anyBorn) this.opt.audio?.phrase?.();
     this._idiomPrimed = true;
   }
-
-  /** 連結した結果と、その分割結果。 */
-  renderSentenceText(res) {
-    const right = el('span', { class: 'sn-res' },
-      el('span', { class: 'sn-eq' }, '= '),
-      el('b', { class: 'sn-text' }, res.evalResult.text || '—'),
-    );
-    if (res.active) {
-      // 熟語の範囲にある分割は金色にして、どの語で熟語になったか分かるようにする。
-      const ev = res.evalResult;
-      const at = ev.idiom ? ev.text.indexOf(ev.idiom.phrase) : -1;
-      const end = at >= 0 ? at + ev.idiom.phrase.length : -1;
-      let pos = 0;
-      right.append(el('span', { class: 'sn-seg' },
-        ev.segments.map((s) => {
-          const inIdiom = at >= 0 && pos < end && pos + s.length > at;
-          pos += s.length;
-          return el('i', {
-            class: `sg ${catClass({ text: s })}` + (inIdiom ? ' idiom' : ''),
-          }, s);
-        })));
-      if (res.evalResult.predicated) {
-        right.append(el('span', { class: 'sn-pred' }, '述語'));
-      }
-    }
-    return el('div', { class: 'sentence' }, right);
-  }
-
 
   renderStats(res) {
     const wrap = el('div', { class: 'wrow-stats' });
@@ -767,10 +730,12 @@ export class Forge {
     if (!sel) {
       d.append(el('span', { class: 'dt' }, '文の中に語を自由に置く'));
       d.append(el('span', { class: 'dl' },
-        '語彙や文をドラッグして文のあいだへ落とす。'
-        + '語をタップしてから文の語や隙間をタップしても置ける。'));
+        '語彙の語を文の語へドラッグすると、その手前に差し込める。'
+        + '語をタップしてから文の語をタップしても置ける。'
+        + 'ドラッグで語を置き換えることはしない。'));
       d.append(el('span', { class: 'dl' },
-        '文の中の語は長押しで持ち上げ、タップだけで並べ替えられる。'));
+        '文の語は語彙へドラッグすると戻せる。 ✕ でも戻せる。'
+        + '文の中の語は長押しで持ち上げ、タップだけで並べ替えられる。'));
       d.append(el('span', { class: 'dl' },
         '接続詞は語の右のマスをタップ → 使える接続詞を一覧から一発で選べる。'
         + '語本体のタップで順に回すこともできる。'));
@@ -781,7 +746,7 @@ export class Forge {
     if (this.held) {
       d.append(el('span', { class: 'dt' }, `${sel.text}  持ち上げ中`));
       d.append(el('span', { class: 'dl' },
-        '文の語か隙間をタップで移動。語彙をタップで語彙へ戻す。'
+        '文の語か末尾の＋をタップで移動。語彙をタップで語彙へ戻す。'
         + 'もう一度この語をタップで元のまま。'));
       return;
     }
@@ -1250,9 +1215,11 @@ export class Forge {
   }
 
   /**
-   * from の語を to へ移す。語彙 → 文、文 → 文、文 → 語彙。
-   * 文どうし (語 ↔ 隙間) は「並べ替え」として扱う。
-   * 語彙側のマスが埋まっているときは入れ替え、空きならそのまま移す。
+   * from の語を to へ運ぶ。
+   *
+   * 文の語の上に落としても置き換えない。落とした位置へ差し込み、
+   * 元からある語はそのまま残す。語彙へ落とせば語彙へ戻る。
+   * 語彙どうしは動かさない (並びを入れ替えない)。
    */
   dropOnto(from, to) {
     if (!from || !to) return;
@@ -1261,30 +1228,41 @@ export class Forge {
       this.render();
       return;
     }
+    if (from.kind === 'lexicon' && to.kind === 'lexicon') {
+      this.render();
+      return;
+    }
     let r;
     let wi = null;
     this.beginEdit();
     if (from.kind === 'lexicon' && to.kind !== 'lexicon') {
       const word = this.run.lexicon[from.index];
-      if (!word) { this.render(); return; }
+      if (!word) { this.popEdit(); this.render(); return; }
       wi = to.kind === 'slot' || to.kind === 'gap' ? to.wi : null;
-      // 文頭 (index 0) へ落としたときは、最初の語と入れ替えるのではなく前に挿入する。
-      // 隙間を外して語のチップに落としても、頭に語を置けるようにする。
-      const insertAtHead = to.kind === 'slot' && to.index === 0;
-      r = (insertAtHead || !this.wordAt(to))
-        ? this.run.insertInto(this.senOf(to), to.index, word, wi)
-        : this.run.swapPlaces(from, to);
+      // 置き換えはしない。落とした位置に差し込む。
+      r = this.run.insertInto(this.senOf(to), to.index, word, wi);
     } else if (from.kind !== 'lexicon' && to.kind === 'lexicon') {
       // 文 → 語彙は、落としたマスが埋まっていても語彙の空きへ戻す。
       // 満杯なら最古の 1 語が語彙から消える (run.toLexicon が処理する)。
-      r = this.run.toLexicon(this.wordAt(from));
+      const word = this.wordAt(from);
+      if (!word) { this.popEdit(); this.render(); return; }
+      r = this.run.toLexicon(word);
+      if (r.ok) this.msg = `「${word.text}」を語彙へ戻した。`;
     } else {
+      // 文 → 文は並べ替え。語を置き換えるのではなく、並びを動かす。
       wi = from.kind === 'slot' || from.kind === 'gap' ? from.wi
         : (to.kind === 'slot' || to.kind === 'gap' ? to.wi : null);
       r = this.run.swapPlaces(from, to);
     }
-    if (r.ok) this.opt.audio?.worn?.(wi ? wi.resolve(this.run.player.stats) : { active: true });
-    else { this.popEdit(); this.opt.audio?.broken?.(); }
+    if (r && r.ok) {
+      this.opt.audio?.worn?.(wi ? wi.resolve(this.run.player.stats) : { active: true });
+    } else {
+      this.popEdit();
+      this.opt.audio?.broken?.();
+      this.msg = r?.reason === 'len'
+        ? '文は 10 文字まで。その位置には入らない。'
+        : '語を動かせなかった。';
+    }
     this.opt.onChange?.();
     this.render();
   }

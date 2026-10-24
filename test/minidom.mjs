@@ -26,15 +26,22 @@ function matches(node, sel) {
   return true;
 }
 
-/** 「A B C」は「A の中の B の中の C」。 */
+/** 「A B C」は「A の中の B の中の C」。子孫は何階層下でもよい。 */
 function matchesChain(node, sel) {
   const parts = sel.trim().split(/\s+/).filter(Boolean);
-  let n = node;
+  let candidates = [node];
   for (let i = parts.length - 1; i >= 0; i--) {
-    if (!n || n.nodeType !== 1) return false;
-    if (!matchOne(n, parts[i])) return false;
+    const hit = candidates.filter((n) => n && n.nodeType === 1 && matchOne(n, parts[i]));
+    if (!hit.length) return false;
     if (i === 0) return true;
-    n = n.parentNode;
+    // 次は、当たった要素の祖先のどれか。
+    const ancestors = [];
+    for (const n of hit) {
+      for (let p = n.parentNode; p; p = p.parentNode) {
+        if (p.nodeType === 1 && !ancestors.includes(p)) ancestors.push(p);
+      }
+    }
+    candidates = ancestors;
   }
   return true;
 }

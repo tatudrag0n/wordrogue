@@ -238,7 +238,7 @@ sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
   const EV = (ws, tail) => evaluate(ws.map(makeWord), tail ? { tail } : {});
   const two = Object.keys(PHRASE_BONUS).filter((k) => PHRASE_BONUS[k].tier === 2);
   const three = Object.keys(PHRASE_BONUS).filter((k) => PHRASE_BONUS[k].tier === 3);
-  ok(two.length >= 30 && two.length <= 60, `二字熟語の数 ${two.length}`);
+  ok(two.length >= 30 && two.length <= 61, `二字熟語の数 ${two.length}`);
   ok(three.every((k) => k.length >= 3), '三字熟語に 2 文字のものがある');
   for (const k of two) {
     const p = PHRASE_BONUS[k];
@@ -271,6 +271,16 @@ sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
   ok(r.predicated, '発電する が述語にならない');
   ok(r.phraseBonus > 0 && r.fx.shock > 0, `発電の効果が乗らない: ${r.phraseBonus} / ${r.fx.shock}`);
   ok(r.fx.power > EV(['電', '剣'], '剣').fx.power, '発電する剣が電剣より弱い');
+
+  // 爆風 … 風の文でも 爆風する と述語にできる二字熟語。
+  r = EV(['爆', '風', 'する', '剣'], '剣');
+  ok(r.valid, `「爆風する剣」が不成立: ${r.reasonText}`);
+  ok(r.idiom?.phrase === '爆風', `爆風が熟語にならない: ${r.idiom?.phrase}`);
+  const bw = r.compounds.find((x) => x.connector === 'する');
+  ok(bw && bw.phrase && bw.source === '爆風' && bw.pred,
+    `する が熟語「爆風」に付いていない: ${JSON.stringify(bw)}`);
+  ok(r.fx.explode > 0, `爆風の効果が乗らない: ${r.fx.explode}`);
+  ok(EV(['爆', '風']).idiom?.phrase === '爆風', '爆風 単体が熟語にならない');
 
   // 電する … 熟語になっていなければ不成立のまま。
   r = EV(['電', 'する', '剣'], '剣');

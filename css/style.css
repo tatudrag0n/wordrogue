@@ -565,7 +565,7 @@ code {
   position: absolute;
   top: -6px;
   right: -6px;
-  font-size: .58rem;
+  font-size: .5rem;
   padding: 0 4px;
   border-radius: 999px;
   background: var(--connect, #2457d6);
@@ -928,21 +928,23 @@ body.touch .hud-choice-title { font-size: .76rem; }
 }
 
 /* ── 自由に並べた文 ───────────────────────────────────────────────────────
-   枠に嵌めず、語のあいだに隙間 ("＋") を置いて自由に配置する。
-   接続詞は「語 + 接続詞」の 1 組で、語のタップで切り替わる。            */
+   語と語のあいだには何も置かない。文はそのまま連結して見える。
+   接続詞は「語 + 接続詞」の 1 組で、語のタップで切り替わる。
+   語を足す「＋」は文の末尾にだけ置く。                                  */
 .sen-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
-  padding: 4px 4px;
+  gap: 2px 0;
+  padding: 4px 6px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #eef2f9;
-  min-height: 38px;
+  min-height: 30px;
 }
-.sen-item { display: inline-flex; align-items: center; gap: 2px; }
+.sen-item { position: relative; display: inline-flex; align-items: center; gap: 0; }
 .sen-word {
+  position: relative;
   min-width: 34px; min-height: 30px;
   padding: 3px 6px;
   display: grid; place-items: center;
@@ -1000,40 +1002,46 @@ body.touch .hud-choice-title { font-size: .76rem; }
   color: var(--fg-mute);
   cursor: default;
 }
-/* 文の語を外すボタン。ホバー / 選択中だけ濃くする。 */
+/* 文の語を外すボタン。語の右上に重ねるので、語と語のあいだに空間を作らない。
+   ホバー / 選択中だけ濃くする。 */
 .sen-out {
-  width: 20px; height: 22px;
-  margin: 0 1px;
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  z-index: 1;
+  width: 12px; height: 12px;
+  margin: 0;
   padding: 0;
   display: grid; place-items: center;
-  border: 1.5px solid transparent;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: 50%;
   background: transparent;
   color: var(--fg-mute);
-  font-size: .72rem;
+  font-size: .5rem;
   line-height: 1;
   cursor: pointer;
-  opacity: .30;
+  opacity: 0;
   touch-action: none;
   transition: opacity .12s, color .12s, border-color .12s, background .12s;
 }
-.sen-item:hover .sen-out,
+.sen-word:hover .sen-out,
+.sen-word.held .sen-out,
 .sen-out:focus-visible {
   opacity: 1;
   border-color: rgba(214, 60, 48, 0.36);
-  background: rgba(214, 60, 48, 0.08);
+  background: rgba(255, 255, 255, .9);
   color: #d63c30;
 }
 .sen-out:active { background: rgba(214, 60, 48, 0.18); }
 /* タッチにはホバーが無いので、常時少し濃くしておく。 */
 @media (hover: none) {
-  .sen-out { opacity: .55; }
+  .sen-out { opacity: .4; }
 }
 
 .sen-conn {
-  min-width: 28px; height: 24px;
-  margin: 0 1px;
-  padding: 0 5px;
+  min-width: 34px; height: 30px;
+  margin: 0;
+  padding: 0 6px;
   display: grid; place-items: center;
   border: 1.5px dashed rgba(36, 87, 214, 0.38);
   border-radius: 999px;
@@ -1051,8 +1059,22 @@ body.touch .hud-choice-title { font-size: .76rem; }
   border-color: rgba(36, 87, 214, 0.77);
   background: rgba(36, 87, 214, 0.19);
 }
-.sen-conn.empty { opacity: .45; }
+.sen-conn.empty {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 1;
+  width: 10px;
+  min-width: 10px;
+  height: 10px;
+  min-height: 10px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: .5rem;
+  opacity: .3;
+}
 .sen-conn.empty:hover { opacity: 1; }
+/* 文の末尾にだけ置く追加位置。語と語のあいだには置かない。 */
 .sen-gap {
   width: 32px; min-height: 36px;
   display: grid; place-items: center;
@@ -1069,6 +1091,12 @@ body.touch .hud-choice-title { font-size: .76rem; }
 }
 /* 語を差し込む目印。タップでも置けるので「押せる」ことが分かる。 */
 .sen-gap:hover { opacity: .9; border-color: var(--line-2); }
+.sen-gap.sen-add {
+  width: 24px;
+  margin-left: 4px;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, .5);
+}
 .wrow-empty {
   padding: 8px 10px;
   border: 1px dashed var(--line-2);
@@ -1077,82 +1105,19 @@ body.touch .hud-choice-title { font-size: .76rem; }
 }
 .wrow-kind.dim { color: var(--fg-mute); }
 
-/* 文面。枠の語を区切って連結した結果と、その分割結果 */
-.sentence {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 3px;
-  padding: 4px 6px;
-  background: #f1f5fb;
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-  font-size: .82rem;
-  letter-spacing: .04em;
+.wrow-self {
+  border-color: rgba(224, 72, 45, .4);
+  border-left: 3px solid var(--accent);
+  background: linear-gradient(180deg, #ffffff, #fff7f2);
 }
-.sn-parts { display: inline-flex; align-items: center; gap: 3px; }
-.sn-plus { color: var(--fg-mute); font-size: .78rem; }
-.sn-conn-slot { display: inline-flex; align-items: center; }
-.sn-conn-empty { color: var(--fg-mute); font-size: .78rem; opacity: .5; }
-.sn-w {
-  background: #e8eef7;
-  border: 1px solid var(--line-2);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-weight: 700;
-}
-.sn-conn  { border-style: dotted; color: #2457d6; background: #eef2f9; }
-.sn-verb  { border-color: rgba(184, 53, 92, 0.40); color: #b8355c; background: #fdeef4; }
-/* 体にも効く語 (語が p. キーを持つ) — 分類ではなく印。 */
-.sn-self  { border-color: rgba(106, 75, 208, 0.42); color: #6a4bd0; background: #f0e9f5; }
-/* 語彙の側でも同じ印 (体にも効く語) */
-.pword.is-self { background: #f3eefa; }
-.sn-empty { color: #8a92a3; font-weight: 400; }
-
+/* 自身の文は行の背景も少し黄め。末尾の「人」まで含む。 */
+.wrow-self .sen-row { border-color: rgba(224, 72, 45, .3); background: #fff7f2; }
 .wrow-kind {
   font-size: .7rem;
   color: var(--fg-mute);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0 5px;
-}
-
-.sn-res {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.sn-eq { color: var(--fg-mute); }
-.sn-text {
-  font-size: 0.95rem;
-  color: var(--ok);
-  letter-spacing: .06em;
-}
-.sn-seg { display: inline-flex; gap: 2px; }
-.sg {
-  font-style: normal;
-  font-size: .68rem;
-  color: var(--fg-mute);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 0 3px;
-}
-.sg.idiom {
-  color: var(--idiom);
-  border-color: var(--idiom);
-  font-weight: 700;
-  background: rgba(194, 106, 13, 0.10);
-}
-.sg-gram { color: #6a4bd0; border-style: dotted; }
-.sg-verb { color: #b8355c; border-color: rgba(184, 53, 92, 0.28); }
-.sn-pred {
-  font-size: .68rem;
-  color: #2457d6;
-  border: 1px solid rgba(36, 87, 214, 0.38);
-  border-radius: 3px;
-  padding: 0 4px;
 }
 
 .wrow-stats {
@@ -2048,7 +2013,7 @@ body.touch .hud-choice-title { font-size: .76rem; }
   display: block;
   font-family: var(--mono);
   font-style: normal;
-  font-size: .58rem;
+  font-size: .5rem;
   font-weight: 700;
   line-height: 1.2;
   color: #0f7a4a;

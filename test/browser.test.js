@@ -447,7 +447,7 @@ sec('語をタップすると直後の接続詞が切り替わる');
   ok(conn.len <= conn.maxLen, `文が ${conn.len} 文字 (上限 ${conn.maxLen})`);
   ok(conn.active, `${conn.title} が不成立`);
   // 隙間の「＋」は見せない (要求)。テキストは空で、置き場だけが残る。
-  ok(conn.gapText.every((t) => t === ''), `語の後ろに何かが出ている: ${conn.gapText.join(',')}`);
+  ok(conn.gapText.every((t) => t === '＋'), `語の後ろの置き場に＋が出ない: ${conn.gapText.join(',')}`);
   console.log(`    「${conn.title}」— ${conn.count} 語 / ${conn.len} 文字 / 接続詞 ${conn.opts.join('→')}→なし`);
 }
 
@@ -460,21 +460,20 @@ sec('文は 10 文字まで。武器語は自分で置く');
     return {
       defs: run.weapons.map(w => ({ id: w.defId, tail: w.tail, title: w.title, maxLen: w.sentence.maxLen })),
       texts: [...document.querySelectorAll('#forgeWeapons .sn-text')].map(n => n.textContent),
+      sentenceRows: document.querySelectorAll('#forgeWeapons .sen-row').length,
       rows: [...document.querySelectorAll('#forgeWeapons .wrow')].map(n => n.textContent),
     };
   })()`);
-  // 武器の文に末尾語は無い。文面表示は武器の行ぶんだけ。
+  // 武器の文に末尾語は無い。文面プレビューは廃止し、語の行そのものが文になる。
   ok(tails.defs.every((w) => w.maxLen === 10), `文の上限が 10 でない: ${tails.defs.map(w => w.maxLen)}`);
-  ok(tails.texts.length === tails.defs.length, `文面表示の数: ${tails.texts.length} / ${tails.defs.length}`);
+  ok(tails.texts.length === 0, `一文プレビューが残っている: ${tails.texts.join(' | ')}`);
+  ok(tails.sentenceRows === tails.defs.length,
+    `文の行の数: ${tails.sentenceRows} / ${tails.defs.length}`);
   for (const w of tails.defs) {
     ok(w.title && !/undefined|null|空/.test(w.title), `武器名が壊れている: ${w.title}`);
   }
-  console.log(`    文面: ${tails.texts.join(' | ')}`);
+  console.log(`    文の行: ${tails.sentenceRows} / 一文プレビュー無し`);
 }
-const sentText = await evalJs(
-  '[...document.querySelectorAll("#forgeWeapons .sn-text")].map(n => n.textContent).join(" | ")');
-ok(sentText.length > 0, `文面 nonempty: ${sentText}`);
-console.log(`    文面: ${sentText}`);
 const coreGone = await evalJs('document.querySelectorAll("#forgeWeapons .sn-core").length');
 ok(coreGone === 0, `核語の表示が残っている: ${coreGone}`);
 
@@ -637,6 +636,33 @@ sec('ドラッグで語を文へ入れ、文の並びを変えられること');
   ok(dnd.backOccupied.ok && dnd.backOccupied.lexHasIt,
     `埋まったマスに落としても語彙へ戻らない: ${JSON.stringify(dnd.backOccupied)}`);
   console.log(`    「${dnd.wa}」→「${dnd.title}」… 並べ替え → 末尾の隙間 → 語彙へ戻す すべて成立`);
+}
+
+sec('語の上に落としても置き換えない (手前に差し込む)');
+{
+  const dnd = await evalJs(`(async () => {
+    const m = await import(new URL('js/data/words.js', document.baseURI).href);
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    const wi = run.weapons[0];
+    wi.sentence.clear();
+    for (const t of ['炎', '剛', '速']) wi.sentence.push(m.makeWord(t));
+    while (run.lexiconFull) run.forgetWord(run.lexicon.find(Boolean));
+    if (!run.lexicon.some((w) => w && w.text === '火')) run.addWord(m.makeWord('火'), true);
+    const lx = run.lexicon.findIndex((w) => w && w.text === '火');
+    forge.render();
+    // 文の 2 番目の語 (剛) の上へ 火 を落とす。
+    forge.dropOnto({ kind: 'lexicon', index: lx }, { kind: 'slot', wi, index: 1 });
+    const texts = wi.sentence.words.map((w) => w.text);
+    forge.dragFrom = null;
+    forge.suppressClick = false;
+    return { texts };
+  })()`);
+  ok(dnd.texts.join('') === '炎火剛速',
+    `置き換えが起きた / 手前に差し込めていない: ${dnd.texts.join('')}`);
+  ok(dnd.texts.includes('剛'), `落とした先の語が消えた: ${dnd.texts.join('')}`);
+  console.log(`    「炎剛速」の「剛」へ「火」-> 「${dnd.texts.join('')}」`);
 }
 
 sec('語の「✕」で語彙へ戻せること');

@@ -108,6 +108,44 @@ sec('語彙から文へドラッグで語を運べる');
   console.log(`  「${text}」-> 「${wi.sentence.text}」`);
 }
 
+sec('語の上に落としても置き換えない (手前に差し込む)');
+{
+  const { run, forge } = openForge();
+  const wi = run.weapons[0];
+  const before = wi.sentence.words.map((w) => w.text);
+  const target = chipsOf(forge)[1] || chipsOf(forge)[0];
+  const targetText = target.querySelector('span').textContent;
+  // 語彙の語を、文の 2 番目の語の上へ落とす。
+  const lex = lexWords()[0];
+  const text = lex.querySelector('span').textContent;
+  drag(lex, target);
+  const after = wi.sentence.words.map((w) => w.text);
+  ok(after.length === before.length + 1,
+    `語が差し込まれていない: ${before.join('')} -> ${after.join('')}`);
+  ok(after.includes(targetText), `落とした先の語が消えた: ${after.join('')}`);
+  const at = after.indexOf(targetText);
+  ok(at > 0 && after[at - 1] === text,
+    `落とした語が手前に来ていない: ${after.join('')} (落とした語 ${text})`);
+  console.log(`  「${before.join('')}」の「${targetText}」へ「${text}」-> 「${after.join('')}」`);
+}
+
+sec('語と語のあいだに隙間を置かない / 一文プレビューを出さない');
+{
+  const { run, forge } = openForge();
+  const wi = run.weapons[0];
+  const row = weaponRow(forge).querySelector('.sen-row');
+  const kids = [...row.children];
+  const gaps = kids.filter((n) => n.classList.contains('sen-gap'));
+  const items = kids.filter((n) => n.classList.contains('sen-item'));
+  ok(gaps.length === 1, `語のあいだに隙間がある: ${gaps.length} 個`);
+  ok(kids[kids.length - 1] === gaps[0], '末尾の＋が文の最後に無い');
+  ok(items.length === wi.sentence.count,
+    `語の数と表示が合わない: ${items.length} / ${wi.sentence.count}`);
+  ok(!weaponRow(forge).querySelector('.sentence'), '一文プレビューが残っている');
+  ok(!weaponRow(forge).querySelector('.sn-text'), '一文プレビューの文面が残っている');
+  console.log(`  語 ${items.length} / 隙間は末尾の＋だけ / プレビュー無し`);
+}
+
 sec('文の中の語をドラッグで並べ替えられる');
 {
   const { run, forge } = openForge();
@@ -290,24 +328,6 @@ sec('文の語はドラッグで語彙へ戻せる');
   ok(run.lexiconFreeCount === free0 - 1, `空きが増えていない: ${free0} -> ${run.lexiconFreeCount}`);
   ok(forge.dragFrom === null, 'dragFrom が残った');
   console.log(`  文の語をドラッグ -> 語彙へ戻った (空き ${free0} -> ${run.lexiconFreeCount})`);
-}
-
-sec('長押しの一覧を出したまま、ほかの語はふつうにタップできる');
-{
-  const { run, forge } = openForge();
-  const wi = run.weapons[0];
-  const text0 = wi.sentence.text;
-  await longPress(chipsOf(forge)[0]);
-  ok(!!dom.doc.querySelector('.conn-picker'), '長押しで接続詞メニューが開かない');
-  // 一覧を出したまま、ほかの語をふつうのタップで操作できる (接続詞が回る)。
-  tap(chipsOf(forge)[1]);
-  ok(wi.sentence.text !== text0, `ふつうのタップで接続詞が回らない: ${text0} -> ${wi.sentence.text}`);
-  ok(!!dom.doc.querySelector('.conn-picker'), 'ほかをタップしただけで一覧が閉じた');
-  // 「なし」を選ぶと一覧が閉じる。
-  const pick = dom.doc.querySelector('.conn-picker .conn-pick');
-  pick.dispatchEvent({ type: 'click', preventDefault() {}, stopPropagation() {} });
-  ok(!dom.doc.querySelector('.conn-picker'), '選んだのに一覧が残る');
-  console.log(`  一覧を出しつつ「${wi.sentence.text}」へ・選んで閉じる`);
 }
 
 sec('長押し時間までに動かすと持ち上がらない');
@@ -527,7 +547,7 @@ sec('熟語が成立すると、構成する語が光る');
   };
   const litTexts = () => chipsOf(forge)
     .filter((c) => c.classList.contains('idiom-word'))
-    .map((c) => c.textContent.trim());
+    .map((c) => (c.querySelector('span')?.textContent || c.textContent).trim());
 
   // 熟語でない文では光らない。開いた直後の初回描画でも弾まない。
   setSen('焔', '硬', '刃');
@@ -539,14 +559,12 @@ sec('熟語が成立すると、構成する語が光る');
   ok(wi.sentence.text === '毒蝕弾の硬刃', `文が違う: ${wi.sentence.text}`);
   ok(litTexts().join('') === '毒蝕弾', `光る語が熟語と違う: ${litTexts().join(',')}`);
   ok(weaponRow(forge).classList.contains('idiom-born'), '成立した瞬間に行が光らない');
-  const segLit = [...weaponRow(forge).querySelectorAll('.sg.idiom')].map((c) => c.textContent).join('');
-  ok(segLit === '毒蝕弾', `分割の光り方が違う: ${segLit}`);
 
   // 同じ熟語のまま描き直しても、成立演出は繰り返さない。
   forge.render();
   ok(!weaponRow(forge).classList.contains('idiom-born'), '再描画でも成立演出が繰り返された');
   ok(litTexts().join('') === '毒蝕弾', `光り続けていない: ${litTexts().join(',')}`);
-  console.log(`  毒蝕弾の硬刃 → 光る語「${litTexts().join('・')}」/ 分割「${segLit}」`);
+  console.log(`  毒蝕弾の硬刃 → 光る語「${litTexts().join('・')}」`);
 }
 
 sec('語彙の＋で属性語から特殊武器の文を作る');

@@ -249,7 +249,6 @@ const RAW_FORM = `
 鍔     form  -  dmg+2  armor+3  shield+16
 釘     form  -  dmg+4  pierce+3  speed+25
 槌     form  -  dmg+8  knock+40  size+0.15  speed-10
-鈴     form  -  dmg+2  area+10  slowImmune+1  p.luck+0.10
 柄     form  -  size-0.12  speed+20  rate+0.15
 晶     form  -  dmg+4  crit+0.04  pierce+1
 `;
@@ -377,13 +376,6 @@ const RAW_MODIFIER = `
 # ── 体もきたえる語 (部位で効く p. キーを持つ。分類としての「自身」は無い) ──
 #   武器の文でも読める形だけを置く。「頑丈な刃」「息の長い刃」「魂を吸う刃」。
 #   p.hp+25 のように付けたキーは部位強化でプレイヤーに乗り、武器の側では無視される。
-頑    modifier  -  dmg+2  armor+2  p.hp+25
-健    modifier  -  dmg+1  regen+0.4  p.hp+20
-息    modifier  -  dmg+2  duration+1.2  p.hp+16  p.regen+0.5
-銘    modifier  -  dmg+2  crit+0.05  p.xp+0.15
-符    modifier  -  dmg+2  shield+10  p.hp+15  p.regen+0.3
-骨    modifier  -  dmg+3  armor+2  p.hp+18
-魂    modifier  -  dmg+2  lifesteal+0.03  p.xp+0.12
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -450,9 +442,6 @@ const RAW_VERB = `
 潰      verb  -  dmg+6  area+14  knock+35
 嚇      verb  -  dmg+3  slowImmune+1  chill+1
 縛      verb  -  dmg+2  slowImmune+1  magnet+0.3
-鍛      verb  -  dmg+4  armor+2  p.hp+22
-研      verb  -  dmg+2  crit+0.06  p.atk+0.10
-駆      verb  -  dmg+2  speed+45  p.spd+0.12
 浴      verb  -  dmg+3  burn+3  area+10
 浸      verb  -  dmg+3  poison+4  duration+0.8
 錆      verb  -  dmg+4  poison+2  rate-0.05

@@ -1032,16 +1032,12 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 }
 .sn-conn  { border-style: dotted; color: #2457d6; background: #eef2f9; }
 .sn-verb  { border-color: rgba(184, 53, 92, 0.40); color: #b8355c; background: #fdeef4; }
-.sn-buff  { border-color: rgba(106, 75, 208, 0.42); color: #6a4bd0; background: #f0e9f5; }
+/* 体にも効く語 (語が p. キーを持つ) — 分類ではなく印。 */
+.sn-self  { border-color: rgba(106, 75, 208, 0.42); color: #6a4bd0; background: #f0e9f5; }
+/* 語彙の側でも同じ印 (体にも効く語) */
+.pword.is-self { background: #f3eefa; }
 .sn-empty { color: #8a92a3; font-weight: 400; }
 
-.wrow-self {
-  border-color: rgba(224, 72, 45, .4);
-  border-left: 3px solid var(--accent);
-  background: linear-gradient(180deg, #ffffff, #fff7f2);
-}
-/* 自身の文は行の背景も少し黄め。末尾の「人」まで含む。 */
-.wrow-self .sen-row { border-color: rgba(224, 72, 45, .3); background: #fff7f2; }
 .wrow-kind {
   font-size: .7rem;
   color: var(--fg-mute);

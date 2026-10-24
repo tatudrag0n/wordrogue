@@ -430,10 +430,10 @@ export class Menus {
     } else if (words.length < 2) {
       // 1 語だけの部位。文の力は 1.00 なので、語そのものが体に効かないと何も起きない。
       box.append(el('div', { class: 'grow-part-eff none' },
-        'この語は体に直接は効かない (武器の文で使う語) — もう 1 語足して文にすると、文の力ぶんだけ強くなる'));
+        'この語は体に直接は効かない — もう 1 語足して文にすると、文の力ぶんだけ強くなる'));
     } else {
       box.append(el('div', { class: 'grow-part-eff none' },
-        '文は成っているが、この語は体に効かない (武器の文で使う語) — 体に効く語 (頑・健・癒 など) に入れ替える'));
+        '文は成っているが、この語は体に効かない — 体にも効く語 (頑・健・息・骨・甲・鍔 など) に入れ替える'));
     }
     return box;
   }
@@ -496,7 +496,9 @@ export class Menus {
     for (const t of save.collection) {
       const info = WORDS[t];
       if (!info) continue;
-      const src = info.cat === 'buff' ? (info.player || info.fx) : info.fx;
+      // 語が持つ効果は武器側 (fx) と体側 (player) の 2 つ。両方見せる。
+      const src = [fxText(info.fx, FX_LABEL), info.player ? `体 ${fxText(info.player, PS_LABEL)}` : '']
+        .filter((x) => x && x !== '効果なし').join(' / ') || '効果なし';
       const used = save.partWordList().filter((x) => x === t).length;
       // この語を単体で部位に入れると何が変わるか。
       //   direct … 語そのものが体に効くか (体力 +25 など)
@@ -506,9 +508,9 @@ export class Menus {
       const b = el('button', {
         class: 'btn grow-word' + (this.growSel === t ? ' sel' : '') + (used ? ' used' : '')
           + (direct.length ? ' has-eff' : ' no-eff'),
-        title: `${CATEGORIES[info.cat]?.name || info.cat}: ${fxText(src, info.cat === 'buff' ? PS_LABEL : FX_LABEL)}`
+        title: `${CATEGORIES[info.cat]?.name || info.cat}: ${src}`
           + (direct.length ? `\n体に効く: ${direct.map((r) => `${r.label} ${r.text}`).join(' / ')}`
-            : '\n体に直接は効かない (武器の文で使う語)')
+            : '\n体に直接は効かない (文にすれば文の力ぶん強くなる)')
           + (eff.length && !direct.length ? '\n文にすれば文の力ぶんだけ強くなる' : '')
           + (used ? `\n部位に ${used} 語入っている (同じ語をいくつでも置ける)` : ''),
       }, t, used ? el('i', { class: 'grow-word-used' }, `×${used}`) : null);
@@ -517,7 +519,7 @@ export class Menus {
         this.growSel = this.growSel === t ? null : t;
         this.growConn = null;
         this.growConnAll = null;
-        if (!direct.length) this._growEffectNote = `「${t}」は体に直接は効かない (文にすれば文の力ぶんだけ強くなる)`;
+        if (!direct.length) this._growEffectNote = `「${t}」は体に直接は効かない — 体にも効く語 (頑・健・息・骨・甲・鍔…) は部位で強く効く`;
         this.audio?.tap?.();
         this.renderGrow();
       });
@@ -759,18 +761,17 @@ export class Menus {
   /** 語的效果を短い文にまとめる。ラベルの表は labels.js を共有する。 */
   static fxLine(w) {
     const out = [];
-    // 「自身」向けの語は fx と player が同じ内容。そっち側にだけ出す。
-    const own = w.cat === 'buff';
-    if (w.fx && !own) {
+    if (w.fx) {
       for (const [k, v] of Object.entries(w.fx)) {
         if (!v) continue;
         out.push(`${FX_LABEL[k] || k} ${v}`);
       }
     }
+    // `p.` で置いた体側の効果。部位強化でだけ効く。
     if (w.player) {
       for (const [k, v] of Object.entries(w.player)) {
         if (!v) continue;
-        out.push(`自身 ${PS_LABEL[k] || k} ${v}`);
+        out.push(`体 ${PS_LABEL[k] || k} ${v}`);
       }
     }
     return out;

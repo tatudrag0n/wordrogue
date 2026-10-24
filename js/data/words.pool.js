@@ -164,17 +164,9 @@ const RAW_POOL = `
 穿  n   つ:adn*
 通  n   る:adn* す:adn*
 
-# ── 自身 ──
+# ── 体をきたえる語 (効果語。p. キーで体にも効く) ──
 頑  na  な:adn+ に:adv+
 健  na  やかな:adn+ やかに:adv+
-走  n   る:adn*
-戒  n   める:adn*
-癒  n   す:adn* える:adn*
-書  n   く:adn* +N
-察  n   する:adn*
-永  a   い:adn+ く:adv+
-楽  a   しい:adn+ しく:adv+ +N
-幸  na  せな:adn+ の:case>noun
 
 # ── 核語 ──
 志  n   す:adn* +N
@@ -228,6 +220,13 @@ const RAW_POOL = `
 潰  v   す:adn* れる:adn* された:adn*p して:adv れて:adv
 嚇  v   す:adn* された:adn*p して:adv
 縛  v   る:adn* られた:adn*p って:adv
+鍛  v   える:adn* えた:adn* えて:adv
+研  v   ぐ:adn* ぎ:adv がれた:adn*p
+駆  v   ける:adn* けた:adn* け:adv
+浴  v   びる:adn* びた:adn* びて:adv
+浸  v   す:adn* した:adn* された:adn*p して:adv
+錆  v   びる:adn* びた:adn* びて:adv
+癒  v   す:adn* える:adn*
 `;
 
 /** 品詞の略号。 */

@@ -44,15 +44,22 @@ export const MAX_WORD_LEN = 5;
 /** 二重定義された語。データ側のバグ検出用。 */
 export const DUPLICATES = [];
 
+/**
+ * 効果の列を読む。`p.` が付いたキーはプレイヤー側 (部位強化で体に効く) 、
+ * 無いキーは武器側 (文の効果) 。同じ語が両方持ってよい。
+ * 分けるのはカテゴリではなくキーの書き方だけ — 「自身語」という分類は無い。
+ */
 const parseFx = (tokens) => {
   const fx = {};
+  const player = {};
   for (const t of tokens) {
-    const m = /^([A-Za-z]+)([+-][\d.]+)$/.exec(t);
+    const m = /^(p\.)?([A-Za-z]+)([+-][\d.]+)$/.exec(t);
     if (!m) continue;
-    const v = parseFloat(m[2]);
-    fx[m[1]] = (fx[m[1]] || 0) + v;
+    const v = parseFloat(m[3]);
+    const into = m[1] ? player : fx;
+    into[m[2]] = (into[m[2]] || 0) + v;
   }
-  return fx;
+  return { fx, player: Object.keys(player).length ? player : null };
 };
 
 for (const table of RAW_TABLES) {
@@ -68,11 +75,11 @@ for (const table of RAW_TABLES) {
       continue;
     }
 
-    const effects = parseFx(fx);
+    const { fx: effects, player } = parseFx(fx);
     // 品詞と接続詞プールは語ごとに words.pool.js で決める。
     const pool = poolOfText(text);
     // 複数カテゴリ: 本来の分類 (cat) に加え、動詞の形 (述語) を持つ語は
-    // 用言としても扱う (震える・還る・走る・察する …)。cats は複数持ちうる。
+    // 用言としても扱う (震える・還る・駆ける・癒える …)。cats は複数持ちうる。
     const cats = [cat];
     if (cat !== 'verb' && pool.some((e) => e.pred)) cats.push('verb');
     WORDS[text] = {
@@ -81,7 +88,8 @@ for (const table of RAW_TABLES) {
       cats,
       el: el && el !== '-' ? el : null,
       fx: effects,
-      player: cat === 'buff' ? effects : null,
+      // 体にだけ効く効果 (語テーブルで `p.` を付けたキー)。
+      player,
       pos: posOfText(text),
       // この語の直後に付く送り仮名 (接続詞)。
       pool,
@@ -114,13 +122,6 @@ const KANA_RE = /[ぁ-んァ-ヶー]/;
 export function hasKana(text) { return KANA_RE.test(text); }
 
 /**
- * 文の末尾に固定で付く語。文面には必ず現れるので、
- * 語彙から引けてはいけない。
- * 分割には語として必要なので、辞書からは消さない。
- */
-const FIXED_TAIL = '人';
-
-/**
  * 語彙から引ける語のカテゴリ。
  * 武器語 (基本武器) は語彙から引かない — レベルアップの 3 択でだけ得る。
  * 形態語の残り (弾・環・玉・壁…) はただの語なので引ける。
@@ -128,12 +129,11 @@ const FIXED_TAIL = '人';
  * 辞書には残す — 文の分割と末尾語の判定に使う。
  */
 const isDrawableCat = (c) => c === 'element' || c === 'phenom' || c === 'form'
-  || c === 'modifier' || c === 'buff' || c === 'verb';
+  || c === 'modifier' || c === 'verb';
 
 /** 語彙から引ける語だけ (接続詞・動詞・武器語を除く)。 */
 export const DRAWABLE = Object.keys(WORDS).filter((w) => {
   const c = WORDS[w].cat;
-  if (w === FIXED_TAIL) return false;
   if (c === 'connect' || c === 'verb') return false;
   return c !== 'form' || !isWeaponWord(w);
 });
@@ -146,7 +146,7 @@ export const DRAWABLE = Object.keys(WORDS).filter((w) => {
  * 出る比重は種別ごとに少しずつ抑えてある。
  */
 export const DRAWABLE_ALL = Object.keys(WORDS).filter(
-  (w) => w !== FIXED_TAIL && isDrawableCat(WORDS[w].cat) && !isWeaponWord(w),
+  (w) => isDrawableCat(WORDS[w].cat) && !isWeaponWord(w),
 );
 
 /** 接続詞。分割はするが、それだけでは文にならない。 */
@@ -166,14 +166,13 @@ export const CONNECTOR_LIST = CONNECT_ORDER.slice();
  */
 export const SIMPLE_POOL = Object.keys(WORDS).filter((w) => {
   const c = WORDS[w].cat;
-  if (w === FIXED_TAIL) return false;
-  if (c !== 'element' && c !== 'phenom' && c !== 'modifier' && c !== 'buff') return false;
+  if (c !== 'element' && c !== 'phenom' && c !== 'modifier') return false;
   return !KANA_RE.test(w) && w.length <= 2;
 });
 
 /** 種別ごとの語配列。 */
 export const WORDS_BY_CAT = {
-  element: [], phenom: [], form: [], modifier: [], verb: [], buff: [], connect: [],
+  element: [], phenom: [], form: [], modifier: [], verb: [], connect: [],
 };
 for (const w of Object.keys(WORDS)) WORDS_BY_CAT[WORDS[w].cat].push(w);
 

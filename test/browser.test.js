@@ -853,7 +853,7 @@ sec('辞書メニューが開き、検索とカテゴリ絞り込みが効くこ
     search: !!document.getElementById('dictSearch'),
   }))()`);
   ok(d.rows > 100, `辞書の行が少ない: ${d.rows}`);
-  ok(d.tabs === 7, `カテゴリのタブ数: ${d.tabs} (すべて + 6 カテゴリ。形態は載せない)`);
+  ok(d.tabs === 6, `カテゴリのタブ数: ${d.tabs} (すべて + 5 カテゴリ。形態は載せない。体に効く専用カテゴリは無い)`);
   ok(d.search, '検索欄が無い');
   ok(/\d+ \/ \d+ 語/.test(d.count), `件数の表示: ${d.count}`);
   console.log(`    辞書: ${d.rows} 語 / タブ ${d.tabs} 個 / ${d.count}`);

@@ -96,8 +96,9 @@ if (syntaxBad) {
   const pkeys = new Set();
   for (const k in WORDS) {
     const w = WORDS[k];
-    // 「自身」向けの語は fx と player が同じ内容。player 側だけで見る。
-    if (w.cat !== 'buff') for (const a in (w.fx || {})) keys.add(a);
+    // fx は武器側の効果、player は語が `p.` で宣言した体側の効果。
+    // どちらにも日本語のラベルが要る (分類ではなくキーで分けている)。
+    for (const a in (w.fx || {})) keys.add(a);
     for (const a in (w.player || {})) pkeys.add(a);
   }
   const missFx = [...keys].filter((k) => !FX_LABEL[k]);
@@ -105,9 +106,9 @@ if (syntaxBad) {
   const notJa = (k) => !/[぀-ヿ一-鿿]/.test(k);
   const badJa = [...keys, ...pkeys]
     .filter((k) => (FX_LABEL[k] || PS_LABEL[k]) && notJa(FX_LABEL[k] || PS_LABEL[k]));
-  console.log(`== 効果キーのラベル ==\n  武器 ${keys.size} / 自身 ${pkeys.size} / 未定義 ${missFx.length + missPs.length} / 日本語なし ${badJa.length}`);
+  console.log(`== 効果キーのラベル ==\n  武器 ${keys.size} / 体 ${pkeys.size} / 未定義 ${missFx.length + missPs.length} / 日本語なし ${badJa.length}`);
   if (missFx.length) console.log('  武器: ' + missFx.join(', '));
-  if (missPs.length) console.log('  自身: ' + missPs.join(', '));
+  if (missPs.length) console.log('  体: ' + missPs.join(', '));
   if (badJa.length) console.log('  日本語なし: ' + badJa.join(', '));
   if (missFx.length || missPs.length || badJa.length) {
     console.log('\n=== 失敗したテストがあります ===');
@@ -383,16 +384,17 @@ if (syntaxBad) {
     '静', '穏', '無', '厳', '敵', '奇', '豪', '雅', '華', '麗', '精', '密',
     '真', '素', '正', '賢', '酷', '確', '活', '端', '滑', '準', '霊', '適',
     '剛', '壮', '清',
-    // 自身
-    '人', '頑', '健', '躯', '柄', '走', '鎧', '甲', '王', '戒', '符', '薬',
-    '癒', '晶', '書', '察', '永', '楽', '幸',
+    // 体をきたえる語 (p. キーで体にも効く。武器の文でも読む)
+    '頑', '健', '息', '銘', '符', '骨', '魂',
+    // 鍛冶と具足の形態語 (盾・壁と同じ「物」の語)
+    '甲', '鞘', '鍔', '釘', '槌', '鈴', '晶', '柄',
     // 核語
     '志', '力', '巧', '守', '感', '智',
   ]);
 
   // 動詞 (「斬」「貫」) と接続詞は 1 文字が普通なので対象外。
   // -fragment な体言・効果語だけを調べた。
-  const NOUNISH = new Set(['element', 'phenom', 'form', 'modifier', 'buff']);
+  const NOUNISH = new Set(['element', 'phenom', 'form', 'modifier']);
   const stray = Object.keys(WORDS).filter((w) => w.length === 1
     && NOUNISH.has(WORDS[w].cat)
     && !ADJ_STEMS.has(w) && !NA_ADJ_STEMS.has(w) && !OK_ONE.has(w));

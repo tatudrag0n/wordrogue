@@ -1,6 +1,7 @@
 // 語辞書と文判定の単体テスト。  node test/words.test.js
 import { WORDS, DRAWABLE, DRAWABLE_ALL, SIMPLE_POOL, CONNECTOR_SET, CONNECTOR_LIST, segment, evaluate, makeWord, drawWord, drawWeaponWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS, CONNECTORS, findCompound, WEAPON_WORDS, isWeaponWord } from '../js/data/words.js';
 import { canConnect, connectorFor, formOf, POS, connectorsAfter, formAfter, COMPOUND_POOLS } from '../js/data/words.connect.js';
+import { CATEGORIES as CATALOG } from '../js/data/words.core.js';
 import { makeRng } from '../js/core/util.js';
 
 let pass = 0, fail = 0;
@@ -31,11 +32,47 @@ for (const w of Object.keys(WORDS)) {
   ok(typeof w === 'string' && w.length > 0, `不正な語: ${JSON.stringify(w)}`);
   ok(!/[\s]/.test(w), `語に空白を含む: ${JSON.stringify(w)}`);
   ok(w.length <= 5, `語が長すぎる: ${w}(${w.length})`);
-  ok(WORDS[w].player === null || WORDS[w].cat === 'buff', `player が buff でない: ${w}`);
+  // 体に効く効果は分類ではなく語が持つキー (テーブルの `p.`) で決まる。
+  ok(!WORDS[w].player || Object.values(WORDS[w].player).every((v) => typeof v === 'number'),
+    `player の形が不正: ${w}`);
+  ok(WORDS[w].cat !== 'buff', `古い「自身」カテゴリの語が残っている: ${w}`);
 }
 console.log(`  語合計 ${Object.keys(WORDS).length} / 引ける ${DRAWABLE.length} / 接続詞 ${CONNECTOR_SET.size}`);
 console.log('  種別:', Object.entries(WORDS_BY_CAT).map(([k, v]) => `${k}=${v.length}`).join(' '));
 ok(DUPLICATES.length === 0, `語の重複定義: ${JSON.stringify(DUPLICATES)}`);
+
+sec('自身語という分類は無い');
+{
+  // 「体に効く語」を別カテゴリにすると、武器の文で使えない語が増える。
+  // なので 体をきたえる語も 効果語・形態語・動詞のまま、持つキーだけで区別する。
+  ok(CATALOG.buff === undefined, 'buff カテゴリが CATEGORIES に残っている');
+  ok(WORDS_BY_CAT.buff === undefined, 'WORDS_BY_CAT に buff が残っている');
+  const body = Object.keys(WORDS).filter((w) => WORDS[w].player);
+  ok(body.length >= 8, `体に効く語が多めに無い: ${body.join(' ')}`);
+  // それぞれの語は、体だけの効果だけでなく武器側の効果も持つ (部位専用語を作らない)。
+  const weaponless = body.filter((w) => !Object.keys(WORDS[w].fx).length);
+  ok(weaponless.length === 0, `武器の側で何も効果の無い語: ${weaponless.join(' ')}`);
+  // 武器の文の中で普通に読める (p. を持つ語でも文は成立する)。
+  const SENT = {
+    頑: ['頑', 'な', '刃'], 健: ['健', 'やかな', '刃'],
+    息: ['息', 'の', '刃'], 銘: ['銘', 'の', '刃'], 符: ['符', 'の', '刃'],
+    甲: ['甲', 'を', '斬', 'る', '刃'], 鞘: ['鞘', 'を', '斬', 'る', '刃'],
+    鍔: ['鍔', 'を', '斬', 'る', '刃'], 釘: ['釘', 'を', '斬', 'る', '刃'],
+    槌: ['槌', 'を', '斬', 'る', '刃'], 鈴: ['鈴', 'を', '斬', 'る', '刃'],
+    晶: ['晶', 'を', '斬', 'る', '刃'], 柄: ['柄', 'を', '斬', 'る', '刃'],
+    鍛: ['鋼', 'を', '鍛', 'えた', '刃'], 研: ['毒', 'を', '研', 'ぐ', '刃'],
+    駆: ['風', 'を', '駆', 'ける', '矛'], 浴: ['光', 'を', '浴', 'びる', '刃'],
+    浸: ['毒', 'に', '浸', 'す', '刃'], 錆: ['錆', 'びた', '鉄', 'の', '刃'],
+    癒: ['焔', 'を', '癒', 'す', '杖'],
+    骨: ['骨', 'を', '斬', 'る', '刃'], 魂: ['魂', 'を', '吸', 'う', '刃'],
+  };
+  for (const [w, ws] of Object.entries(SENT)) {
+    const r = evaluate(ws.map(makeWord), { minContent: 2, tail: ws[ws.length - 1] });
+    ok(r.valid, `「${ws.join('')}」が文にならない: ${r.reasonText}`);
+    ok(!!WORDS[w], `「${w}」が辞書に無い`);
+  }
+  console.log(`  体に効く語 ${body.length} / ${body.join(' ')}`);
+}
 
 sec('分割');
 ok(JSON.stringify(segment('火球')) === JSON.stringify(['火', '球']), `火球 -> ${JSON.stringify(segment('火球'))}`);
@@ -421,7 +458,7 @@ sec('プールの形で文が読めること');
     ['霜', 'を', '蝕', 'む', '刃'],               // 霜を蝕む刃
     ['踏', 'む', '焔', 'を', '斬', 'る', '刃'],   // 踏む焔を斬る刃
     ['溶', 'ける', '毒', 'を', '斬', 'る', '刃'], // 溶ける毒を斬る刃
-    ['察', 'する', '毒', 'を', '斬', 'る', '刃'], // 察する毒を斬る刃
+    ['圧', 'する', '毒', 'を', '斬', 'る', '刃'], // 圧する毒を斬る刃
     ['小', 'さな', '焔', 'を', '斬', 'る', '刃'], // 小さな焔を斬る刃
     ['大', 'きな', '焔', 'の', '刃'],             // 大きな焔の刃
     ['急', 'に', '斬', 'る', '妙', 'な', '刃'],   // 急に斬る妙な刃

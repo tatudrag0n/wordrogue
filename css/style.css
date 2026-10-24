@@ -960,8 +960,7 @@ body.touch .hud-choice-title { font-size: .76rem; }
   touch-action: none;
 }
 .sen-gap:first-child { min-width: 40px; }
-.sen-gap-unused { transition: border-color .12s, background .12s, transform .08s;
-}
+
 .sen-word:active { cursor: grabbing; }
 .sen-word.armed {
   border-color: var(--accent);

@@ -2349,3 +2349,86 @@ html, body {
   border-radius: 4px !important;
 }
 .hud-dash { border-radius: 50% !important; }
+
+/* ═══ 文づくりの補助線を消す (要求対応) ═══════════════════════════════════
+   隙間の「＋」と、隙間・接続詞の空きマスの点線枠は見せない。
+   触り場所としてはそのまま残し、触れたとき・ドラッグのときだけ薄く出す。 */
+#forge .sen-gap {
+  width: 18px;
+  border: none;
+  opacity: 1;
+  background: transparent;
+}
+#forge .sen-gap:hover {
+  border: none;
+  opacity: 1;
+  background: rgba(214, 60, 48, 0.12);
+}
+#forge .placing .sen-gap,
+#forge .placing .sen-gap:hover {
+  border: none;
+  opacity: 1;
+  background: rgba(224, 72, 45, 0.10);
+}
+#forge .sen-gap.drop-hot {
+  border: none;
+  opacity: 1;
+  background: rgba(214, 60, 48, 0.22);
+}
+#forge .sen-conn.empty {
+  border: none;
+  background: transparent;
+  opacity: 0;
+}
+#forge .sen-conn.empty:hover,
+#forge .sen-conn.empty:focus-visible { opacity: .55; }
+
+/* ═══ 接続詞メニュー: 縦 1 列でスクロールして選ぶ ═══════════════════════ */
+.conn-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 132px;
+  max-height: min(46vh, 340px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: y proximity;
+}
+.conn-pick {
+  scroll-snap-align: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  font-size: .9rem;
+}
+.conn-pick.snap { background: rgba(36, 87, 214, 0.10); color: var(--fg); }
+@media (hover: none) {
+  .conn-pick { min-height: 44px; }
+}
+
+/* ═══ チュートリアル ════════════════════════════════════════════════════ */
+.tut-steps { max-width: 62ch; }
+.tut-step { display: none; }
+.tut-step.is-on { display: block; }
+.tut-step h3 { margin: 0 0 8px; font-size: 1.02rem; }
+.tut-step p { margin: 0 0 10px; font-size: .92rem; line-height: 1.75; }
+.tut-step .k {
+  font-family: var(--mono);
+  font-size: .84em;
+  background: #f1f5fb;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+#tutStep { font-variant-numeric: tabular-nums; }
+
+/* ═══ スマホ: 指の届きを保ちつつ省スペース ══════════════════════════════ */
+@media (max-width: 640px) {
+  #forge .forge-body { gap: 10px; }
+  #forge .lexicon { max-height: 18vh; }
+  #forge .pword,
+  #forge .sen-word { font-size: 1.06rem; }
+  #forge .sen-item { gap: 3px; }
+  #forge .forge-how { font-size: .74rem; }
+  .conn-picker { max-width: min(92vw, 340px); }
+}

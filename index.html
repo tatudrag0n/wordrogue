@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#f3eee1">
 <meta name="description" content="言葉を組み合わせて武装する 2D ローグライク。 combina 語で作った文が成立しなければ、武器は無効になる。">
 <title>ワードローグ — Wordrogue</title>
@@ -262,12 +262,11 @@
       <h3>3. 語の種類</h3>
       <ul class="howto-list">
       <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
-      <li><b>形態</b> … 剣・銃・弓と、弾・矢・球・環・壁など。<strong>うち基本武器の 14 語だけが武器語</strong>で、語彙からは引けない。残りは語彙から引けるただの語（攻撃の型は決めない）</li>
-      <li><b>効果</b> … 貫・裂・散など。数値を上げる。</li>
+      <li><b>形態</b> … 剣・銃・弓と、弾・矢・球・環・壁・甲・鍔・鞘など。<strong>うち基本武器の 14 語だけが武器語</strong>で、語彙からは引けない。残りは語彙から引けるただの語（攻撃の型は決めない）</li>
+      <li><b>効果</b> … 貫・裂・散、頑・健・銘など。数値を上げる。</li>
       <li><b>動詞</b> … <code>燃</code> <code>貫</code> <code>凍</code> など。1 枚で 1 つの動作になる。</li>
       <li><b>接続</b> … <code>る</code> <code>の</code> <code>られた</code> など。語ごとに付く送り仮名が決まっている。
       <strong>直前の語に結合する</strong>（下項）。</li>
-      <li><b>自身</b> … 頑・走など。プレイヤーに効く。</li>
       </ul>
       </section>
       <section>
@@ -320,6 +319,9 @@
       語の右の<strong>「接続詞」</strong>を押すと付けられる形の一覧が開く。
       部位は<strong>どの接続詞でも選べる</strong> — <strong>✓ は文が成る形</strong>（効きが伸びる）、
       ✕ は不成文（何も効かない）。文の力は<strong>体そのもの</strong>（攻撃と体力）にも乗る。
+      <strong>体に効く語だけの分類は無い</strong> — 武器の文で使う語ならどれも置けて、
+      その語の効果のうち<strong>体力・移動・攻撃・経験値・幸運</strong>などの分だけ体が受け取る。
+      （語彙で <b style="color:#6a4bd0">紫</b> の語が、体にも効く語）
       <strong>何がどれだけ変わるか</strong>は、各部の下と「部位の合計」に数字で出る。
       語は<strong>言玉</strong>を払う<strong>言葉くじ</strong>で手に入り、
       戦闘で使う語と同じプールから出る。
@@ -622,6 +624,17 @@
   </p>
 </noscript>
 
+<script>
+document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+let _lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => { const now = Date.now(); if (now - _lastTouchEnd <= 350) e.preventDefault(); _lastTouchEnd = now; }, { passive: false });
+document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+</script>
 <script type="module" src="js/main.js?v=1.3"></script>
 </body>
 </html>

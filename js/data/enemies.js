@@ -93,7 +93,7 @@ export const ENEMIES = {
     keep: 240, shot: { speed: 190, dmg: 10, cd: 2.6 },
   },
   rhymer: {
-    words: ['楽', '剛'],
+    words: ['響', '剛'],
     id: 'rhymer', name: '韻獣', ai: 'charger',
     hp: 70, speed: 60, dmg: 16, r: 16, xp: 8, color: '#66309c',
     charge: { range: 240, speed: 380, time: 0.6, cd: 2.2 },

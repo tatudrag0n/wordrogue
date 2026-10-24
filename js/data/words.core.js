@@ -1,9 +1,12 @@
 // ============================================================================
 // ワードローグ — 語テーブル (属性)
 // フォーマット: 語  種別  属性  効果(半角スペース区切り)
-//   種別: element / form / modifier / buff / grammar / core
+//   種別: element / phenom / form / modifier / verb / connect
 //   属性: element のときだけ必須。それ以外は -
-//   効果: key+数値 の並び。buff は player のステータス。
+//   効果: key+数値 の並び。
+//     前に `p.` を付けたキーだけが、部位強化でプレイヤーの体に効く
+//     (hp・spd・atk・xp など。p. の無いキーは武器側の効果。両方書くこともできる)。
+//     体に効く専用語という分類は無い — どの語も武器の文で読める語だけにする。
 //
 // 語は「すべて 1 文字の漢字」。語を並べるだけで日本語の文になるので、
 // 部品だけの 2 文字の語は置かない。効果語も動詞も属性語も全部 1 文字。
@@ -38,7 +41,6 @@ export const CATEGORIES = {
   form:     { name: '形態', color: '#2f7fc4', weight: 12 },
   modifier: { name: '効果', color: '#4e9b1f', weight: 24 },
   verb:     { name: '動詞', color: '#d94f7a', weight: 18 },
-  buff:     { name: '自身', color: '#7d55d6', weight: 12 },
   connect:  { name: '接続', color: '#5b7fb5', weight: 18 },
 };
 
@@ -67,9 +69,10 @@ export const isWeaponWord = (text) => WEAPON_WORD_SET.has(text);
 //                     属性と同じく特殊武器になれる。
 //   3. 形態 form    … 具体的な物の形・道具を指す体言。武器の頭になれるのは基本武器だけ。
 //   4. 動詞 verb    … 動作・作用そのものが主役で、述語になる語。
-//   5. 自身 buff    … プレイヤーの身体・装備・状態を指し、部位強化で常時効く語。
-//   6. 効果 modifier… 上のどれでもなく、他の語を修飾するのが主役の語。
-//   7. 接続 connect … 送り仮名。語ではない。
+//   5. 効果 modifier… 上のどれでもなく、他の語を修飾するのが主役の語。
+//   6. 接続 connect … 送り仮名。語ではない。
+// 「体に効く語」という分類は無い。部位強化で体に効く効果は、効果語・形態語・動詞の
+// どれにでも `p.` を付けて置ける (下のフォーマットを見る)。
 // 1 語が複数カテゴリに属してよい (words.js の cats)。
 //   動詞の形 (述語) を持つ語は、本来の分類に加えて verb も持つ (震える・還る・走る)。
 //   形容の形は品詞 (pos) で表し、分類は増やさない。
@@ -87,6 +90,8 @@ export const isWeaponWord = (text) => WEAPON_WORD_SET.has(text);
  * その直前に別の形を表す語を置くと名詞の叠字になる。
  * 効果としての「貫通」「散弾」は末尾語を普通に修飾できるので、
  * 対象は「物としての形」だけの語に限っている。
+ * 甲・鞘・鍔・柄・晶 のような道具の語は入れない — 形の語そのものではなく、
+ * 「長柄の槍」「氷晶の剣」は の で係れば普通に読める。
  */
 export const TAIL_UNMODIFIABLE = new Set([
   '刃', '剣', '刀', '斧', '槍', '矛', '戈', '牙', '爪',
@@ -235,6 +240,18 @@ const RAW_FORM = `
 壁     form  -  dmg+6  shield+18  area+10
 網     form  -  dmg+5  area+14  slowImmune+1
 盾     form  -  dmg+4  shield+22  armor+2
+
+# ── 鍛冶と具足 (盾・壁と同じ「ただの物」の語。部位強化でも効く) ──
+#   体の強化に使う語を別の分類にはしない。甲・鍔・盾・壁はみな形態語で、
+#   文の中でも体の中でも同じ効き方をする。
+甲     form  -  dmg+4  armor+3  shield+12
+鞘     form  -  dmg+3  speed+30  rate+0.15
+鍔     form  -  dmg+2  armor+3  shield+16
+釘     form  -  dmg+4  pierce+3  speed+25
+槌     form  -  dmg+8  knock+40  size+0.15  speed-10
+鈴     form  -  dmg+2  area+10  slowImmune+1  p.luck+0.10
+柄     form  -  size-0.12  speed+20  rate+0.15
+晶     form  -  dmg+4  crit+0.04  pierce+1
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -356,31 +373,17 @@ const RAW_MODIFIER = `
 結    modifier  -  dmg+4  chill+0.15
 穿    modifier  -  dmg+5  pierce+6
 通    modifier  -  dmg+4  pierce+4
-`;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 自身強化語: 語彙に置いてある間、プレイヤーに常時効く
-// ─────────────────────────────────────────────────────────────────────────────
-const RAW_BUFF = `
-人       buff  -  atk+0.03  spd+0.02
-頑    buff  -  hp+25  armor+1
-健    buff  -  hp+20  regen+0.3
-躯    buff  -  size+0.15  hp+10
-柄    buff  -  size-0.12  spd+0.06  atk-0.02
-走    buff  -  spd+0.12
-鎧    buff  -  armor+1  hp+8
-甲    buff  -  armor+2  shield+20
-王    buff  -  atk+0.16  hp+12  luck+0.06
-戒    buff  -  atk+0.09  crit+0.05
-符    buff  -  hp+15  regen+0.4
-薬    buff  -  regen+0.5  hp+6
-癒    buff  -  regen+0.8
-晶    buff  -  atk+0.12
-書    buff  -  xp+0.15
-察    buff  -  crit+0.08  atk+0.06
-永    buff  -  hp+30  regen+0.6  armor+1
-楽    buff  -  atk+0.07  crit+0.03
-幸    buff  -  luck+0.12  magnet+0.2
+# ── 体もきたえる語 (部位で効く p. キーを持つ。分類としての「自身」は無い) ──
+#   武器の文でも読める形だけを置く。「頑丈な刃」「息の長い刃」「魂を吸う刃」。
+#   p.hp+25 のように付けたキーは部位強化でプレイヤーに乗り、武器の側では無視される。
+頑    modifier  -  dmg+2  armor+2  p.hp+25
+健    modifier  -  dmg+1  regen+0.4  p.hp+20
+息    modifier  -  dmg+2  duration+1.2  p.hp+16  p.regen+0.5
+銘    modifier  -  dmg+2  crit+0.05  p.xp+0.15
+符    modifier  -  dmg+2  shield+10  p.hp+15  p.regen+0.3
+骨    modifier  -  dmg+3  armor+2  p.hp+18
+魂    modifier  -  dmg+2  lifesteal+0.03  p.xp+0.12
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -447,12 +450,18 @@ const RAW_VERB = `
 潰      verb  -  dmg+6  area+14  knock+35
 嚇      verb  -  dmg+3  slowImmune+1  chill+1
 縛      verb  -  dmg+2  slowImmune+1  magnet+0.3
+鍛      verb  -  dmg+4  armor+2  p.hp+22
+研      verb  -  dmg+2  crit+0.06  p.atk+0.10
+駆      verb  -  dmg+2  speed+45  p.spd+0.12
+浴      verb  -  dmg+3  burn+3  area+10
+浸      verb  -  dmg+3  poison+4  duration+0.8
+錆      verb  -  dmg+4  poison+2  rate-0.05
+癒      verb  -  dmg+1  regen+0.8
 `;
 
 // 接続詞 (送り仮名) は words.connect.js が語ごとのプールから作る。
 // 辞書にも words.js がそこから登録するので、ここには並べない。
 
 export const RAW_TABLES = [
-  RAW_ELEMENT, RAW_FORM, RAW_MODIFIER, RAW_VERB, RAW_BUFF,
-  RAW_CORE,
+  RAW_ELEMENT, RAW_FORM, RAW_MODIFIER, RAW_VERB, RAW_CORE,
 ];

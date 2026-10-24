@@ -1058,7 +1058,7 @@ sec('語をタップすると直後の接続詞が切り替わる');
   const wi = r.weapons[0];
   const free = r.lexiconFreeCount;
   // 語彙を埋める。
-  const filler = ['火', '流', '風', '雷', '刃', '刀', '盾', '剛', '王', '鋼', '環', '光'];
+  const filler = ['火', '流', '風', '雷', '刃', '刀', '盾', '剛', '甲', '鋼', '環', '光'];
   for (let k = 0; k < free; k++) r.giveWord(makeWord(filler[k % filler.length]), true);
   ok(r.lexiconFull, '満杯になっていない');
   ok(r.lexicon.every(Boolean), '語彙に空きが残っている');

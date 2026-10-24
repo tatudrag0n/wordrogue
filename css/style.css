@@ -48,8 +48,8 @@
     repeating-linear-gradient(0deg, rgba(23, 43, 84, .014) 0 1px, rgba(23, 43, 84, 0) 1px 3px),
     repeating-linear-gradient(90deg, rgba(23, 43, 84, .010) 0 1px, rgba(23, 43, 84, 0) 1px 4px);
 
-  --r:   12px;
-  --r-s: 8px;
+  --r:   6px;
+  --r-s: 4px;
   --shadow:   0 12px 30px rgba(23, 43, 84, 0.09), 0 1px 0 rgba(255, 255, 255, .95) inset;
   --shadow-s: 0 2px 8px rgba(23, 43, 84, 0.07);
   --ring:     0 0 0 2px rgba(224, 72, 45, .22);
@@ -85,6 +85,8 @@ html, body {
   font-size: 15px;
   line-height: 1.6;
   overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
   /* iPad の横持ちで左右いっぱいに広げないようにする (文字が大きくなりすぎる)。 */
   max-width: 100%;
   text-size-adjust: 100%;
@@ -708,10 +710,10 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
   border-radius: var(--r);
   background: linear-gradient(180deg, #ffffff, var(--panel-2));
   box-shadow: var(--shadow-s);
-  padding: 11px 13px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 5px;
 }
 .wrow.broken { border-color: rgba(214, 60, 48, .45); border-left-color: var(--ng); background: rgba(214, 60, 48, .06); }
 .wrow.great, .wrow.idiom { border-left-color: var(--accent); }
@@ -736,10 +738,10 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 .wrow-head {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 6px;
   flex-wrap: wrap;
 }
-.wrow-name { font-weight: 700; font-size: .98rem; }
+.wrow-name { font-weight: 700; font-size: .85rem; }
 .wrow-core {
   font-size: .74rem;
   color: var(--fg-mute);
@@ -749,10 +751,10 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 }
 .wrow-lv {
   font-family: var(--mono);
-  font-size: .74rem;
+  font-size: .68rem;
   background: #eef2f9;
   border-radius: 4px;
-  padding: 1px 6px;
+  padding: 0 5px;
   color: var(--fg-dim);
 }
 /* 「空にする」 … 文の語を全部語彙へ戻す。並べ直すときの逃げ道。 */
@@ -771,9 +773,9 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 .wrow-clear:hover { color: var(--fg); border-color: var(--fg-dim); }
 .wrow-grade {
   margin-left: auto;
-  font-size: .78rem;
+  font-size: .70rem;
   font-weight: 700;
-  padding: 1px 9px;
+  padding: 1px 6px;
   border-radius: 999px;
   border: 1px solid currentColor;
 }
@@ -782,7 +784,7 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 .grade-great  { color: var(--great); }
 .grade-broken { color: var(--ng); }
 
-.wrow-why { font-size: .8rem; color: var(--ng); }
+.wrow-why { font-size: .72rem; color: var(--ng); line-height: 1.4; }
 
 .slots { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
 .slot {
@@ -862,24 +864,24 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 3px;
-  padding: 8px 6px;
+  gap: 2px;
+  padding: 4px 4px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #eef2f9;
-  min-height: 56px;
+  min-height: 38px;
 }
-.sen-item { display: inline-flex; align-items: center; gap: 3px; }
+.sen-item { display: inline-flex; align-items: center; gap: 2px; }
 .sen-word {
-  min-width: 48px; min-height: 40px;
-  padding: 5px 9px;
+  min-width: 34px; min-height: 30px;
+  padding: 3px 6px;
   display: grid; place-items: center;
   border: 1.5px solid var(--line-2);
   border-radius: 8px;
   background: linear-gradient(180deg, #ffffff, #f4f7fc);
   color: var(--ink);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 2px 5px rgba(23, 43, 84, 0.07);
-  font-size: 1.05rem;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 1px 3px rgba(23, 43, 84, 0.06);
+  font-size: 0.92rem;
   font-weight: 700;
   cursor: grab;
   user-select: none;
@@ -929,15 +931,15 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 }
 /* 文の語を外すボタン。ホバー / 選択中だけ濃くする。 */
 .sen-out {
-  width: 24px; height: 26px;
-  margin: 0 1px 0 2px;
+  width: 20px; height: 22px;
+  margin: 0 1px;
   padding: 0;
   display: grid; place-items: center;
   border: 1.5px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--fg-mute);
-  font-size: .82rem;
+  font-size: .72rem;
   line-height: 1;
   cursor: pointer;
   opacity: .30;
@@ -958,15 +960,15 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 }
 
 .sen-conn {
-  min-width: 34px; height: 30px;
+  min-width: 28px; height: 24px;
   margin: 0 1px;
-  padding: 0 6px;
+  padding: 0 5px;
   display: grid; place-items: center;
   border: 1.5px dashed rgba(36, 87, 214, 0.38);
   border-radius: 999px;
   background: rgba(36, 87, 214, 0.06);
   color: #2457d6;
-  font-size: .82rem;
+  font-size: .72rem;
   font-weight: 700;
   cursor: pointer;
   user-select: none;
@@ -981,7 +983,7 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 .sen-conn.empty { opacity: .45; }
 .sen-conn.empty:hover { opacity: 1; }
 .sen-gap {
-  width: 30px; min-height: 40px;
+  width: 24px; min-height: 30px;
   display: grid; place-items: center;
   border: 1.5px dashed transparent;
   border-radius: 8px;
@@ -1009,13 +1011,13 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 5px;
-  padding: 6px 9px;
+  gap: 3px;
+  padding: 4px 6px;
   background: #f1f5fb;
   border: 1px solid var(--line);
   border-radius: var(--r-s);
-  font-size: .95rem;
-  letter-spacing: .06em;
+  font-size: .82rem;
+  letter-spacing: .04em;
 }
 .sn-parts { display: inline-flex; align-items: center; gap: 3px; }
 .sn-plus { color: var(--fg-mute); font-size: .78rem; }
@@ -1030,16 +1032,12 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 }
 .sn-conn  { border-style: dotted; color: #2457d6; background: #eef2f9; }
 .sn-verb  { border-color: rgba(184, 53, 92, 0.40); color: #b8355c; background: #fdeef4; }
-.sn-buff  { border-color: rgba(106, 75, 208, 0.42); color: #6a4bd0; background: #f0e9f5; }
+/* 体にも効く語 (語が p. キーを持つ) — 分類ではなく印。 */
+.sn-self  { border-color: rgba(106, 75, 208, 0.42); color: #6a4bd0; background: #f0e9f5; }
+/* 語彙の側でも同じ印 (体にも効く語) */
+.pword.is-self { background: #f3eefa; }
 .sn-empty { color: #8a92a3; font-weight: 400; }
 
-.wrow-self {
-  border-color: rgba(224, 72, 45, .4);
-  border-left: 3px solid var(--accent);
-  background: linear-gradient(180deg, #ffffff, #fff7f2);
-}
-/* 自身の文は行の背景も少し黄め。末尾の「人」まで含む。 */
-.wrow-self .sen-row { border-color: rgba(224, 72, 45, .3); background: #fff7f2; }
 .wrow-kind {
   font-size: .7rem;
   color: var(--fg-mute);
@@ -1057,9 +1055,9 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 }
 .sn-eq { color: var(--fg-mute); }
 .sn-text {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   color: var(--ok);
-  letter-spacing: .1em;
+  letter-spacing: .06em;
 }
 .sn-seg { display: inline-flex; gap: 2px; }
 .sg {
@@ -1089,15 +1087,15 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 .wrow-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 6px;
-  font-size: .74rem;
+  gap: 3px 4px;
+  font-size: .68rem;
   font-family: var(--mono);
 }
 .stat {
   background: #eef2f9;
   border: 1px solid var(--line);
   border-radius: 4px;
-  padding: 1px 6px;
+  padding: 0 4px;
   color: var(--fg-dim);
 }
 .stat.up   { color: var(--ok);  border-color: rgba(22, 145, 90, 0.30); }
@@ -1105,11 +1103,11 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 .stat.idom { color: var(--idiom); border-color: rgba(194, 106, 13, 0.36); background: rgba(194, 106, 13, 0.20); }
 .stat.nat  { color: #2457d6; border-color: rgba(36, 87, 214, 0.34); }
 
-/* 自然さの内訳。加点は青、減点は赤で区別する。 */
+/* 自然さの内訳。加点は青、減点は赤で区別する。コンパクトにまとめる。 */
 .wrow-nat {
-  display: flex; flex-wrap: wrap; gap: .3rem .5rem;
-  align-items: baseline; margin: .2rem 0 .3rem;
-  font-family: var(--mono); font-size: .72rem; line-height: 1.5;
+  display: flex; flex-wrap: wrap; gap: .2rem .35rem;
+  align-items: baseline; margin: .15rem 0 .2rem;
+  font-family: var(--mono); font-size: .64rem; line-height: 1.4;
 }
 .wrow-nat .nat-total { color: #2457d6; font-weight: 700; }
 .wrow-nat .nat-plus  { color: var(--ok); }
@@ -2313,3 +2311,41 @@ html, body {
 .hud-weapons .wchip.idiom { animation: weaponIdiom 1.7s ease-in-out infinite; }
 @keyframes weaponReady { 0%,100% { box-shadow: 0 2px 8px rgba(23, 43, 84, 0.09); } 50% { box-shadow: 0 3px 14px rgba(192,139,47,.25); } }
 @keyframes weaponIdiom { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.13) drop-shadow(0 0 5px rgba(220,166,48,.48)); } }
+
+/* ── 角丸を抑える（要求対応） ──
+   元は --r 12px / --r-s 8px および各所 999px のピル形状だったが、
+   全体的に丸すぎるため一回り角ばらせる。ダッシュボタンの真円は維持。 */
+.btn,
+.panel,
+.wchip,
+.hud-hint,
+.sen-word,
+.sen-conn,
+.sen-gap,
+.lexicon,
+.pword,
+.drag-ghost,
+.wrow,
+.sentence,
+.forge-side,
+.grow-part,
+.grow-slot,
+.grow-conn-menu,
+.grow-word,
+.dict-row,
+.set-row,
+.conn-picker {
+  border-radius: 4px !important;
+}
+.btn-icon,
+.wrow-grade,
+.wrow-drop,
+.grow-conn-pick,
+.dict-tab,
+.eff,
+.hud-self,
+.statbox,
+.choice-card {
+  border-radius: 4px !important;
+}
+.hud-dash { border-radius: 50% !important; }

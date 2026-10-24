@@ -3,8 +3,12 @@
 //
 // プレイヤーの強化はメインメニューの「部位強化」で行う (戦闘中には行わない)。
 // 頭・右腕・左腕・右手・左手・右足・左足・胸・胴の 9 部位に語を入れると、
-// その語の効果 (buff 語の player、それ以外の語は fx のうちプレイヤーに
-// 効くもの) がそのまま能力に乗る。セーブの恒久強化 (書庫) もここで重ねる。
+// その語の効果のうち、プレイヤーに効くキーがそのまま能力に乗る。
+// 体に効く専用語という分類は無い — どの語も武器の文で使える語で、
+// 体に効くかは語が持つキーで決まる。
+//   語の player (`p.` で宣言した効果) … 体だけに効く (体力・移動・攻撃・経験値 …)
+//   語の fx (武器側の効果)            … うち PART_KEYS にあるものは体にも効く
+// セーブの恒久強化 (書庫) もここで重ねる。
 //
 // 部位は **1 文として数える** (武器と同じ)。1 部位に 2 語まで入れられて、
 // 語の直後には接続詞が選べる。
@@ -12,7 +16,7 @@
 //   発 + 電する   … 熟語「発電」が成立して、部位まるごとの効果が伸びる。
 // 不成文の部位 (接続詞が結べていない等) は何も効かない。
 //
-// **文の力は体そのものにも乗る。** 語が buff でなくても、正しく文にすれば
+// **文の力は体そのものにも乗る。** 体に効くキーを持たない語でも、正しく文にすれば
 // わずかに攻撃と体力が上がる (文力ボーナス)。接続詞を足して文を整える意味を
 // どの語でも持たせるためで、倍率は体じゅうで頭打ちにする。
 //
@@ -44,15 +48,18 @@ export const BASE_PLAYER = {
   reflect: 0,      // 被弾を返す割合
 };
 
-/** buff 語がプレイヤーに与えるキー一覧。 */
-const BUFF_KEYS = new Set([
-  'hp', 'spd', 'atk', 'armor', 'crit', 'regen', 'lifesteal',
+/**
+ * 語が `p.` で宣言する、プレイヤー専用のキー。
+ * 武器の側では読まれない (weapon.js が捨てる) ので、弾速や大きさと同じ名前にしない。
+ */
+const SELF_KEYS = new Set([
+  'hp', 'spd', 'atk', 'armor', 'crit', 'critDmg', 'regen', 'lifesteal',
   'luck', 'magnet', 'xp', 'size', 'shield',
 ]);
 
 /**
- * buff 以外の語を部位に入れたとき、プレイヤーに効くキー。
- * 動詞の spd は弾速、大きさと攻撃は武器側のものなので、ここには入れない。
+ * 部位に入れたとき、武器側の効果のうち体にも効くキー。
+ * 速さ・大きさ・攻撃倍率は武器側のものなので、ここには入れない。
  */
 const PART_KEYS = new Set([
   'hp', 'armor', 'crit', 'regen', 'lifesteal', 'luck', 'magnet', 'shield',
@@ -72,38 +79,20 @@ export const PART_POWER = {
 };
 
 /**
- * buff 語の効果をプレイヤー能力へ写す。
- * 語データの hp は絶対値、spd と xp は割合なので、行き先のキーが違う。
- * @returns {boolean} 何か効いたか
- */
-function applyBuffFx(s, src) {
-  let used = false;
-  for (const [k, v] of Object.entries(src)) {
-    if (typeof v !== 'number' || !BUFF_KEYS.has(k)) continue;
-    if (k === 'hp') s.maxHp += v;
-    else if (k === 'xp') s.xpMul += v;
-    else if (k === 'spd') s.spd *= 1 + v;
-    else s[k] = (s[k] || 0) + v;
-    used = true;
-  }
-  return used;
-}
-
-/**
  * 部位 1 つぶんの効果をプレイヤー能力に足す。
  * @param {object} s 集計中の能力
  * @param {object} src 語・接続詞・熟語の効果
  * @param {Set<string>} keys 通すキー
  * @param {number} gain 文の力による倍率
- * @param {boolean} buffForm buff 語の形か (hp / xp / spd の向きが違う)
+ * @param {boolean} selfSide 語の `p.` 側か (hp / xp / spd の向きが違う)
  * @returns {boolean} 何か効いたか
  */
-function applyPartSrc(s, src, keys, gain, buffForm) {
+function applyPartSrc(s, src, keys, gain, selfSide) {
   let used = false;
   for (const [k, v] of Object.entries(src || {})) {
     if (typeof v !== 'number') continue;
-    if (buffForm) {
-      if (!BUFF_KEYS.has(k)) continue;
+    if (selfSide) {
+      if (!SELF_KEYS.has(k)) continue;
       if (k === 'hp') s.maxHp += v * gain;
       else if (k === 'xp') s.xpMul += v * gain;
       else if (k === 'spd') s.spd *= 1 + v * gain;
@@ -175,10 +164,9 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
     for (const e of p.sen.entries) {
       const info = WORDS[e.word.text];
       if (!info) continue;
-      const isBuff = info.cat === 'buff';
-      const ok = isBuff
-        ? applyPartSrc(s, info.player || info.fx || {}, BUFF_KEYS, gain, true)
-        : applyPartSrc(s, info.fx || {}, PART_KEYS, gain, false);
+      // 語そのものの効果。`p.` で置いた体側の効果と、武器側の効果のうち体に効くもの。
+      const selfOk = info.player ? applyPartSrc(s, info.player, SELF_KEYS, gain, true) : false;
+      const ok = applyPartSrc(s, info.fx || {}, PART_KEYS, gain, false) || selfOk;
       if (ok) { used++; s.partTexts.push(info.text); }
       // 語の直後の接続詞。部位ではプレイヤーに効くキーだけを通す。
       if (e.conn) {
@@ -186,7 +174,25 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
       }
     }
     // 熟語が成立していれば、その効果も乗る (発電 = 感電など)。
-    if (p.idiom) applyPartSrc(s, p.idiom.fx || {}, PART_KEYS, gain, false);
+    if (p.idiom) {
+      if (applyPartSrc(s, p.idiom.fx || {}, PART_KEYS, gain, false)) used++;
+    }
+    // どんな語でも何かしら体に効くように、直接効果が無ければ汎用ボーナスを与える
+    // 武器系語（炎・弾・強など）も部位で無効にならないようにする。
+    // 文の力があればそちらで体に乗るので、力が無いときだけ最低保証を入れる。
+    if (used === 0 && p.sen.count > 0 && p.power <= 1.01) {
+      const fb = gain > 0 ? gain : 0.6;
+      s.maxHp += 8 * fb;
+      s.atkMul += 0.02 * fb;
+      used = 1;
+      const first = p.sen.entries[0]?.word?.text;
+      if (first && !s.partTexts.includes(first)) s.partTexts.push(first);
+    } else if (used === 0 && p.sen.count > 0) {
+      // 力はあるが直接効果が無い場合もカウントして部位が「効いた」扱いにする
+      used = 1;
+      const first = p.sen.entries[0]?.word?.text;
+      if (first && !s.partTexts.includes(first)) s.partTexts.push(first);
+    }
     // 文の力そのものを体に写す。
     s.partPowerBonus += Math.max(0, p.power - 1);
     s.partCount += used;
@@ -233,6 +239,7 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
  */
 const EFFECT_ROWS = [
   { key: 'maxHp', label: '体力', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
+  { key: 'atk', label: '攻撃', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'atkMul', label: '攻撃', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'armor', label: '装甲', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'crit', label: '会心', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
@@ -371,5 +378,3 @@ export function statRows(s) {
 export function statLine(s) {
   return statRows(s).map((r) => `${r.label} ${r.value}`).join('  ');
 }
-
-export { BUFF_KEYS };

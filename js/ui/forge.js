@@ -19,6 +19,7 @@ import {
 } from '../data/words.js';
 import { CONNECTORS, CONNECT_ORDER, formOf, ROLE_LABEL } from '../data/words.connect.js';
 import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
+import { FX_LABEL, PS_LABEL } from './labels.js';
 import { keyStats } from '../game/weapon.js';
 
 /**
@@ -37,29 +38,23 @@ function catClass(w) {
   if (!info) return 'sn-x';
   if (info.cat === 'connect') return 'sn-conn';
   if (info.cat === 'verb') return 'sn-verb';
-  if (info.cat === 'buff') return 'sn-buff';
+  // 分類としての「自身」語は無い。体側 (p.) の効果を持つ語に印を付けるだけ。
+  if (info.player) return 'sn-self';
   return 'sn-n';
 }
 
+// 効果の日本語名は labels.js 1 つだけ (ここにも書くと片方が古くなる)。
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
 
-const FX_LABEL = {
-  dmg: '威力', rate: '攻撃/秒', speed: '速さ', count: '数', pierce: '貫通',
-  split: '分裂', bounce: '反射', chain: '連鎖', orbit: '回転数', size: '大きさ',
-  area: '範囲', range: '間合い', arc: '扇', spread: '散り', crit: '会心',
-  critDmg: '会心威力', homing: '追尾', duration: '持続', explode: '爆発',
-  burn: '炎上', poison: '毒', chill: '減速', shock: '感電', freeze: '凍結',
-  lifesteal: '吸血', regen: '回復', shield: 'シールド', knock: '撃退',
-  recoil: '反動', magnet: '吸引', slowImmune: '減速耐性', reflect: '反射',
-  armor: '装甲', power: '文力', atkMul: '攻撃', xpMul: '経験値',
-  dmgMul: '威力', hpMul: '体力',
-};
-
-const PS_LABEL = {
-  hp: '体力', spd: '移動', atk: '攻撃', armor: '装甲', crit: '会心',
-  regen: '回復', lifesteal: '吸血', luck: '幸運', magnet: '吸引',
-  xp: '経験値', size: '大きさ', shield: 'シールド', critDmg: '会心威力',
-};
+/** 語の体側の効果 (p.) を一行に。部位強化でだけ効く分。 */
+function selfLine(player) {
+  const out = [];
+  for (const [k, v] of Object.entries(player || {})) {
+    if (!v) continue;
+    out.push(`${PS_LABEL[k] || k} ${v > 0 ? '+' : ''}${round(v)}`);
+  }
+  return out.join(' ');
+}
 
 /**
  * 語に付く接続詞のチップ。語チップのすぐ右に並べて「語の直後」を表す。
@@ -295,7 +290,7 @@ export class Forge {
       row.append(this.renderWordChip(e, place, opt.idiomIdx?.has(i), opt.idiomName));
       row.append(mkGap(i + 1));
     });
-    // 末尾語 (「人」) は枠の外に固定で付く。
+    // 末尾語 (武器語) は枠の外に固定で付く。
     if (sen.tailText) {
       row.append(el('div', {
         class: 'sen-word sen-tail',
@@ -679,11 +674,14 @@ export class Forge {
         class: 'pword'
           + (this.armed === w ? ' armed' : '')
           + (this.forgetMode ? ' forgetable' : '')
-          + (w.cat === 'form' ? ' is-form' : ''),
+          + (w.cat === 'form' ? ' is-form' : '')
+          // 体に効く効果 (p.) を持つ語は、部位強化でもそのまま効く
+          + (info?.player ? ' is-self' : ''),
         style: { borderColor: cat.color },
         title: this.forgetMode
           ? `${w.text} を忘れる（捨てる）`
-          : `${w.text} [${cat.name}]\nタップで選んで、文の語や隙間をタップすると置けます。`,
+          : `${w.text} [${cat.name}]\nタップで選んで、文の語や隙間をタップすると置けます。`
+            + (info?.player ? `\n体にも効く: ${selfLine(info.player)}` : ''),
       }, el('span', {}, w.text));
       const n = counts.get(w.text);
       if (n > 1) node.append(el('span', { class: 'pword-n' }, `×${n}`));
@@ -763,11 +761,7 @@ export class Forge {
     for (const [k, v] of Object.entries(fx)) {
       parts.push(`${FX_LABEL[k] || k} ${v > 0 ? '+' : ''}${round(v)}`);
     }
-    if (info?.player) {
-      for (const [k, v] of Object.entries(info.player)) {
-        parts.push(`自身 ${PS_LABEL[k] || k} ${v > 0 ? '+' : ''}${round(v)}`);
-      }
-    }
+    if (info?.player) parts.push(`体 ${selfLine(info.player)}`);
     d.append(el('span', { class: 'dl' }, parts.length ? parts.join('  ') : '効果なし'));
     // 文の中にあるときだけ、その語に使える接続詞を全部見せる。
     // （語をタップすると一周する。どれが使えるかを毎回覚える必要をなくす。）

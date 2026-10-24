@@ -277,8 +277,8 @@ export class Forge {
       const place = { kind: gapKind, index, wi: opt.wi || null, wIdx: opt.wIdx };
       const node = el('div', {
         class: 'sen-gap',
-        title: 'ここに語を落とす (ドラッグ)',
-      }, el('span', {}, '＋'));
+        title: 'ここに語を置ける (ドラッグ / タップ)',
+      });
       this.makeDropTarget(node, place);
       this.makeTappable(node, () => this.onGapTap(place));
       return node;
@@ -314,11 +314,12 @@ export class Forge {
       title: `${w.text} [${cat.name}]`
         + (inIdiom ? `\n熟語「${idiomName}」を構成する語` : '')
         + `\nタップ: 後ろの接続詞を切り替える`
-        + `\n長押し: 持ち上げてタップだけで並べ替える`
+        + `\n長押し: 接続詞の一覧 (スクロールで選ぶ)`
         + `\nドラッグ: 並べ替える / 語彙へ戻す`
         + `\n使える接続詞: ${this.connListText(entry, place)}`,
     }, el('span', {}, w.text));
-    this.makeDraggable(chip, place, () => this.onWordTap(place), () => this.pickUp(place));
+    // 長押しは「持ち上げ」から接続詞の一覧へ (要求)。並べ替えはドラッグで行う。
+    this.makeDraggable(chip, place, () => this.onWordTap(place), () => this.openConnPicker(place, chip));
 
     // 接続詞は語の直後に置く。語と同じタップで切り替わる。
     const connChip = renderConnector(this, place, conn);
@@ -444,6 +445,9 @@ export class Forge {
     const phrase = opts.map((c) => sen.connForm(place.index, c)).find((h) => h && h.compound);
     menu.append(el('div', { class: 'conn-picker-head' },
       phrase ? `${e.word.text} の直後 (熟語「${phrase.source}」)` : `${e.word.text} の直後`));
+    // 候補は縦 1 列に並べてスクロールできるようにする (要求)。
+    // 指で押せる高さに取り、スクロールで中心に来た候補を少し強調する。
+    const list = el('div', { class: 'conn-pick-list' });
     const add = (text, label) => {
       const b = el('button', {
         class: 'conn-pick' + (text === cur ? ' cur' : ''),
@@ -455,11 +459,22 @@ export class Forge {
         ev.stopPropagation();
         this.pickConnector(place, text);
       });
-      menu.append(b);
+      list.append(b);
     };
     add(null, 'なし');
     for (const c of opts) add(c, c);
+    menu.append(list);
+    list.addEventListener('scroll', () => this.hintConnScroll(list));
     document.body.append(menu);
+    // いまの接続詞 (無ければ「なし」) を最初に見せる。中心に来るよう合わせる。
+    // 本物の DOM でだけ動かす。偽 DOM では位置合わせを飛ばす。
+    try {
+      const cEl = list.querySelector('.cur');
+      if (cEl && list.clientHeight && list.scrollHeight > list.clientHeight
+        && cEl.offsetTop != null) {
+        list.scrollTop = cEl.offsetTop - (list.clientHeight - cEl.offsetHeight) / 2;
+      }
+    } catch { /* 初回位置は出なくても支障はない */ }
     // チップの下に出す。画面外なら上へ逃がす。
     try {
       const r = anchor.getBoundingClientRect();
@@ -472,6 +487,24 @@ export class Forge {
     } catch { /* 位置が取れなければそのまま */ }
     this.pickerEl = menu;
     return menu;
+  }
+
+  /** スクロールで中心に来た候補を強調する。決定はタップで行う。 */
+  hintConnScroll(list) {
+    try {
+      const kids = [...list.children];
+      if (!kids.length || !list.clientHeight) return;
+      const mid = (list.scrollTop || 0) + list.clientHeight / 2;
+      let best = null, bd = Infinity;
+      for (const k of kids) {
+        const d = Math.abs((k.offsetTop || 0) + (k.offsetHeight || 0) / 2 - mid);
+        if (d < bd) { bd = d; best = k; }
+      }
+      if (best && !best.classList.contains('snap')) {
+        for (const x of kids) x.classList.remove('snap');
+        best.classList.add('snap');
+      }
+    } catch { /* 本物の DOM でだけ動く。偽 DOM では何もしない */ }
   }
 
   /** メニューから接続詞を選んで付ける。null なら外す。 */
@@ -1034,7 +1067,7 @@ export class Forge {
   /** ドラッグ開始とみなす移動量 (px)。 */
   static get DRAG_SLOP() { return 7; }
 
-  /** 長押しで「持ち上げる」とみなす時間 (ms)。 */
+  /** 長押しとみなす時間 (ms)。押したままの語は接続詞の一覧を出す。 */
   static get HOLD_MS() { return 480; }
 
   /** タップで選べるようにする。 */

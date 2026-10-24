@@ -902,5 +902,18 @@ sec('新しい語 — 気・己・皆と敵のは');
   console.log('  気・己・皆 追加:「敵は皆燃える」・「己を癒す剣」 成立');
 }
 
+sec('矛盾する属性の並びは減点');
+{
+  const r = E('氷', 'の', '炎');
+  ok(r.valid, '「氷の炎」が不成立: ' + r.reasonText);
+  const pc = (r.naturalParts || []).find((p) => p.key === 'clash');
+  ok(!!pc && pc.v < 0, '矛盾ペアの減点が無い: ' + JSON.stringify(r.naturalParts));
+  const calm = E('氷', 'の', '雪');
+  ok(calm.valid, '「氷の雪」が不成立: ' + calm.reasonText);
+  ok(!(calm.naturalParts || []).some((p) => p.key === 'clash'), '「氷の雪」に矛盾減点がある');
+  ok(r.natural < calm.natural, '矛盾する方が自然さが上: ' + r.natural + ' / ' + calm.natural);
+  ok(r.fx.power < calm.fx.power, '矛盾する方が強い: ' + r.fx.power + ' / ' + calm.fx.power);
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

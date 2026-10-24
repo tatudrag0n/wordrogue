@@ -373,6 +373,9 @@ const RAW_MODIFIER = `
 穿    modifier  -  dmg+5  pierce+6
 通    modifier  -  dmg+4  pierce+4
 
+骨    modifier  -  dmg+3  armor+2
+魂    modifier  -  dmg+2  lifesteal+0.03
+
 # ── 体もきたえる語 (部位で効く p. キーを持つ。分類としての「自身」は無い) ──
 #   武器の文でも読める形だけを置く。「頑丈な刃」「息の長い刃」「魂を吸う刃」。
 #   p.hp+25 のように付けたキーは部位強化でプレイヤーに乗り、武器の側では無視される。
@@ -446,6 +449,7 @@ const RAW_VERB = `
 浸      verb  -  dmg+3  poison+4  duration+0.8
 錆      verb  -  dmg+4  poison+2  rate-0.05
 癒      verb  -  dmg+1  regen+0.8
+鍛      verb  -  dmg+4  armor+2
 `;
 
 // 接続詞 (送り仮名) は words.connect.js が語ごとのプールから作る。

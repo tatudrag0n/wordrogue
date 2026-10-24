@@ -10,6 +10,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 # 同時実行を避けるため、concurrency group を分ける。
 concurrency:
@@ -30,7 +31,27 @@ jobs:
       # 依存パッケージは無いので、辞書とシミュレーションのテストだけ回す。
       # (ブラウザテストは Chrome を使うため CI では省く)
       - name: 辞書のテスト
-        run: node test/words.test.js
+        id: words
+        run: |
+          node test/words.test.js > words.log 2>&1
+          status=$?
+          echo "exit=$status" >> words.log
+          cat words.log
+          exit $status
+
+      - name: 失敗ログを Issue に残す
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('words.log', 'utf8').slice(0, 60000);
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'words.test failure 2',
+              body: '\`\`\`\\n' + body + '\\n\`\`\`'
+            });
 
       - name: シミュレーションのテスト
         run: node test/sim.test.js

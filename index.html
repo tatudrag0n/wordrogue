@@ -106,7 +106,7 @@
           <div class="lexicon" id="forgeLexicon"></div>
 
           <ul class="forge-how">
-            <li><b>語を置く</b><span>語彙の語をタップ → 文の語か <em>＋</em> をタップ</span></li>
+            <li><b>語を置く</b><span>語彙の語をタップ → 文のあいた場所をタップ</span></li>
             <li><b>接続詞</b><span>語の右のマスをタップ → 使える接続詞を一覧から一発で選ぶ。語のタップで順に切り替え</span></li>
             <li><b>戻す</b><span>「戻す」で直前の操作を 1 つ取り消す</span></li>
             <li><b>外す</b><span>語の <em>✕</em> をタップ → 語彙へ。語彙へドラッグしてもよい</span></li>
@@ -133,8 +133,8 @@
 
       <footer class="panel-foot">
         <span class="muted">
-          ドラッグの判定は 7px。動かせば並べ替え、動かさなければタップ（接続詞の切り替え。
-          語の右のマスをタップすると一覧から選べる）。
+          動かせば並べ替え / タップで接続詞を切り替え / 押したままにすると
+          その語の接続詞の一覧 (スクロールして選ぶ)。
         </span>
         <button class="btn btn-primary" id="forgeBack">戦闘へ戻る</button>
       </footer>
@@ -151,6 +151,7 @@
         <button class="btn btn-primary btn-lg" id="btnStart">はじめる</button>
         <button class="btn" id="btnStages">ステージ選択</button>
         <button class="btn" id="btnHowto">遊び方</button>
+        <button class="btn" id="btnTutorial">チュートリアル</button>
         <button class="btn" id="btnGrow">部位強化</button>
         <button class="btn" id="btnArchive">書庫</button>
         <button class="btn" id="btnDict">辞書</button>
@@ -389,9 +390,9 @@
       <li>語彙の語を<strong>タップ</strong> … 語を持ち上げる。文の隙間をタップで置ける</li>
       <li>文の語の <strong>✕</strong> … 語彙へ戻す。<strong>語彙が満杯でもできる</strong>（最古の 1 語を捨てる）</li>
       <li>文の語を<strong>タップ</strong> … 後ろの接続詞が順に切り替わる</li>
-      <li>文の語の<strong>右の接続詞マスをタップ</strong> … 使える接続詞を一覧から一発で選ぶ</li>
+      <li>文の語を<strong>長押し</strong> … 使える接続詞を一覧で出す。<strong>スクロールしてタップ</strong>で決定</li>
       <li><strong>戻す</strong> … 直前の操作を 1 つ取り消す（最大 40 回）</li>
-      <li>文の語を<strong>長押し</strong> … 持ち上げてからタップだけで並べ替えられる</li>
+      <li>長押しは<strong>接続詞の一覧</strong>専用。語の並べ替えはドラッグで行う</li>
       <li>文は <strong>10 文字</strong>まで。入りきらない語は置けない</li>
       </ul>
       </section>
@@ -479,12 +480,62 @@
             <li><kbd>Esc</kbd> … 一時停止 / 閉じる</li>
             <li>タッチ … 画面を長押ししてからドラッグで移動</li>
             <li>タッチ … 右下の<strong>ダッシュ</strong>を押してダッシュ（タップでも効く）</li>
-            <li>言葉鍛冶 … 語を<strong>文へドラッグ</strong>、または<strong>タップで選んでから隙間をタップ</strong>。文の語を<strong>タップ</strong>で接続詞切替</li>
+            <li>言葉鍛冶 … 語を<strong>文へドラッグ</strong>、または<strong>タップで選んでから隙間をタップ</strong>。文の語を<strong>タップ</strong>で接続詞切替、<strong>長押し</strong>で一覧 (スクロール選択)</li>
             <li>武器は<strong>自動で攻撃する</strong>。攻撃の向きは自動で選ぶ</li>
           </ul>
         </section>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ═══ チュートリアル ═════════════════════════════════════════════════ -->
+  <div id="tutorial" class="layer screen" hidden>
+    <div class="panel panel-tutorial">
+      <header class="panel-head">
+        <h2>チュートリアル</h2>
+        <span class="muted" id="tutStep">1 / 4</span>
+        <button class="btn btn-close" data-close="tutorial" title="とじる">✕</button>
+      </header>
+      <div class="tut-steps">
+        <section class="tut-step is-on" data-step="0">
+          <h3>1. 言葉を並べて、武器にする</h3>
+          <p>
+          戦闘中に <span class="k">Q</span>（スマホは右下の <strong>語</strong> ボタン）で<strong>言葉鍛冶</strong>を開く。
+          持っている語を自由に並べて<strong>文</strong>にすると、その文が<strong>そのまま武器の名前</strong>になり、強さも文しだい。
+          武器は<strong>自動で攻撃</strong>する。敵の頭の上の「敵の文」をこちらの文で崩していこう。
+          </p>
+        </section>
+        <section class="tut-step" data-step="1">
+          <h3>2. 語を置く — タップでもドラッグでも</h3>
+          <p>
+          <strong>語彙の語をタップ</strong> → 入れたい<strong>文のあいた場所をタップ</strong>で置ける。
+          <strong>ドラッグ</strong>で直接運んでもよい。文の中の語はドラッグで並べ替え、
+          <span class="k">✕</span> で語彙へ戻す。文は <strong>10 文字まで</strong>。
+          </p>
+        </section>
+        <section class="tut-step" data-step="2">
+          <h3>3. 接続詞は長押しで一覧</h3>
+          <p>
+          文の中の<strong>語を押したままにする（長押し）</strong>と、その語に付けられる<strong>接続詞の一覧</strong>が出る。
+          <strong>スクロールして選び、タップで決定</strong>。
+          こわづか（語をふつうに<strong>ふつうにタップ</strong>すれば接続詞が一つずつ切り替わる）。
+          例 「斬」なら <code>る</code> → <code>られた</code> → <code>り</code> → なし、と周る。
+          </p>
+        </section>
+        <section class="tut-step" data-step="3">
+          <h3>4. よい文ほど強い</h3>
+          <p>
+          <strong>日本語として成立する文</strong>だけが武器になる。属性で始まって 格を挟み 述語で締めるほど<strong>文の力</strong>が上がり、
+          <strong>熟語</strong>（発電する剣 など）ができるとさらに強くなる。
+          クリアで <strong>言玉</strong> が手に入る。書庫で恒久強化、タイトルの<strong>言葉くじ</strong>で語を増やして次のステージへ。
+          </p>
+        </section>
+      </div>
+      <footer class="panel-foot">
+        <button class="btn" id="tutBack" disabled>まえへ</button>
+        <button class="btn btn-primary" id="tutNext">つぎへ</button>
+      </footer>
     </div>
   </div>
 
@@ -634,6 +685,7 @@ let _lastTouchEnd = 0;
 document.addEventListener('touchend', (e) => { const now = Date.now(); if (now - _lastTouchEnd <= 350) e.preventDefault(); _lastTouchEnd = now; }, { passive: false });
 document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn, .sen-gap')) e.preventDefault(); }, false);
 </script>
 <script type="module" src="js/main.js?v=1.3"></script>
 </body>

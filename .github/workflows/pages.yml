@@ -10,7 +10,6 @@ permissions:
   contents: read
   pages: write
   id-token: write
-  issues: write
 
 # 同時実行を避けるため、concurrency group を分ける。
 concurrency:
@@ -34,27 +33,7 @@ jobs:
         run: node test/words.test.js
 
       - name: シミュレーションのテスト
-        id: sim
-        run: |
-          node test/sim.test.js > sim.log 2>&1
-          status=$?
-          echo "exit=$status" >> sim.log
-          cat sim.log
-          exit $status
-
-      - name: 失敗ログを Issue に残す
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const body = fs.readFileSync('sim.log', 'utf8').slice(0, 60000);
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'sim.test failure 3',
-              body: '\`\`\`\\n' + body + '\\n\`\`\`'
-            });
+        run: node test/sim.test.js
 
   deploy:
     name: デプロイ

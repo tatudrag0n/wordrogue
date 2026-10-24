@@ -117,7 +117,7 @@ export const NA_ADJ_STEMS = new Set(Object.keys(WORDS).filter((w) => WORDS[w].po
 export function posOf(text) { return WORDS[text]?.pos || null; }
 
 /** 分割判定に使う語集合。 */
-const DICT = new Set(Object.keys(WORDS).concat(CONNECT_ORDER));
+const DICT = new Set(Object.keys(WORDS).concat(['は']));
 
 /** 語にかな (平仮名・片仮名) が含まれるか。 */
 const KANA_RE = /[ぁ-んァ-ヶー]/;

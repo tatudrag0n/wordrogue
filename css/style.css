@@ -472,6 +472,7 @@ code {
   box-shadow: 0 10px 32px rgba(23, 43, 84, 0.161);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  max-width: calc(100vw - 24px);
   animation: choiceIn .16s ease-out;
 }
 @keyframes choiceIn {
@@ -499,7 +500,7 @@ code {
   text-align: right;
 }
 .hud-choice-timer.urgent { color: #d63c30; }
-.hud-choice-list { display: flex; gap: 8px; }
+.hud-choice-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .hud-choice-list.small { flex-wrap: wrap; max-width: 420px; }
 .hud-choice-note {
   margin: 0 0 5px;
@@ -670,19 +671,88 @@ code {
 .hud-dash.empty { opacity: .4; }
 
 /* ダッシュボタンは右中段。3 択は中央下なので縦には重ならない。
-   横が狭いときだけ 3 択の幅が届くので、右に余白を残す。 */
-body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px); }
+   タッチでは 3 択を画面幅いっぱいのカード列にして、指で選びやすくする。 */
+body.touch .hud-choice {
+  left: calc(8px + var(--safe-l));
+  right: calc(8px + var(--safe-r));
+  bottom: calc(72px + var(--safe-b));
+  max-width: none;
+  transform: none;
+  animation: choiceInTouch .16s ease-out;
+}
+@keyframes choiceInTouch {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+body.touch .hud-choice-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+body.touch .hud-choice-list.small { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); }
+body.touch .choice-card {
+  min-width: 0;
+  min-height: 64px;
+  padding: 8px 4px;
+  justify-content: center;
+}
+body.touch .choice-card-cat { font-size: .58rem; }
+body.touch .choice-card-fx { font-size: .6rem; line-height: 1.25; }
+body.touch .hud-choice-title { font-size: .76rem; }
 
 .hud-paused {
   position: absolute; inset: 0;
-  display: grid; place-items: center;
-  background: rgba(23, 43, 84, 0.175);
-  backdrop-filter: blur(2px);
+  z-index: 20;
+  display: flex;
+  align-items: safe center;
+  justify-content: safe center;
+  padding: calc(16px + var(--safe-t)) calc(16px + var(--safe-r))
+           calc(16px + var(--safe-b)) calc(16px + var(--safe-l));
+  background: rgba(23, 43, 84, 0.42);
+  backdrop-filter: blur(5px) saturate(.85);
+  -webkit-backdrop-filter: blur(5px) saturate(.85);
   pointer-events: auto;
+  animation: fade .14s ease-out;
 }
-.paused-inner { text-align: center; }
-.paused-title { font-size: 2rem; font-weight: 700; letter-spacing: .2em; }
-.paused-hint { color: var(--fg-dim); font-size: .84rem; margin-top: 6px; }
+.pause-card {
+  width: min(420px, 100%);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, var(--panel) 48%, var(--panel-2) 100%);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  box-shadow: 0 18px 52px rgba(23, 43, 84, 0.30), 0 1px 0 rgba(255, 255, 255, .95) inset;
+  animation: rise .18s ease-out;
+}
+.pause-head { text-align: center; }
+.pause-kicker {
+  display: block;
+  font-family: var(--mono);
+  font-size: .64rem;
+  font-weight: 700;
+  letter-spacing: .28em;
+  color: var(--accent);
+}
+.pause-title { margin: 2px 0 0; font-size: 1.55rem; letter-spacing: .16em; }
+.pause-meta {
+  min-height: 1.5em;
+  margin: 5px 0 0;
+  color: var(--fg-dim);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.pause-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.pause-actions .btn { min-height: 46px; padding: 10px 12px; }
+.pause-resume { grid-column: 1 / -1; font-size: 1.02rem; }
+.pause-quit { width: 100%; min-height: 40px; color: var(--fg-dim); font-size: .84rem; }
+.pause-quit.armed {
+  color: #fff7f3;
+  background: linear-gradient(180deg, #d3563b, var(--accent));
+  border-color: var(--accent-ink);
+}
+.pause-hint { color: var(--fg-mute); font-size: .76rem; text-align: center; }
 
 /* ══ 言葉鍛冶 ════════════════════════════════════════════════════════ */
 
@@ -2129,6 +2199,7 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 @media (max-width: 900px) {
   .hud-top { padding: calc(8px + var(--safe-t)) calc(10px + var(--safe-r)) 12px calc(10px + var(--safe-l)); gap: 8px; }
   .hud-timer { font-size: 1.6rem; }
+  .hud-stage { max-width: 34vw; margin: 0 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hud-stats { display: none; }
   .grow-parts { grid-template-columns: repeat(2, 1fr); }
   .hud-weapons { padding: 6px 10px calc(10px + var(--safe-b)); }
@@ -2137,10 +2208,11 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 /* 電話 (縦)。数字と時計だけで横幅を使い切る。 */
 @media (max-width: 560px) {
   .hud-timer { font-size: 1.35rem; }
-  .hud-stage { font-size: .72rem; letter-spacing: .04em; }
+  .hud-stage { max-width: 28vw; font-size: .72rem; letter-spacing: .04em; }
   .hud-num b { font-size: .92rem; }
   .hud-num span { display: none; }
-  .hud-btns .btn-icon { width: 36px; height: 36px; }
+  .hud-btns { gap: 4px; }
+  .hud-btns .btn-icon { width: 40px; height: 40px; }
   .grow-parts { grid-template-columns: 1fr; }
   .title-record { grid-template-columns: repeat(2, 1fr); }
   .panel-dict { width: 100%; }
@@ -2178,8 +2250,10 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
   .gs-out { width: 30px; height: 32px; opacity: .7; }
   .grow-word { padding: 8px 12px; }
   .btn-icon { width: 42px; height: 42px; }
+  .hud-btns .btn-icon { width: 44px; height: 44px; }
   .wrow-clear { padding: 3px 10px; }
   .sen-conn { min-width: 38px; height: 34px; }
+  .pause-actions .btn { min-height: 50px; }
 }
 
 /* スクロールバー */
@@ -2191,6 +2265,10 @@ body.touch .hud-choice { left: calc(50% - 60px); max-width: calc(100vw - 140px);
 /* ==========================================================================
    UX polish — ホバー/フォーカス/遷移の強化
    ========================================================================== */
+button:focus-visible, .btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 button, .btn, .up-buy, .stage-card, .lo-card {
   transition: transform .12s ease, box-shadow .12s ease, filter .12s ease, background .12s ease;
 }

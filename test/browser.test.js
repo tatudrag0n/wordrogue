@@ -200,6 +200,38 @@ sec('書庫で言玉を使い、恒久強化と語彙の枠を買える');
 await evalJs('window.__wordrogue.menus.show("title")');
 await sleep(150);
 
+sec('Esc は開いている画面を閉じ、裏のタイトルで Enter が暴発しない');
+{
+  const r = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const m = app.menus;
+    if (m.tutorial && !m.tutorial.hidden) m.closeTutorial();
+    m.show('title');
+    app.mode = 'title';
+    m.show('howto');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
+    const afterEnter = {
+      howto: !document.getElementById('howto').hidden,
+      stages: !document.getElementById('stages').hidden,
+    };
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape' }));
+    return {
+      afterEnter,
+      afterEsc: {
+        howto: !document.getElementById('howto').hidden,
+        title: !document.getElementById('title').hidden,
+      },
+    };
+  })()`);
+  ok(r.afterEnter.howto, '遊び方が開いていない');
+  ok(!r.afterEnter.stages, '遊び方の上で Enter を押すと裏のステージ選択が開く');
+  ok(!r.afterEsc.howto, 'Esc で遊び方が閉じない');
+  ok(r.afterEsc.title, 'Esc でタイトルに戻らない');
+  console.log('    画面の上では Enter が裏へ抜けず、Esc で 1 段戻る');
+}
+
 sec('タイトル画面の記録に「文を崩した数」が出る');
 {
   const rec = await evalJs('document.getElementById("recBroken") ? document.getElementById("recBroken").textContent : null');
@@ -279,6 +311,75 @@ const shots = await evalJs(`(() => {
   return r.bullets.length + r.fields.length + r.slashes.length + r.rings.length;
 })()`);
 ok(shots >= 0, `エフェクト数: ${shots}`);
+
+sec('一時停止メニューから再開・設定・自動停止ができる');
+{
+  await evalJs('document.getElementById("btnPause").click()');
+  await sleep(220);
+  const p0 = await evalJs(`({
+    open: !document.getElementById('hudPaused').hidden,
+    mode: window.__wordrogue.mode,
+    paused: window.__wordrogue.run.paused,
+    forge: !document.getElementById('forge').hidden,
+    resume: !!document.getElementById('btnResume'),
+    meta: document.getElementById('pauseMeta').textContent,
+  })`);
+  ok(p0.open, '一時停止メニューが出ない');
+  ok(p0.mode === 'pause', `mode が pause でない: ${p0.mode}`);
+  ok(p0.paused === true, '一時停止しても時間が止まらない');
+  ok(!p0.forge, '一時停止で言葉鍛冶まで開いてしまう');
+  ok(p0.resume, '再開ボタンが無い');
+  ok(/第 \d+ 戦/.test(p0.meta), `止めた場所が出ない: ${p0.meta}`);
+
+  await evalJs('document.getElementById("btnPauseSettings").click()');
+  await sleep(200);
+  const p1 = await evalJs(`({
+    settings: !document.getElementById('settings').hidden,
+    pause: !document.getElementById('hudPaused').hidden,
+    mode: window.__wordrogue.mode,
+  })`);
+  ok(p1.settings, 'ポーズから設定が開かない');
+  ok(!p1.pause, '設定の裏にポーズ画面が残っている');
+  ok(p1.mode === 'settings', `mode が settings でない: ${p1.mode}`);
+
+  await evalJs(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape' }));`);
+  await sleep(220);
+  const p2 = await evalJs(`({
+    settings: !document.getElementById('settings').hidden,
+    pause: !document.getElementById('hudPaused').hidden,
+    mode: window.__wordrogue.mode,
+    paused: window.__wordrogue.run.paused,
+  })`);
+  ok(!p2.settings, 'Esc で設定が閉じない');
+  ok(p2.pause, '設定を閉じてもポーズに戻らない');
+  ok(p2.mode === 'pause' && p2.paused, `ポーズに戻っていない: ${p2.mode}`);
+
+  await evalJs('document.getElementById("btnResume").click()');
+  await sleep(220);
+  const p3 = await evalJs(`({
+    open: !document.getElementById('hudPaused').hidden,
+    mode: window.__wordrogue.mode,
+    paused: window.__wordrogue.run.paused,
+  })`);
+  ok(!p3.open && p3.mode === 'play' && !p3.paused, '再開できない');
+
+  const auto = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    app.input.keys.add('d');
+    window.dispatchEvent(new Event('blur'));
+    return {
+      keys: app.input.keys.size,
+      mode: app.mode,
+      paused: app.run.paused,
+    };
+  })()`);
+  ok(auto.keys === 0, `blur 後もキーが残っている: ${auto.keys}`);
+  ok(auto.mode === 'pause' && auto.paused, 'ウィンドウを離れても自動で止まらない');
+  await evalJs('document.getElementById("btnResume").click()');
+  await sleep(200);
+  console.log('    再開 / 設定 / Esc / blur 自動停止を確認');
+}
 
 sec('言葉鍛冶を開けること');
 await evalJs(`document.getElementById('btnForge').click()`);
@@ -1521,6 +1622,12 @@ await sleep(300);
 ok(await evalJs('!document.getElementById("result").hidden'), '結果画面が出た');
 const rsRows = await evalJs('document.querySelectorAll("#resultStats .rs-row").length');
 ok(rsRows >= 5, `結果行の数: ${rsRows}`);
+const nextBtn = await evalJs(`({
+  hidden: document.getElementById('resultNext').hidden,
+  text: document.getElementById('resultNext').textContent,
+})`);
+ok(!nextBtn.hidden, 'クリア後の「次へ」ボタンが隠れている');
+ok(/次のステージ/.test(nextBtn.text), `次へボタンの文言: ${nextBtn.text}`);
 
 sec('セーブが記録されたこと');
 const saved = await evalJs(`(() => {

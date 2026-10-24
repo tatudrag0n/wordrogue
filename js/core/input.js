@@ -34,7 +34,7 @@ export class Input {
 
   _bind() {
     const kd = (e) => {
-      // 入力欄にフォーカスしているときは-operated しない。
+      // 入力欄にフォーカスしているときは操作しない。
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       const k = e.key.toLowerCase();
       if (!this.keys.has(k)) this.pressed.add(k);
@@ -48,7 +48,21 @@ export class Input {
     };
     window.addEventListener('keydown', kd, { passive: false });
     window.addEventListener('keyup', ku);
-    window.addEventListener('blur', () => { this._resetStick(); });
+    window.addEventListener('blur', () => { this.clear(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.clear();
+    });
+  }
+
+  /** 押しっぱなしのキー・スティック・ダッシュをすべて離す。 */
+  clear() {
+    this.keys.clear();
+    this.pressed.clear();
+    this.ax = 0;
+    this.ay = 0;
+    this.touchDash = false;
+    this.touchDashHold = 0;
+    this._resetStick();
   }
 
   _resetStick() {

@@ -30,6 +30,8 @@ export class Hud {
     this.bossName = $('#bossName');
     this.bossFill = $('#bossFill');
     this.hudPaused = $('#hudPaused');
+    this.pauseMeta = $('#pauseMeta');
+    this.btnResume = $('#btnResume');
     this.btnDash = $('#btnDash');
 
     // 3 択
@@ -52,7 +54,23 @@ export class Hud {
 
   show(on) { this.root.hidden = !on; }
 
-  setPaused(on) { this.hudPaused.hidden = !on; }
+  /**
+   * ポーズ画面の表示。run を渡すと、止めた場所と戦況を出す。
+   * 出すときは「再開」にフォーカスして、キーボードだけでも戻れるようにする。
+   */
+  setPaused(on, run) {
+    this.hudPaused.hidden = !on;
+    if (!on) return;
+    if (run?.stage) {
+      this.pauseMeta.textContent = '第 ' + run.stage.id + ' 戦・' + run.stage.name
+        + ' ／ ' + run.kills + ' 討伐 ／ ' + fmtTime(run.time);
+    } else if (this.pauseMeta) {
+      this.pauseMeta.textContent = '';
+    }
+    globalThis.requestAnimationFrame?.(() => {
+      try { this.btnResume?.focus({ preventScroll: true }); } catch {}
+    });
+  }
 
   /**
    * ダッシュボタン。タッチ端末だけ表示する。

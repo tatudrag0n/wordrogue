@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#f3eee1">
 <meta name="description" content="言葉を組み合わせて武装する 2D ローグライク。 combina 語で作った文が成立しなければ、武器は無効になる。">
 <title>ワードローグ — Wordrogue</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=1.5">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 </head>
 <body>
@@ -77,9 +77,21 @@
     <button class="hud-dash" id="btnDash" type="button" hidden>ダッシュ</button>
 
     <div class="hud-paused" id="hudPaused" hidden>
-      <div class="paused-inner">
-        <div class="paused-title">一時停止</div>
-        <div class="paused-hint">Q … 言葉鍛冶　/　Esc … 再開</div>
+      <div class="pause-card" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+        <div class="pause-head">
+          <span class="pause-kicker">PAUSED</span>
+          <h2 class="pause-title" id="pauseTitle">一時停止</h2>
+          <p class="pause-meta" id="pauseMeta"></p>
+        </div>
+        <div class="pause-actions">
+          <button class="btn btn-primary pause-resume" id="btnResume" type="button">再開する</button>
+          <button class="btn" id="btnPauseForge" type="button">言葉鍛冶</button>
+          <button class="btn" id="btnPauseDict" type="button">辞書</button>
+          <button class="btn" id="btnPauseSettings" type="button">設定</button>
+          <button class="btn" id="btnPauseHowto" type="button">遊び方</button>
+        </div>
+        <button class="btn btn-ghost pause-quit" id="btnPauseTitle" type="button">タイトルへ戻る</button>
+        <div class="pause-hint"><kbd>Esc</kbd> 再開 ／ <kbd>Q</kbd> 言葉鍛冶</div>
       </div>
     </div>
   </div>
@@ -166,7 +178,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">v1.9 · 6afaa48</div>
+      <div class="title-version">v1.10</div>
     </div>
   </div>
 
@@ -336,6 +348,11 @@
       <kbd>Q</kbd> で言葉鍛冶を開く。開いている間だけ時間が止まるので、
       戦況を見てから並び替えられる。
       </p>
+      <p>
+      <kbd>Esc</kbd> で<strong>一時停止メニュー</strong>。再開・言葉鍛冶・辞書・設定・
+      タイトルへ戻るを選べる。タブを離れたときやウィンドウを切り替えたときも
+      自動で止まる。
+      </p>
       </section>
       <section>
 <h3>7. ことばはレベルアップの 3 択でもらう</h3>
@@ -477,9 +494,9 @@
             <li><kbd>WASD</kbd> / <kbd>矢印</kbd> … 移動</li>
             <li><kbd>スペース</kbd> … <strong>押しっぱなしでダッシュ</strong>（スタミナを消費）</li>
             <li><kbd>Q</kbd> … 言葉鍛冶の開閉</li>
-            <li><kbd>Esc</kbd> … 一時停止 / 閉じる</li>
+            <li><kbd>Esc</kbd> / <kbd>P</kbd> … 一時停止メニュー（開いている画面を閉じる）</li>
             <li>タッチ … 画面を長押ししてからドラッグで移動</li>
-            <li>タッチ … 右下の<strong>ダッシュ</strong>を押してダッシュ（タップでも効く）</li>
+            <li>タッチ … 画面の右にある<strong>ダッシュ</strong>を押してダッシュ（タップでも効く）</li>
             <li>言葉鍛冶 … 語を<strong>文へドラッグ</strong>、または<strong>タップで選んでから隙間をタップ</strong>。文の語を<strong>タップ</strong>で接続詞切替、<strong>長押し</strong>で一覧 (スクロール選択)</li>
             <li>武器は<strong>自動で攻撃する</strong>。攻撃の向きは自動で選ぶ</li>
           </ul>
@@ -687,6 +704,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn, .sen-gap')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.3"></script>
+<script type="module" src="js/main.js?v=1.5"></script>
 </body>
 </html>

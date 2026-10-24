@@ -176,6 +176,7 @@ export class Forge {
   }
 
   close() {
+    const wasOpen = this.isOpen;
     this.root.hidden = true;
     this.run.paused = false;
     this.closeConnPicker();
@@ -188,7 +189,7 @@ export class Forge {
     this.root.classList.remove('placing');
     this.endGhost();
     this.clearDropMarks();
-    this.opt.onClose?.();
+    if (wasOpen) this.opt.onClose?.();
   }
 
   get isOpen() { return !this.root.hidden; }

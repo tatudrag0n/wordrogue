@@ -2,17 +2,17 @@
 // ワードローグ — 起動とメインループ
 // ============================================================================
 
-import { $, clamp } from './core/util.js?v=1.4';
-import { Input } from './core/input.js?v=1.4';
-import { Audio } from './core/audio.js?v=1.4';
-import { Save } from './core/save.js?v=1.4';
-import { Run } from './game/run.js?v=1.4';
-import { Renderer } from './ui/render.js?v=1.4';
-import { Hud } from './ui/hud.js?v=1.4';
-import { Forge } from './ui/forge.js?v=1.4';
-import { Menus } from './ui/menus.js?v=1.4';
+import { $, clamp } from './core/util.js?v=1.5';
+import { Input } from './core/input.js?v=1.5';
+import { Audio } from './core/audio.js?v=1.5';
+import { Save } from './core/save.js?v=1.5';
+import { Run } from './game/run.js?v=1.5';
+import { Renderer } from './ui/render.js?v=1.5';
+import { Hud } from './ui/hud.js?v=1.5';
+import { Forge } from './ui/forge.js?v=1.5';
+import { Menus } from './ui/menus.js?v=1.5';
 
-import { STAGES } from './data/stages.js?v=1.4';
+import { STAGES } from './data/stages.js?v=1.5';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態
@@ -26,7 +26,7 @@ const app = {
   forge: null,
   menus: null,
   run: null,
-  mode: 'title',       // title | play | forge | dict | result
+  mode: 'title',       // title | play | pause | forge | dict | settings | howto | result
   last: 0,
   acc: 0,
 };
@@ -59,7 +59,22 @@ function boot() {
   $('#btnForgeDict').addEventListener('click', () => toggleDict());
   $('#btnDictInGame').addEventListener('click', () => toggleDict());
   $('#btnPause').addEventListener('click', () => togglePause());
+  $('#btnResume').addEventListener('click', () => resumeRun());
+  $('#btnPauseForge').addEventListener('click', () => openForge());
+  $('#btnPauseDict').addEventListener('click', () => openDictFromPause());
+  $('#btnPauseSettings').addEventListener('click', () => openTabFromPause('settings'));
+  $('#btnPauseHowto').addEventListener('click', () => openTabFromPause('howto'));
+  $('#btnPauseTitle').addEventListener('click', onPauseTitleClick);
   window.addEventListener('keydown', onKey);
+
+  const leave = () => {
+    app.input?.clear?.();
+    if (app.mode === 'play') pauseRun();
+  };
+  window.addEventListener('blur', leave);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) leave();
+  });
 
   window.addEventListener('resize', () => app.renderer.resize());
   window.addEventListener('orientationchange', () => setTimeout(() => app.renderer.resize(), 120));
@@ -74,19 +89,41 @@ function boot() {
   app.menus.cb = {
     onStart: (weaponIds) => startRun(weaponIds),
     onRetry: () => startRun(app.lastLoadout),
-    onStages: () => { app.mode = 'title'; app.hud.show(false); app.run = null; app.menus.showStages(); },
+    onStages: () => {
+      app.mode = 'title';
+      app.hud.show(false);
+      app.hud.setPaused(false);
+      app.forge?.close();
+      app.run = null;
+      app.menus.showStages();
+    },
     onCloseDict: () => {
       if (app.mode === 'dict') toggleDict();   // 戦闘/鍛冶から開いた辞書を閉じる
       else app.menus.hide('dict');             // タイトル系から開いたタブを閉じる
     },
     onNext: () => {
-      // ステージクリア後は一旦ホームへ。次のステージはホームから選ぶ。
       app.mode = 'title';
       app.hud.show(false);
       app.hud.setPaused(false);
       app.forge?.close();
       app.run = null;
       app.menus.show('title');
+    },
+    onNextStage: () => {
+      const nextId = Math.min((app.run?.stage.id || 1) + 1, STAGES.length);
+      app.mode = 'title';
+      app.hud.show(false);
+      app.hud.setPaused(false);
+      app.forge?.close();
+      app.run = null;
+      app.menus.stageId = nextId;
+      startRun(app.lastLoadout);
+    },
+    onCloseTabFromPause: () => {
+      if (!app.run) return;
+      app.mode = 'pause';
+      app.run.paused = true;
+      app.hud.setPaused(true, app.run);
     },
   };
 
@@ -136,13 +173,21 @@ function startRun(weaponIds) {
 
   app.run = run;
   app.mode = 'play';
+  app.acc = 0;
+  app.last = performance.now();
   app.menus.hideAll();
   app.hud.show(true);
   app.hud.setPaused(false);
   app.forge?.close();
   app.forge = new Forge(run, {
     audio: app.audio,
-    onClose: () => { app.mode = 'play'; app.hud.setPaused(false); },
+    onClose: () => {
+      if (app.mode !== 'forge') return;
+      app.mode = 'play';
+      app.acc = 0;
+      app.last = performance.now();
+      app.hud.setPaused(false);
+    },
     onChange: () => { /* 武器は毎フレーム解決し直すので何もしない */ },
   });
   // Forge のタップ音を足す。
@@ -154,7 +199,9 @@ function startRun(weaponIds) {
 }
 
 function onRunEnd(cleared) {
+  app.input?.clear?.();
   app.hud.setPaused(false);
+  app.acc = 0;
   // 書庫の通貨「言玉」。文を崩した敵の数で入り、クリアするとまとまって入る。
   const broken = app.run.brokenCount || 0;
   // プレイヤーの強さ (恒久強化と部位強化) で報酬が上乗せされる。
@@ -182,28 +229,84 @@ function onRunEnd(cleared) {
   });
 }
 
-function toggleForge() {
-  if (app.mode !== 'play' && app.mode !== 'forge') return;
-  if (app.mode === 'forge') {
-    app.forge.close();
-    app.mode = 'play';
-    app.hud.setPaused(false);
-  } else {
-    app.mode = 'forge';
-    app.forge.setRun(app.run);
-    app.forge.open();
-    app.hud.setPaused(true);
-  }
-}
-
-function togglePause() {
-  if (app.mode !== 'play' && app.mode !== 'forge') return;
-  if (app.mode === 'forge') { toggleForge(); return; }
-  app.run.paused = true;
+function openForge() {
+  if (!app.run || (app.mode !== 'play' && app.mode !== 'pause')) return;
+  app.input?.clear?.();
   app.mode = 'forge';
+  app.acc = 0;
+  resetQuitButton();
+  app.hud.setPaused(false);
   app.forge.setRun(app.run);
   app.forge.open();
-  app.hud.setPaused(true);
+}
+function toggleForge() {
+  if (app.mode === 'forge') { app.forge.close(); return; }
+  openForge();
+}
+function pauseRun() {
+  if (app.mode !== 'play' || !app.run) return false;
+  app.input?.clear?.();
+  app.run.paused = true;
+  app.mode = 'pause';
+  app.acc = 0;
+  resetQuitButton();
+  app.hud.setPaused(true, app.run);
+  return true;
+}
+function resumeRun() {
+  if (app.mode !== 'pause' || !app.run) return false;
+  app.run.paused = false;
+  app.mode = 'play';
+  app.acc = 0;
+  app.last = performance.now();
+  resetQuitButton();
+  app.hud.setPaused(false);
+  return true;
+}
+function togglePause() {
+  if (app.mode === 'pause') resumeRun();
+  else if (app.mode === 'forge') app.forge.close();
+  else if (app.mode === 'play') pauseRun();
+}
+function openDictFromPause() {
+  if (app.mode !== 'pause' || !app.run) return;
+  app.hud.setPaused(false);
+  app.mode = 'dict';
+  app.dictFrom = 'pause';
+  app.run.paused = true;
+  app.menus.show('dict');
+}
+function openTabFromPause(name) {
+  if (app.mode !== 'pause' || !app.run) return;
+  app.hud.setPaused(false);
+  app.mode = name;
+  app.menus.showFromPause(name);
+}
+let quitTimer = 0;
+const QUIT_ARM_MS = 3500;
+function resetQuitButton() {
+  if (quitTimer) clearTimeout(quitTimer);
+  quitTimer = 0;
+  const b = $('#btnPauseTitle');
+  b.classList.remove('armed');
+  b.textContent = 'タイトルへ戻る';
+}
+function onPauseTitleClick() {
+  const b = $('#btnPauseTitle');
+  if (b.classList.contains('armed')) { returnToTitle(); return; }
+  b.classList.add('armed');
+  b.textContent = 'もう一度押すと放棄';
+  if (quitTimer) clearTimeout(quitTimer);
+  quitTimer = setTimeout(resetQuitButton, QUIT_ARM_MS);
+}
+function returnToTitle() {
+  resetQuitButton();
+  app.mode = 'title';
+  app.hud.show(false);
+  app.hud.setPaused(false);
+  app.forge?.close();
+  app.run = null;
+  app.menus.show('title');
 }
 
 /**
@@ -222,21 +325,25 @@ function toggleDict() {
     if (from === 'forge') {
       app.mode = 'forge';
       app.run.paused = true;
-      app.hud.setPaused(true);
+      app.hud.setPaused(false);
+    } else if (from === 'pause') {
+      app.mode = 'pause';
+      app.run.paused = true;
+      app.hud.setPaused(true, app.run);
     } else {
       app.mode = 'play';
       app.run.paused = false;
+      app.acc = 0;
+      app.last = performance.now();
       app.hud.setPaused(false);
     }
     return;
   }
-  // タイトル系画面 (タイトル/ステージ/編成/結果) からも開ける。
-  // 閉じるときは menus.hide('dict') が _tabFrom の画面を復元する。
   app.menus.show('dict');
-  if (app.mode === 'play' || app.mode === 'forge') {
+  if (app.mode === 'play' || app.mode === 'forge' || app.mode === 'pause') {
     app.dictFrom = app.mode;
     app.run.paused = true;
-    app.hud.setPaused(true);
+    app.hud.setPaused(false);
     app.mode = 'dict';
   }
 }
@@ -245,28 +352,43 @@ function toggleDict() {
 // キー操作
 // ─────────────────────────────────────────────────────────────────────────────
 function onKey(e) {
+  if (e.repeat) return;
   const k = e.key.toLowerCase();
-
   if (app.mode === 'play') {
-    if (k === 'q' || k === 'tab') { e.preventDefault(); toggleForge(); return; }
-    if (k === 'escape') { e.preventDefault(); togglePause(); return; }
+    if (k === 'q' || k === 'tab') { e.preventDefault(); openForge(); return; }
+    if (k === 'escape' || k === 'p') { e.preventDefault(); pauseRun(); return; }
     return;
   }
-
+  if (app.mode === 'pause') {
+    if (k === 'escape' || k === 'p') { e.preventDefault(); resumeRun(); return; }
+    if (k === 'q' || k === 'tab') { e.preventDefault(); openForge(); return; }
+    return;
+  }
   if (app.mode === 'forge') {
-    if (k === 'q' || k === 'escape') { e.preventDefault(); toggleForge(); return; }
+    if (k === 'q' || k === 'escape') { e.preventDefault(); app.forge.close(); return; }
     return;
   }
-
   if (app.mode === 'dict') {
-    // 辞書はボタンと ✕ だけで開く。キーに割り当てない。
     if (k === 'escape') { e.preventDefault(); toggleDict(); return; }
     return;
   }
-
-  if (app.mode === 'title' && (k === 'enter' || k === ' ')) {
-    e.preventDefault();
-    app.menus.showStages();
+  if (app.mode === 'settings' || app.mode === 'howto') {
+    if (k === 'escape') { e.preventDefault(); app.menus.back(); return; }
+    return;
+  }
+  if (app.mode === 'result') {
+    if (k === 'escape') { e.preventDefault(); returnToTitle(); }
+    return;
+  }
+  if (app.mode === 'title') {
+    if (k === 'escape') {
+      if (app.menus.back()) e.preventDefault();
+      return;
+    }
+    if ((k === 'enter' || k === ' ') && app.menus.isVisible('title')) {
+      e.preventDefault();
+      app.menus.showStages();
+    }
   }
 }
 
@@ -318,6 +440,8 @@ function loop(now) {
     }
 
     // 死亡/クリアは Run が通知するので、ここでは何もしない。
+  } else if (run && app.mode === 'pause') {
+    app.renderer.draw(run, app.input.stickState());
   } else if (app.input.stickState().active) {
     // メニュー中は操作しない。
   }

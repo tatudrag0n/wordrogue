@@ -166,19 +166,20 @@ export class Menus {
           this.cb.onCloseDict();
           return;
         }
-        // タイトル系画面 (タイトル/ステージ/編成/結果) の上に開いた
-        // タブ (遊び方/書庫/辞書/設定) は、閉じたら元の画面へ戻す。
-        const back = this._tabFrom;
-        this._tabFrom = null;
-        this.hide(b.dataset.close);
-        if (back) this[back].hidden = false;
-        else this.show('title');
+        if (b.dataset.close === 'tutorial') {
+          this.closeTutorial();
+          return;
+        }
+        this.closeTab(b.dataset.close);
       });
     }
 
     $('#resultRetry').addEventListener('click', () => { tap(); this.cb.onRetry?.(); });
     $('#resultStages').addEventListener('click', () => { tap(); this.cb.onStages?.(); });
-    this.resultNext.addEventListener('click', () => { tap(); this.cb.onNext?.(); });
+    this.resultNext.addEventListener('click', () => {
+      tap();
+      (this._resultHasNext ? this.cb.onNextStage : this.cb.onNext)?.();
+    });
 
     this.loadoutGo.addEventListener('click', () => { tap(); this.cb.onStart?.(this.picked.slice()); });
 
@@ -209,10 +210,10 @@ export class Menus {
     if (name === 'dict') {
       this.dictSearch.value = '';
       this.dictQuery = '';
-      // タブの下に開いていた画面 (タイトル/ステージ/編成/結果) を戻す。
       const back = this._tabFrom;
       this._tabFrom = null;
-      if (back && back !== name) this[back].hidden = false;
+      if (back === 'pause') this.cb.onCloseTabFromPause?.();
+      else if (back && back !== name && this[back]) this[back].hidden = false;
     }
   }
 
@@ -233,6 +234,38 @@ export class Menus {
     if (name === 'archive') this.renderArchive();
     if (name === 'grow') this.renderGrow();
     if (name === 'tutorial') this.renderTutorial();
+  }
+
+  isVisible(name) {
+    return !!this[name] && !this[name].hidden;
+  }
+
+  back() {
+    if (this.tutorial && !this.tutorial.hidden) { this.closeTutorial(); return true; }
+    for (const name of ['howto', 'settings', 'archive', 'grow']) {
+      if (!this[name].hidden) { this.closeTab(name); return true; }
+    }
+    if (!this.dict.hidden) { this.cb.onCloseDict?.(); return true; }
+    if (!this.loadout.hidden) { this.showStages(); return true; }
+    if (!this.stages.hidden) { this.show('title'); return true; }
+    return false;
+  }
+
+  closeTab(name) {
+    const back = this._tabFrom;
+    this._tabFrom = null;
+    this.hide(name);
+    if (back === 'pause') { this.cb.onCloseTabFromPause?.(); return; }
+    if (back && this[back]) this[back].hidden = false;
+    else this.show('title');
+  }
+
+  showFromPause(name) {
+    if (!this[name]) return;
+    this._tabFrom = 'pause';
+    this.hideAll();
+    this[name].hidden = false;
+    if (name === 'settings') this.renderSettings();
   }
 
   // ── チュートリアル ─────────────────────────────────────────────────────────
@@ -781,9 +814,10 @@ export class Menus {
         el('span', {}, k), el('b', {}, v)));
     }
 
-    // クリアしたら必ず「ホームへ」。次のステージはホームから選ぶ。
-    this.resultNext.hidden = !cleared;
-    this.resultNext.textContent = 'ホームへ';
+    const hasNext = cleared && !isLast && st.id < STAGES.length;
+    this._resultHasNext = hasNext;
+    this.resultNext.hidden = false;
+    this.resultNext.textContent = hasNext ? '次のステージへ' : 'ホームへ';
     this.hideAll();
     this.result.hidden = false;
   }

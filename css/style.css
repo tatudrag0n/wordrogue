@@ -958,7 +958,9 @@ body.touch .hud-choice-title { font-size: .76rem; }
   -webkit-user-select: none;
   /* これが無いと指がスクロールになり、ドラッグの途中で pointercancel される。 */
   touch-action: none;
-  transition: border-color .12s, background .12s, transform .08s;
+}
+.sen-gap:first-child { min-width: 40px; }
+.sen-gap-unused { transition: border-color .12s, background .12s, transform .08s;
 }
 .sen-word:active { cursor: grabbing; }
 .sen-word.armed {
@@ -1053,7 +1055,7 @@ body.touch .hud-choice-title { font-size: .76rem; }
 .sen-conn.empty { opacity: .45; }
 .sen-conn.empty:hover { opacity: 1; }
 .sen-gap {
-  width: 24px; min-height: 30px;
+  width: 32px; min-height: 36px;
   display: grid; place-items: center;
   border: 1.5px dashed transparent;
   border-radius: 8px;

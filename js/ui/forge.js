@@ -1268,8 +1268,12 @@ export class Forge {
       const word = this.run.lexicon[from.index];
       if (!word) { this.render(); return; }
       wi = to.kind === 'slot' || to.kind === 'gap' ? to.wi : null;
-      r = this.wordAt(to) ? this.run.swapPlaces(from, to)
-        : this.run.insertInto(this.senOf(to), to.index, word, wi);
+      // 文頭 (index 0) へ落としたときは、最初の語と入れ替えるのではなく前に挿入する。
+      // 隙間を外して語のチップに落としても、頭に語を置けるようにする。
+      const insertAtHead = to.kind === 'slot' && to.index === 0;
+      r = (insertAtHead || !this.wordAt(to))
+        ? this.run.insertInto(this.senOf(to), to.index, word, wi)
+        : this.run.swapPlaces(from, to);
     } else if (from.kind !== 'lexicon' && to.kind === 'lexicon') {
       // 文 → 語彙は、落としたマスが埋まっていても語彙の空きへ戻す。
       // 満杯なら最古の 1 語が語彙から消える (run.toLexicon が処理する)。

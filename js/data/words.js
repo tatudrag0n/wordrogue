@@ -178,7 +178,12 @@ for (const w of Object.keys(WORDS)) WORDS_BY_CAT[WORDS[w].cat].push(w);
 
 /** 語を「インスタンス」として引くためのプロトタイプをキャッシュ。 */
 export function makeWord(text) {
-  const base = WORDS[text];
+  let base = WORDS[text];
+  // 「は」のような generated connector は辞書 (WORDS) には無いが、
+  // インスタンスとしては接続詞として扱えるようにする。
+  if (!base && CONNECTOR_SET.has(text)) {
+    base = { text, cat: 'connect', cats: ['connect'], el: null, fx: CONNECTORS[text]?.fx || {}, player: null };
+  }
   if (!base) throw new Error(`未知の語: ${text}`);
   return {
     uid: wordUid++,

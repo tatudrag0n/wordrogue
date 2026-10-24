@@ -48,8 +48,8 @@ export class Input {
     };
     window.addEventListener('keydown', kd, { passive: false });
     window.addEventListener('keyup', ku);
-    window.addEventListener('blur', () => { this.clear(); });
-    document.addEventListener('visibilitychange', () => {
+    if (typeof window !== 'undefined') window.addEventListener('blur', () => { this.clear(); });
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.clear();
     });
   }

@@ -48,30 +48,26 @@ sec('自身語という分類は無い');
   ok(CATALOG.buff === undefined, 'buff カテゴリが CATEGORIES に残っている');
   ok(WORDS_BY_CAT.buff === undefined, 'WORDS_BY_CAT に buff が残っている');
   const body = Object.keys(WORDS).filter((w) => WORDS[w].player);
-  ok(body.length >= 8, `体に効く語が多めに無い: ${body.join(' ')}`);
+  ok(body.length === 0, `自身語は削除された: ${body.join(' ')}`);
   // それぞれの語は、体だけの効果だけでなく武器側の効果も持つ (部位専用語を作らない)。
   const weaponless = body.filter((w) => !Object.keys(WORDS[w].fx).length);
   ok(weaponless.length === 0, `武器の側で何も効果の無い語: ${weaponless.join(' ')}`);
   // 武器の文の中で普通に読める (p. を持つ語でも文は成立する)。
   const SENT = {
-    頑: ['頑', 'な', '刃'], 健: ['健', 'やかな', '刃'],
-    息: ['息', 'の', '刃'], 銘: ['銘', 'の', '刃'], 符: ['符', 'の', '刃'],
     甲: ['甲', 'を', '斬', 'る', '刃'], 鞘: ['鞘', 'を', '斬', 'る', '刃'],
     鍔: ['鍔', 'を', '斬', 'る', '刃'], 釘: ['釘', 'を', '斬', 'る', '刃'],
-    槌: ['槌', 'を', '斬', 'る', '刃'], 鈴: ['鈴', 'を', '斬', 'る', '刃'],
+    槌: ['槌', 'を', '斬', 'る', '刃'],
     晶: ['晶', 'を', '斬', 'る', '刃'], 柄: ['柄', 'を', '斬', 'る', '刃'],
-    鍛: ['鋼', 'を', '鍛', 'えた', '刃'], 研: ['毒', 'を', '研', 'ぐ', '刃'],
-    駆: ['風', 'を', '駆', 'ける', '矛'], 浴: ['光', 'を', '浴', 'びる', '刃'],
+    浴: ['光', 'を', '浴', 'びる', '刃'],
     浸: ['毒', 'に', '浸', 'す', '刃'], 錆: ['錆', 'びた', '鉄', 'の', '刃'],
     癒: ['焔', 'を', '癒', 'す', '杖'],
-    骨: ['骨', 'を', '斬', 'る', '刃'], 魂: ['魂', 'を', '吸', 'う', '刃'],
   };
   for (const [w, ws] of Object.entries(SENT)) {
     const r = evaluate(ws.map(makeWord), { minContent: 2, tail: ws[ws.length - 1] });
     ok(r.valid, `「${ws.join('')}」が文にならない: ${r.reasonText}`);
     ok(!!WORDS[w], `「${w}」が辞書に無い`);
   }
-  console.log(`  体に効く語 ${body.length} / ${body.join(' ')}`);
+  console.log(`  体に効く語 ${body.length}`);
 }
 
 sec('分割');

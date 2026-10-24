@@ -107,14 +107,13 @@ export class WeaponInst {
 
   /**
    * 文に「攻撃できる動詞」が述語の形で付いているか。
-   * 熟語の述語 (爆発する 等) は、熟語の頭の語が動詞なら数える。
+   * 直接の述語 (斬る・貫く 等) のみを数える。熟語の述語は数えない。
    * @param {object} e evaluate の結果
    */
   hasAttackVerb(e) {
     return (e?.compounds || []).some((c) => {
       if (!c.pred) return false;
-      if (WORDS[c.source]?.cats?.includes('verb')) return true;
-      return c.phrase && WORDS[c.source[0]]?.cat === 'verb';
+      return !!WORDS[c.source]?.cats?.includes('verb');
     });
   }
   get tailWord() { return this.tail ? makeWord(this.tail) : null; }

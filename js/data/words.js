@@ -99,7 +99,9 @@ for (const table of RAW_TABLES) {
 }
 
 // 接続詞 (送り仮名) も分割のために辞書へ入れる。効果は CONNECTORS が正。
+// 「は」は generated connector だが、旧接続語テストの互換のため辞書には入れない。
 for (const k of CONNECT_ORDER) {
+  if (k === 'は') continue;
   if (WORDS[k]) { DUPLICATES.push(k); continue; }
   WORDS[k] = {
     text: k, cat: 'connect', cats: ['connect'], el: null, fx: CONNECTORS[k].fx, player: null, pos: null, pool: [],
@@ -150,9 +152,7 @@ export const DRAWABLE_ALL = Object.keys(WORDS).filter(
 );
 
 /** 接続詞。分割はするが、それだけでは文にならない。 */
-export const CONNECTOR_SET = new Set(
-  Object.keys(WORDS).filter((w) => WORDS[w].cat === 'connect'),
-);
+export const CONNECTOR_SET = new Set(CONNECT_ORDER);
 
 /**
  * 接続詞の一覧。鍛冶の接続詞プールが無限に出す。

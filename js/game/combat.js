@@ -166,7 +166,6 @@ function doBomb(run, wi, st, aim, el, elInfo) {
     element: el,
     color: elInfo.color,
     kindName: 'bomb',
-    gravity: 90,
   });
   b.st = st; b.wi = wi;
   run.bullets.push(b);

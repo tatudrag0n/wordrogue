@@ -1248,7 +1248,6 @@ export class Run {
       const b = this.bullets[i];
       if (b.dead) { this.bullets.splice(i, 1); continue; }
 
-      if (b.gravity) { b.vy += b.gravity * dt; b.vx *= 0.995; }
       updateBullet(b, ctx, dt);
       if (b.dead) { this.bullets.splice(i, 1); continue; }
 

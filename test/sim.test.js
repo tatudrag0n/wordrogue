@@ -1353,6 +1353,7 @@ sec('武器の文で敵の文を斬れる');
 
   // ふつうの成立文は 1 語。
   const plain = set('焔', '電', '剛');
+  console.log('DEBUG plain valid=' + plain.valid + ' reason=' + plain.evalResult.reasonText + ' segs=' + JSON.stringify(plain.evalResult.segments) + ' cats=' + plain.sentence.words.map((w) => w.text + ':' + (WORDS[w.text]?.cat)).join(','));
   ok(plain.valid, `比較用の文が成立しない: ${plain.evalResult.reasonText}`);
   ok(plain.stats.cutPower === 1, `成立文の斬り数が 1 でない: ${plain.stats.cutPower}`);
 

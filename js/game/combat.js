@@ -20,6 +20,7 @@ const cdOf = (rate) => 1 / Math.max(0.05, rate);
  */
 export function fireWeapon(run, wi, res) {
   const st = res.stats;
+  if (res.heal) st.heal = true;
   const p = run.player;
   // 攻撃の種類は文中の形態語が決めている (無ければ武器の既定)。
   const kind = res.kind || wi.def.kind;
@@ -290,6 +291,18 @@ function cutByWeapon(e, st, run) {
  */
 export function damage(run, e, st, opt = {}) {
   if (!e || e.dead) return 0;
+  if (st.heal) {
+    const amt = Math.max(1, Math.round((st.dmg || 0) * 0.5));
+    e.hp += amt;
+    if (run && run.dmgTexts) {
+      run.dmgTexts.push({
+        x: e.x, y: e.y - e.r - 12, v: 0, crit: false,
+        life: 0.7, maxLife: 0.7, vy: -30, text: '+' + amt,
+        color: '#37b24d',
+      });
+    }
+    return 0;
+  }
 
   let dmg = st.dmg;
   const crit = opt.crit;

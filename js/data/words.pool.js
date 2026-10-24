@@ -115,6 +115,7 @@ const RAW_POOL = `
 華  na  やかな:adn+ やかに:adv+
 密  na  な:adn+ に:adv+
 壮  na  なる:adn+
+聖  na  なる:adn+ +N
 確  na  かな:adn+ かに:adv+
 滑  na  らかな:adn+ らかに:adv+ る:adn*
 妙  na  な:adn+ に:adv+

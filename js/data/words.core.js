@@ -131,6 +131,7 @@ const RAW_ELEMENT = `
 神     element light   dmg+5  lifesteal+0.02
 輝     element light   dmg+3  burn+1
 耀     element light   dmg+2  crit+0.04
+虹     element light   dmg+2  pierce+1  chain+2
 陽     element light   dmg+2  regen+0.5  area+6
 天     element light   dmg+2  pierce+1  speed+20
 光     element light   dmg+8  pierce+8  speed+60  size+0.20
@@ -308,6 +309,7 @@ const RAW_MODIFIER = `
 雅    modifier  -  crit+0.06  speed+15
 華    modifier  -  area+12  crit+0.05
 麗    modifier  -  area+10  crit+0.04
+燦    modifier  -  crit+0.05  dmg+2
 精    modifier  -  crit+0.08  dmg+2
 密    modifier  -  pierce+2  crit+0.05
 真    modifier  -  crit+0.04  dmg+3
@@ -332,6 +334,7 @@ const RAW_MODIFIER = `
 # ── 名詞・動詞的效果語 ──
 心    modifier  -  crit+0.08  homing+0.25
 渦    phenom    -  dmg+5  orbit+2
+乱    phenom    -  dmg+1  count+2  spread+0.25
 圧    modifier  -  knock+90  size+0.2  speed-10
 律    modifier  -  rate+0.6  count+1  dmg+3
 斉    modifier  -  count+3  dmg+4  rate+0.3
@@ -367,6 +370,7 @@ const RAW_MODIFIER = `
 潤    modifier  -  regen+0.6  armor+1
 発    modifier  -  dmg+4  area+8  speed+25
 穢    modifier  -  poison+3  area+8
+爛    modifier  -  poison+3  dmg+2
 優    modifier  -  regen+0.4  speed+5
 護    modifier  -  shield+16  regen+0.3
 結    modifier  -  dmg+4  chill+0.15

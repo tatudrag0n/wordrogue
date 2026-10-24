@@ -303,7 +303,7 @@ console.log(`    行: 自身 ${rows.self} / 武器 ${rows.weapon} / 追加案内
 const words = await evalJs('document.querySelectorAll("#forgeWeapons .sen-word").length');
 ok(words >= 1, `文の中の語が表示されない: ${words}`);
 const gaps = await evalJs('document.querySelectorAll("#forgeWeapons .sen-gap").length');
-ok(gaps >= 1, `語の後ろの置き場 (＋) が出ていない: ${gaps}`);
+ok(gaps >= 1, `語の後ろの置き場が出ていない: ${gaps}`);
 const conns = await evalJs('document.querySelectorAll("#forgeWeapons .sen-conn").length');
 ok(conns >= 1, `接続詞の表示がない: ${conns}`);
 
@@ -345,7 +345,8 @@ sec('語をタップすると直後の接続詞が切り替わる');
   ok(conn.count === 2, `語が変わった: ${conn.count}`);
   ok(conn.len <= conn.maxLen, `文が ${conn.len} 文字 (上限 ${conn.maxLen})`);
   ok(conn.active, `${conn.title} が不成立`);
-  ok(conn.gapText.includes('＋'), `語の後ろに「＋」が無い: ${conn.gapText.join(',')}`);
+  // 隙間の「＋」は見せない (要求)。テキストは空で、置き場だけが残る。
+  ok(conn.gapText.every((t) => t === ''), `語の後ろに何かが出ている: ${conn.gapText.join(',')}`);
   console.log(`    「${conn.title}」— ${conn.count} 語 / ${conn.len} 文字 / 接続詞 ${conn.opts.join('→')}→なし`);
 }
 

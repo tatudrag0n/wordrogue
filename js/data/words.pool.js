@@ -115,6 +115,7 @@ const RAW_POOL = `
 華  na  やかな:adn+ やかに:adv+
 密  na  な:adn+ に:adv+
 壮  na  なる:adn+
+燦  na  なる:adn+ めく:adn*
 聖  na  なる:adn+ +N
 確  na  かな:adn+ かに:adv+
 滑  na  らかな:adn+ らかに:adv+ る:adn*
@@ -160,6 +161,7 @@ const RAW_POOL = `
 潤  n   う:adn* す:adn*
 発  n   する:adn* +N
 穢  n   れた:adn* す:adn*
+爛  n   れる:adn* れた:adn* れて:adv
 護  n   る:adn*
 結  n   ぶ:adn* ばれた:adn*p
 穿  n   つ:adn*
@@ -197,6 +199,7 @@ const RAW_POOL = `
 砕  v   く:adn* ける:adn* かれた:adn*p いて:adv けて:adv
 殴  v   る:adn* られた:adn*p って:adv
 渦  n   +N
+乱  n   れる:adn* れた:adn* れて:adv +N
 還  n   る:adn* +N
 散  v   る:adn* らす:adn* らされた:adn*p って:adv らして:adv
 伸  v   びる:adn* ばす:adn* ばされた:adn*p びて:adv ばして:adv

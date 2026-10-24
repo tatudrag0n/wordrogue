@@ -117,7 +117,8 @@ export const NA_ADJ_STEMS = new Set(Object.keys(WORDS).filter((w) => WORDS[w].po
 export function posOf(text) { return WORDS[text]?.pos || null; }
 
 /** 分割判定に使う語集合。 */
-const DICT = new Set(Object.keys(WORDS).concat(['は']));
+const DICT = new Set(Object.keys(WORDS));
+DICT.add('は');
 
 /** 語にかな (平仮名・片仮名) が含まれるか。 */
 const KANA_RE = /[ぁ-んァ-ヶー]/;
@@ -152,7 +153,10 @@ export const DRAWABLE_ALL = Object.keys(WORDS).filter(
 );
 
 /** 接続詞。分割はするが、それだけでは文にならない。 */
-export const CONNECTOR_SET = new Set(CONNECT_ORDER);
+export const CONNECTOR_SET = new Set(
+  Object.keys(WORDS).filter((w) => WORDS[w].cat === 'connect'),
+);
+CONNECTOR_SET.add('は');
 
 /**
  * 接続詞の一覧。鍛冶の接続詞プールが無限に出す。

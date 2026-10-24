@@ -607,31 +607,34 @@ sec('部位強化の語が能力に効く');
   ok(r0.player.stats.partCount === 0, `部位が最初から入っている: ${r0.player.stats.partCount}`);
   ok(r0.player.stats.maxHp === 100, `素の体力が 100 でない: ${r0.player.stats.maxHp}`);
 
-  // 部位の語はそのまま能力に乗る (頑: 体力+25 / 健: 体力+20 回復+0.3)。
-  const r = newRun(1, undefined, undefined, { partWords: ['頑', '健'] });
+  // 部位の語はそのまま能力に乗る。骨: 装甲+2 / 魂: 吸血+0.03。
+  // 体に効く専用語は無いので、体力は増えない。
+  const r = newRun(1, undefined, undefined, { partWords: ['骨', '魂'] });
   ok(r.player.stats.partCount === 2, `部位の語が効いていない: ${r.player.stats.partCount}`);
-  ok(r.player.stats.maxHp === 145, `部位で体力が増えない: ${r.player.stats.maxHp}`);
-  ok(r.player.stats.regen > 0, `部位で回復が増えない: ${r.player.stats.regen}`);
-  ok(r.player.maxHp === 145, `最大体力に反映されない: ${r.player.maxHp}`);
+  ok(r.player.stats.maxHp === 100, `体に効かない語で体力が増えた: ${r.player.stats.maxHp}`);
+  ok(r.player.stats.armor > 0, `部位で装甲が増えない: ${r.player.stats.armor}`);
+  ok(r.player.stats.lifesteal > 0, `部位で吸血が増えない: ${r.player.stats.lifesteal}`);
+  ok(r.player.maxHp === 100, `最大体力に反映されない: ${r.player.maxHp}`);
 
   // resolvePlayerStats を直接呼んでも同じ。
-  const direct = resolvePlayerStats(['頑', '健'], {});
-  ok(direct.maxHp === 145 && direct.partCount === 2, `直接呼んだ部位が違う: ${direct.maxHp}/${direct.partCount}`);
+  const direct = resolvePlayerStats(['骨', '魂'], {});
+  ok(direct.maxHp === 100 && direct.partCount === 2, `直接呼んだ部位が違う: ${direct.maxHp}/${direct.partCount}`);
+  ok(direct.armor > 0 && direct.lifesteal > 0, `直接呼んだ部位の効果が違う: ${direct.armor}/${direct.lifesteal}`);
 
   // 存在しない語・接続詞は部位に入らない。
   const rBad = newRun(1, undefined, undefined, { partWords: ['存在しない語', 'の'] });
   ok(rBad.player.stats.partCount === 0, `変な語が部位に効いている: ${rBad.player.stats.partCount}`);
 
   // 戦闘中の語彙 (デッキ) ではプレイヤーは強化されない。
-  const r2 = newRun(1, undefined, undefined, { deckWords: ['頑', '健', '癒'] });
+  const r2 = newRun(1, undefined, undefined, { deckWords: ['骨', '魂', '癒'] });
   ok(r2.player.stats.partCount === 0, `語彙の buff で強化されている: ${r2.player.stats.partCount}`);
   ok(r2.player.stats.maxHp === 100, `語彙で体力が増えている: ${r2.player.stats.maxHp}`);
   const lex = r2.lexicon.filter(Boolean).map((w) => w.text);
   ok(lex.length === 0, `開始時の語彙が空でない: ${lex.join(',')}`);
   // デッキの語は deckPool に保持され、レベルアップで獲得できる。
-  ok(r2.deckPool && r2.deckPool.has('頑'), 'デッキの語が deckPool に無い');
+  ok(r2.deckPool && r2.deckPool.has('骨'), 'デッキの語が deckPool に無い');
 
-  console.log(`  部位「頑・健」 体力 ${r.player.stats.maxHp} / 回復 ${r.player.stats.regen} / デッキ先頭 ${lex.slice(0, 3).join('・')}`);
+  console.log(`  部位「骨・魂」 装甲 ${r.player.stats.armor.toFixed(2)} / 吸血 ${r.player.stats.lifesteal.toFixed(2)} / デッキ先頭 ${lex.slice(0, 3).join('・')}`);
 }
 
 sec('経験値の吸引が暴れない');
@@ -840,8 +843,8 @@ sec('語彙から「忘れる」');
 {
   const r = newRun(1);
   // 空の語彙なので、まず語を 3 つ入れる。
-  r.addWord(makeWord('頑'), true);
-  r.addWord(makeWord('健'), true);
+  r.addWord(makeWord('骨'), true);
+  r.addWord(makeWord('魂'), true);
   r.addWord(makeWord('癒'), true);
   const n0 = r.lexicon.filter(Boolean).length;
   const free0 = r.lexiconFreeCount;
@@ -1527,12 +1530,12 @@ sec('言葉くじ・デッキ・部位はセーブで管理する');
   }
 
   // 部位: 持っている語だけ入る。外せる。
-  ok(save.setPart('head', 0, '頑'), '部位に語が入らない');
-  ok(save.partWordList().includes('頑'), '部位の語が読めない');
+  ok(save.setPart('head', 0, '魂'), '部位に語が入らない');
+  ok(save.partWordList().includes('魂'), '部位の語が読めない');
   ok(!save.setPart('head', 1, '存在しない語'), '持っていない語が部位に入った');
-  ok(!save.setPart('xxx', 0, '頑'), '無い部位に入った');
+  ok(!save.setPart('xxx', 0, '魂'), '無い部位に入った');
   save.setPart('head', 0, null);
-  ok(!save.partWordList().includes('頑'), '部位の語が外れない');
+  ok(!save.partWordList().includes('魂'), '部位の語が外れない');
 
   // デッキ: 出し入れできる。持っていない語は入らない。
   const t0 = save.collection[0];
@@ -1544,10 +1547,11 @@ sec('言葉くじ・デッキ・部位はセーブで管理する');
   ok(save.toggleDeck('存在しない語') === false, '持っていない語がデッキに入った');
 
   // ランへ渡すと、部位は能力に、デッキは開始時の語彙に効く。
-  save.setPart('chst', 0, '頑');
+  save.setPart('chst', 0, '魂');
   const run = newRun(1, undefined, save, { deckWords: save.deck, partWords: save.partWordList() });
   ok(run.player.stats.partCount === 1, `部位がランに効かない: ${run.player.stats.partCount}`);
-  ok(run.player.stats.maxHp === 125, `部位で体力が増えない: ${run.player.stats.maxHp}`);
+  ok(run.player.stats.lifesteal > 0, `部位で吸血が増えない: ${run.player.stats.lifesteal}`);
+  ok(run.player.stats.maxHp === 100, `体に効かない語で体力が増えた: ${run.player.stats.maxHp}`);
   console.log(`  くじ「${g.word}」${g.dup ? ' (重複)' : ''} / 所持 ${save.collection.length} 語 / デッキ ${save.deck.length} 語`);
 }
 
@@ -1558,23 +1562,26 @@ sec('部位強化は 1 文。接続詞が使える');
   save.addInk(5000);
   // くじで 2 語そろうまで引く (発・電 は語彙にある語)。
   // 語は抽選に任せずに入れておく (テストを決定的にするため)。
-  for (const t of ['発', '電', '癒']) if (!save.ownsWord(t)) save.data.collection.push(t);
+  for (const t of ['発', '電', '癒', '魂', '骨', '妙']) if (!save.ownsWord(t)) save.data.collection.push(t);
 
-  // 1 語だけの部位 — 従来どおり、そのまま効く (倍率 1.00)。
-  ok(save.setPart('head', 0, '頑'), '部位に語が入らない');
+  // 1 語だけの部位 — 従来どおり、そのまま効く (倍率 1.00)。魂 は吸血 +0.03。
+  ok(save.setPart('head', 0, '魂'), '部位に語が入らない');
   const one = resolvePlayerStats(save.partEntries(), {});
-  ok(one.maxHp === 125, `1 語の部位が変わった: ${one.maxHp}`);
+  ok(one.lifesteal > 0, `1 語の部位が効かない: ${one.lifesteal}`);
+  ok(one.maxHp === 100, `体に効かない語で体力が増えた: ${one.maxHp}`);
   ok(one.partCount === 1, `部位の語数が違う: ${one.partCount}`);
 
   // 同じ部位にもう 1 語。2 語の文になるので少しだけ強くなる。
-  save.setPart('head', 1, '健');
+  save.setPart('head', 1, '骨');
   const two = resolvePlayerStats(save.partEntries(), {});
-  ok(two.maxHp > 145, `2 語の部位が 1 語ぶんより弱いです: ${two.maxHp}`);
+  ok(two.lifesteal > one.lifesteal, `2 語の部位が 1 語ぶんより弱いです: ${one.lifesteal} -> ${two.lifesteal}`);
+  ok(two.armor > 0, `2 語目の効果が乗らない: ${two.armor}`);
   ok(two.partCount === 2, `2 語が数えていない: ${two.partCount}`);
 
   // 接続詞を付けられる。部位は **どの接続詞でも選べる** (武器の鍛冶と違う)。
   // その語の形 (プールの送り仮名) は source='word' として先に出て、
   // 文を壊す形も選べるが valid=false で示される。
+  save.setPart('head', 0, '妙');   // 妙な骨 — 連体形が成る並び
   const opts = partConnOptions(save.partRaw('head').filter(Boolean), 0);
   ok(Array.isArray(opts), 'partConnOptions が配列を返さない');
   const put = save.setPartConn('head', 0, opts[0] || null);
@@ -1584,7 +1591,7 @@ sec('部位強化は 1 文。接続詞が使える');
   const choices = partConnChoices(headWords, 0);
   ok(choices.length > opts.length, '接続詞の候補が自由になっていない');
   ok(choices.some((c) => c.text === 'な' && c.source === 'word' && c.valid),
-    `その語の形 (頑な) が出ない: ${JSON.stringify(choices.slice(0, 4))}`);
+    `その語の形 (妙な) が出ない: ${JSON.stringify(choices.slice(0, 4))}`);
   ok(choices.some((c) => c.text === 'された' && !c.valid),
     '文を壊す形が valid=false で出ない');
   // 自由に選べる。選んだ形がそのまま保存される。
@@ -1612,13 +1619,11 @@ sec('部位強化は 1 文。接続詞が使える');
       `接続詞で強くない: ${p.power.toFixed(2)} -> ${withConn.power.toFixed(2)}`);
     ok(withConn.idiom?.name === '発電', `熟語にならない: ${withConn.idiom?.name}`);
     withPower = withConn.power;
-    // 部位まるごとの効果が文の力ぶん伸びる (頑健 ×1.03 相当)。
-    save.setPart('chst', 0, '頑');
-    save.setPart('chst', 1, '健');
+    // 部位まるごとの効果が文の力ぶん伸びる (発電する の倍率)。
     const loose = resolvePlayerStats(save.partEntries(), {});
     const withRegen = evaluatePart([{ text: '癒', conn: null }]);
     ok(withRegen.valid, '1 語の部位が不成文になっている');
-    ok(loose.partRows.some((x) => x.text === '頑健' && x.gain > 1),
+    ok(loose.partRows.some((x) => x.text === '発電する' && x.gain > 1),
       `部位の文の力が乗らない: ${JSON.stringify(loose.partRows)}`);
     ok(loose.partBroken.length === 0, `不成文の部位が出た: ${JSON.stringify(loose.partBroken)}`);
   }
@@ -1634,15 +1639,15 @@ sec('部位強化は 1 文。接続詞が使える');
   ok(!save.partWordList().includes('癒'), '語一覧に残っている');
 
   // 部位の語は RUN に渡して初めて能力になる。
-  save.setPart('trnk', 0, '頑');
+  save.setPart('chst', 1, null);
+  save.setPart('trnk', 0, '癒');
   const run = newRun(1, undefined, save, { partEntries: save.partEntries() });
   ok(run.player.stats.partCount >= 1, 'ランに部位が効かない');
-  ok(run.player.maxHp > 100, `部位の体力が反映されない: ${run.player.maxHp}`);
+  ok(run.player.stats.regen > 0, `部位の回復が反映されない: ${run.player.stats.regen}`);
   // 古い flat な渡し方でも動く (後方互換)。
-  const legacy = newRun(1, undefined, save, { partWords: ['頑'] });
-  ok(legacy.player.maxHp === run.player.maxHp || legacy.player.maxHp > 100,
-    `旧 API の部位が効かない: ${legacy.player.maxHp}`);
-  console.log(`  部位 1 語 125 / 2 語 ${two.maxHp} / 接続詞で文の力 ${withPower.toFixed(2)}`);
+  const legacy = newRun(1, undefined, save, { partWords: ['癒'] });
+  ok(legacy.player.stats.regen > 0, `旧 API の部位が効かない: ${legacy.player.stats.regen}`);
+  console.log(`  部位 1 語 吸血 ${one.lifesteal.toFixed(2)} / 2 語 ${two.lifesteal.toFixed(2)} / 接続詞で文の力 ${withPower.toFixed(2)}`);
 }
 
 sec('属性語から特殊武器を戦闘中に作れる');

@@ -167,10 +167,6 @@ const RAW_POOL = `
 穿  n   つ:adn*
 通  n   る:adn* す:adn*
 
-# ── 体をきたえる語 (効果語。p. キーで体にも効く) ──
-頑  na  な:adn+ に:adv+
-健  na  やかな:adn+ やかに:adv+
-
 # ── 核語 ──
 志  n   す:adn* +N
 巧  na  みな:adn+ みに:adv+

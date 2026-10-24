@@ -38,7 +38,7 @@ for (const id of [...IDS, 'growTotal']) {
 const save = new Save();
 save.reset();
 // テストを決定的にする。語は抽選に頼まず入れる。
-save.data.collection = ['頑', '健', '癒', '発', '電', '強', '弾', '斬', '炎'];
+save.data.collection = ['妙', '骨', '癒', '発', '電', '強', '弾', '斬', '炎'];
 save.data.parts = {};
 for (const p of PARTS) save.data.parts[p.id] = [];
 
@@ -68,15 +68,15 @@ sec('部位が 9 コマ出て、各コマに枠が PART_SLOTS 個ある');
 
 sec('語を選んで枠を押し → 入る。もう一度押すと外れる');
 {
-  const word = wordsBox().find((b) => b.textContent.trim().startsWith('頑'));
-  ok(!!word, '所持語に「頑」が無い');
+  const word = wordsBox().find((b) => b.textContent.trim().startsWith('妙'));
+  ok(!!word, '所持語に「妙」が無い');
   click(word);
   ok(q('#growWords .grow-word.sel').length === 1, '選んだ語が sel にならない');
-  ok(/頑/.test(dom.doc.getElementById('growSelNote').textContent), '選択中の変化が説明に出ない');
+  ok(/妙/.test(dom.doc.getElementById('growSelNote').textContent), '選択中の変化が説明に出ない');
 
   const gap = q('.grow-slot.empty', boxOf('head'))[0];
   click(gap);
-  ok(save.partSlotText('head', 0) === '頑', '枠に入れてもセーブに入らない');
+  ok(save.partSlotText('head', 0) === '妙', '枠に入れてもセーブに入らない');
   ok(q('.gs-word', boxOf('head')).length === 1, '語のチップが出ない');
   ok(!!q('.gs-out', boxOf('head'))[0], '✕ が出ていない (取り外せない不具合)');
 
@@ -85,7 +85,7 @@ sec('語を選んで枠を押し → 入る。もう一度押すと外れる');
   ok(!save.partSlot('head', 0), '同じ語を押しても外れない (取り外せない不具合)');
 
   // 語の選択もトグル (押すと外れる) — 押せるものだけが選べる状態になる。
-  click(wordsBox().find((b) => b.textContent.trim().startsWith('頑')));
+  click(wordsBox().find((b) => b.textContent.trim().startsWith('妙')));
   ok(q('#growWords .grow-word.sel').length === 0, '選んだ語をもう一度押しても外れない');
 
   // 枠の ✕ でも外れる。
@@ -145,17 +145,17 @@ sec('部位の文は能力に乗り、不成文は何も乗せない');
 {
   const save2 = new Save();
   save2.reset();
-  save2.data.collection = ['頑', '健'];
+  save2.data.collection = ['癒', '骨', '妙'];
   save2.data.parts = {};
   for (const p of PARTS) save2.data.parts[p.id] = [];
-  save2.setPart('chst', 0, '頑');
-  save2.setPart('chst', 1, '健');
-  save2.setPart('head', 0, '頑');
+  save2.setPart('chst', 0, '癒');
+  save2.setPart('chst', 1, '骨');
+  save2.setPart('head', 0, '妙');
   const rows = resolvePlayerStats(save2.partEntries(), {});
   ok(rows.partCount === 3, `部位の語を数えていない: ${rows.partCount}`);
   ok(rows.partRows.length === 2, `文の行が ${rows.partRows.length} 件`);
   const chst = rows.partRows.find((r) => r.name === '胸');
-  ok(chst && chst.text === '頑健' && chst.gain > 1, `2 語の文の力が乗らない: ${JSON.stringify(chst)}`);
+  ok(chst && chst.text === '癒骨' && chst.gain > 1, `2 語の文の力が乗らない: ${JSON.stringify(chst)}`);
   // 部位の語が 1 語でも効きは落ちない (1 語 = 倍率 1.00)
   const one = rows.partRows.find((r) => r.name === '頭');
   ok(one && Math.abs(one.gain - 1) < 0.001, `1 語の倍率が ${one?.gain}`);
@@ -243,7 +243,7 @@ sec('体に効かない語は、そう表示する');
   // 文の力ぶんの効果は出る (体力/攻撃の数字が付く)。
   ok(q('.grow-part-eff .eff', boxOf('larm')).length > 0,
     `文の力ぶんの効果が出ない: ${note.textContent}`);
-  // 同じ語を 1 語だけ別の部位に置いて比較: 直接効く語 (頑) のほうが大きい。
+  // 部位の効きは、直接効く語でも文の力ぶんでも数字のチップで出る。
   click(q('.gs-out', boxOf('larm'))[0]);
   click(w);   // 選択解除
   console.log(`  炎 → 「体に直接は効かない」+ 文の力ぶん ${note.textContent.replace(/\s+/g, ' ').slice(0, 60)}`);

@@ -79,7 +79,7 @@ for (const table of RAW_TABLES) {
     // 品詞と接続詞プールは語ごとに words.pool.js で決める。
     const pool = poolOfText(text);
     // 複数カテゴリ: 本来の分類 (cat) に加え、動詞の形 (述語) を持つ語は
-    // 用言としても扱う (震える・還る・駆ける・癒える …)。cats は複数持ちうる。
+    // 用言としても扱う (震える・還る・鍛える・癒える …)。cats は複数持ちうる。
     const cats = [cat];
     if (cat !== 'verb' && pool.some((e) => e.pred)) cats.push('verb');
     WORDS[text] = {

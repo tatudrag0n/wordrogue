@@ -1185,7 +1185,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
     app.menus.renderGrow();
     const gachaBefore = save.collection.length;
     const g = save.drawGacha();
-    save.setPart('head', 0, '頑');
+    save.setPart('head', 0, '癒');
     save.toggleDeck('炎');
     return {
       shown: !document.getElementById('grow').hidden,
@@ -1201,7 +1201,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   ok(menu.words >= 10, `所持語の表示が少ない: ${menu.words}`);
   ok(menu.gachaOk, '言葉くじが引けない');
   ok(menu.coll >= menu.gachaBefore, `くじで所持語が減った: ${menu.gachaBefore} -> ${menu.coll}`);
-  ok(menu.part.includes('頑'), `部位に語が入らない: ${menu.part}`);
+  ok(menu.part.includes('癒'), `部位に語が入らない: ${menu.part}`);
   console.log(`    部位 9 / 所持 ${menu.words} 語 / くじ後の言玉 ${menu.ink}`);
 
   // ランに渡すと、部位の語が能力に乗り、デッキが開始時の語彙に入る。
@@ -1216,12 +1216,14 @@ sec('部位強化はメニューで設定し、戦闘に効く');
     return {
       partCount: run.player.stats.partCount,
       maxHp: run.player.stats.maxHp,
+      regen: run.player.stats.regen,
       hasSelf: run.player.self !== undefined,
       filled: run.lexicon.filter(Boolean).length,
     };
   })()`);
   ok(applied.partCount >= 1, `部位が能力に乗らない: ${applied.partCount}`);
-  ok(applied.maxHp > 100, `部位で体力が増えない: ${applied.maxHp}`);
+  ok(applied.regen > 0, `部位の回復が能力に乗らない: ${applied.regen}`);
+  ok(applied.maxHp >= 100, `体力が素の値より低い: ${applied.maxHp}`);
   ok(applied.hasSelf === false, '戦闘中に自身の文が残っている');
   ok(applied.filled === 0, `開始時の語彙が空でない: ${applied.filled}`);
   console.log(`    部位 ${applied.partCount} 語 / 体力 ${applied.maxHp} / 語彙 ${applied.filled} 語`);

@@ -491,7 +491,7 @@ export class Menus {
         'この語は体に直接は効かない — もう 1 語足して文にすると、文の力ぶんだけ強くなる'));
     } else {
       box.append(el('div', { class: 'grow-part-eff none' },
-        '文は成っているが、この語は体に効かない — 体にも効く語 (甲・鍔 など) に入れ替える'));
+        '文は成っているが、この語は体に効かない — 装甲・盾などの効果を持つ語 (甲・鍔 など) に入れ替える'));
     }
     return box;
   }
@@ -577,7 +577,7 @@ export class Menus {
         this.growSel = this.growSel === t ? null : t;
         this.growConn = null;
         this.growConnAll = null;
-        if (!direct.length) this._growEffectNote = `「${t}」は体に直接は効かない — 体にも効く語 (甲・鍔…) は部位で強く効く`;
+        if (!direct.length) this._growEffectNote = `「${t}」は体に直接は効かない — 装甲・盾などの効果を持つ語 (甲・鍔…) は部位で強く効く`;
         this.audio?.tap?.();
         this.renderGrow();
       });

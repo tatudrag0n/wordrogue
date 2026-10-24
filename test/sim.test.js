@@ -332,10 +332,11 @@ sec('不成文の武器は無効化される');
   ok(r2.reason === 'noparticle', `理由 ${r2.reason}`);
 
   // 2 語 -> 成立。属性語から始まる、単純な形。
-  setFlat(wi, ['焔', '剛']);
+  setFlat(wi, ['焔', '剛', '刃']);
   const r3 = wi.resolve(r.player.stats);
   ok(r3.active, `「焔剛」が不成立: ${r3.reasonText}`);
   ok(r3.element === 'fire', `属性 ${r3.element}`);
+  ok(r3.fullText === '焔剛刃', `文面 ${r3.fullText}`);
 
   // 武器語どうしは隣り合わない。「刃弾」は日本語に無い並び。
   setFlat(wi, ['刃', '弾']);
@@ -1220,7 +1221,7 @@ sec('貫と拡散が実際に効く');
     ok(res.active, `「${a}${b2}」が不成文: ${res.reasonText}`);
     return res.stats;
   };
-  const plain = st('鋼', '速');
+  const plain = st('速', '鋼');
   const piercing = st('徹', '鋼');
   const spread = st('散', '鋼');
   ok(piercing.pierce > plain.pierce, `貫: ${plain.pierce} -> ${piercing.pierce}`);
@@ -1268,11 +1269,11 @@ sec('武器 1 つにつき複数語を並べられる');
   ok(wi.sentence.text === '刃', `初期文が「${wi.sentence.text}」`);
 
   // 語は 何個でも足せる (10 文字まで)。
-  setFlat(wi, ['焔', '火', '球', '剛']);
+  setFlat(wi, ['焔', '火', '剛', '球']);
   const res = wi.resolve(r.player.stats);
   const ev = res.evalResult;
   ok(res.valid, `「焔火球剛」が成立しない: ${res.reasonText}`);
-  ok(res.fullText === '焔火球剛', `文面 ${res.fullText}`);
+  ok(res.fullText === '焔火剛球', `文面 ${res.fullText}`);
   ok(ev.content === 4, `実質語数 ${ev.content}`);
   console.log(`  4 語 → 「${res.fullText}」${res.gradeInfo.name}`);
 
@@ -1308,8 +1309,8 @@ sec('武器 1 つにつき複数語を並べられる');
   console.log(`  二字熟語 → 「${hres.fullText}」(${hres.gradeInfo.name} / 熟語 ${hres.evalResult.idiom?.name})`);
 
   // 接続詞は文の力を上げる。同じ語並びで比較する。
-  const plain = setFlat(wi, ['焔', '鋼', '剛']).resolve(r.player.stats);
-  const gram = setFlat(wi, ['焔', 'の', '鋼', '剛']).resolve(r.player.stats);
+  const plain = setFlat(wi, ['焔', '鋼']).resolve(r.player.stats);
+  const gram = setFlat(wi, ['焔', 'の', '鋼']).resolve(r.player.stats);
   ok(plain.valid && gram.valid, `比較用の文が成立していない: ${gram.reasonText}`);
   ok(gram.evalResult.fx.power > plain.evalResult.fx.power,
     `接続詞で文の力が上がらない: ${plain.evalResult.fx.power} -> ${gram.evalResult.fx.power}`);
@@ -1739,6 +1740,31 @@ sec('言玉で語彙の枠を広げると次のランで入る');
   ok(before.lexicon.length > plain.lexicon.length,
     `語彙が広がっていない: ${before.lexicon.length} vs ${plain.lexicon.length}`);
   console.log(`  語彙 ${plain.lexicon.length} → ${before.lexicon.length} 個`);
+}
+
+sec('癒し剣 — combat で敵を回復する');
+{
+  const r = newRun(1, ['sword']);
+  const wi = r.weapons[0];
+  setFlat(wi, ['己', 'を', '癒', 'す', '剣']);
+  const res = wi.resolve(r.player.stats);
+  ok(res.valid && res.active, '「己を癒す剣」が不成文: ' + res.reasonText);
+  ok(res.heal === true, 'heal が立っていない');
+  ok(res.kind === 'slash', 'kind が slash でない: ' + res.kind);
+  ok(res.stats.dmg > 0, 'dmg が 0 以下: ' + res.stats.dmg);
+  const e = makeEnemy('goblin', 0, 0);
+  e.hp = 5;
+  damage(r, e, { dmg: 6, heal: true, el: 'none' }, {});
+  ok(e.hp === 8, 'heal 後 hp が違う: ' + e.hp);
+  ok(r.dmgTexts.length >= 1, 'dmgTexts が無い');
+  const last = r.dmgTexts[r.dmgTexts.length - 1];
+  ok(last.text === '+3', 'text が違う: ' + last.text);
+  ok(last.color === '#37b24d', 'color が違う: ' + last.color);
+  const e2 = makeEnemy('goblin', 0, 0);
+  e2.hp = 10;
+  damage(r, e2, { dmg: 6, el: 'none' }, {});
+  ok(e2.hp === 4, '通常ダメージ後 hp が違う: ' + e2.hp);
+  console.log('  癒し剣 → hp 5 +3 = 8 / 通常 10 -6 = 4');
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

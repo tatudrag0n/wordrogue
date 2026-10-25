@@ -25,6 +25,20 @@ export class Audio {
     this._mediaBuffers = {};
     this._mediaNames = ['slot','phrase','broken','levelup','gacha_spin','gacha_reveal','boss_warn','win','lose','explode','hurt','pickup','hit','slash','shoot','kill','xp','conn','combo','dash','heal','ui_open','ui_close','ui_select','ui_deny','heartbeat','tick_urgent','boss','gacha_shine','gacha_tick','gacha_lock','cast','elem_hit'];
     this._mediaFetches = {};
+    this._mediaAt = new Map();
+    this._mediaGain = {
+      slot: 0.22, conn: 0.22, phrase: 0.32, broken: 0.24, levelup: 0.32,
+      gacha_spin: 0.20, gacha_shine: 0.32, gacha_tick: 0.16, gacha_lock: 0.22, gacha_reveal: 0.32,
+      boss_warn: 0.36, boss: 0.40, win: 0.34, lose: 0.36,
+      hit: 0.20, slash: 0.20, shoot: 0.18, kill: 0.20, explode: 0.26, hurt: 0.20,
+      combo: 0.20, dash: 0.18, heal: 0.28, xp: 0.16, pickup: 0.20,
+      ui_open: 0.20, ui_close: 0.18, ui_select: 0.18, ui_deny: 0.18,
+      heartbeat: 0.16, tick_urgent: 0.16, cast: 0.16, elem_hit: 0.14,
+    };
+    this._mediaGap = {
+      xp: 0.05, cast: 0.045, elem_hit: 0.045, hit: 0.035, slash: 0.04, shoot: 0.04,
+      kill: 0.04, combo: 0.06, heartbeat: 0.25, gacha_tick: 0.04, tick_urgent: 0.08,
+    };
     for (const name of this._mediaNames) {
       this._mediaFetches[name] = fetch('assets/sfx/' + name + '.wav').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).catch(() => null);
     }
@@ -32,7 +46,7 @@ export class Audio {
     try {
       this._bgmEl.src = 'assets/bgm/main.wav';
       this._bgmEl.loop = true;
-      this._bgmEl.volume = 0.3;
+      this._bgmEl.volume = 0.12;
     } catch {}
   }
 
@@ -173,11 +187,13 @@ export class Audio {
   playMedia(name) {
     const buf = this._mediaBuffers[name];
     if (!buf || !this.on) return false;
+    const gap = this._mediaGap[name] ?? 0.05;
+    if (!this._throttle(this._mediaAt, name, gap)) return true;
     try {
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
       const g = this.ctx.createGain();
-      g.gain.value = 0.6;
+      g.gain.value = this._mediaGain[name] ?? 0.2;
       src.connect(g).connect(this.sfxGain);
       src.start();
       return true;
@@ -480,7 +496,7 @@ export class Audio {
     if (!this.on || !this.enabled) return;
     if (this._bgmEl) {
       if (this._bgmEl.paused) this._bgmEl.play().catch(()=>{});
-      this._bgmEl.volume = Math.max(0.05, Math.min(0.6, 0.25 + intensity * 0.35));
+      this._bgmEl.volume = Math.max(0.08, Math.min(0.34, 0.12 + intensity * 0.22));
       return;
     }
     this._musicTimer -= dt;

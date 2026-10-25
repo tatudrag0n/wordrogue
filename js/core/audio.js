@@ -23,11 +23,11 @@ export class Audio {
     this._castAt = new Map();
     this._hitAt = new Map();
     this._mediaBuffers = {};
-    this._mediaNames = ['slot','phrase','broken','levelup','gacha_spin','gacha_reveal','boss_warn','win','lose','explode','hurt','pickup','hit','slash','shoot','kill','xp','conn','combo','dash','heal','ui_open','ui_close','ui_select','ui_deny','heartbeat','tick_urgent','boss','gacha_shine','gacha_tick','gacha_lock','cast','elem_hit','cast_fire','cast_ice','cast_thunder','cast_wind','cast_earth','cast_dark','cast_water','cast_gold','cast_shot','cast_gun','cast_arrow','cast_thrust','hit_soft','hit_sharp','hit_heavy','hit_ring','hit_wind','hit_coin','hit_dark'];
+    this._mediaNames = ['slot','phrase','broken','levelup','gacha_spin','gacha_reveal','boss_warn','win','lose','explode','hurt','pickup','hit','slash','shoot','kill','xp','conn','combo','dash','heal','ui_open','ui_close','ui_select','ui_deny','heartbeat','tick_urgent','boss','gacha_shine','gacha_tick','gacha_lock','cast','elem_hit','cast_fire','cast_ice','cast_thunder','cast_wind','cast_earth','cast_dark','cast_water','cast_gold','cast_shot','cast_gun','cast_arrow','cast_thrust','uns','hit_soft','hit_sharp','hit_heavy','hit_ring','hit_wind','hit_coin','hit_dark'];
     this._mediaFetches = {};
     this._mediaAt = new Map();
     this._mediaGain = {
-      slot: 0.22, conn: 0.22, phrase: 0.32, broken: 0.24, levelup: 0.32,
+      slot: 0.22, conn: 0.22, uns: 0.18, phrase: 0.32, broken: 0.24, levelup: 0.32,
       gacha_spin: 0.20, gacha_shine: 0.32, gacha_tick: 0.16, gacha_lock: 0.22, gacha_reveal: 0.32,
       boss_warn: 0.36, boss: 0.40, win: 0.34, lose: 0.36,
       hit: 0.20, slash: 0.20, shoot: 0.18, kill: 0.20, explode: 0.26, hurt: 0.20,
@@ -435,6 +435,12 @@ export class Audio {
   slot() { if (this.playMedia('slot')) return;
     this.tone({ freq: 540, type: 'triangle', dur: 0.07, vol: 0.06 });
     this.noise({ dur: 0.045, vol: 0.035, hp: 2400, lp: 7000 });
+  }
+
+  /** 語を文から語彙へ戻す音。置く音とは逆向きの、低く短い下降。 */
+  uns() { if (this.playMedia('uns')) return;
+    this.tone({ freq: 560, type: 'sine', dur: 0.07, vol: 0.05, slide: 0.7 });
+    this.tone({ freq: 380, type: 'triangle', dur: 0.09, vol: 0.04, delay: 0.03, slide: 0.8 });
   }
 
   /** 接続詞を選んだ音。 */

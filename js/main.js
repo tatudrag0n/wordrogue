@@ -4,12 +4,12 @@
 
 import { $, clamp } from './core/util.js?v=1.5';
 import { Input } from './core/input.js?v=1.5';
-import { Audio } from './core/audio.js?v=2';
+import { Audio } from './core/audio.js?v=2.1';
 import { Save } from './core/save.js?v=1.5';
 import { Run } from './game/run.js?v=2';
 import { Renderer } from './ui/render.js?v=1.5';
 import { Hud } from './ui/hud.js?v=1.5';
-import { Forge } from './ui/forge.js?v=1.7';
+import { Forge } from './ui/forge.js?v=1.8';
 import { Menus } from './ui/menus.js?v=1.7';
 
 import { STAGES } from './data/stages.js?v=1.5';

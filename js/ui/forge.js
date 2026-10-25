@@ -248,7 +248,7 @@ export class Forge {
       this.msg = `文「${wi.title || wi.def.name}」を外した — ${r.returned} 語を語彙へ戻す。`;
       this.armed = null;
       this.held = null;
-      this.opt.audio?.tap?.();
+      this.opt.audio?.uns?.();
     } else {
       this.popEdit();
       this.msg = r.reason === 'fixed'
@@ -349,7 +349,7 @@ export class Forge {
     const r = this.run.toLexicon(word);
     if (r.ok) {
       this.msg = `「${word.text}」を語彙へ戻した。`;
-      this.opt.audio?.tap?.();
+      this.opt.audio?.uns?.();
     } else {
       this.popEdit();
       this.msg = r.reason === 'full'
@@ -983,7 +983,8 @@ export class Forge {
     this.beginEdit();
     const r = this.run.moveWordTo(held.place, place);
     if (r.ok) {
-      this.opt.audio?.worn?.(place.wi ? place.wi.resolve(this.run.player.stats) : { active: true });
+      if (place.kind === 'lexicon') this.opt.audio?.uns?.();
+      else this.opt.audio?.worn?.(place.wi ? place.wi.resolve(this.run.player.stats) : { active: true });
     } else {
       this.popEdit();
       this.opt.audio?.broken?.();
@@ -1334,7 +1335,8 @@ export class Forge {
     }
 
     if (r && r.ok) {
-      this.opt.audio?.worn?.(wi ? wi.resolve(this.run.player.stats) : { active: true });
+      if (to.kind === 'lexicon') this.opt.audio?.uns?.();
+      else this.opt.audio?.worn?.(wi ? wi.resolve(this.run.player.stats) : { active: true });
     } else {
       this.popEdit();
       this.opt.audio?.broken?.();

@@ -348,44 +348,6 @@ sec('長押し時間までに動かすと持ち上がらない');
   console.log('  長押し時間までに動かせば持ち上がらない (ドラッグ扱い)');
 }
 
-sec('語の「✕」で語彙へ戻せる');
-{
-  const { run, forge } = openForge();
-  const wi = run.weapons[0];
-  const text0 = wi.sentence.text;
-  const btns = outBtns(forge);
-  ok(btns.length === wi.sentence.count, `✕ ボタンの数が文の語数と合わない: ${btns.length} / ${wi.sentence.count}`);
-  const gone = wi.sentence.words[1].text;
-  tap(btns[1]);
-  ok(wi.sentence.words.every((w) => w.text !== gone), `文に語が残っている: ${wi.sentence.text}`);
-  ok(run.lexicon.some((w) => w && w.text === gone), '語彙に戻っていない');
-  ok(wi.sentence.text !== text0, '文が変わっていない');
-  console.log(`  「${gone}」-> ✕ で外した / 文「${text0}」->「${wi.sentence.text}」`);
-}
-
-sec('語彙が満杯でも文から語を戻せる');
-{
-  const { run, forge } = openForge();
-  const wi = run.weapons[0];
-  // 語彙を埋める。
-  const filler = ['火', '流', '風', '雷', '刃', '刀', '盾', '剛'];
-  let k = 0;
-  while (!run.lexiconFull && k < 40) {
-    run.giveWord(makeWord(filler[k % filler.length]), true);
-    k++;
-  }
-  ok(run.lexiconFull, '語彙を埋められなかった');
-  const n0 = run.lexicon.filter(Boolean).length;
-  const oldest = run.lexicon[run.oldestLexiconIndex()].text;
-  const btns = outBtns(forge);
-  const gone = wi.sentence.words[0].text;
-  tap(btns[0]);
-  ok(run.lexicon.some((w) => w && w.text === gone), '語が語彙に入っていない');
-  ok(wi.sentence.words.every((w) => w.text !== gone), '文に語が残っている');
-  ok(run.lexicon.filter(Boolean).length === n0, `語彙の数が変わった: ${run.lexicon.filter(Boolean).length} / ${n0}`);
-  console.log(`  満杯 (${n0}) でも戻せた / 最古の「${oldest}」を捨てた`);
-}
-
 sec('ドラッグ中は語が指の下に出る');
 {
   const { run, forge } = openForge();
@@ -604,7 +566,6 @@ sec('語彙の＋で属性語から特殊武器の文を作る');
   const newRow = rows.find((r) => r.textContent.includes('光'));
   ok(!!newRow, '作った文が武器欄に出ない');
   ok(newRow.querySelectorAll('.sen-gap').length > 0, '新しい文に隙間が無い');
-  ok(newRow.querySelectorAll('.sen-out').length > 0, '新しい文の語に ✕ が無い');
   console.log(`  ＋ →「${wi.sentence.text}」(${run.weapons.length} 本目)`);
 }
 
@@ -630,12 +591,7 @@ sec('形態語 (弾・環・玉) は武器語ではない — ＋ も付かな�
   await settle();
   ok(wi.sentence.count === before + 1, `形態語が文に置けない: ${wi.sentence.text}`);
   forge.render();
-  const outs = outBtns(forge);
-  ok(outs.length > 0, '文から語を外す ✕ が無い (取り外せない不具合)');
-  const last = outs.at(-1);
-  const nBefore = wi.sentence.count;
-  tap(last);
-  ok(wi.sentence.count === nBefore - 1, `✕ で語が外れない: ${nBefore} -> ${wi.sentence.count}`);
+  // ✕ は廃止したので、取り外しはドラッグで行う (別テストで確認)。
 
   // 文まるごと外す (.wrow-drop) と、語が語彙に戻る。
   // 武器語「剣」の文を 1 本作って、そこに行き着く。

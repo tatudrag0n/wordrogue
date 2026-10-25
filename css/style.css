@@ -1071,7 +1071,7 @@ body.touch .hud-choice-title { font-size: .76rem; }
   padding: 0;
   border-radius: 50%;
   font-size: .5rem;
-  opacity: .3;
+  opacity: 0;
 }
 .sen-conn.empty:hover { opacity: 1; }
 /* 文の末尾にだけ置く追加位置。語と語のあいだには置かない。 */
@@ -2412,9 +2412,7 @@ html, body {
   background: rgba(214, 60, 48, 0.22);
 }
 #forge .sen-conn.empty {
-  border: none;
-  background: transparent;
-  opacity: 0;
+  display: none;
 }
 #forge .sen-conn.empty:hover,
 #forge .sen-conn.empty:focus-visible { opacity: .55; }

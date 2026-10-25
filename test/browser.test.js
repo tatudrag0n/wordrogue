@@ -674,42 +674,6 @@ sec('語の上に落としても置き換えない (手前に差し込む)');
   console.log(`    「炎剛速」の「剛」へ「火」-> 「${dnd.texts.join('')}」`);
 }
 
-sec('語の「✕」で語彙へ戻せること');
-{
-  const out = await evalJs(`(() => {
-    const app = window.__wordrogue;
-    const forge = app.forge;
-    const run = app.run;
-    const wi = run.weapons[0];
-    // 直前のテストで文を空にしました。文の語が 1 つないと「✕」を叩けないので戻す。
-    const lex = run.lexicon.findIndex((w) => w);
-    if (wi.sentence.count === 0 && lex >= 0) {
-      forge.dropOnto({ kind: 'lexicon', index: lex }, { kind: 'slot', wi, index: 0 });
-    }
-    // dropOnto は画面を作り直すので、行は引き直してから取る。
-    const row = [...document.querySelectorAll('#forgeWeapons .wrow')]
-      .find((r) => !r.classList.contains('wrow-self') && !r.classList.contains('wrow-empty'));
-    const btns = [...row.querySelectorAll('.sen-item .sen-out')];
-    const items = row.querySelectorAll('.sen-item').length;
-    const gone = wi.sentence.words[0].text;
-    btns[0].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 }));
-    btns[0].dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 5, clientY: 5 }));
-    return {
-      btns: btns.length,
-      items,
-      count: wi.sentence.count,
-      gone,
-      inSen: wi.sentence.words.some((w) => w.text === gone),
-      inLex: run.lexicon.some((w) => w && w.text === gone),
-    };
-  })()`);
-  ok(out.btns === out.items, `✕ ボタンの数が文の語数と合わない: ${out.btns} / ${out.items}`);
-  ok(out.count === out.items - 1, `語を外せていない: ${out.count} / ${out.items}`);
-  ok(!out.inSen, `文に語が残っている: ${out.gone}`);
-  ok(out.inLex, '語彙に戻っていない');
-  console.log(`    「${out.gone}」-> ✕ で外した (文 ${out.count} 語 / 語彙へ戻った)`);
-}
-
 sec('語彙が満杯でも文から語を戻せること');
 {
   const full = await evalJs(`(async () => {

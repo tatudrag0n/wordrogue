@@ -68,7 +68,7 @@ function renderConnector(forge, place, conn) {
   const node = el('div', {
     class: conn ? 'sen-conn filled' : 'sen-conn empty',
     title,
-  }, el('span', {}, conn ? conn.text : '・'));
+  }, el('span', {}, conn ? conn.text : ''));
   // 接続詞のチップは一発で選べるメニューを開く。語本体は今まで通り順に回る。
   forge.makeTappable(node, () => forge.openConnPicker(place, node));
   return node;
@@ -316,13 +316,7 @@ export class Forge {
     // 接続詞は語の直後に置く。語と同じタップで切り替わる。
     const connChip = renderConnector(this, place, conn);
 
-    // 語彙へ戻すボタン。語の上に重ねるので、語と語のあいだに空間を作らない。
-    const outBtn = el('button', {
-      class: 'sen-out', type: 'button', title: '語彙へ戻す',
-      'aria-label': `${w.text} を語彙へ戻す`,
-    }, el('span', {}, '✕'));
-    this.makeTappable(outBtn, () => this.returnWord(place));
-    chip.append(outBtn);
+    // 語を語彙へ戻すのは、語を語彙へドラッグする操作に一本化した (✕ は使わない)。
 
     // 「語 + 接続詞」をひとまとまりの語として扱う。
     // data-place もここに乗せるので、接続詞にポインタが出ても語として拾う。
@@ -560,7 +554,7 @@ export class Forge {
       });
 
       const head = el('div', { class: 'wrow-head' },
-        el('span', { class: 'wrow-name' }, wi.title || wi.def.name),
+        // 武器名 (文面) は語の並びそのものなので、ここでは表示しない (要求)。
         el('span', { class: 'wrow-kind' }, KIND_LABEL[res.kind] || res.kind),
         el('span', { class: 'wrow-lv' }, `${wi.sentence.len} / ${wi.sentence.maxLen} 文字`),
         res.tail

@@ -23,7 +23,7 @@ export class Audio {
     this._castAt = new Map();
     this._hitAt = new Map();
     this._mediaBuffers = {};
-    this._mediaNames = ['slot','phrase','broken','levelup','gacha_spin','gacha_reveal','boss_warn','win','lose','explode','hurt','pickup','hit','slash','shoot','kill','xp','conn','combo','dash','heal','ui_open','ui_close','ui_select','ui_deny','heartbeat','tick_urgent','boss','gacha_shine','gacha_tick','gacha_lock','cast','elem_hit'];
+    this._mediaNames = ['slot','phrase','broken','levelup','gacha_spin','gacha_reveal','boss_warn','win','lose','explode','hurt','pickup','hit','slash','shoot','kill','xp','conn','combo','dash','heal','ui_open','ui_close','ui_select','ui_deny','heartbeat','tick_urgent','boss','gacha_shine','gacha_tick','gacha_lock','cast','elem_hit','cast_fire','cast_ice','cast_thunder','cast_wind','cast_earth','cast_dark','cast_water','cast_gold','hit_soft','hit_sharp','hit_heavy','hit_ring','hit_wind','hit_coin','hit_dark'];
     this._mediaFetches = {};
     this._mediaAt = new Map();
     this._mediaGain = {
@@ -34,7 +34,14 @@ export class Audio {
       combo: 0.20, dash: 0.18, heal: 0.28, xp: 0.16, pickup: 0.20,
       ui_open: 0.20, ui_close: 0.18, ui_select: 0.18, ui_deny: 0.18,
       heartbeat: 0.16, tick_urgent: 0.16, cast: 0.16, elem_hit: 0.14,
+      cast_fire: 0.18, cast_ice: 0.14, cast_thunder: 0.16, cast_wind: 0.16, cast_earth: 0.18,
+      cast_dark: 0.16, cast_water: 0.14, cast_gold: 0.14,
+      hit_soft: 0.14, hit_sharp: 0.12, hit_heavy: 0.16, hit_ring: 0.14, hit_wind: 0.12, hit_coin: 0.12, hit_dark: 0.14,
     };
+    this._castMedia = { fire:'cast_fire', ice:'cast_ice', thunder:'cast_thunder', poison:'cast_dark', light:'cast_ice', dark:'cast_dark', wind:'cast_wind', water:'cast_water', nature:'cast_water', earth:'cast_earth', steel:'cast_gold', gold:'cast_gold', blood:'cast_dark', none:'cast_thunder' };
+    this._castRate = { fire:1, ice:1.35, thunder:1.55, poison:0.8, light:1.7, dark:0.65, wind:1.15, water:1, nature:1.25, earth:0.8, steel:1.2, gold:1.5, blood:0.7, none:1 };
+    this._hitMedia = { fire:'hit_heavy', ice:'hit_sharp', thunder:'hit_sharp', poison:'hit_soft', light:'hit_ring', dark:'hit_dark', wind:'hit_wind', water:'hit_soft', nature:'hit_soft', earth:'hit_heavy', steel:'hit_sharp', gold:'hit_coin', blood:'hit_dark', none:'hit_soft' };
+    this._hitRate = { fire:0.9, ice:1.3, thunder:1.6, poison:0.75, light:1, dark:0.7, wind:1.1, water:1, nature:1.2, earth:0.7, steel:1.2, gold:1, blood:0.8, none:1 };
     this._mediaGap = {
       xp: 0.05, cast: 0.045, elem_hit: 0.045, hit: 0.035, slash: 0.04, shoot: 0.04,
       kill: 0.04, combo: 0.06, heartbeat: 0.25, gacha_tick: 0.04, tick_urgent: 0.08,
@@ -42,12 +49,9 @@ export class Audio {
     for (const name of this._mediaNames) {
       this._mediaFetches[name] = fetch('assets/sfx/' + name + '.wav').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).catch(() => null);
     }
-    this._bgmEl = document.createElement('audio');
-    try {
-      this._bgmEl.src = 'assets/bgm/main.wav';
-      this._bgmEl.loop = true;
-      this._bgmEl.volume = 0.12;
-    } catch {}
+    this._bgmTracks = {};
+    this._bgmName = null;
+    this._bgmEl = null;
   }
 
   /** 最初のユーザ操作で呼ぶ。ブラウザの自動再生規約のため。 */
@@ -184,20 +188,43 @@ export class Audio {
     }
   }
 
-  playMedia(name) {
+  playMedia(name, rate = 1) {
     const buf = this._mediaBuffers[name];
     if (!buf || !this.on) return false;
+    const key = name + '@' + rate;
     const gap = this._mediaGap[name] ?? 0.05;
-    if (!this._throttle(this._mediaAt, name, gap)) return true;
+    if (!this._throttle(this._mediaAt, key, gap)) return true;
     try {
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
+      src.playbackRate.value = rate;
       const g = this.ctx.createGain();
       g.gain.value = this._mediaGain[name] ?? 0.2;
       src.connect(g).connect(this.sfxGain);
       src.start();
       return true;
     } catch { return false; }
+  }
+
+  setBgm(name, intensity = 0) {
+    if (!this.enabled) return;
+    if (this._bgmName === name && this._bgmEl) return;
+    if (this._bgmEl) { try { this._bgmEl.pause(); } catch {} }
+    this._bgmName = name;
+    let el = this._bgmTracks[name];
+    if (!el) {
+      try {
+        el = document.createElement('audio');
+        el.src = 'assets/bgm/' + name + '.wav';
+        el.loop = true;
+        this._bgmTracks[name] = el;
+      } catch { this._bgmEl = null; return; }
+    }
+    this._bgmEl = el;
+    try { el.currentTime = 0; } catch {}
+    const p = el.play();
+    if (p && p.catch) p.catch(() => {});
+    el.volume = Math.max(0.08, Math.min(0.34, 0.12 + intensity * 0.22));
   }
 
   // ── ゲーム用の効果音 ─────────────────────────────────────────────────────
@@ -232,7 +259,8 @@ export class Audio {
    */
   cast(el = 'none', kind = 'shot') {
     if (!this.on) return;
-    if (this.playMedia('cast')) return;
+    const cm = this._castMedia[el] || this._castMedia.none;
+    if (this.playMedia(cm, this._castRate[el] || 1)) return;
     if (!this._throttle(this._castAt, `${el}|${kind}`, 0.05)) return;
     const slash = kind === 'slash' || kind === 'whip';
     const heavy = kind === 'bomb' || kind === 'beam';
@@ -297,7 +325,8 @@ export class Audio {
    */
   elemHit(el = 'none') {
     if (!this.on) return;
-    if (this.playMedia('elem_hit')) return;
+    const hm = this._hitMedia[el] || this._hitMedia.none;
+    if (this.playMedia(hm, this._hitRate[el] || 1)) return;
     if (!this._throttle(this._hitAt, el, 0.055)) return;
     switch (el) {
       case 'fire':
@@ -492,8 +521,9 @@ export class Audio {
    * BGM。簡単な和音を繰り返し、強度で戦況に追従させる。
    * @param {number} intensity 0..1
    */
-  musicTick(dt, intensity = 0) {
+  musicTick(dt, intensity = 0, track = 'stage1') {
     if (!this.on || !this.enabled) return;
+    this.setBgm(track, intensity);
     if (this._bgmEl) {
       if (this._bgmEl.paused) this._bgmEl.play().catch(()=>{});
       this._bgmEl.volume = Math.max(0.08, Math.min(0.34, 0.12 + intensity * 0.22));

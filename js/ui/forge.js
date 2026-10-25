@@ -519,7 +519,7 @@ export class Forge {
     } else {
       this.msg = text ? `接続詞「${text}」を付けた。` : '接続詞を外した。';
       this.focusPlace = { ...place };
-      this.opt.audio?.phrase?.(); window.playMotion?.('sentence');
+      this.opt.audio?.phrase?.();
     }
     this.opt.onChange?.();
     this.render();
@@ -621,7 +621,7 @@ export class Forge {
       row.append(this.renderStats(res));
       list.append(row);
     }
-    if (anyBorn) { this.opt.audio?.phrase?.(); window.playMotion?.('sentence'); }
+    if (anyBorn) { this.opt.audio?.phrase?.(); }
     this._idiomPrimed = true;
   }
 
@@ -1002,7 +1002,7 @@ export class Forge {
     const r = this.run.cycleConnector(place);
     if (!r.ok) this.popEdit();
     this.focusPlace = { ...place };
-    if (r.text) { this.opt.audio?.phrase?.(); window.playMotion?.('sentence'); }
+    if (r.text) { this.opt.audio?.phrase?.(); }
     else if (r.reason === 'none') this.opt.audio?.broken?.();
     else this.opt.audio?.tap?.();
     this.armed = null;

@@ -144,8 +144,16 @@ export class Run {
     this.beams = [];
     this.dmgTexts = [];
     this.corpses = [];
+    /** 地面に残る墨の染み。敵の死骸より長く残り、戦場の履歴を見せる。 */
+    this.decals = [];
     this.particles = [];
     this.bossBursts = [];
+    /** 低体力の鼓動と残り時間の刻み。 */
+    this._heartT = 0;
+    this._tickAt = -1;
+    /** 連続で拾った経験値の数 (音程を上げる)。 */
+    this._xpStreak = 0;
+    this._xpStreakT = 0;
     this.bossVictoryPending = false;
 
     this.kills = 0;
@@ -938,6 +946,17 @@ export class Run {
     e.dead = true;
     this.kills++;
     this.corpses.push({ x: e.x, y: e.y, r: e.r, color: e.def.color, life: 0.4, maxLife: 0.4 });
+    // 地面に残る墨の染み。倒した跡がしばらく戦場に残る。
+    this.decals.push({
+      x: e.x + (this.rand ? (this.rand() - 0.5) * e.r : 0),
+      y: e.y + (this.rand ? (this.rand() - 0.5) * e.r : 0),
+      r: e.r * (e.boss ? 1.6 : 0.85),
+      color: e.def.color,
+      life: e.boss ? 7 : 4.2,
+      maxLife: e.boss ? 7 : 4.2,
+      seed: (e.x * 0.021 + e.y * 0.013) % 1,
+    });
+    if (this.decals.length > 48) this.decals.shift();
     this.burst(e.x, e.y, e.boss ? 42 : Math.min(20, 8 + Math.round(e.r)), e.def.color, {
       spd: e.boss ? 340 : 210,
       life: e.boss ? 0.9 : 0.55,
@@ -1077,6 +1096,28 @@ export class Run {
     if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - dt * 34);
     if (this.magnetPulse > 0) this.magnetPulse = Math.max(0, this.magnetPulse - dt * 3);
     if (this.boss && this.boss.dead) this.boss = null;
+
+    // 低体力の鼓動。体力が減るほど間隔が詰まる。
+    const p = this.player;
+    const low = p.maxHp > 0 ? 1 - p.hp / p.maxHp : 0;
+    if (p.alive && low > 0.55) {
+      this._heartT -= dt;
+      if (this._heartT <= 0) {
+        this._heartT = 0.95 - (low - 0.55) * 1.1;
+        this.audio.heartbeat?.(low);
+      }
+    } else {
+      this._heartT = 0;
+    }
+
+    // 残り 10 秒は 1 秒ごとに刻む。
+    if (!this.stage.boss) {
+      const left = this.stage.time - this.time;
+      if (left > 0 && left <= 10) {
+        const sec = Math.ceil(left);
+        if (sec !== this._tickAt) { this._tickAt = sec; this.audio.tickUrgent?.(); }
+      }
+    }
 
     this.playerTick(d, input);
     this.waveTick();
@@ -1445,7 +1486,9 @@ export class Run {
     const p = this.player;
     if (q.type === 'xp') {
       p.xp += q.value * (p.stats.xpMul || 1);
-      this.audio.xp();
+      this._xpStreak = Math.min(8, this._xpStreak + 1);
+      this._xpStreakT = 0.55;
+      this.audio.xp?.(this._xpStreak);
       while (p.xp >= p.xpNext) {
         p.xp -= p.xpNext;
         p.level++;
@@ -1496,6 +1539,10 @@ export class Run {
     dec(this.lightnings);
     dec(this.beams);
     dec(this.corpses);
+    dec(this.decals);
+    // 拾うのが途切れたら音程を戻す。
+    this._xpStreakT = Math.max(0, this._xpStreakT - this._lastDt);
+    if (this._xpStreakT <= 0) this._xpStreak = 0;
     // 粒子 (burst) の移動と寿命。
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const q = this.particles[i];

@@ -2681,6 +2681,7 @@ html, body {
   --cat: var(--accent);
   position: absolute;
   inset: 2px 14px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2739,7 +2740,7 @@ html, body {
 .gacha-ribbon {
   position: absolute;
   top: 12px;
-  right: -6px;
+  right: 2px;
   padding: 3px 10px;
   background: linear-gradient(115deg, #e8b23c, #c08a10);
   color: #fffdf5;
@@ -2836,3 +2837,73 @@ html, body {
   .gacha-actions .btn { flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px; }
 }
 
+/* ═══ 言葉くじの開示を、もう一段だけ華やかに ═══════════════════════════════
+   カードの上を光が横切る。NEW のときは後ろに金の光が広がる。 */
+.gacha-veil.is-revealed .gacha-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, .9) 47%, transparent 62%);
+  transform: translateX(-130%);
+  animation: gachaShineSweep .85s cubic-bezier(.2, .8, .3, 1) .3s both;
+  pointer-events: none;
+}
+@keyframes gachaShineSweep {
+  to { transform: translateX(130%); }
+}
+.gacha-veil.is-revealed .gacha-stage::after {
+  content: '';
+  position: absolute;
+  inset: 8% 16%;
+  z-index: -1;
+  background: radial-gradient(circle, rgba(240, 194, 90, .42), transparent 68%);
+  animation: gachaGoldFlash .75s ease-out .12s both;
+  pointer-events: none;
+}
+@keyframes gachaGoldFlash {
+  0% { opacity: 0; transform: scale(.6); }
+  45% { opacity: 1; transform: scale(1.04); }
+  100% { opacity: 0; transform: scale(1.18); }
+}
+
+/* 3 択のカードは、左から順に少し遅れて立ち上がる。 */
+.choice-card {
+  animation: choiceRise .3s cubic-bezier(.16, 1, .3, 1) both;
+}
+@keyframes choiceRise {
+  from { opacity: 0; transform: translateY(10px) scale(.94); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 押した瞬間だけ、少し沈む。反応していることが指に伝わる。 */
+.btn:active:not(:disabled),
+.choice-card:active {
+  transform: translateY(1px) scale(.975);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gacha-veil.is-revealed .gacha-card::after,
+  .gacha-veil.is-revealed .gacha-stage::after,
+  .choice-card { animation: none !important; }
+  .btn:active:not(:disabled),
+  .choice-card:active { transform: none; }
+}
+
+/* リールの上下を紙に溶かす。目が硬い箱に見えない。 */
+.gacha-reel {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+}
+
+/* 回っている間、ステージの奥がほんのり温かくなる。 */
+.gacha-veil.is-spinning .gacha-stage {
+  background: radial-gradient(circle at 50% 50%, rgba(240, 194, 90, .16), transparent 62%);
+  animation: gachaStageBreathe 1.1s ease-in-out infinite alternate;
+}
+@keyframes gachaStageBreathe {
+  from { filter: brightness(1); }
+  to   { filter: brightness(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gacha-veil.is-spinning .gacha-stage { animation: none; }
+}

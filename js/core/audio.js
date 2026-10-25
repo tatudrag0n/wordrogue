@@ -115,11 +115,13 @@ export class Audio {
    * 経験値を拾ったとき。同時に何十個も届くので、
    * 小音量にして、短い間隔では 1 回にまとめる。
    */
-  xp() {
+  xp(step = 0) {
     const now = this.ctx ? this.ctx.currentTime : 0;
     if (now - this._xpAt < 0.055) return;
     this._xpAt = now;
-    this.tone({ freq: 1560, type: 'sine', dur: 0.05, vol: 0.035 });
+    // 続けて拾うほど半音ずつ上がる。拾い続けたくなる手応えにする。
+    const n = Math.min(8, Math.max(0, step | 0));
+    this.tone({ freq: 1560 * 2 ** (n / 12), type: 'sine', dur: 0.05, vol: 0.035 });
   }
   levelup() { [0, 4, 7, 12].forEach((n, i) => this.tone({ freq: hz(69 + n), type: 'triangle', dur: 0.18, vol: 0.12, delay: i * 0.07 })); }
 
@@ -146,6 +148,25 @@ export class Audio {
   conn() {
     this.tone({ freq: 720, type: 'triangle', dur: 0.08, vol: 0.05 });
     this.tone({ freq: 1080, type: 'sine', dur: 0.1, vol: 0.04, delay: 0.05 });
+  }
+
+  /** 低体力の鼓動。level は 0..1 で、減るほど強く速くなる。 */
+  heartbeat(level = 0.5) {
+    const v = 0.045 + Math.min(1, Math.max(0, level)) * 0.05;
+    this.tone({ freq: 64, type: 'sine', dur: 0.12, vol: v });
+    this.tone({ freq: 52, type: 'sine', dur: 0.15, vol: v * 0.8, delay: 0.13 });
+  }
+
+  /** 残り時間の刻み。最後の数秒を急かす短い音。 */
+  tickUrgent() {
+    this.tone({ freq: 1240, type: 'square', dur: 0.035, vol: 0.028 });
+  }
+
+  /** くじで新しい語を引いたときの、きらめき。 */
+  gachaShine() {
+    [96, 100, 103, 108, 112].forEach((n, i) => this.tone({
+      freq: hz(n), type: 'sine', dur: 0.16, vol: 0.03, delay: 0.16 + i * 0.055,
+    }));
   }
 
   // ── 言葉くじ ─────────────────────────────────────────────────────────────

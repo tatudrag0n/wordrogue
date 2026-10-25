@@ -803,6 +803,8 @@ export class Menus {
         : `新しい語を引いた。部位に入れるか、デッキに加えよう。言玉は残り ${r.ink}。`;
     }
     this.audio?.gachaReveal?.(!!r.dup);
+    // 新しい語のときだけ、開いたあとにきらめきを重ねる。
+    if (!r.dup) this.audio?.gachaShine?.();
     this.gachaAgain?.focus?.({ preventScroll: true });
   }
 

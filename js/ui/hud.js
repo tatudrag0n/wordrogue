@@ -324,7 +324,7 @@ export class Hud {
       const node = el('button', {
         class: 'choice-card',
         type: 'button',
-        style: { borderColor: cat.color },
+        style: { borderColor: cat.color, animationDelay: `${i * 55}ms` },
         title: this.fxLine(w),
       },
         el('span', {}, w.text),

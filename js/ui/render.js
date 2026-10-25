@@ -67,6 +67,7 @@ export class Renderer {
     g.translate(-this.camX, -this.camY);
 
     this.step('ground', () => this.drawGround(run));
+    this.step('decals', () => this.drawDecals(run));
     this.step('corpses', () => this.drawCorpses(run));
     this.step('fields', () => this.drawFields(run));
     this.step('pickups', () => this.drawPickups(run));
@@ -292,6 +293,56 @@ export class Renderer {
   // ───────────────────────────────────────────────────────────────────────────
   // 個体
   // ───────────────────────────────────────────────────────────────────────────
+  /**
+   * 地面に残る墨の染み。倒した敵の数だけ戦場に履歴が残る。
+   * 紙の上に吸い込まれるように薄く広がり、時間で消える。
+   */
+  drawDecals(run) {
+    const g = this.ctx;
+    for (const d of run.decals || []) {
+      const k = Math.max(0, d.life / d.maxLife);
+      const born = 1 - k;                        // 0 = 出た瞬間, 1 = 消える
+      const spread = 1 + born * 0.3;
+      const a = Math.min(0.20, k * 0.22) * (d.boss ? 1.2 : 1);
+      if (a <= 0.004) continue;
+      const seed = (d.seed || 0) * 37 + d.x * 0.011 + d.y * 0.007;
+      g.save();
+      g.globalAlpha = a;
+      g.fillStyle = d.color;
+      g.beginPath();
+      const lumps = 10;
+      for (let i = 0; i <= lumps; i++) {
+        const ang = (i / lumps) * TAU;
+        const rr = d.r * spread * (0.72 + hash01(seed + i * 1.71) * 0.5);
+        const x = d.x + Math.cos(ang) * rr;
+        const y = d.y + Math.sin(ang) * rr * 0.82;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.closePath();
+      g.fill();
+      // 縁から飛んだ粒。
+      g.globalAlpha = a * 0.75;
+      for (let i = 0; i < 4; i++) {
+        const ang = hash01(seed + i * 5.3) * TAU;
+        const dist = d.r * (1.05 + hash01(seed + i * 9.7) * 0.8) * spread;
+        g.beginPath();
+        g.arc(d.x + Math.cos(ang) * dist, d.y + Math.sin(ang) * dist * 0.8,
+          Math.max(0.8, d.r * (0.06 + hash01(seed + i * 3.1) * 0.08)), 0, TAU);
+        g.fill();
+      }
+      // 出た直後だけ、縁が少し明るい。
+      if (born < 0.18) {
+        g.globalAlpha = (0.18 - born) * 0.5;
+        g.strokeStyle = '#fffdf7';
+        g.lineWidth = 1.2;
+        g.beginPath();
+        g.arc(d.x, d.y, d.r * spread * 0.82, 0, TAU);
+        g.stroke();
+      }
+      g.restore();
+    }
+  }
+
   drawCorpses(run) {
     const g = this.ctx;
     for (const c of run.corpses) {

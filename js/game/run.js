@@ -18,7 +18,7 @@ import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } fro
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
 import { WeaponInst } from './weapon.js';
-import { fireWeapon, damage as damageEnemy } from './combat.js';
+import { fireWeapon, damage as damageEnemy } from './combat.js?v=2';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,

@@ -23,7 +23,7 @@ export class Audio {
     this._castAt = new Map();
     this._hitAt = new Map();
     this._mediaBuffers = {};
-    this._mediaNames = ['slot','phrase','broken','levelup','gacha_spin','gacha_reveal','boss_warn','win','lose','explode','hurt','pickup','hit','slash','shoot','kill','xp','conn','combo','dash','heal','ui_open','ui_close','ui_select','ui_deny','heartbeat','tick_urgent','boss','gacha_shine','gacha_tick','gacha_lock','cast','elem_hit','cast_fire','cast_ice','cast_thunder','cast_wind','cast_earth','cast_dark','cast_water','cast_gold','hit_soft','hit_sharp','hit_heavy','hit_ring','hit_wind','hit_coin','hit_dark'];
+    this._mediaNames = ['slot','phrase','broken','levelup','gacha_spin','gacha_reveal','boss_warn','win','lose','explode','hurt','pickup','hit','slash','shoot','kill','xp','conn','combo','dash','heal','ui_open','ui_close','ui_select','ui_deny','heartbeat','tick_urgent','boss','gacha_shine','gacha_tick','gacha_lock','cast','elem_hit','cast_fire','cast_ice','cast_thunder','cast_wind','cast_earth','cast_dark','cast_water','cast_gold','cast_shot','cast_gun','cast_arrow','cast_thrust','hit_soft','hit_sharp','hit_heavy','hit_ring','hit_wind','hit_coin','hit_dark'];
     this._mediaFetches = {};
     this._mediaAt = new Map();
     this._mediaGain = {
@@ -36,10 +36,12 @@ export class Audio {
       heartbeat: 0.16, tick_urgent: 0.16, cast: 0.16, elem_hit: 0.14,
       cast_fire: 0.18, cast_ice: 0.14, cast_thunder: 0.16, cast_wind: 0.16, cast_earth: 0.18,
       cast_dark: 0.16, cast_water: 0.14, cast_gold: 0.14,
+      cast_shot: 0.14, cast_gun: 0.16, cast_arrow: 0.14, cast_thrust: 0.14,
       hit_soft: 0.14, hit_sharp: 0.12, hit_heavy: 0.16, hit_ring: 0.14, hit_wind: 0.12, hit_coin: 0.12, hit_dark: 0.14,
     };
-    this._castMedia = { fire:'cast_fire', ice:'cast_ice', thunder:'cast_thunder', poison:'cast_dark', light:'cast_ice', dark:'cast_dark', wind:'cast_wind', water:'cast_water', nature:'cast_water', earth:'cast_earth', steel:'cast_gold', gold:'cast_gold', blood:'cast_dark', none:'cast_thunder' };
-    this._castRate = { fire:1, ice:1.35, thunder:1.55, poison:0.8, light:1.7, dark:0.65, wind:1.15, water:1, nature:1.25, earth:0.8, steel:1.2, gold:1.5, blood:0.7, none:1 };
+    this._castKind = { slash:'slash', shot:'cast_shot', bomb:'cast_fire', beam:'cast_thunder', chain:'cast_thunder', whip:'cast_wind', orbit:'cast_gold', aura:'cast_water', boomerang:'cast_wind' };
+    this._castWeapon = { gun:'cast_gun', arrow:'cast_arrow', needle:'cast_shot', dragon:'cast_thrust', flank:'cast_thrust', boulder:'cast_fire', bomb:'cast_fire' };
+    this._castElemRate = { fire:0.85, ice:1.3, thunder:1.2, poison:0.9, light:1.4, dark:0.75, wind:1.1, water:1, nature:1.05, earth:0.8, steel:1.15, gold:1.3, blood:0.8, none:1 };
     this._hitMedia = { fire:'hit_heavy', ice:'hit_sharp', thunder:'hit_sharp', poison:'hit_soft', light:'hit_ring', dark:'hit_dark', wind:'hit_wind', water:'hit_soft', nature:'hit_soft', earth:'hit_heavy', steel:'hit_sharp', gold:'hit_coin', blood:'hit_dark', none:'hit_soft' };
     this._hitRate = { fire:0.9, ice:1.3, thunder:1.6, poison:0.75, light:1, dark:0.7, wind:1.1, water:1, nature:1.2, earth:0.7, steel:1.2, gold:1, blood:0.8, none:1 };
     this._mediaGap = {
@@ -257,10 +259,11 @@ export class Audio {
    * @param {string} el 属性
    * @param {string} kind 攻撃の型 (slash / shot / bomb / beam …)
    */
-  cast(el = 'none', kind = 'shot') {
+  cast(el = 'none', kind = 'shot', weaponId = '') {
     if (!this.on) return;
-    const cm = this._castMedia[el] || this._castMedia.none;
-    if (this.playMedia(cm, this._castRate[el] || 1)) return;
+    const base = this._castWeapon[weaponId] || this._castKind[kind] || 'cast_shot';
+    if (this.playMedia(base, this._castElemRate[el] || 1)) return;
+    if (this.playMedia('cast_shot')) return;
     if (!this._throttle(this._castAt, `${el}|${kind}`, 0.05)) return;
     const slash = kind === 'slash' || kind === 'whip';
     const heavy = kind === 'bomb' || kind === 'beam';

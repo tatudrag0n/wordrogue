@@ -4,9 +4,9 @@
 
 import { $, clamp } from './core/util.js?v=1.5';
 import { Input } from './core/input.js?v=1.5';
-import { Audio } from './core/audio.js?v=1.9';
+import { Audio } from './core/audio.js?v=2';
 import { Save } from './core/save.js?v=1.5';
-import { Run } from './game/run.js?v=1.5';
+import { Run } from './game/run.js?v=2';
 import { Renderer } from './ui/render.js?v=1.5';
 import { Hud } from './ui/hud.js?v=1.5';
 import { Forge } from './ui/forge.js?v=1.7';

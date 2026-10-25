@@ -88,7 +88,7 @@ export function fireWeapon(run, wi, res) {
   p.castDir = aim;
   p.castColor = elInfo.color;
   p.castKind = kind;
-  run.audio.cast?.(el, kind);
+  run.audio.cast?.(el, kind, wi.def.id);
 
   switch (kind) {
     case 'slash': doSlash(run, wi, st, aim, el, elInfo); break;

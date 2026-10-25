@@ -4,7 +4,7 @@
 
 import { $, clamp } from './core/util.js?v=1.5';
 import { Input } from './core/input.js?v=1.5';
-import { Audio } from './core/audio.js?v=1.6';
+import { Audio } from './core/audio.js?v=1.7';
 import { Save } from './core/save.js?v=1.5';
 import { Run } from './game/run.js?v=1.5';
 import { Renderer } from './ui/render.js?v=1.5';

@@ -24,7 +24,16 @@ export class Audio {
     this._hitAt = new Map();
     this._mediaBuffers = {};
     this._mediaNames = ['slot','phrase','broken','levelup','gacha_spin','gacha_reveal','boss_warn','win','lose','explode','hurt','pickup','hit','slash','shoot','kill','xp','conn','combo','dash','heal','ui_open','ui_close','ui_select','ui_deny','heartbeat','tick_urgent','boss','gacha_shine','gacha_tick','gacha_lock','cast','elem_hit'];
-    this._bgmEl = null;
+    this._mediaFetches = {};
+    for (const name of this._mediaNames) {
+      this._mediaFetches[name] = fetch('assets/sfx/' + name + '.wav').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).catch(() => null);
+    }
+    this._bgmEl = document.createElement('audio');
+    try {
+      this._bgmEl.src = 'assets/bgm/main.wav';
+      this._bgmEl.loop = true;
+      this._bgmEl.volume = 0.3;
+    } catch {}
   }
 
   /** 最初のユーザ操作で呼ぶ。ブラウザの自動再生規約のため。 */
@@ -155,17 +164,10 @@ export class Audio {
 
   _loadMedia() {
     if (!this.ctx) return;
-    const base = 'assets/sfx/';
     for (const name of this._mediaNames) {
-      fetch(base + name + '.wav').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(ab => this.ctx.decodeAudioData(ab)).then(buf => { this._mediaBuffers[name] = buf; }).catch(() => {});
+      const p = this._mediaFetches[name] || fetch('assets/sfx/' + name + '.wav').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).catch(() => null);
+      p.then(ab => { if (!ab) return null; return this.ctx.decodeAudioData(ab); }).then(buf => { if (buf) this._mediaBuffers[name] = buf; }).catch(() => {});
     }
-    try {
-      const el = document.createElement('audio');
-      el.src = 'assets/bgm/main.wav';
-      el.loop = true;
-      el.volume = 0.3;
-      this._bgmEl = el;
-    } catch {}
   }
 
   playMedia(name) {

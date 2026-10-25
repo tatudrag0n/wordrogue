@@ -9,10 +9,14 @@
 /**
  * waves は 10 秒刻み。各要素は { at: 開始秒, list: [[敵ID, 個体数], ...] }
  * 一度に出すと出切ったぶんは次のウェーブに回す。
+ *
+ * midBoss / midBossAt … 各章の中ボスと出現時刻 (秒)。
+ *   中ボスはボスとは別枠。倒すと宝箱 (ランダムな言葉 2 個) を落とす。
  */
 export const STAGES = [
   {
     id: 1, name: '村の外れ', time: 60, boss: null,
+    midBoss: 'mid_boar', midBossAt: 30,
     color: '#6f8a52', ground: '#dfe7cb', accent: '#3f6b3a',
     intro: '夜が明ける前に村を出る。',
     waves: [
@@ -25,6 +29,7 @@ export const STAGES = [
   },
   {
     id: 2, name: '森の奥', time: 70, boss: 'boss_slime',
+    midBoss: 'mid_treant', midBossAt: 35,
     color: '#4e7a46', ground: '#d8e3c6', accent: '#2f5c34',
     intro: '樹が蠢える。何かが居る。',
     waves: [
@@ -38,6 +43,7 @@ export const STAGES = [
   },
   {
     id: 3, name: '廃村', time: 80, boss: 'boss_dragon',
+    midBoss: 'mid_grave', midBossAt: 40,
     color: '#a3814f', ground: '#e9dcc0', accent: '#7d5a2a',
     intro: '民が去った村。灯りがまだ点いている。',
     waves: [
@@ -51,6 +57,7 @@ export const STAGES = [
   },
   {
     id: 4, name: '地下墓場', time: 85, boss: 'boss_lich',
+    midBoss: 'mid_knight', midBossAt: 42,
     color: '#767c95', ground: '#dfe0e6', accent: '#4c5169',
     intro: '石棺の隙間から冷気。',
     waves: [
@@ -64,6 +71,7 @@ export const STAGES = [
   },
   {
     id: 5, name: '城塞外壁', time: 90, boss: 'boss_demon',
+    midBoss: 'mid_wraith', midBossAt: 45,
     color: '#a97a4e', ground: '#e9dccb', accent: '#8a4f28',
     intro: '城壁の向こうで、魔王が待っている。',
     waves: [
@@ -77,6 +85,7 @@ export const STAGES = [
   },
   {
     id: 6, name: '深淵の魔王城', time: 100, boss: 'boss_demon',
+    midBoss: 'mid_demon', midBossAt: 50,
     color: '#6c5cae', ground: '#dddff0', accent: '#4b3d86',
     intro: 'すべてが終わる場所。',
     waves: [
@@ -90,6 +99,7 @@ export const STAGES = [
   },
   {
     id: 7, name: '語書庫', time: 105, boss: 'boss_scribe',
+    midBoss: 'mid_scribe', midBossAt: 52,
     color: '#a5813f', ground: '#eee6cf', accent: '#7a5a1e',
     intro: '使われなかったことばが積まれている。',
     waves: [
@@ -103,6 +113,7 @@ export const STAGES = [
   },
   {
     id: 8, name: '韻律の塔', time: 110, boss: 'boss_scribe',
+    midBoss: 'mid_rhyme', midBossAt: 55,
     color: '#4f86a8', ground: '#dce8ef', accent: '#2c6280',
     intro: '上へ上へ。同じ音が何千も重なっている。',
     waves: [
@@ -116,6 +127,7 @@ export const STAGES = [
   },
   {
     id: 9, name: '言葉の根源', time: 120, boss: 'boss_word',
+    midBoss: 'mid_origin', midBossAt: 60,
     color: '#c9971f', ground: '#f2ead2', accent: '#9a6f0c',
     intro: '最初の語が、そこから生まれている。',
     waves: [

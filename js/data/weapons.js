@@ -115,13 +115,6 @@ export const WEAPONS = {
     grow: { dmg: 1.0, rate: 0.2, count: 0.15, pierce: 0.15 },
     startWord: '毒', startWord2: '蝕', maxLevel: 8, unlock: { stage: 3 },
   },
-  boulder: {
-    id: 'boulder', name: '塊', kind: 'bomb', glyph: '塊', tail: '塊',
-    desc: '重い。ゆっくり飛んで、敵を吹き飛ばす。',
-    base: { dmg: 20, rate: 0.42, speed: 150, explode: 34, area: 34, size: 1.4, count: 1, knock: 80 },
-    grow: { dmg: 6.2, rate: 0.04, explode: 9, area: 6 },
-    startWord: '土', startWord2: '崖', maxLevel: 8, unlock: { stage: 4 },
-  },
   claw: {
     id: 'claw', name: '爪', kind: 'slash', glyph: '爪', tail: '爪',
     desc: '短く速い。近くを連続で薙ぐ。',

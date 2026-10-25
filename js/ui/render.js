@@ -467,8 +467,24 @@ export class Renderer {
 
       g.globalAlpha = fade;
       const isHeal = q.type === 'heal';
+      const isChest = q.type === 'chest';
       g.fillStyle = isHeal ? '#2f9e44' : '#d9a406';
-      if (isHeal) {
+      if (isChest) {
+        // 中ボスの宝箱。蓋と留め具がある箱にして、経験値の星と区別する。
+        const s = q.r;
+        g.save();
+        g.translate(q.x, y);
+        g.rotate(-0.05 + Math.sin(q.t * 2.2) * 0.05);
+        g.fillStyle = '#b8730a';
+        g.fillRect(-s * 1.15, -s * 0.55, s * 2.3, s * 1.45);
+        g.fillStyle = '#e8b425';
+        g.fillRect(-s * 1.15, -s * 1.05, s * 2.3, s * 0.62);
+        g.fillStyle = '#6b4a17';
+        g.fillRect(-s * 0.16, -s * 0.22, s * 0.32, s * 0.52);
+        g.fillStyle = '#fff3c4';
+        g.fillRect(-s * 0.06, -s * 0.05, s * 0.12, s * 0.16);
+        g.restore();
+      } else if (isHeal) {
         // 回復は十字。ひと目で「拾うと治る」と分かる形にする。
         const s = q.r;
         g.save();
@@ -499,11 +515,11 @@ export class Renderer {
       g.lineWidth = 1.3;
       g.strokeStyle = 'rgba(28, 35, 49, .5)';
       g.beginPath();
-      g.arc(q.x, y, q.r, 0, TAU);
+      g.arc(q.x, y, isChest ? q.r * 1.55 : q.r, 0, TAU);
       g.stroke();
       g.globalAlpha = fade * 0.3;
       g.beginPath();
-      g.arc(q.x, y, q.r * (1.8 + Math.sin(q.t * 4) * 0.2), 0, TAU);
+      g.arc(q.x, y, isChest ? q.r * 2.1 : q.r * (1.8 + Math.sin(q.t * 4) * 0.2), 0, TAU);
       g.fill();
     }
     g.globalAlpha = 1;
@@ -1252,21 +1268,33 @@ export class Renderer {
    */
   drawEnemySentence(e, run) {
     if (!e.words || !e.words.length) return;
-    // 近い敵とボスだけ描く。全部描くと画面が読めなくなる。
+    // 近い敵・中ボス・ボスだけ描く。全部描くと画面が読めなくなる。
     // dist2 は二乗距離なので、しきい値も二乗で比べる。
     const near = dist2(e.x, e.y, run.player.x, run.player.y) <= 280 * 280;
-    if (!near && !e.boss) return;
+    if (!near && !e.boss && !e.midBoss) return;
 
     const g = this.ctx;
     const text = e.words.join('');
-    const size = e.boss ? 16 : 13;
+    const size = e.boss ? 16 : e.midBoss ? 15 : 13;
     const font = (px) => `700 ${px}px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif`;
     g.save();
+
+    // 突進の予備動作。赤い輪で「来る」ことを先に伝える。
+    if (e.windup > 0 || e.charging > 0) {
+      g.globalAlpha = e.windup > 0 ? 0.85 : 0.5;
+      g.strokeStyle = '#c1432b';
+      g.lineWidth = 2.2;
+      g.beginPath();
+      g.arc(e.x, e.y, e.r + 7 + Math.sin(e.t * 18) * 1.5, 0, TAU);
+      g.stroke();
+      g.globalAlpha = 1;
+    }
+
     // canvas の font に var() は書けない。実体名を直接入れる。
     g.font = font(size);
     g.textAlign = 'center';
     g.textBaseline = 'bottom';
-    const y = e.y - e.r - (e.boss ? 22 : 16);
+    const y = e.y - e.r - (e.boss ? 22 : e.midBoss ? 20 : 16);
 
     // 滲み。紙なので、文字のまわりを白く抜いてから墨で書く。
     g.lineWidth = 4.5;

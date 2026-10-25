@@ -24,6 +24,7 @@ export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1, rnd = Math.random
     speed: d.speed,
     xp: d.xp,
     boss: !!d.boss,
+    midBoss: !!d.midBoss,
     alpha: d.alpha ?? 1,
     // 状態異常
     burn: 0, burnT: 0,
@@ -39,7 +40,8 @@ export function makeEnemy(id, x, y, hpScale = 1, dmgScale = 1, rnd = Math.random
     cutFlash: 0,
     // AI
     t: rnd() * 2,
-    atkCd: 0, charging: 0, cdLeft: (d.charge?.cd || 2) * rnd(),
+    atkCd: 0, charging: 0, windup: 0, patIdx: 0, ring: 0,
+    cdLeft: (d.charge?.cd || d.dash?.cd || 2) * rnd(),
     burrowed: false, burrowT: 1.2,
     phase: rnd() * TAU,
     dead: false,
@@ -125,12 +127,12 @@ export function makePickup(x, y, kind, value) {
   return {
     kind: 'pickup',
     uid: ++eUid,
-    x, y, r: 7,
-    type: kind,      // 'xp' | 'heal' | 'magnet' | 'shield' | 'coin'
+    x, y, r: kind === 'chest' ? 11 : 7,
+    type: kind,      // 'xp' | 'heal' | 'chest'
     value: value || 1,
     t: 0,
-    // 経験値は life を 0 にして切らない。拾えなかった分が消えるのはきつい。
-    life: kind === 'xp' ? 0 : 30,
+    // 経験値と宝箱は life を 0 にして切らない。拾えなかった分が消えるのはきつい。
+    life: (kind === 'xp' || kind === 'chest') ? 0 : 30,
     vx: (Math.random() - 0.5) * 90,
     vy: (Math.random() - 0.5) * 90,
     pulling: 0,      // 1 なら吸引中 (描画で光らせる)
@@ -196,6 +198,7 @@ export function updateEnemy(en, w, dt) {
   dx /= d; dy /= d;
 
   let mvx = 0, mvy = 0;
+  let speedMul = 1;
   const slow = en.chill > 0 ? (1 - clamp(en.chill, 0, 0.85)) : 1;
   const frozen = en.freeze > 0 || en.stun > 0;
   if (en.freeze > 0) en.freeze = Math.max(0, en.freeze - dt);
@@ -222,14 +225,37 @@ export function updateEnemy(en, w, dt) {
         break;
       }
       case 'charger': {
+        const cfg = en.def.charge || { range: 220, speed: en.speed * 3, time: 0.5, cd: 2 };
         if (en.charging > 0) {
           en.charging -= dt;
           mvx = Math.cos(en.face); mvy = Math.sin(en.face);
+          speedMul = (cfg.speed || en.speed * 3) / en.speed;
         } else {
           en.cdLeft -= dt;
-          const cfg = en.def.charge;
           if (d < cfg.range && d > 40 && en.cdLeft <= 0) {
             en.charging = cfg.time;
+            en.cdLeft = cfg.cd;
+            en.face = Math.atan2(dy, dx);
+          } else {
+            mvx = dx; mvy = dy;
+          }
+        }
+        break;
+      }
+      case 'dasher': {
+        const cfg = en.def.dash || { range: 240, speed: en.speed * 4, windup: 0.35, time: 0.5, cd: 2.2 };
+        if (en.charging > 0) {
+          en.charging -= dt;
+          mvx = Math.cos(en.face); mvy = Math.sin(en.face);
+          speedMul = (cfg.speed || en.speed * 4) / en.speed;
+        } else if (en.windup > 0) {
+          en.windup -= dt;
+          en.face = Math.atan2(dy, dx);
+          if (en.windup <= 0) en.charging = cfg.time;
+        } else {
+          en.cdLeft -= dt;
+          if (d < cfg.range && d > 40 && en.cdLeft <= 0) {
+            en.windup = cfg.windup;
             en.cdLeft = cfg.cd;
             en.face = Math.atan2(dy, dx);
           } else {
@@ -249,7 +275,8 @@ export function updateEnemy(en, w, dt) {
         mvx /= l; mvy /= l;
         break;
       }
-      case 'shooter': {
+      case 'shooter':
+      case 'spitter': {
         const keep = en.def.keep;
         if (d > keep + 30) { mvx = dx; mvy = dy; }
         else if (d < keep - 30) { mvx = -dx; mvy = -dy; }
@@ -287,16 +314,27 @@ export function updateEnemy(en, w, dt) {
   const l = Math.hypot(mvx, mvy);
   if (l > 0.001) {
     mvx /= l; mvy /= l;
-    en.x += mvx * sp * dt;
-    en.y += mvy * sp * dt;
+    en.x += mvx * sp * speedMul * dt;
+    en.y += mvy * sp * speedMul * dt;
     en.face = Math.atan2(mvy, mvx);
   }
 
-  if (ai === 'shooter' && !frozen) {
+  if ((ai === 'shooter' || ai === 'spitter') && !frozen) {
     en.atkCd -= dt;
-    if (en.atkCd <= 0 && d < 420) {
-      en.atkCd = en.def.shot.cd;
-      w.spawnEnemyShot?.(en.x, en.y, Math.atan2(dy, dx), en.def.shot);
+    if (en.atkCd <= 0 && d < 480) {
+      const shot = en.def.shot;
+      const base = Math.atan2(dy, dx);
+      en.atkCd = shot.cd;
+      if (ai === 'spitter') {
+        const n = Math.max(2, Math.round(shot.count || 3));
+        const spread = shot.spread || 0.24;
+        for (let i = 0; i < n; i++) {
+          const a = base + (i - (n - 1) / 2) * spread;
+          w.spawnEnemyShot?.(en.x, en.y, a, shot.speed, shot.dmg, en.def.color);
+        }
+      } else {
+        w.spawnEnemyShot?.(en.x, en.y, base, shot.speed, shot.dmg, en.def.color);
+      }
     }
   }
 }

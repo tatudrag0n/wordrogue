@@ -62,12 +62,14 @@
       <b id="comboValue">0</b><span>連斬</span>
     </div>
 
-    <!-- レベルアップの 3 択。時間は止まらない。 -->
-    <div class="hud-choice" id="hudChoice" hidden>
+    <!-- レベルアップの 3 択。選択中はゲームが止まる。 -->
+    <div class="hud-choice-veil" id="hudChoiceVeil" hidden></div>
+    <div class="hud-choice" id="hudChoice" hidden role="dialog" aria-modal="true" aria-labelledby="choiceTitle">
       <div class="hud-choice-head">
         <span class="hud-choice-title" id="choiceTitle">ことばを 1 つ選べ</span>
         <span class="hud-choice-timer" id="choiceTimer">7</span>
       </div>
+      <div class="hud-choice-sub">ゲームは止まっています</div>
       <div class="hud-choice-list" id="choiceList"></div>
       <!-- 語彙が満杯のとき、何を捨てるか選ばせる。 -->
       <div class="hud-choice-forget" id="choiceForget" hidden>
@@ -371,8 +373,8 @@
       <p>
       新しいことばはステージ終わりに<strong>もらいません</strong>。
       <strong>戦闘中のレベルアップ</strong>で入ります。引き直しボタンもありません。
-      出るたびに <strong>3 個から 1 個</strong>選ぶ。7 秒以内に決めないと
-      上の候補から 1 個入る（時間は止まらない）。
+      出るたびに <strong>3 個から 1 個</strong>選ぶ。選択中は<strong>ゲームが止まり</strong>、
+      画面中央の大きな札で選べる。7 秒以内に決めないと上の候補から 1 個入る。
       <strong>接続詞は 3 択に出ない</strong>。文の中の語をタップすれば付け替えられる。
       </p>
       <ul class="howto-list">
@@ -437,7 +439,7 @@
       </p>
       <p>
       <strong>ことばはここでは出ない。</strong>
-      新しいことばは戦闘中の<strong>レベルアップ</strong>と、
+      新しいことばは戦闘中の<strong>レベルアップ</strong>、中ボスの<strong>宝箱</strong>、
       タイトルの<strong>言葉くじ</strong>で得る。
       </p>
       </section>
@@ -459,8 +461,9 @@
       <section>
 <h3>13. 敵も「文」でできている</h3>
       <p>
-      敵の頭の上には<strong>敵自身の文</strong>が出ている。通常の敵は 2 語、
-      ボスは 3 〜 5 語。自分が作った武器の文で<strong>その語を斬り落とす</strong>。
+      敵の頭の上には<strong>敵自身の文</strong>が出ている。文字数は強さの段階で増える。
+      雑魚は 1 文字、そこそこは 2 文字、強敵は 3 文字、精鋭と中ボスは 4 文字、ボスは 5 文字。
+      自分が作った武器の文で<strong>その語を斬り落とす</strong>。
       </p>
       <ul class="howto-list">
       <li>武器の文が<strong>成立</strong> … 1 語斬る（確率 15%）</li>
@@ -469,6 +472,12 @@
       <li>敵の文が<strong>不成文</strong>になると <strong>「不成文」</strong> と出て、
       その敵は<strong>動かなくなり、ダメージの受けが 2.5 倍</strong>になる</li>
       </ul>
+      <p>
+      各章には<strong>中ボス</strong>がいる。章ボスとは別に、倒すと<strong>宝箱</strong>を落とし、
+      拾うと<strong>ランダムなことばを 2 個</strong>もらえる。
+      敵の行動は、追跡・不規則・突進・射撃・三方向の弾・周回・潜行など。
+      中ボスは章ボスと同じ行動パターン（突進・弾幕・召喚・叩きつけなど）を使う。
+      </p>
       <p>
       つまり<strong>よく組んだ文ほど、敵の文を早く崩せる</strong>。
       威力で押し切るのとは別の、ことばの作り方で勝つ道がある。

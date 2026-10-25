@@ -137,6 +137,9 @@ export class Run {
     this.pending = [];
     this.boss = null;
     this.bossSpawned = false;
+    /** 中ボス。章ボスとは別枠で、倒すと宝箱を落とす。 */
+    this.midBoss = null;
+    this.midBossSpawned = false;
     this.enemies = [];
     this.bullets = [];
     this.fields = [];
@@ -290,7 +293,8 @@ export class Run {
    * 接続詞は出ない (語の横にあるので、文を作るとき、切り替えるだけ)。
    * 武器語 (基本武器 14 語) は他の語より低い確率で入る。
    *   環・弾・玉 のような形態語は武器語ではないので、ここでは出ない (語側で引ける)。
-   * 選んでいる間も時間は止まらない。時間切れなら 1 番目を自動で取る。
+   * 選んでいる間はゲーム (敵・弾・ステージ時間) が止まる。
+   * 選択 UI の制限時間が切れたら 1 番目を自動で取る。
    */
   offerWordChoices() {
     const pool = [];
@@ -932,8 +936,27 @@ export class Run {
     // 乱数はランのシード付き乱数から引く。再現性のため Math.random は使わない。
     const e = makeEnemy(id, pos.x, pos.y, hpScale, dmgScale, this.rand);
     e.spawned = 0;
-    if (d.boss) { e.atkCd = 2.4; e.patIdx = 0; e.ring = 0; e.spawned = 1; }
+    if (d.boss || d.midBoss) {
+      e.atkCd = 2.4; e.patIdx = 0; e.ring = 0; e.windup = 0; e.spawned = 1;
+    }
     this.enemies.push(e);
+    return e;
+  }
+
+  /** 各章の中ボス。ボスより早い時刻に現れ、倒すと宝箱を落とす。 */
+  spawnMidBoss() {
+    if (this.midBossSpawned || !this.stage.midBoss) return null;
+    this.midBossSpawned = true;
+    const e = this.spawnEnemy(this.stage.midBoss, {
+      x: this.player.x + this.rand.range(-120, 120),
+      y: this.player.y - (this.viewH || 600) / 2 - 100,
+    });
+    if (!e) return null;
+    this.midBoss = e;
+    this.audio.bossWarn?.();
+    this.screenFlash = { color: '#c9971f', life: 0.32, maxLife: 0.32 };
+    this.pushHint(`中ボス ${e.def.name} が来る — 倒すと宝箱`);
+    this.shake(8);
     return e;
   }
 
@@ -1022,6 +1045,19 @@ export class Run {
     const per = Math.max(1, Math.ceil(xp / n));
     for (let i = 0; i < n; i++) this.pickups.push(makePickup(e.x, e.y, 'xp', per));
     if (this.rand.chance(0.025)) this.pickups.push(makePickup(e.x, e.y, 'heal', 14));
+
+    if (e.midBoss) {
+      // 中ボスの宝箱。中身は拾ったときにランダムな言葉 2 個。
+      this.pickups.push(makePickup(e.x, e.y, 'chest', 1));
+      for (let i = 0; i < 8; i++) this.pickups.push(makePickup(e.x, e.y, 'xp', Math.ceil(e.xp / 8)));
+      this.rings.push({
+        x: e.x, y: e.y, r: 120, life: 0.55, maxLife: 0.55,
+        color: '#c9971f', hit: new Set(), thin: true,
+      });
+      this.shake(14);
+      this.audio.explode();
+      this.pushHint(`中ボス ${e.def.name} を討伐 — 宝箱が落ちた`);
+    }
 
     if (e.boss) {
       this.bossBursts.push({ x: e.x, y: e.y, life: 2.2, maxLife: 2.2, color: e.def.color || '#d39a35' });
@@ -1126,6 +1162,14 @@ export class Run {
   update(dt, input) {
     if (this.paused || this.state !== 'playing') { this.fxTick(dt); return; }
 
+    // レベルアップの選択中はゲームを止める。選択 UI の制限時間だけ進める。
+    // 敵・弾・プレイヤー・ステージ時間は動かさない。
+    if (this.pendingChoices.length) {
+      this.choiceTick(dt);
+      this.fxTick(dt);
+      return;
+    }
+
     if (this.slowmo > 0) this.slowmo = Math.max(0, this.slowmo - dt);
     const d = dt * (this.slowmo > 0 ? 0.35 : 1);
     this._lastDt = d;
@@ -1146,6 +1190,7 @@ export class Run {
       if (this.screenFlash.life <= 0) this.screenFlash = null;
     }
     if (this.boss && this.boss.dead) this.boss = null;
+    if (this.midBoss && this.midBoss.dead) this.midBoss = null;
 
     // 低体力の鼓動。体力が減るほど間隔が詰まる。
     const p = this.player;
@@ -1323,6 +1368,8 @@ export class Run {
         this.pending.splice(i, 1);
       }
     }
+    if (st.midBoss && !this.midBossSpawned
+      && this.time >= (st.midBossAt ?? st.time * 0.5)) this.spawnMidBoss();
     if (st.boss && !this.bossSpawned && this.time >= st.time) this.spawnBoss();
   }
 
@@ -1419,7 +1466,16 @@ export class Run {
           continue;
         }
       }
-      if (b.enemy) { this.bullets.splice(i, 1); continue; }
+      if (b.enemy) {
+        // 敵の弾。プレイヤーに当たったら 1 回だけダメージを与えて消える。
+        const p = this.player;
+        const rr = b.r + p.r;
+        if (dist2(b.x, b.y, p.x, p.y) <= rr * rr) {
+          this.hurtPlayer(b.dmg || 1);
+          this.bullets.splice(i, 1);
+        }
+        continue;
+      }
 
       const st = b.st || {
         dmg: b.dmg || 5, crit: 0, critDmg: 1.5, lifesteal: 0, pierce: 0, knock: 0, size: 1, el: 'none',
@@ -1595,7 +1651,63 @@ export class Run {
         color: '#37b24d', hit: new Set(),
       });
       this.pushHint(`回復 ${q.value}`);
+    } else if (q.type === 'chest') {
+      this.openChest();
     }
+  }
+
+  /**
+   * 宝箱を開ける。ランダムな言葉を 2 個入手する。
+   * 語彙が満杯なら、giveWord の規則で最も古い語が入れ替わる。
+   * @returns {object[]} 入手した語
+   */
+  openChest() {
+    const words = this.randomChestWords(2);
+    if (!words.length) return [];
+    const got = [];
+    const lost = [];
+    for (const word of words) {
+      if (this.lexiconFull) {
+        const drop = this.oldestLexiconIndex();
+        const victim = drop >= 0 ? this.lexicon[drop] : null;
+        if (victim) lost.push(victim.text);
+      }
+      if (this.giveWord(word, true)) got.push(word);
+    }
+    if (!got.length) return [];
+    const p = this.player;
+    this.burst(p.x, p.y, 18, '#e8b425', {
+      spd: 210, spdMin: 30, life: 0.75, r: 2.4, shape: 'spark', drag: 4,
+    });
+    this.burst(p.x, p.y, 8, '#fffdf7', {
+      spd: 130, spdMin: 20, life: 0.45, r: 2.0, shape: 'dot', drag: 5,
+    });
+    this.rings.push({
+      x: p.x, y: p.y, r: 54, life: 0.5, maxLife: 0.5,
+      color: '#e8b425', hit: new Set(), thin: true,
+    });
+    this.audio.gachaReveal?.(false);
+    const names = got.map((w) => `「${w.text}」`).join('');
+    const lostNames = [...new Set(lost)].map((t) => `「${t}」`).join('');
+    this.pushHint(`宝箱から ${names} を手に入れた`
+      + (lostNames ? `（${lostNames} は消えた）` : ''));
+    return got;
+  }
+
+  /** 宝箱用のランダムな語。デッキがあればその中から、無ければ全語彙から。 */
+  randomChestWords(n) {
+    const deck = [...(this.deckPool || [])].filter((t) => WORDS[t] && !CONNECTOR_SET.has(t));
+    const out = [];
+    const seen = new Set();
+    for (let tries = 0; tries < 80 && out.length < n; tries++) {
+      let word = null;
+      if (deck.length >= n) word = makeWord(deck[this.rand.int(deck.length)]);
+      else word = drawWord(this.rand);
+      if (!word || seen.has(word.text)) continue;
+      seen.add(word.text);
+      out.push(word);
+    }
+    return out;
   }
 
   contactTick() {
@@ -1719,6 +1831,7 @@ export class Run {
     this.bullets.push(makeBullet({
       x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
       r: 9, size: 1, life: 5, pierce: 0,
+      dmg: Math.max(1, dmg || 1),
       color: color || '#f88', kindName: 'eshot', enemy: true,
     }));
   }

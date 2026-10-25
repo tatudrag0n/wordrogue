@@ -9,9 +9,9 @@ import {
   makeWord, WORDS, evaluate, CONNECTOR_SET, drawWeaponWord, WEAPON_WORDS, DRAWABLE_ALL,
 } from '../js/data/words.js';
 import { WEAPONS, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS } from '../js/data/weapons.js';
-import { ENEMIES } from '../js/data/enemies.js';
+import { ENEMIES, ENEMY_IDS, MID_BOSS_IDS, BOSS_IDS } from '../js/data/enemies.js';
 import { WeaponInst } from '../js/game/weapon.js';
-import { makePickup, makeEnemy } from '../js/game/entities.js';
+import { makePickup, makeEnemy, updateEnemy } from '../js/game/entities.js';
 import { damage } from '../js/game/combat.js';
 import { resolvePlayerStats } from '../js/game/stats.js';
 import { Sentence, MAX_SENTENCE_LEN } from '../js/game/sentence.js';
@@ -267,7 +267,7 @@ sec('形態語 (弾・環・玉…) は武器語ではなくただの語');
   const sword = new WeaponInst('sword', 1);
 
   // 武器語 (基本武器) は FORM_SHAPE に載っている語だけ。
-  for (const w of ['弾', '環', '玉', '球', '壁', '輪', '塊', '石', '矢', '珠', '還', '戈', '盾', '網']) {
+  for (const w of ['弾', '環', '玉', '球', '壁', '輪', '石', '矢', '珠', '還', '戈', '盾', '網']) {
     ok(!BASIC_WEAPONS.has(w), `「${w}」がまだ基本武器として登録されている`);
     ok(!FORM_SHAPE[w], `「${w}」が FORM_SHAPE (武器語 -> 形) に残っている`);
     ok(WORDS[w] && WORDS[w].cat === 'form', `「${w}」が形態語として辞書に無い`);
@@ -1319,21 +1319,172 @@ sec('武器 1 つにつき複数語を並べられる');
     + ` → 「${gram.fullText}」${gram.evalResult.fx.power.toFixed(2)}`);
 }
 
-sec('敵は文でできている');
+sec('敵の文字数は強さの段階で増え、ボスは 5 文字');
 {
-  // 全敵の文が、辞書だけで閉じる文になっていること。
+  const normalRanks = new Set();
   for (const [id, def] of Object.entries(ENEMIES)) {
     const words = def.words || [];
-    ok(words.length >= 2, `${def.name}: 文が短い (${words.length})`);
+    ok(words.length === def.rank,
+      `${def.name}: 文字数 ${words.length} が rank ${def.rank} と違う`);
+    ok(def.rank >= 1 && def.rank <= 5, `${def.name}: rank ${def.rank} が範囲外`);
     const missing = words.filter((w) => !WORDS[w]);
     ok(missing.length === 0, `${def.name}: 辞書に無い語 ${missing.join(',')}`);
-    const r = evaluate(words.map((text) => ({ text })));
-    ok(r.valid, `${def.name}: 文が成立しない (${r.reasonText})`);
+    if (def.rank === 1) {
+      ok(words.length === 1, `${def.name}: 雑魚が 1 文字でない (${words.length})`);
+    } else {
+      const r = evaluate(words.map((text) => ({ text })));
+      ok(r.valid, `${def.name}: 文が成立しない (${r.reasonText})`);
+    }
+    if (def.boss) {
+      ok(def.rank === 5 && words.length === 5, `${def.name}: ボスが 5 文字でない`);
+    } else if (def.midBoss) {
+      ok(def.rank === 4 && words.length === 4, `${def.name}: 中ボスが 4 文字でない`);
+      ok(!def.boss, `${def.name}: 中ボスに boss フラグが立っている`);
+    } else {
+      normalRanks.add(def.rank);
+    }
   }
-  // ボスの文は長い。 harder には時間がかかるように。
-  const bossWords = ENEMIES.boss_word.words.length;
-  ok(bossWords >= 4, `ボスの文が短すぎる: ${bossWords}`);
-  console.log(`  敵 ${Object.keys(ENEMIES).length} 種 / 最終ボスの文 ${bossWords} 語`);
+  for (const rank of [1, 2, 3, 4]) {
+    ok(normalRanks.has(rank), `rank ${rank} の通常敵がいない`);
+  }
+  ok(ENEMY_IDS.length === 14, `通常敵の数 ${ENEMY_IDS.length}`);
+  ok(MID_BOSS_IDS.length === 9, `中ボスの数 ${MID_BOSS_IDS.length}`);
+  ok(BOSS_IDS.length === 6, `ボスの数 ${BOSS_IDS.length}`);
+  const mids = STAGES.map((s) => s.midBoss);
+  ok(new Set(mids).size === STAGES.length, '章ごとの中ボスが重複している');
+  for (const s of STAGES) {
+    const d = ENEMIES[s.midBoss];
+    ok(!!d && !!d.midBoss, `第 ${s.id} 戦: 中ボス「${s.midBoss}」が無い`);
+    ok(Number.isFinite(s.midBossAt) && s.midBossAt > 0 && s.midBossAt < s.time,
+      `第 ${s.id} 戦: 中ボスの時刻 ${s.midBossAt} が範囲外`);
+    ok(!d || !d.boss, `第 ${s.id} 戦: 中ボスが章ボス扱いになっている`);
+  }
+  console.log(`  敵 ${Object.keys(ENEMIES).length} 種 (通常 ${ENEMY_IDS.length} / 中ボス ${MID_BOSS_IDS.length}`
+    + ` / ボス ${BOSS_IDS.length}) / 文字数 rank 1〜5`);
+}
+
+sec('中ボスは各章に出現し、倒すと宝箱を落とす');
+{
+  const r = newRun(1);
+  const mid = r.spawnMidBoss();
+  ok(mid, '中ボスを生成できない');
+  ok(r.midBoss === mid, '中ボスが run に登録されない');
+  ok(mid.midBoss && !mid.boss, '中ボスのフラグが違う');
+  ok(mid.words.length === 4, `中ボスの文字数 ${mid.words.length}`);
+
+  const r2 = newRun(1);
+  r2.time = r2.stage.midBossAt;
+  r2.waveTick();
+  ok(r2.midBoss, '中ボスが時刻になっても出ない');
+
+  const before = r.lexicon.filter(Boolean).length;
+  mid.hp = 0;
+  r.killEnemy(mid, null);
+  const chests = r.pickups.filter((q) => q.type === 'chest');
+  ok(chests.length === 1, `宝箱が落ちない: ${chests.length}`);
+  ok(chests[0] && chests[0].life === 0, '宝箱が時間で消える');
+  const got = r.openChest();
+  ok(got.length === 2, `宝箱の言葉が 2 個でない: ${got.length}`);
+  ok(new Set(got.map((w) => w.text)).size === 2, '宝箱の言葉が重複している');
+  const after = r.lexicon.filter(Boolean).length;
+  ok(after === before + 2, `宝箱で語が 2 個増えない: ${before} -> ${after}`);
+  ok(/宝箱/.test(r.hint || ''), `宝箱の入手メッセージが無い: ${r.hint}`);
+
+  // 中ボスも章ボスと同じ行動パターンで動く。
+  const w = {
+    player: { x: 0, y: 0 }, t: 0,
+    spawnEnemyShot() {}, bossRing() {}, bossBreath() {},
+    bossSummon() {}, bossSlam() {}, bossDrain() {}, bossSpiral() {},
+  };
+  const ai = makeEnemy('mid_boar', 200, 0);
+  ai.spawned = 1;
+  ai.atkCd = 0;
+  let sawCharge = false, moved = false;
+  for (let i = 0; i < 60 * 3; i++) {
+    const x0 = ai.x;
+    updateEnemy(ai, w, 1 / 60);
+    w.t += 1 / 60;
+    if (ai.charging > 0) sawCharge = true;
+    if (Math.abs(ai.x - x0) > 0.5) moved = true;
+  }
+  ok(sawCharge && moved, `中ボスの行動が動かない: charge=${sawCharge} / moved=${moved}`);
+
+  // 語彙が満杯でも宝箱の 2 語で入れ替わる。
+  const rf = newRun(1);
+  while (!rf.lexiconFull) rf.giveWord(makeWord('炎'), true);
+  const fullN = rf.lexicon.filter(Boolean).length;
+  const gotFull = rf.openChest();
+  ok(gotFull.length === 2, `満杯時の宝箱が ${gotFull.length} 語`);
+  ok(rf.lexiconFull && rf.lexicon.filter(Boolean).length === fullN,
+    `満杯時の宝箱で語数が変わる: ${fullN} -> ${rf.lexicon.filter(Boolean).length}`);
+  console.log(`  ${mid.def.name}「${mid.words.join('')}」→ 宝箱 → 「${got.map((w) => w.text).join('・')}」`);
+}
+
+sec('レベルアップ選択中はゲームが止まる');
+{
+  const r = newRun(1);
+  r.spawnEnemy('slime', { x: r.player.x + 100, y: r.player.y });
+  const e = r.enemies[0];
+  e.spawned = 1;
+  r.grantLevelWords(2);
+  ok(r.pendingChoices.length === 1, '3 択が出ない');
+  const t0 = r.time;
+  const x0 = e.x, y0 = e.y;
+  for (let i = 0; i < 60; i++) r.update(1 / 60, { ax: 0, ay: 0, moving: false });
+  ok(r.time === t0, `選択中にステージ時間が進んだ: ${t0} -> ${r.time}`);
+  ok(e.x === x0 && e.y === y0, '選択中に敵が動いた');
+  ok(r.pendingChoices.length === 1, '選択中に 3 択が消えた');
+  const c = r.pendingChoices[0];
+  ok(r.chooseWord(c.id, 0), '選択できない');
+  r.update(1 / 60, { ax: 0, ay: 0, moving: false });
+  ok(r.time > t0, '選択後もゲームが再開しない');
+  console.log(`  選択中 1 秒停止 → 選択後に再開 (${t0.toFixed(2)} -> ${r.time.toFixed(2)})`);
+}
+
+sec('敵の新しい行動パターン (突進・拡散弾)');
+{
+  // 突進: 予備動作 → 一直線の踏み込み。
+  const w = { player: { x: 0, y: 0 }, t: 0, spawnEnemyShot: () => {} };
+  const dash = makeEnemy('wraith', 220, 0);
+  dash.spawned = 1;
+  let sawWindup = false, sawCharge = false;
+  for (let i = 0; i < 60 * 6; i++) {
+    updateEnemy(dash, w, 1 / 60);
+    w.t += 1 / 60;
+    if (dash.windup > 0) sawWindup = true;
+    if (dash.charging > 0) sawCharge = true;
+  }
+  ok(sawWindup, '突進の予備動作が無い');
+  ok(sawCharge, '突進が起きない');
+
+  // 拡散弾: 三方向に弾を撃つ。
+  const shots = [];
+  const w2 = {
+    player: { x: 0, y: 0 }, t: 0,
+    spawnEnemyShot: (x, y, a, speed, dmg, color) => shots.push({ a, speed, dmg, color }),
+  };
+  const spit = makeEnemy('inkfiend', 200, 0);
+  spit.spawned = 1;
+  for (let i = 0; i < 60 * 2; i++) {
+    updateEnemy(spit, w2, 1 / 60);
+    w2.t += 1 / 60;
+  }
+  ok(shots.length >= 3, `拡散弾が 3 発未満: ${shots.length}`);
+  const angles = shots.slice(0, 3).map((s) => s.a);
+  ok(Math.max(...angles) - Math.min(...angles) > 0.2,
+    `弾が拡散していない: ${angles.join(',')}`);
+  ok(shots.every((s) => Number.isFinite(s.speed) && s.speed > 0 && s.dmg > 0),
+    '弾の速度か威力が不正');
+
+  // 敵の弾はプレイヤーに当たるとダメージを与える。
+  const rb = newRun(1);
+  rb.player.invuln = 0;
+  const hp0 = rb.player.hp;
+  rb.spawnEnemyShot(rb.player.x, rb.player.y, 0, 100, 7, '#f88');
+  rb.bulletTick(1 / 60);
+  ok(rb.player.hp < hp0, `敵の弾が当たらない: ${hp0} -> ${rb.player.hp}`);
+  console.log(`  突進 ${sawWindup && sawCharge} / 拡散弾 ${shots.slice(0, 3).length} 発`
+    + ` / 敵弾ダメージ ${hp0} -> ${rb.player.hp}`);
 }
 
 sec('武器の文で敵の文を斬れる');
@@ -1407,23 +1558,22 @@ sec('熟語か述語なら、一撃で 2 語斬る');
   ok(strong.valid, `比較用の文が成立しない: ${strong.evalResult.reasonText}`);
   ok(strong.stats.cutPower === 2, `斬り数が 2 でない: ${strong.stats.cutPower}`);
 
-  // 3 語の敵を 1 撃で 2 語斬れる (ボス以外)。
-  const e = makeEnemy('boss_slime', 0, 0);
-  e.boss = false;
+  // 3 語の敵を 1 撃で 2 語斬れる。
+  const e = makeEnemy('brute', 0, 0);
   ok(e.words.length === 3, `敵の文が 3 語でない: ${e.words.length}`);
   strong.stats.cutChance = 10;
   damage(r, e, strong.stats, {});
   ok(e.words.length === 1, `2 語斬れていない: ${e.words.join('')}`);
   ok(e.broken, '3 語 -> 1 語 で崩れていない');
-  console.log(`  ${ENEMIES.boss_slime.name}「${ENEMIES.boss_slime.words.join('')}」`
+  console.log(`  ${ENEMIES.brute.name}「${ENEMIES.brute.words.join('')}」`
     + ` → 熟語 1 撃で 2 斬り → 「${e.words.join('')}」${e.broken ? ' (崩れた)' : ''}`);
 
-  // ボスの文は斬れない (免疫)。
+  // ボスの文は 5 文字で、斬れない (免疫)。
   const b = makeEnemy('boss_slime', 0, 0);
-  ok(b.words.length === 3, `ボスの文が 3 語でない: ${b.words.length}`);
+  ok(b.words.length === 5, `ボスの文が 5 語でない: ${b.words.length}`);
   strong.stats.cutChance = 10;
   damage(r, b, strong.stats, {});
-  ok(b.words.length === 3, `ボスの文が斬られてしまった: ${b.words.join('')}`);
+  ok(b.words.length === 5, `ボスの文が斬られてしまった: ${b.words.join('')}`);
   ok(!b.broken, 'ボスが崩れてしまった');
 }
 

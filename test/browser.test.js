@@ -868,6 +868,80 @@ sec('3 択は実際のクリックで選べる');
   console.log(`    「${t ? t.text : '?'}」を実クリック -> 未選択 ${pending0} -> ${pending1}`);
 }
 
+sec('レベルアップ選択中はゲームが止まり、中央に大きな選択肢が出る');
+{
+  await evalJs(`(() => {
+    const app = window.__wordrogue;
+    if (!document.getElementById('forge').hidden) app.forge.close();
+    app.menus.hideAll();
+    app.mode = 'play';
+    app.run.paused = false;
+    app.hud.show(true);
+    const run = app.run;
+    // 語彙が満杯だと先に捨てる操作が要るので、空きを 1 つ作る。
+    let guard = 0;
+    while (run.lexiconFull && guard++ < 40) {
+      run.forgetWord(run.lexicon[run.lexicon.findIndex(Boolean)]);
+    }
+    run.pendingChoices.length = 0;
+    app.hud._choiceSig = '';
+    run.offerWordChoices();
+  })()`);
+  await sleep(350);
+  const ui = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const run = app.run;
+    const box = document.getElementById('hudChoice');
+    const veil = document.getElementById('hudChoiceVeil');
+    const br = box.getBoundingClientRect();
+    const card = document.querySelector('#choiceList .choice-card');
+    const cr = card && card.getBoundingClientRect();
+    return {
+      hidden: box.hidden,
+      veil: !veil.hidden,
+      cx: br.left + br.width / 2,
+      cy: br.top + br.height / 2,
+      vw: window.innerWidth,
+      vh: window.innerHeight,
+      w: br.width,
+      cardW: cr ? cr.width : 0,
+      cardH: cr ? cr.height : 0,
+      time: run.time,
+      pending: run.pendingChoices.length,
+    };
+  })()`);
+  ok(!ui.hidden, '3 択の中央パネルが出ていない');
+  ok(ui.veil, '3 択の背景幕が出ていない');
+  ok(ui.pending === 1, `3 択の候補が ${ui.pending} 件`);
+  ok(Math.abs(ui.cx - ui.vw / 2) < 3, `3 択が横中央でない: ${ui.cx} / ${ui.vw / 2}`);
+  ok(Math.abs(ui.cy - ui.vh / 2) < 3, `3 択が縦中央でない: ${ui.cy} / ${ui.vh / 2}`);
+  ok(ui.w >= 400, `3 択のパネルが小さい: ${ui.w}px`);
+  ok(ui.cardW >= 120 && ui.cardH >= 90,
+    `候補カードが小さい: ${ui.cardW}x${ui.cardH}`);
+
+  await sleep(500);
+  const after = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    return { time: app.run.time, hp: app.run.player.hp, pending: app.run.pendingChoices.length };
+  })()`);
+  ok(after.time === ui.time, `選択中にステージ時間が進んだ: ${ui.time} -> ${after.time}`);
+  ok(after.pending === 1, `選択中に 3 択が消えた: ${after.pending}`);
+
+  // 後続のテストに残さない。候補を 1 つ選んで閉じる。
+  await evalJs(`(() => {
+    const card = document.querySelector('#choiceList .choice-card');
+    if (card) card.click();
+    const app = window.__wordrogue;
+    app.run.pendingChoices.length = 0;
+    app.hud._choiceSig = '';
+    app.run.paused = false;
+    app.mode = 'play';
+  })()`);
+  await sleep(200);
+  console.log(`    中央 ${Math.round(ui.cx)},${Math.round(ui.cy)} / パネル ${Math.round(ui.w)}px`
+    + ` / カード ${Math.round(ui.cardW)}x${Math.round(ui.cardH)}`);
+}
+
 sec('ダッシュボタンが押せる (タッチ端末)');
 {
   // PC の Chrome ではホバーできるので、ボタンは隠れている。
@@ -1766,6 +1840,41 @@ sec('敵の文が表示される');
   })()`);
   ok(!b.err, `不成文の描画で例外: ${b.err}`);
   console.log(`    敵の文「${r.before}」/ 崩れた文「${b.text}」`);
+}
+
+sec('中ボスの文・宝箱・中ボス HUD が描画できる');
+{
+  const mid = await evalJs(`(async () => {
+    const m = await import(new URL('js/game/entities.js', document.baseURI).href);
+    const app = window.__wordrogue;
+    const run = app.run;
+    const e = m.makeEnemy('mid_boar', run.player.x + 80, run.player.y - 50);
+    e.spawned = 1;
+    run.enemies.push(e);
+    run.midBoss = e;
+    run.boss = null;
+    let err = null;
+    try { app.renderer.drawEnemySentence(e, run); } catch (ex) { err = 'enemy: ' + ex.message; }
+    const q = m.makePickup(e.x, e.y, 'chest', 1);
+    run.pickups.push(q);
+    try { app.renderer.drawPickups(run); } catch (ex) { err = (err ? err + ' / ' : '') + 'chest: ' + ex.message; }
+    app.hud.update(run, () => {});
+    const shown = {
+      hidden: document.getElementById('hudBoss').hidden,
+      name: document.getElementById('bossName').textContent,
+      midClass: document.getElementById('hudBoss').classList.contains('mid'),
+    };
+    run.enemies = run.enemies.filter((x) => x !== e);
+    run.pickups = run.pickups.filter((x) => x !== q);
+    run.midBoss = null;
+    return { err, words: e.words.length, text: e.words.join(''), chestLife: q.life, chestR: q.r, shown };
+  })()`);
+  ok(!mid.err, `中ボス/宝箱の描画で例外: ${mid.err}`);
+  ok(mid.words === 4 && mid.text.length === 4, `中ボスの文字数: ${mid.words} / ${mid.text}`);
+  ok(mid.chestLife === 0 && mid.chestR > 7, `宝箱の寿命/大きさ: ${mid.chestLife} / ${mid.chestR}`);
+  ok(!mid.shown.hidden && mid.shown.midClass && mid.shown.name.includes('中ボス'),
+    `中ボス HUD: ${JSON.stringify(mid.shown)}`);
+  console.log(`    中ボス「${mid.text}」/ 宝箱 / HUD ${mid.shown.name}`);
 }
 
 sec('描画で例外が出てもプレイヤーが消えない');

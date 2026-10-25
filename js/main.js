@@ -428,7 +428,7 @@ function loop(now) {
     app.hud.update(run, (wi) => {
       if (app.mode === 'play') toggleForge();
     });
-    // 3 択。時間制限つきで、時間は止まらない。
+    // 3 択。選択中はゲームが止まり、中央の大きな札で選ぶ。
     app.hud.renderChoices(run, (id, index, discardIndex) => {
       if (run.chooseWord(id, index, discardIndex)) app.audio.phrase();
     });

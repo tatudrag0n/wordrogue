@@ -215,7 +215,7 @@ if (syntaxBad) {
 //  bosses も、解放される武器のステージ番号も範囲内であること。
 {
   const { STAGES } = await import(new URL('../js/data/stages.js', import.meta.url));
-  const { ENEMIES, BOSS_IDS } = await import(new URL('../js/data/enemies.js', import.meta.url));
+  const { ENEMIES, BOSS_IDS, MID_BOSS_IDS } = await import(new URL('../js/data/enemies.js', import.meta.url));
   const { WEAPONS } = await import(new URL('../js/data/weapons.js', import.meta.url));
 
   const maxStage = STAGES.length;
@@ -229,7 +229,26 @@ if (syntaxBad) {
       if (w.at < 0 || w.at > s.time) unknown.push(`${s.name}: ウェーブ時刻 ${w.at} が範囲外`);
     }
     if (s.boss && !BOSS_IDS.includes(s.boss)) unknown.push(`${s.name}: ボス「${s.boss}」が無い`);
+    if (!s.midBoss) {
+      unknown.push(`${s.name}: 中ボスが無い`);
+    } else {
+      const mid = ENEMIES[s.midBoss];
+      if (!mid) unknown.push(`${s.name}: 中ボス「${s.midBoss}」が無い`);
+      else {
+        if (!mid.midBoss) unknown.push(`${s.name}: 「${s.midBoss}」が中ボスではない`);
+        if (mid.boss) unknown.push(`${s.name}: 中ボス「${s.midBoss}」が章ボス扱い`);
+        if (!MID_BOSS_IDS.includes(s.midBoss)) unknown.push(`${s.name}: 中ボス一覧に「${s.midBoss}」が無い`);
+      }
+      if (!(Number.isFinite(s.midBossAt) && s.midBossAt > 0 && s.midBossAt < s.time)) {
+        unknown.push(`${s.name}: 中ボスの時刻 ${s.midBossAt} が範囲外`);
+      }
+      if (s.boss === s.midBoss) unknown.push(`${s.name}: 中ボスと章ボスが同じ`);
+    }
     if (!s.waves.length) unknown.push(`${s.name}: ウェーブが空`);
+  }
+  const assignedMids = new Set(STAGES.map((s) => s.midBoss).filter(Boolean));
+  for (const id of MID_BOSS_IDS) {
+    if (!assignedMids.has(id)) unknown.push(`中ボス「${id}」がどのステージにも出ない`);
   }
   const badUnlock = Object.values(WEAPONS)
     .filter((w) => w.unlock && (w.unlock.stage < 1 || w.unlock.stage > maxStage))
@@ -364,7 +383,7 @@ if (syntaxBad) {
     // 武器語 (形を表す語)
     '刃', '剣', '刀', '斧', '槍', '矛', '戈', '牙', '爪',
     '弾', '銃', '玉', '矢', '針', '弓', '球', '珠', '還', '光', '雷',
-    '塊', '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾', '杖', '拳',
+    '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾', '杖', '拳',
     // 効果語 (体言のもの)
     // 「巨」は体言として許可する。な形容詞は「巨大」であって「巨」ではない。
     //   「巨な」は日本語に無いので `巨` はな形容の語幹表に入れず、接続詞は の・に・へ・を だけ。

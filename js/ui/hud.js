@@ -37,6 +37,7 @@ export class Hud {
     this.btnDash = $('#btnDash');
 
     // 3 択
+    this.choiceVeil = $('#hudChoiceVeil');
     this.choiceBox = $('#hudChoice');
     this.choiceTitle = $('#choiceTitle');
     this.choiceTimer = $('#choiceTimer');
@@ -208,11 +209,13 @@ export class Hud {
       }
     }
 
-    // ボス
-    const b = run.boss;
+    // ボス / 中ボス
+    const b = run.boss || run.midBoss;
+    const isMid = !!b && !run.boss;
+    this.hudBoss.classList.toggle('mid', isMid);
     if (b && !b.dead) {
       this.hudBoss.hidden = false;
-      this.bossName.textContent = b.def.name;
+      this.bossName.textContent = (isMid ? '中ボス ' : '') + b.def.name;
       this.bossFill.style.width = `${clamp(b.hp / b.maxHp, 0, 1) * 100}%`;
     } else {
       this.hudBoss.hidden = true;
@@ -291,7 +294,7 @@ export class Hud {
   /**
    * レベルアップの 3 択。
    * 語彙が満杯のときは、先に「何を捨てるか」を選ばせる。
-   * ゲームは止めない。時間切れなら run 側で自動で決まる。
+   * 選択中はゲームが止まる。時間切れなら run 側で自動で決まる。
    * @param {object} run
    * @param {(id:number, index:number, discardIndex:number|null)=>void} onPick
    */
@@ -300,10 +303,12 @@ export class Hud {
     const c = run.pendingChoices && run.pendingChoices[0];
     if (!c) {
       this.choiceBox.hidden = true;
+      if (this.choiceVeil) this.choiceVeil.hidden = true;
       this._choice = null;
       this._choiceSig = '';
       return;
     }
+    if (this.choiceVeil) this.choiceVeil.hidden = false;
 
     const full = run.lexiconFull;
     const sig = `${c.id}|${c.words.map((w) => w.text).join(',')}|${full}|${this.forgetIndex}|`

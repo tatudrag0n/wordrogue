@@ -96,7 +96,7 @@ export const isWeaponWord = (text) => WEAPON_WORD_SET.has(text);
 export const TAIL_UNMODIFIABLE = new Set([
   '刃', '剣', '刀', '斧', '槍', '矛', '戈', '牙', '爪',
   '弾', '銃', '玉', '矢', '針', '弓', '球', '珠', '光', '雷',
-  '塊', '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾', '杖', '拳',
+  '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾', '杖', '拳',
 ]);
 
 const RAW_ELEMENT = `
@@ -243,7 +243,6 @@ const RAW_FORM = `
 珠     form  -  dmg+10  pierce+4  bounce+2  crit+0.06
 還     form  -  dmg+11  pierce+5  bounce+3  speed+40
 
-塊     form  -  dmg+8  speed-25  size+0.30  knock+25
 石     form  -  dmg+7  speed-20  size+0.25  knock+20
 
 環     form  -  orbit+1  count+2  dmg+5

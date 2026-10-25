@@ -100,11 +100,13 @@ function normalizePart(arr, collection) {
   return out;
 }
 
-/** 枠の並びを詰める (後ろの空を落とし、語の無い枠は null のまま残す)。 */
+/**
+ * 枠の並びを詰める (空の枠を落とす)。
+ * 画面は語だけを順に並べるので、保存にも穴を残さない。
+ * 穴を残すと、表示の番号と保存の番号がずれて ✕ が効かなくなる。
+ */
 function compact(arr) {
-  const out = arr.slice(0, PART_SLOTS);
-  while (out.length && !out[out.length - 1]) out.pop();
-  return out;
+  return arr.filter(Boolean).slice(0, PART_SLOTS);
 }
 
 /** 初期所持語。最初からデッキにも入っている。 */

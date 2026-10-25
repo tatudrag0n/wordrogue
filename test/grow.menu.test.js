@@ -113,30 +113,41 @@ sec('部位の 2 語は 1 文。接続詞の一覧が枠の下に出る');
   ok(/発電/.test(q('.grow-part-note', boxOf('chst'))[0].textContent),
     '熟語で文になったことが説明に出ない');
 
-  // 接続詞の一覧を開く → 「する」を選ぶ → 発電する になる。
-  click(q('.gs-conn', boxOf('chst'))[1]);
+  // 熟語 + 接続詞 は文末が接続詞になる。部位は 2 語までなので、
+  // 語で閉じる並び (妙な骨) で接続詞の効果を見る。
+  // 前の枠から外しても、残りは前へ詰まる (✕ が効かなくならない)。
+  click(q('.gs-out', boxOf('chst'))[0]);
+  click(q('.gs-out', boxOf('chst'))[0]);
+  ok(save.partRaw('chst').filter(Boolean).length === 0, '部位の語を外せない');
+  set('chst', '妙');
+  set('chst', '骨');
+  ok(save.partSlotText('chst', 0) === '妙' && save.partSlotText('chst', 1) === '骨',
+    `並びを入れ替えられない: ${JSON.stringify(save.partRaw('chst'))}`);
+
+  // 接続詞の一覧を開く → 「な」を選ぶ → 妙な骨 になる。
+  click(q('.gs-conn', boxOf('chst'))[0]);
   const menuEl = q('.grow-conn-menu', boxOf('chst'))[0];
   ok(!!menuEl, '接続詞の一覧が開かない');
   const picks = q('.grow-conn-pick', menuEl);
-  ok(picks.some((x) => x.textContent.trim() === 'する'),
-    `「する」が一覧に無い: ${picks.map((x) => x.textContent.trim())}`);
-  ok(picks.some((x) => x.classList.contains('ok') && /する/.test(x.textContent)),
+  ok(picks.some((x) => x.textContent.trim() === 'な'),
+    `「な」が一覧に無い: ${picks.map((x) => x.textContent.trim())}`);
+  ok(picks.some((x) => x.classList.contains('ok') && /な/.test(x.textContent)),
     '文が成る形に ✓ (ok) が付かない');
-  click(picks.find((x) => x.textContent.trim() === 'する'));
+  click(picks.find((x) => x.textContent.trim() === 'な'));
   const raw = save.partRaw('chst').filter(Boolean);
-  ok(raw.some((e) => e.conn === 'する'), `接続詞がセーブに入らない: ${JSON.stringify(save.partRaw('chst'))}`);
+  ok(raw.some((e) => e.conn === 'な'), `接続詞がセーブに入らない: ${JSON.stringify(save.partRaw('chst'))}`);
   const p = evaluatePart(save.partRaw('chst').filter(Boolean));
-  ok(p.valid && p.text === '発電する', `部位の文が読めない: ${p.text} / ${p.reasonText}`);
-  ok(/発電する/.test(q('.grow-part-note', boxOf('chst'))[0].textContent), '文の評価が更新されない');
+  ok(p.valid && p.text === '妙な骨', `部位の文が読めない: ${p.text} / ${p.reasonText}`);
+  ok(/妙な骨/.test(q('.grow-part-note', boxOf('chst'))[0].textContent), '文の評価が更新されない');
   ok(q('.gs-conn.filled', boxOf('chst')).length === 1, '接続詞のマスが filled にならない');
 
   // 選び直しても文は壊れない (一覧に出るのは「付けられる形」だけ)。
   ok(p.valid, `接続詞を付けたら不成文になった: ${p.reasonText}`);
   // 一覧は語を選ぶと閉じる。もう一度マスをタップすると開き、もう一度で閉じる。
   ok(!q('.grow-conn-menu', boxOf('chst')).length, '接続詞を選んでも一覧が開いたまま');
-  click(q('.gs-conn', boxOf('chst'))[1]);
+  click(q('.gs-conn', boxOf('chst'))[0]);
   ok(q('.grow-conn-menu', boxOf('chst')).length === 1, '接続詞の一覧を開けない');
-  click(q('.gs-conn', boxOf('chst'))[1]);
+  click(q('.gs-conn', boxOf('chst'))[0]);
   ok(!q('.grow-conn-menu', boxOf('chst')).length, '一覧を閉じられない');
   console.log(`  「${p.text}」 文の力 ${p.power.toFixed(2)} / 効き ×${p.gain.toFixed(2)}`);
 }

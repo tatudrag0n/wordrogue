@@ -1360,8 +1360,8 @@ sec('武器の文で敵の文を斬れる');
   ok(idiom.valid && idiom.evalResult.idiom, `熟語が成立しない: ${idiom.fullText}`);
   ok(idiom.stats.cutPower === 2, `熟語文の斬り数が 2 でない: ${idiom.stats.cutPower}`);
 
-  // 述語 (接続詞の合成) があれば +1。
-  const gram = set('焔', 'を', '斬', 'る');
+  // 述語 (接続詞の合成) があれば +1。文末は語で閉じる。
+  const gram = set('焔', 'を', '斬', 'る', '剣');
   ok(gram.valid, `述語の文が成立しない: ${gram.fullText} / ${gram.evalResult.reasonText}`);
 
   // 日本語にならない文は斬れない。
@@ -1602,37 +1602,48 @@ sec('部位強化は 1 文。接続詞が使える');
     '不成文になる形なのに文が成っている');
   save.setPartConn('head', 0, null);
 
-  // 熟語になる 2 語 (発電 + する) は、文の力だけが乗る (部位の語に player 効果が無ければ 0)。
+  // 接続詞で文の力が乗る。文末は語で閉じる (接続詞で終わる文は不成文)。
+  //   妙 + な + 骨 … 連体形「な」が骨を修飾する。
   let withPower = 1;
+  {
+    save.setPart('chst', 0, null);
+    save.setPart('chst', 1, null);
+    save.setPart('chst', 0, '妙');
+    save.setPart('chst', 1, '骨');
+    const bare = evaluatePart(save.partRaw('chst').filter(Boolean));
+    ok(bare.valid && bare.text === '妙骨', `妙骨 の部位の文が読めない: ${bare.text} / ${bare.reasonText}`);
+    ok(save.setPartConn('chst', 0, 'な').ok, '連体形「な」が選べない');
+    const withConn = evaluatePart(save.partRaw('chst').filter(Boolean));
+    ok(withConn.valid && withConn.power > bare.power,
+      `接続詞で強くない: ${bare.power.toFixed(2)} -> ${withConn.power.toFixed(2)}`);
+    withPower = withConn.power;
+    // 部位まるごとの効果が文の力ぶん伸びる (妙な骨 の倍率)。
+    const loose = resolvePlayerStats(save.partEntries(), {});
+    const withRegen = evaluatePart([{ text: '癒', conn: null }]);
+    ok(withRegen.valid, '1 語の部位が不成文になっている');
+    ok(loose.partRows.some((x) => x.text === '妙な骨' && x.gain > 1),
+      `部位の文の力が乗らない: ${JSON.stringify(loose.partRows)}`);
+    ok(loose.partBroken.length === 0, `不成文の部位が出た: ${JSON.stringify(loose.partBroken)}`);
+  }
+
+  // 熟語 + する は接続詞で終わるので、部位では不成文になる。
   if (save.ownsWord('発') && save.ownsWord('電')) {
     save.setPart('chst', 0, null);
     save.setPart('chst', 1, null);
     save.setPart('chst', 0, '発');
     save.setPart('chst', 1, '電');
-    const noConn = save.partRaw('chst').filter(Boolean);
-    ok(!save.setPart('head', 0, null) || true, '外せない');
-    const p = evaluatePart(noConn);
-    ok(p.valid && p.text === '発電', `発電 の部位の文が読めない: ${p.text} / ${p.reasonText}`);
     ok(save.setPartConn('chst', 1, 'する').ok, '熟語の形「する」が選べない');
-    const withConn = evaluatePart(save.partRaw('chst').filter(Boolean));
-    ok(withConn.valid && withConn.power > p.power,
-      `接続詞で強くない: ${p.power.toFixed(2)} -> ${withConn.power.toFixed(2)}`);
-    ok(withConn.idiom?.name === '発電', `熟語にならない: ${withConn.idiom?.name}`);
-    withPower = withConn.power;
-    // 部位まるごとの効果が文の力ぶん伸びる (発電する の倍率)。
-    const loose = resolvePlayerStats(save.partEntries(), {});
-    const withRegen = evaluatePart([{ text: '癒', conn: null }]);
-    ok(withRegen.valid, '1 語の部位が不成文になっている');
-    ok(loose.partRows.some((x) => x.text === '発電する' && x.gain > 1),
-      `部位の文の力が乗らない: ${JSON.stringify(loose.partRows)}`);
-    ok(loose.partBroken.length === 0, `不成文の部位が出た: ${JSON.stringify(loose.partBroken)}`);
+    const dangling = evaluatePart(save.partRaw('chst').filter(Boolean));
+    ok(!dangling.valid && dangling.ev.reason === 'tailconn',
+      `「発電する」が成立してしまった: ${dangling.reasonText}`);
   }
 
   // 取り外す: 枠の ✕ 相当 (null) と、同じ語をもう一度押すトグル。
   save.setPart('chst', 0, '癒');
   ok(save.partSlotText('chst', 0) === '癒', '語が入らない');
   ok(save.setPart('chst', 0, '癒'), '同じ語を押して何も返らない');
-  ok(!save.partSlot('chst', 0), '同じ語を押しても外れない (取り外せない不具合)');
+  ok(!save.partRaw('chst').filter(Boolean).some((e) => e.t === '癒'),
+    '同じ語を押しても外れない (取り外せない不具合)');
   save.setPart('chst', 0, '癒');
   save.setPart('chst', 0, null);
   ok(!save.partSlot('chst', 0), '✕ (null) で外れない');

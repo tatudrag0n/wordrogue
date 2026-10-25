@@ -135,6 +135,11 @@ const dictSize = await evalJs(`(async () => {
 ok(dictSize > 300, `辞書が読み込まれた: ${dictSize} 語`);
 
 sec('タイトル画面');
+// 初回はチュートリアルが自動で開き、タイトルを覆う。閉じてから見る。
+await evalJs(`(() => {
+  const m = window.__wordrogue.menus;
+  if (m.tutorial && !m.tutorial.hidden) m.closeTutorial();
+})()`);
 ok(await evalJs('!document.getElementById("title").hidden'), 'タイトルが表示されている');
 ok(await evalJs('document.getElementById("btnStart") !== null'), '開始ボタンがある');
 
@@ -1312,7 +1317,10 @@ sec('部位強化はメニューで設定し、戦闘に効く');
     app.menus.renderGrow();
     const gachaBefore = save.collection.length;
     const g = save.drawGacha();
+    // 部位は 2 語まで。文末は語で閉じるので、接続詞は前の語に付ける
+    // (癒す骨)。1 語 + 接続詞は文末が接続詞になり、不成文になる。
     save.setPart('head', 0, '癒');
+    save.setPart('head', 1, '骨');
     save.toggleDeck('炎');
     return {
       shown: !document.getElementById('grow').hidden,

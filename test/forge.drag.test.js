@@ -659,7 +659,7 @@ sec('形態語 (弾・環・玉) は武器語ではない — ＋ も付かな�
   console.log(`  形態語「弾」は語彙から引けて文に置ける / 文は ${run.weapons.length} 本`);
 }
 
-sec('形語は文末。意味で攻撃の型と癒しが変わる');
+sec('文末は語で閉じる。接続詞で終わる文は不成文');
 {
   const { run, forge } = openForge();
   const wi = run.weapons[0];
@@ -670,7 +670,9 @@ sec('形語は文末。意味で攻撃の型と癒しが変わる');
   wi._sig = null;
   const r1 = wi.resolve(run.player.stats);
   ok(!r1.valid, '「氷を斬る」が成立してしまった');
-  ok(r1.reason === 'tailshape', '理由が tailshape でない: ' + r1.reason);
+  ok(r1.reason === 'tailconn', '理由が tailconn でない: ' + r1.reason);
+
+  // 語を足して文末を閉じれば成立する。
   wi.sentence.clear();
   for (const w of ['氷', '斬', '針']) wi.sentence.push(makeWord(w));
   wi.sentence.setConnAt(0, 'を');
@@ -679,36 +681,19 @@ sec('形語は文末。意味で攻撃の型と癒しが変わる');
   const r2 = wi.resolve(run.player.stats);
   ok(r2.valid && r2.active, '「氷を斬る針」が不成文: ' + r2.reasonText);
   ok(r2.element === 'ice', '属性が ice でない: ' + r2.element);
+  ok(r2.stats.dmg > 0, 'dmg が 0 以下: ' + r2.stats.dmg);
+
+  // 現象語の特殊武器も、動詞の述語 + 末尾の語で成立する。
   wi.sentence.clear();
-  for (const w of ['敵', '皆', '燃']) wi.sentence.push(makeWord(w));
-  wi.sentence.setConnAt(0, 'は');
-  wi.sentence.setConnAt(2, 'える');
+  for (const w of ['焔', '燃', '渦']) wi.sentence.push(makeWord(w));
+  wi.sentence.setConnAt(1, 'える');
   wi._sig = null;
   const r3 = wi.resolve(run.player.stats);
-  ok(r3.valid && r3.active, '「敵は皆燃える」が不成文: ' + r3.reasonText);
-  ok(r3.stats.count === 1, 'count が 1 でない: ' + r3.stats.count);
-  ok(r3.stats.area > 0, 'area が 0 以下: ' + r3.stats.area);
-  wi.sentence.clear();
-  for (const w of ['己', '癒', '剣']) wi.sentence.push(makeWord(w));
-  wi.sentence.setConnAt(0, 'を');
-  wi.sentence.setConnAt(1, 'す');
-  wi._sig = null;
-  const r4 = wi.resolve(run.player.stats);
-  ok(r4.valid && r4.active, '「己を癒す剣」が不成文: ' + r4.reasonText);
-  ok(r4.heal === true, 'heal が立っていない');
-  ok(r4.kind === 'slash', 'kind が slash でない: ' + r4.kind);
-  ok(r4.stats.dmg > 0, 'dmg が 0 以下: ' + r4.stats.dmg);
-  wi.sentence.clear();
-  for (const w of ['斬', '風', '針']) wi.sentence.push(makeWord(w));
-  wi.sentence.setConnAt(0, 'る');
-  wi.sentence.setConnAt(1, 'の');
-  wi._sig = null;
-  const r5 = wi.resolve(run.player.stats);
-  ok(r5.valid && r5.active, '「斬る風の針」が不成文: ' + r5.reasonText);
-  ok(r5.special === true, 'special が立っていない');
-  ok(r5.kind === 'slash', 'kind が slash でない: ' + r5.kind);
-  ok(r5.shape === 'blade', 'shape が blade でない: ' + r5.shape);
-  console.log('  形語は文末 / 意味で型と癒しが変わる');
+  ok(r3.valid && r3.active, '「焔燃える渦」が不成文: ' + r3.reasonText);
+  ok(r3.special === true && r3.tail === '渦', '特殊武器「渦」が発動しない: '
+    + `special=${r3.special} tail=${r3.tail}`);
+  ok(r3.kind === 'orbit', 'kind が orbit でない: ' + r3.kind);
+  console.log('  文末が接続詞 (る・える) の文は不成文 / 語を足すと成立');
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

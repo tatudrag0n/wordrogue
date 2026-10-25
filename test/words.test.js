@@ -278,6 +278,10 @@ sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
   ok(r.idiom?.phrase === '爆風', `爆風が熟語にならない: ${r.idiom?.phrase}`);
   ok(r.fx.explode > 0, `爆風の効果が乗らない: ${r.fx.explode}`);
   ok(EV(['爆', '風']).idiom?.phrase === '爆風', '爆風 単体が熟語にならない');
+  // 爆風 の中の 爆 は動詞だが、熟語は 1 つの名詞。動作として数えない。
+  ok(r.verbs === 0, `「爆風」の中の動詞を数えている: ${r.verbs}`);
+  ok(!r.naturalParts.some((p) => p.key === 'topicverb' || p.key === 'verb'),
+    `「爆風剣」が動詞の文として評価されている: ${JSON.stringify(r.naturalParts)}`);
   // 爆風する は作れない (不自然なため)。
   r = EV(['爆', '風', 'する', '剣'], '剣');
   ok(!r.valid, `「爆風する剣」が成立してしまう: ${r.reasonText}`);
@@ -535,6 +539,15 @@ sec('プールの形で文が読めること');
     '「電貫く弓」に裸語幹の減点がある');
   const single = E2('風', 'の', '潮', '銃');
   ok(!single.naturalParts.some((p) => p.key === 'dupconn'), '重複していないのに減点がある');
+  // 同じ「く」でも、形容の連用 (強く) と動詞の連体 (貫く) は役割が違う。
+  // 使われ方が違えば重複として減点しない。
+  const kuAdj = E2('強', 'く', '速', 'く', '斬', 'る', '刃');
+  ok(kuAdj.valid && kuAdj.naturalParts.some((p) => p.key === 'dupconn'),
+    '形容の「く」の重複が減点されていない');
+  const kuVerb = E2('強', 'く', '斬', 'って', '貫', 'く', '刃');
+  ok(kuVerb.valid, `「強く斬って貫く刃」が不成立: ${kuVerb.reasonText}`);
+  ok(!kuVerb.naturalParts.some((p) => p.key === 'dupconn'),
+    '形容の「く」と動詞の「く」が重複とみなされた');
   console.log(`  ${good.length} 通り成立 / ${bad.length} 通りは理由つきで落ちる / 重複は減点`);
 }
 
@@ -794,6 +807,26 @@ sec('接続詞の規則');
   ok(!r.valid && r.reason === 'noobject', `NG5 の理由 ${r.reason}`);
 
   console.log('  例1・例2 成立 / NG1〜NG5 不成立');
+}
+
+sec('文末は語で閉じる (接続詞で終わる文は不成文)');
+{
+  const E = (...ws) => evaluate(ws.map(makeWord), { minContent: 2, tail: ws[ws.length - 1] });
+  // 接続詞は語に付くもので、文を閉じない。
+  const particleTail = evaluate(['風', 'の', '潮', 'の'].map(makeWord), { minContent: 2 });
+  ok(!particleTail.valid && particleTail.reason === 'tailconn',
+    `「風の潮の」→ valid=${particleTail.valid} reason=${particleTail.reason} (期待 tailconn)`);
+  const verbTail = evaluate(['焔', 'を', '斬', 'る'].map(makeWord), { minContent: 2 });
+  ok(!verbTail.valid && verbTail.reason === 'tailconn',
+    `「焔を斬る」→ valid=${verbTail.valid} reason=${verbTail.reason} (期待 tailconn)`);
+  // 最後に語を置けば、同じ並びが成立する。
+  ok(E('風', 'の', '潮', 'の', '銃').valid, '「風の潮の銃」が成立しない');
+  ok(E('焔', 'を', '斬', 'る', '剣').valid, '「焔を斬る剣」が成立しない');
+  // 実質語が足りない文は、そちらの理由が先に出る。
+  const few = evaluate(['火', 'の'].map(makeWord), { minContent: 2 });
+  ok(!few.valid && few.reason === 'onelexeme',
+    `「火の」の理由 ${few.reason} (期待 onelexeme)`);
+  console.log('  接続詞で終わる文は tailconn / 語を足すと成立');
 }
 
 sec('接続詞の順序 (両方向を許す)');

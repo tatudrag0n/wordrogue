@@ -396,8 +396,11 @@ export function checkConnectors(segs, dict) {
         acc);
     }
 
-    const n = (seen.get(s) || 0) + 1;
-    seen.set(s, n);
+    // 同じ接続詞でも、動詞の連体 (貫く) と形容の連用 (強く) は別の使い方。
+    // 重複として減点するのは、同じ使われ方のときだけ。
+    const dupKey = `${s}|${e.pred ? 'pred' : 'mod'}`;
+    const n = (seen.get(dupKey) || 0) + 1;
+    seen.set(dupKey, n);
     if (n > 1) acc.dups.push(s);
 
     acc.order.push(CONNECTORS[s].pri);

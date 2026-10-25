@@ -293,6 +293,43 @@ export function findCompound(text) {
   return best;
 }
 
+/**
+ * 文面の各語が登録済みの熟語 (PHRASE_BONUS) の内側にあるか。
+ *
+ * 熟語は 1 つの名詞として扱う。中の動詞だった語 (爆風 の 爆、貫通 の 貫) は
+ * 文の述語ではないので、動詞の数や文頭の品詞から外す。
+ *
+ * @param {string[]} segs 分割結果
+ * @param {string} joined 連結した文面
+ * @returns {{mask:boolean[], head:string|null}}
+ *   mask … 各語が熟語の内側にあるか
+ *   head … 文頭 (0 文字目) から始まる熟語。無ければ null
+ */
+function phraseMask(segs, joined) {
+  const mask = new Array(segs.length).fill(false);
+  let head = null;
+  const offs = [];
+  const boundary = new Set([0]);
+  let off = 0;
+  for (const t of segs) {
+    offs.push(off);
+    off += t.length;
+    boundary.add(off);
+  }
+  for (const key of Object.keys(PHRASE_BONUS)) {
+    for (let at = joined.indexOf(key); at >= 0; at = joined.indexOf(key, at + 1)) {
+      const end = at + key.length;
+      // 語の切れ目とずれた部分一致は熟語とみなさない。
+      if (!boundary.has(at) || !boundary.has(end)) continue;
+      if (at === 0) head = key;
+      for (let i = 0; i < segs.length; i++) {
+        if (offs[i] >= at && offs[i] + segs[i].length <= end) mask[i] = true;
+      }
+    }
+  }
+  return { mask, head };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 文の成立判定
 // ─────────────────────────────────────────────────────────────────────────────
@@ -316,6 +353,7 @@ const REASONS = {
   tailform:   '形を表す語が末尾語を直接修飾している',
   connorder:  '接続詞どうしが続いている',
   floatconn:  '接続詞が直前の語に結べない',
+  tailconn:   '文末が接続詞で終わっている。最後に語を置くこと',
   connnoun:   '連用形の接続詞のあとに名詞が来ている',
   noobject:   '「〜を」のあとに動詞 (=目的語) が無い',
 };
@@ -364,19 +402,22 @@ export function evaluate(words, opt = {}) {
   if (!segs) {
     return { ...base, valid: false, reason: 'unseg', reasonText: REASONS.unseg, grade: 'broken', gradeInfo: GRADES.broken };
   }
+  // 熟語の範囲。熟語の中の動詞は名詞の一部なので、文の述語として数えない。
+  const phrase = phraseMask(segs, joined);
   // 分割結果から実効語 (接続詞でない語) を数えながら効果を集計する。
   let content = 0;
   let verbs = 0;
   const elWeight = Object.create(null);
   const fx = Object.create(null);
 
-  for (const s of segs) {
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
     const w = WORDS[s];
     if (!w) continue;
     // 接続詞は文の骨組みであって、実効語ではない。
     const filler = w.cat === 'connect';
     if (!filler) content++;
-    if (w.cat === 'verb') verbs++;
+    if (w.cat === 'verb' && !phrase.mask[i]) verbs++;
     if (w.el) elWeight[w.el] = (elWeight[w.el] || 0) + 1;
     for (const [k, v] of Object.entries(w.fx)) {
       fx[k] = (fx[k] || 0) + v;
@@ -392,6 +433,16 @@ export function evaluate(words, opt = {}) {
       reason: content === 0 ? 'noparticle' : (content === 1 ? 'onelexeme' : 'fewwords'),
       reasonText: content === 0 ? '接続詞だけの羅列。実質語が要る'
         : (content === 1 ? REASONS.onelexeme : REASONS.fewwords),
+      grade: 'broken', gradeInfo: GRADES.broken,
+    };
+  }
+
+  // 文末が接続詞で終わる文は不成文。
+  //   接続詞は語に付くもので、文を閉じない。「氷を斬る」は「氷を斬る…」の途中。
+  if (CONNECTOR_SET.has(segs[segs.length - 1])) {
+    return {
+      ...base, segments: segs, content, valid: false,
+      reason: 'tailconn', reasonText: REASONS.tailconn,
       grade: 'broken', gradeInfo: GRADES.broken,
     };
   }
@@ -512,7 +563,12 @@ export function evaluate(words, opt = {}) {
   // ── 主題 ────────────────────────────────────────────────────────────────
   // 日本語の武器名は「属性 (青・炎・業火…) で始まるときに最も自然」。
   // 形や効果、動詞で始めると主題が立たない。
-  const headCat = contentSegs.length ? contentSegs[0].info.cat : null;
+  // 文頭が登録済みの熟語で、その頭が動詞でも、熟語は 1 つの名詞として扱う。
+  //   「爆風剣」… 爆 は動詞だが、熟語「爆風」の一部。動詞で始まる扱いにしない。
+  //   「毒蝕弾」… 頭が属性語なら、熟語でも属性で始まる主題として扱う。
+  const headCat = phrase.head && contentSegs.length && contentSegs[0].info.cat === 'verb'
+    ? null
+    : (contentSegs.length ? contentSegs[0].info.cat : null);
   // 先頭の語が連体形で結べているなら、それは正しい連体修飾の文頭。
   //   「凍える剣」「溶かされた剣」「滑らかな刀」… 自然な文頭なので減点しない。
   // 減点が残るのは、裸の語幹で始まる場合だけ。

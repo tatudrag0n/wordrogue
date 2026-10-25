@@ -621,7 +621,7 @@ export class Forge {
       row.append(this.renderStats(res));
       list.append(row);
     }
-    if (anyBorn) this.opt.audio?.phrase?.();
+    if (anyBorn) { this.opt.audio?.phrase?.(); }
     this._idiomPrimed = true;
   }
 
@@ -1002,7 +1002,7 @@ export class Forge {
     const r = this.run.cycleConnector(place);
     if (!r.ok) this.popEdit();
     this.focusPlace = { ...place };
-    if (r.text) this.opt.audio?.phrase?.();
+    if (r.text) { this.opt.audio?.phrase?.(); }
     else if (r.reason === 'none') this.opt.audio?.broken?.();
     else this.opt.audio?.tap?.();
     this.armed = null;

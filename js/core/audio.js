@@ -22,6 +22,36 @@ export class Audio {
     /** 属性ごとの発射音・命中音の間引き。同時に鳴りすぎないようにする。 */
     this._castAt = new Map();
     this._hitAt = new Map();
+    this._mediaBuffers = {};
+    this._mediaNames = ['slot','phrase','broken','levelup','gacha_spin','gacha_reveal','boss_warn','win','lose','explode','hurt','pickup','hit','slash','shoot','kill','xp','conn','combo','dash','heal','ui_open','ui_close','ui_select','ui_deny','heartbeat','tick_urgent','boss','gacha_shine','gacha_tick','gacha_lock','cast','elem_hit','cast_fire','cast_ice','cast_thunder','cast_wind','cast_earth','cast_dark','cast_water','cast_gold','hit_soft','hit_sharp','hit_heavy','hit_ring','hit_wind','hit_coin','hit_dark'];
+    this._mediaFetches = {};
+    this._mediaAt = new Map();
+    this._mediaGain = {
+      slot: 0.22, conn: 0.22, phrase: 0.32, broken: 0.24, levelup: 0.32,
+      gacha_spin: 0.20, gacha_shine: 0.32, gacha_tick: 0.16, gacha_lock: 0.22, gacha_reveal: 0.32,
+      boss_warn: 0.36, boss: 0.40, win: 0.34, lose: 0.36,
+      hit: 0.20, slash: 0.20, shoot: 0.18, kill: 0.20, explode: 0.26, hurt: 0.20,
+      combo: 0.20, dash: 0.18, heal: 0.28, xp: 0.16, pickup: 0.20,
+      ui_open: 0.20, ui_close: 0.18, ui_select: 0.18, ui_deny: 0.18,
+      heartbeat: 0.16, tick_urgent: 0.16, cast: 0.16, elem_hit: 0.14,
+      cast_fire: 0.18, cast_ice: 0.14, cast_thunder: 0.16, cast_wind: 0.16, cast_earth: 0.18,
+      cast_dark: 0.16, cast_water: 0.14, cast_gold: 0.14,
+      hit_soft: 0.14, hit_sharp: 0.12, hit_heavy: 0.16, hit_ring: 0.14, hit_wind: 0.12, hit_coin: 0.12, hit_dark: 0.14,
+    };
+    this._castMedia = { fire:'cast_fire', ice:'cast_ice', thunder:'cast_thunder', poison:'cast_dark', light:'cast_ice', dark:'cast_dark', wind:'cast_wind', water:'cast_water', nature:'cast_water', earth:'cast_earth', steel:'cast_gold', gold:'cast_gold', blood:'cast_dark', none:'cast_thunder' };
+    this._castRate = { fire:1, ice:1.35, thunder:1.55, poison:0.8, light:1.7, dark:0.65, wind:1.15, water:1, nature:1.25, earth:0.8, steel:1.2, gold:1.5, blood:0.7, none:1 };
+    this._hitMedia = { fire:'hit_heavy', ice:'hit_sharp', thunder:'hit_sharp', poison:'hit_soft', light:'hit_ring', dark:'hit_dark', wind:'hit_wind', water:'hit_soft', nature:'hit_soft', earth:'hit_heavy', steel:'hit_sharp', gold:'hit_coin', blood:'hit_dark', none:'hit_soft' };
+    this._hitRate = { fire:0.9, ice:1.3, thunder:1.6, poison:0.75, light:1, dark:0.7, wind:1.1, water:1, nature:1.2, earth:0.7, steel:1.2, gold:1, blood:0.8, none:1 };
+    this._mediaGap = {
+      xp: 0.05, cast: 0.045, elem_hit: 0.045, hit: 0.035, slash: 0.04, shoot: 0.04,
+      kill: 0.04, combo: 0.06, heartbeat: 0.25, gacha_tick: 0.04, tick_urgent: 0.08,
+    };
+    for (const name of this._mediaNames) {
+      this._mediaFetches[name] = fetch('assets/sfx/' + name + '.wav').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).catch(() => null);
+    }
+    this._bgmTracks = {};
+    this._bgmName = null;
+    this._bgmEl = null;
   }
 
   /** 最初のユーザ操作で呼ぶ。ブラウザの自動再生規約のため。 */
@@ -79,6 +109,7 @@ export class Audio {
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this._noise = buf;
+    this._loadMedia();
   }
 
   setVolume(v) {
@@ -149,20 +180,67 @@ export class Audio {
     return true;
   }
 
+  _loadMedia() {
+    if (!this.ctx) return;
+    for (const name of this._mediaNames) {
+      const p = this._mediaFetches[name] || fetch('assets/sfx/' + name + '.wav').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).catch(() => null);
+      p.then(ab => { if (!ab) return null; return this.ctx.decodeAudioData(ab); }).then(buf => { if (buf) this._mediaBuffers[name] = buf; }).catch(() => {});
+    }
+  }
+
+  playMedia(name, rate = 1) {
+    const buf = this._mediaBuffers[name];
+    if (!buf || !this.on) return false;
+    const key = name + '@' + rate;
+    const gap = this._mediaGap[name] ?? 0.05;
+    if (!this._throttle(this._mediaAt, key, gap)) return true;
+    try {
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = rate;
+      const g = this.ctx.createGain();
+      g.gain.value = this._mediaGain[name] ?? 0.2;
+      src.connect(g).connect(this.sfxGain);
+      src.start();
+      return true;
+    } catch { return false; }
+  }
+
+  setBgm(name, intensity = 0) {
+    if (!this.enabled) return;
+    if (this._bgmName === name && this._bgmEl) return;
+    if (this._bgmEl) { try { this._bgmEl.pause(); } catch {} }
+    this._bgmName = name;
+    let el = this._bgmTracks[name];
+    if (!el) {
+      try {
+        el = document.createElement('audio');
+        el.src = 'assets/bgm/' + name + '.wav';
+        el.loop = true;
+        this._bgmTracks[name] = el;
+      } catch { this._bgmEl = null; return; }
+    }
+    this._bgmEl = el;
+    try { el.currentTime = 0; } catch {}
+    const p = el.play();
+    if (p && p.catch) p.catch(() => {});
+    el.volume = Math.max(0.08, Math.min(0.34, 0.12 + intensity * 0.22));
+  }
+
   // ── ゲーム用の効果音 ─────────────────────────────────────────────────────
   _xpAt = -1;   // 最後に経験値の音を鳴らした時刻
-  hit()     { this.noise({ dur: 0.07, vol: 0.10, hp: 900, lp: 5200 }); }
-  slash()   { this.noise({ dur: 0.11, vol: 0.11, hp: 1600, lp: 7000 }); this.tone({ freq: 900, type: 'sawtooth', dur: 0.06, vol: 0.05, slide: 0.4 }); }
-  shoot()   { this.tone({ freq: 1500, type: 'square', dur: 0.05, vol: 0.05, slide: 0.35 }); }
-  explode() { this.noise({ dur: 0.34, vol: 0.24, hp: 60, lp: 3000 }); this.tone({ freq: 130, type: 'sine', dur: 0.28, vol: 0.16, slide: 0.3 }); }
-  hurt()    { this.tone({ freq: 260, type: 'sawtooth', dur: 0.2, vol: 0.16, slide: 0.42 }); this.noise({ dur: 0.16, vol: 0.12, hp: 200, lp: 2600 }); }
-  kill()    { this.tone({ freq: 700, type: 'square', dur: 0.07, vol: 0.07, slide: 1.5 }); }
-  pickup()  { this.tone({ freq: 880, type: 'sine', dur: 0.09, vol: 0.10 }); this.tone({ freq: 1320, type: 'sine', dur: 0.11, vol: 0.08, delay: 0.06 }); }
+  hit()     { if (this.playMedia('hit')) return; this.noise({ dur: 0.07, vol: 0.10, hp: 900, lp: 5200 }); }
+  slash()   { if (this.playMedia('slash')) return; this.noise({ dur: 0.11, vol: 0.11, hp: 1600, lp: 7000 }); this.tone({ freq: 900, type: 'sawtooth', dur: 0.06, vol: 0.05, slide: 0.4 }); }
+  shoot()   { if (this.playMedia('shoot')) return; this.tone({ freq: 1500, type: 'square', dur: 0.05, vol: 0.05, slide: 0.35 }); }
+  explode() { if (this.playMedia('explode')) return; this.noise({ dur: 0.34, vol: 0.24, hp: 60, lp: 3000 }); this.tone({ freq: 130, type: 'sine', dur: 0.28, vol: 0.16, slide: 0.3 }); }
+  hurt()    { if (this.playMedia('hurt')) return; this.tone({ freq: 260, type: 'sawtooth', dur: 0.2, vol: 0.16, slide: 0.42 }); this.noise({ dur: 0.16, vol: 0.12, hp: 200, lp: 2600 }); }
+  kill()    { if (this.playMedia('kill')) return; this.tone({ freq: 700, type: 'square', dur: 0.07, vol: 0.07, slide: 1.5 }); }
+  pickup()  { if (this.playMedia('pickup')) return; this.tone({ freq: 880, type: 'sine', dur: 0.09, vol: 0.10 }); this.tone({ freq: 1320, type: 'sine', dur: 0.11, vol: 0.08, delay: 0.06 }); }
   /**
    * 経験値を拾ったとき。同時に何十個も届くので、
    * 小音量にして、短い間隔では 1 回にまとめる。
    */
-  xp(step = 0) {
+  xp(step = 0) { if (this.playMedia('xp')) return;
     const now = this.ctx ? this.ctx.currentTime : 0;
     if (now - this._xpAt < 0.055) return;
     this._xpAt = now;
@@ -170,7 +248,7 @@ export class Audio {
     const n = Math.min(8, Math.max(0, step | 0));
     this.tone({ freq: 1560 * 2 ** (n / 12), type: 'sine', dur: 0.05, vol: 0.035 });
   }
-  levelup() { [0, 4, 7, 12].forEach((n, i) => this.tone({ freq: hz(69 + n), type: 'triangle', dur: 0.18, vol: 0.12, delay: i * 0.07 })); }
+  levelup() { if (this.playMedia('levelup')) return; [0, 4, 7, 12].forEach((n, i) => this.tone({ freq: hz(69 + n), type: 'triangle', dur: 0.18, vol: 0.12, delay: i * 0.07 })); }
 
   // ── 属性の音 ─────────────────────────────────────────────────────────────
   /**
@@ -181,6 +259,8 @@ export class Audio {
    */
   cast(el = 'none', kind = 'shot') {
     if (!this.on) return;
+    const cm = this._castMedia[el] || this._castMedia.none;
+    if (this.playMedia(cm, this._castRate[el] || 1)) return;
     if (!this._throttle(this._castAt, `${el}|${kind}`, 0.05)) return;
     const slash = kind === 'slash' || kind === 'whip';
     const heavy = kind === 'bomb' || kind === 'beam';
@@ -245,6 +325,8 @@ export class Audio {
    */
   elemHit(el = 'none') {
     if (!this.on) return;
+    const hm = this._hitMedia[el] || this._hitMedia.none;
+    if (this.playMedia(hm, this._hitRate[el] || 1)) return;
     if (!this._throttle(this._hitAt, el, 0.055)) return;
     switch (el) {
       case 'fire':
@@ -293,84 +375,85 @@ export class Audio {
 
   // ── UI の音 ──────────────────────────────────────────────────────────────
   /** 画面を開く。紙をめくるような短い上昇。 */
-  uiOpen() {
+  uiOpen() { if (this.playMedia('ui_open')) return;
     this.noise({ dur: 0.09, vol: 0.022, hp: 2200, lp: 9000 });
     this.tone({ freq: hz(79), type: 'triangle', dur: 0.07, vol: 0.035 });
     this.tone({ freq: hz(86), type: 'triangle', dur: 0.09, vol: 0.028, delay: 0.045, space: 0.1 });
   }
 
   /** 画面を閉じる。下降。 */
-  uiClose() {
+  uiClose() { if (this.playMedia('ui_close')) return;
     this.tone({ freq: hz(84), type: 'triangle', dur: 0.07, vol: 0.03 });
     this.tone({ freq: hz(77), type: 'triangle', dur: 0.1, vol: 0.024, delay: 0.04 });
     this.noise({ dur: 0.07, vol: 0.016, hp: 1800, lp: 6000, delay: 0.02 });
   }
 
   /** 選ぶ。小さな木の音。 */
-  uiSelect() {
+  uiSelect() { if (this.playMedia('ui_select')) return;
     this.tone({ freq: 880, type: 'sine', dur: 0.05, vol: 0.035 });
     this.noise({ dur: 0.03, vol: 0.02, hp: 3000, lp: 9000 });
   }
 
   /** できない操作。低く短く断る。 */
-  uiDeny() {
+  uiDeny() { if (this.playMedia('ui_deny')) return;
     this.tone({ freq: 150, type: 'square', dur: 0.09, vol: 0.035, slide: 0.8 });
   }
 
   /** 連斬の音。n が増えるほど少し高くなる。 */
   combo(n = 0) {
     if (!this.on) return;
+    if (this.playMedia('combo')) return;
     if (!this._throttle(this._hitAt, 'combo', 0.09)) return;
     const step = Math.min(12, Math.max(0, n | 0));
     this.tone({ freq: hz(72 + Math.min(14, step * 2)), type: 'triangle', dur: 0.07, vol: 0.03 });
   }
 
   /** ボス出現の警告。遠くで鳴る低いサイレン。 */
-  bossWarn() {
+  bossWarn() { if (this.playMedia('boss_warn')) return;
     this.tone({ freq: 180, type: 'sawtooth', dur: 0.5, vol: 0.09, slide: 0.75, space: 0.2 });
     this.tone({ freq: 120, type: 'sine', dur: 0.8, vol: 0.08, delay: 0.16, slide: 0.9 });
     this.noise({ dur: 0.8, vol: 0.05, hp: 120, lp: 900, space: 0.2 });
   }
 
   /** ダッシュの風切り音。 */
-  dash() {
+  dash() { if (this.playMedia('dash')) return;
     this.noise({ dur: 0.2, vol: 0.075, hp: 700, lp: 4200 });
     this.tone({ freq: 300, type: 'sine', dur: 0.16, vol: 0.05, slide: 2.1 });
   }
 
   /** 回復。 */
-  heal() {
+  heal() { if (this.playMedia('heal')) return;
     [0, 7, 12].forEach((n, i) => this.tone({
       freq: hz(76 + n), type: 'sine', dur: 0.16, vol: 0.06, delay: i * 0.05,
     }));
   }
 
   /** 部位に語を置く音。紙の上に置いた軽い音。 */
-  slot() {
+  slot() { if (this.playMedia('slot')) return;
     this.tone({ freq: 540, type: 'triangle', dur: 0.07, vol: 0.06 });
     this.noise({ dur: 0.045, vol: 0.035, hp: 2400, lp: 7000 });
   }
 
   /** 接続詞を選んだ音。 */
-  conn() {
+  conn() { if (this.playMedia('conn')) return;
     this.tone({ freq: 720, type: 'triangle', dur: 0.08, vol: 0.05 });
     this.tone({ freq: 1080, type: 'sine', dur: 0.1, vol: 0.04, delay: 0.05 });
   }
 
   /** 低体力の鼓動。level は 0..1 で、減るほど強く速くなる。 */
-  heartbeat(level = 0.5) {
+  heartbeat(level = 0.5) { if (this.playMedia('heartbeat')) return;
     const v = 0.045 + Math.min(1, Math.max(0, level)) * 0.05;
     this.tone({ freq: 64, type: 'sine', dur: 0.12, vol: v });
     this.tone({ freq: 52, type: 'sine', dur: 0.15, vol: v * 0.8, delay: 0.13 });
   }
 
   /** 残り時間の刻み。最後の数秒を急かす短い音。 */
-  tickUrgent() {
+  tickUrgent() { if (this.playMedia('tick_urgent')) return;
     this.tone({ freq: 1240, type: 'square', dur: 0.035, vol: 0.028 });
   }
 
   /** くじで新しい語を引いたときの、きらめき。 */
-  gachaShine() {
+  gachaShine() { if (this.playMedia('gacha_shine')) return;
     [96, 100, 103, 108, 112].forEach((n, i) => this.tone({
       freq: hz(n), type: 'sine', dur: 0.16, vol: 0.03, delay: 0.16 + i * 0.055,
     }));
@@ -378,19 +461,19 @@ export class Audio {
 
   // ── 言葉くじ ─────────────────────────────────────────────────────────────
   /** リールが回り始める音。 */
-  gachaSpin() {
+  gachaSpin() { if (this.playMedia('gacha_spin')) return;
     this.tone({ freq: 300, type: 'triangle', dur: 0.28, vol: 0.07, slide: 2.6 });
     this.noise({ dur: 0.42, vol: 0.05, hp: 1200, lp: 7200 });
   }
 
   /** リールの目が流れる音。i で音程を少し上げる。 */
-  gachaTick(i = 0) {
+  gachaTick(i = 0) { if (this.playMedia('gacha_tick')) return;
     const n = [84, 86, 88, 91][Math.abs(i) % 4];
     this.tone({ freq: hz(n), type: 'square', dur: 0.025, vol: 0.018 });
   }
 
   /** リールが 1 列ずつ止まる音。 */
-  gachaLock(i = 0) {
+  gachaLock(i = 0) { if (this.playMedia('gacha_lock')) return;
     this.tone({ freq: hz(79 + i * 5), type: 'triangle', dur: 0.14, vol: 0.085 });
     this.noise({ dur: 0.07, vol: 0.045, hp: 2400, lp: 9000 });
   }
@@ -399,7 +482,7 @@ export class Audio {
    * くじの開示。新しい語なら明るく、重複なら柔らかく返す。
    * @param {boolean} dup すでに持っている語か
    */
-  gachaReveal(dup = false) {
+  gachaReveal(dup = false) { if (this.playMedia('gacha_reveal')) return;
     if (dup) {
       [0, 5, 9].forEach((n, i) => this.tone({
         freq: hz(69 + n), type: 'triangle', dur: 0.22, vol: 0.065, delay: i * 0.075,
@@ -415,22 +498,22 @@ export class Audio {
   }
 
   /** 文が成立したとき。気持ちよい 2 音。 */
-  phrase() {
+  phrase() { if (this.playMedia('phrase')) return;
     this.tone({ freq: hz(76), type: 'triangle', dur: 0.13, vol: 0.11 });
     this.tone({ freq: hz(83), type: 'triangle', dur: 0.18, vol: 0.09, delay: 0.07 });
   }
   /** 文が崩れたとき。 */
-  broken() {
+  broken() { if (this.playMedia('broken')) return;
     this.tone({ freq: 190, type: 'sawtooth', dur: 0.16, vol: 0.10, slide: 0.6 });
   }
-  boss() {
+  boss() { if (this.playMedia('boss')) return;
     [0, -5, -12].forEach((n, i) => this.tone({ freq: hz(45 + n), type: 'sawtooth', dur: 0.5, vol: 0.16, delay: i * 0.16 }));
     this.noise({ dur: 0.8, vol: 0.14, hp: 40, lp: 1200 });
   }
-  win() {
+  win() { if (this.playMedia('win')) return;
     [0, 4, 7, 12, 16, 19].forEach((n, i) => this.tone({ freq: hz(69 + n), type: 'triangle', dur: 0.32, vol: 0.12, delay: i * 0.11 }));
   }
-  lose() {
+  lose() { if (this.playMedia('lose')) return;
     [0, -3, -7, -12].forEach((n, i) => this.tone({ freq: hz(64 + n), type: 'sawtooth', dur: 0.42, vol: 0.14, delay: i * 0.19 }));
   }
 
@@ -438,8 +521,14 @@ export class Audio {
    * BGM。簡単な和音を繰り返し、強度で戦況に追従させる。
    * @param {number} intensity 0..1
    */
-  musicTick(dt, intensity = 0) {
+  musicTick(dt, intensity = 0, track = 'stage1') {
     if (!this.on || !this.enabled) return;
+    this.setBgm(track, intensity);
+    if (this._bgmEl) {
+      if (this._bgmEl.paused) this._bgmEl.play().catch(()=>{});
+      this._bgmEl.volume = Math.max(0.08, Math.min(0.34, 0.12 + intensity * 0.22));
+      return;
+    }
     this._musicTimer -= dt;
     if (this._musicTimer > 0) return;
     this._musicTimer = 0.34;

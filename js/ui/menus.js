@@ -744,7 +744,7 @@ export class Menus {
       return;
     }
 
-    this.audio?.gachaSpin?.();
+    this.audio?.gachaSpin?.(); window.playMotion?.('gacha');
     // 3 列が少しずつ止まる。音だけ先に鳴らして「止まる予感」を作る。
     this._gachaDelay(() => this.audio?.gachaLock?.(0), 720);
     this._gachaDelay(() => this.audio?.gachaLock?.(1), 880);

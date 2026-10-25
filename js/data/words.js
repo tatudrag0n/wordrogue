@@ -602,11 +602,17 @@ export function evaluate(words, opt = {}) {
   //   「凍える剣」「溶かされた剣」「滑らかな刀」… 自然な文頭なので減点しない。
   // 減点が残るのは、裸の語幹で始まる場合だけ。
   const headBound = compounds.some((c) => c.start === 0 && (c.role === 'adn' || c.role === 'adv'));
+  // 文頭の語が格 (の・を・に・へ) を取っているなら、それは名詞句としての
+  // 主題であって「効果で始まる」文頭ではない。分類が効果語でも減点しない。
+  //   敵を深く斬る剣 / 敵の剣を斬る剣
+  // 敵・魂・力 のように分類は効果語でも、プールは名詞 (の・を・に・へ) だけ
+  // という語が多く、減点は分類ではなく「その場の使われ方」で決める。
+  const headNounUse = compounds.some((c) => c.start === 0 && c.role === 'case');
   if (headCat === 'element') {
     parts.push({ key: 'topic', label: '属性で始まる', v: 1.2 });
   } else if (headCat === 'form') {
     parts.push({ key: 'topicform', label: '形で始まる', v: -0.8 });
-  } else if (headCat === 'modifier' && !headBound) {
+  } else if (headCat === 'modifier' && !headBound && !headNounUse) {
     parts.push({ key: 'topicmod', label: '効果で始まる', v: -0.3 });
   } else if (headCat === 'verb' && !headBound) {
     parts.push({ key: 'topicverb', label: '動詞で始まる', v: -0.4 });
@@ -821,12 +827,12 @@ export function evaluate(words, opt = {}) {
       hasPredicate = true;
     }
   }
-  // 目的語。格助詞「〜を」のあとに動詞が来ていれば、一文として閉じている。
-  //   「業火を斬る剣」… これが日本語の完全な一節。
+  // 目的語。格助詞「〜を」の係り先が後方の他動詞まで解決していれば、
+  // 一文として閉じている。連用修飾が間に入っても、目的語句が先でも後でも同じ。
+  //   「業火を斬る剣」「敵を深く斬る剣」「深く敵を斬る剣」
   for (const c of compounds) {
     if (!(c.role === 'case' && c.next === 'verb')) continue;
-    const next = segs[c.idx + 1];
-    if (next && WORDS[next] && (WORDS[next].cat === 'verb' || compAt.get(c.idx + 2)?.pred)) {
+    if (c.resolved != null) {
       parts.push({ key: 'object', label: '目的語', v: 0.7 });
       break;
     }

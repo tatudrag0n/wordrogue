@@ -1,6 +1,7 @@
 // 語辞書と文判定の単体テスト。  node test/words.test.js
 import { WORDS, DRAWABLE, DRAWABLE_ALL, SIMPLE_POOL, CONNECTOR_SET, CONNECTOR_LIST, segment, evaluate, makeWord, drawWord, drawWeaponWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS, CONNECTORS, findCompound, WEAPON_WORDS, isWeaponWord } from '../js/data/words.js';
 import { canConnect, connectorFor, formOf, POS, connectorsAfter, formAfter, COMPOUND_POOLS } from '../js/data/words.connect.js';
+import { NOUN_POOL } from '../js/data/words.pool.js';
 import { CATEGORIES as CATALOG } from '../js/data/words.core.js';
 import { makeRng } from '../js/core/util.js';
 
@@ -858,6 +859,114 @@ sec('文末は語で閉じる (接続詞で終わる文は不成文)');
   console.log('  接続詞で終わる文は tailconn / 語を足すと成立');
 }
 
+sec('連用修飾語が目的語句を越えて述語に係ること');
+{
+  const E = (ws) => evaluate(ws.map(makeWord), { minContent: 2 });
+  // 必須の武器文。連用形 → 後方の述語の係りが解決する。
+  const required = [
+    ['敵', 'を', '深', 'く', '斬', 'る', '剣'],
+    ['深', 'く', '敵', 'を', '斬', 'る', '剣'],
+    ['敵', 'を', '静', 'かに', '斬', 'る', '剣'],
+    ['静', 'かに', '敵', 'を', '斬', 'る', '剣'],
+    ['敵', 'を', '必', 'ず', '斬', 'る', '剣'],
+    ['必', 'ず', '敵', 'を', '斬', 'る', '剣'],
+    ['敵', 'を', '強', 'く', '斬', 'る', '剣'],
+    ['強', 'く', '敵', 'を', '斬', 'る', '剣'],
+    ['敵', 'を', '深', 'く', '静', 'かに', '斬', 'る', '剣'],
+    ['深', 'く', '静', 'かに', '敵', 'を', '斬', 'る', '剣'],
+    ['敵', 'を', '深', 'く', '斬', 'り', '裂', 'く', '剣'],
+    ['深', 'く', '敵', 'を', '斬', 'り', '裂', 'く', '剣'],
+    ['敵', 'を', '深', 'く', '貫', 'く', '剣'],
+    ['深', 'く', '敵', 'を', '貫', 'く', '剣'],
+    ['敵', 'の', '剣', 'を', '深', 'く', '斬', 'る', '剣'],
+    ['深', 'く', '敵', 'の', '剣', 'を', '斬', 'る', '剣'],
+    ['敵', 'に', '深', 'く', '刺', 'す', '剣'],
+    ['敵', 'を', '深', 'く', '刺', 'す', '剣'],
+  ];
+  for (const ws of required) {
+    const r = E(ws);
+    ok(r.valid, `「${ws.join('')}」が不成立: ${r.reasonText || r.reason}`);
+    if (!r.valid) continue;
+    ok(r.naturalParts.some((p) => p.key === 'adverbial'),
+      `「${ws.join('')}」に連用修飾の加点が無い`);
+    if (ws.includes('を')) {
+      ok(r.naturalParts.some((p) => p.key === 'object'),
+        `「${ws.join('')}」に目的語の加点が無い`);
+    }
+  }
+
+  // 連用修飾が目的語句の前でも後でも、目的語と述語の関係は同じ。
+  const plain = E(['敵', 'を', '斬', 'る', '剣']);
+  const deepAfter = E(['敵', 'を', '深', 'く', '斬', 'る', '剣']);
+  const deepBefore = E(['深', 'く', '敵', 'を', '斬', 'る', '剣']);
+  ok(plain.valid && deepAfter.valid && deepBefore.valid, '比較用の文が不成立');
+  ok(deepAfter.natural >= plain.natural,
+    `「敵を深く斬る剣」が「敵を斬る剣」より自然さで負ける: ${deepAfter.natural} < ${plain.natural}`);
+  ok(Math.abs(deepAfter.natural - deepBefore.natural) < 1e-9,
+    `連用修飾の位置で自然さが逆転: ${deepAfter.natural} / ${deepBefore.natural}`);
+  ok(deepAfter.fx.power >= plain.fx.power,
+    `「敵を深く斬る剣」が「敵を斬る剣」より弱い: ${deepAfter.fx.power} < ${plain.fx.power}`);
+
+  // 敵 は分類が効果語でも、を で名詞句として使われているので
+  // 「効果で始まる」の減点を付けない。敵 だけの特例にはしない。
+  ok(!deepAfter.naturalParts.some((p) => p.key === 'topicmod'),
+    '「敵を深く斬る剣」に効果で始まる減点がある');
+  ok(!deepBefore.naturalParts.some((p) => p.key === 'topicmod'),
+    '「深く敵を斬る剣」に効果で始まる減点がある');
+  const nounOnly = Object.keys(WORDS).filter((w) => {
+    if (CONNECTOR_SET.has(w)) return false;
+    const pool = WORDS[w].pool || [];
+    return pool.length === 4
+      && pool.every((e, i) => e.k === ['の', 'を', 'に', 'へ'][i] && e.role === 'case');
+  });
+  const modNouns = nounOnly.filter((w) => WORDS[w].cat === 'modifier');
+  for (const w of modNouns) {
+    const r = E([w, 'を', '斬', 'る', '剣']);
+    ok(r.valid, `名詞用法の「${w}を」が不成立: ${r.reasonText}`);
+    ok(!r.naturalParts.some((p) => p.key === 'topicmod'),
+      `名詞用法の「${w}を」に効果で始まる減点がある`);
+  }
+  console.log(`  必須 ${required.length} 文 / 名詞だけのプール ${nounOnly.length} 語`
+    + ` (効果語 ${modNouns.length} 語)`);
+
+  // 述語が無い形は、連用形 + 名詞でも通さない。
+  const bad = [
+    [['敵', 'を', '深', 'く'], 'tailconn'],
+    [['深', 'く', '敵'], 'connnoun'],
+    [['敵', 'を', '深', 'く', '剣'], 'noobject'],
+    [['深', 'く', '剣'], 'connnoun'],
+    [['深', 'く', '敵', 'の', '剣'], 'connnoun'],
+    [['敵', 'を', '燃', 'える', '剣'], 'intransitive'],
+    [['焔', 'の', '斬', 'る', '剣'], 'subjectverb'],
+    [['敵', 'を', '深', 'く', '斬', 'る'], 'tailconn'],
+    [['深', 'く', '敵', 'を', '斬', 'る'], 'tailconn'],
+    [['敵', 'を', '深', 'く', '燃', 'える', '剣'], 'intransitive'],
+  ];
+  for (const [ws, why] of bad) {
+    const r = E(ws);
+    ok(!r.valid && r.reason === why,
+      `「${ws.join('')}」→ valid=${r.valid} reason=${r.reason} (期待 ${why})`);
+  }
+  const blade = evaluate(['刃', '剣'].map(makeWord), { minContent: 2, tail: '剣' });
+  ok(!blade.valid && blade.reason === 'tailform', `「刃剣」の理由 ${blade.reason}`);
+
+  // 10 文字の上限は Sentence が守る。11 文字目は入らない。
+  const { Sentence } = await import('../js/game/sentence.js');
+  const sen = new Sentence();
+  for (const w of ['敵', '深', '静', '斬', '剣']) {
+    ok(sen.push(makeWord(w)).ok, `「${w}」が入らない`);
+  }
+  ok(sen.setConnAt(0, 'を').ok && sen.setConnAt(1, 'く').ok
+    && sen.setConnAt(2, 'かに').ok && sen.setConnAt(3, 'る').ok,
+    '「敵を深く静かに斬る剣」の接続詞が置けない');
+  ok(sen.text === '敵を深く静かに斬る剣', `文面 ${sen.text}`);
+  ok(sen.len === 10, `文字数 ${sen.len} (期待 10)`);
+  ok(sen.evaluate({ minContent: 2 }).valid, '10 文字の文が不成立');
+  const over = sen.insertAt(5, makeWord('刃'));
+  ok(!over.ok && over.reason === 'len', `10 文字を超えて入った: ${JSON.stringify(over)} / ${sen.text}`);
+  ok(sen.len === 10, `上限を超えた: ${sen.len}`);
+}
+
 sec('接続詞の順序 (両方向を許す)');
 {
   const E2 = (...ws) => evaluate(ws.map((w) => ({ text: w })));
@@ -873,8 +982,9 @@ sec('接続詞の順序 (両方向を許す)');
   //   い形容詞の連体は「い」、な形容詞の連体は「な」。
   ok(E2('速', 'い', '焔', 'を', '斬', 'る', '妙', 'な', '剣').valid,
     '「速い…妙な」の形容の連体が通らない');
-  ok(!E2('速', 'く', '焔', 'を', '斬', 'る', '妙', 'な', '剣').valid,
-    '連用形「速く」のあとに名詞「焔」が通ってしまう');
+  // 連用形は目的語句を越えて後方の述語に係れる。名詞に係るのではない。
+  ok(E2('速', 'く', '焔', 'を', '斬', 'る', '妙', 'な', '剣').valid,
+    '「速く焔を斬る妙な剣」が通らない (連用形 + 目的語 + 述語)');
   ok(E2('焔', 'を', '斬', 'る', '妙', 'な', '剣').valid,
     '「焔を斬る妙な剣」が通らない');
   // 接続詞どうしが直接隣れる並びだけは落ちる (直前の語に結べない = 宙に浮く)。

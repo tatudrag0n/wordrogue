@@ -20,10 +20,14 @@
 //   2. 連体 (adn) と 格「の」 のあとは名詞句。連用の語や裸の動詞は来ない。
 //        NG「斬る速く…」
 //      (動詞が連体形で続く「斬る燃える刃」「焔の斬られた剣」は名詞句として認める)
-//   3. 連用 (adv) のあとは動詞か形容。名詞は来ない。
+//   3. 連用 (adv) は節の後方の動詞か形容に係る。名詞だけでは閉じない。
+//        係り先が節の終わりまでに無ければ不成文。
 //        NG「速く剣」「妙に剣」「急に焔」
-//   4. 格「を」のあとは動作 (述語の形を持つ語)。「に」「へ」は動作か形容。
-//        NG「焔を剣」
+//      目的語句や「の」句は越えられる (連用修飾は後方の述語に係る)。
+//        OK「速く敵を斬る剣」「深く敵の剣を斬る剣」
+//   4. 格「を」は同じ節の後方の他動詞で受ける。「に」「へ」は動作か形容。
+//        あいだに 0 個以上の連用修飾語が入れる。
+//        NG「焔を剣」 / OK「敵を深く斬る剣」「敵に深く刺す剣」
 //
 // 同じ接続詞を 2 回使うのは **不成立ではなく自然さの減点** にした。
 //   「風の潮の銃」は日本語として読めるので成立する (少し弱い)。
@@ -41,7 +45,6 @@ import {
   compoundPoolOf,
 } from './words.pool.js';
 import { PHRASE_BONUS } from './words.phrase.js';
-
 export { NOUN_POOL, WORD_POOLS, COMPOUND_POOLS };
 
 /** 品詞。自然さの採点 (形容の連体・裸の形容) と末尾語の判定に使う。 */
@@ -324,12 +327,22 @@ const ANIMATE_SUBJECT = new Set(['神', '魔', '魂', '霊', '賢', '己', '心'
 /**
  * 分割結果に接続詞の規則を適用する。
  *
+ * 判定は「接続詞の直後の 1 語」ではなく、**節の終わりまで先読みする**。
+ *   ・「〜を」は、後方の他動詞の述語まで係り先を探す。
+ *     あいだには 0 個以上の連用修飾語 (深く・静かに・必ず…) が入れる。
+ *   ・連用形は、目的語句を越えて後方の述語 (動詞・形容) に係れる。
+ *   ・連用形が名詞に係ることはない。述語が見つからないまま節が終われば不成文。
+ *
+ * 係り先は語ではなく **語の単位** で数える。接続詞を挟まずに熟語になる
+ * 語列 (発 + 電 + する) は 1 つの述語として扱う。
+ *
  * @param {string[]} segs 分割結果
  * @param {Record<string, {pos?:string, cat?:string, pool?:Array}>} [dict] 語の情報
  * @returns {{
  *   ok: boolean, reason: string, reasonText: string,
  *   compounds: Array<{text:string, source:string, connector:string, pri:number, pos:string,
- *     role:string, next?:string, pred:boolean, adj:boolean, idx:number}>,
+ *     role:string, next?:string, pred:boolean, adj:boolean, idx:number,
+ *     start:number, phrase:boolean, resolved?:number}>,
  *   floats: string[], used: string[], order: number[], dups: string[],
  * }}
  */
@@ -359,35 +372,12 @@ export function checkConnectors(segs, dict) {
       e: hit.form, start: i - hit.n, compound: true,
     };
   };
-  // j から始まる語 (接続詞の直後に来る語) と、その語に付いた形。
-  // j から始まる熟語に接続詞が付いていれば熟語ごと見る (炎の 爆 発 する 剣)。
-  const headAt = (j) => {
-    if (!segs[j] || isConnector(segs[j])) return { w: null, f: null };
-    let c = j;
-    while (c < segs.length && !isConnector(segs[c])) c++;
-    if (c < segs.length && c > j + 1) {
-      const b = bindAt(c);
-      if (b && b.compound && b.start === j) return { w: b.src, f: b.e };
-    }
-    // 語列が熟語になっていれば、熟語ごと名詞句の頭として扱う (滅亡の光 の「滅亡」)。
-    if (c > j + 1) {
-      const runText = segs.slice(j, c).join('');
-      if (PHRASE_BONUS[runText]) {
-        const b = bindAt(c);
-        return { w: { text: runText, pos: POS.noun }, f: b ? b.e : null };
-      }
-    }
-    const w = info(segs[j]);
-    const b = c === j + 1 ? bindAt(c) : null;
-    return { w, f: b ? b.e : null };
-  };
 
+  // 1. すべての接続詞が直前の語 (か、直前の語列でできた熟語) に結べること。
+  //    プールに無ければ宙に浮く = 壊れた文。
   for (let i = 0; i < segs.length; i++) {
     const s = segs[i];
     if (!isConnector(s)) continue;
-
-    // 1. 直前の語 (か、直前の語列でできた熟語) と結合する。
-    //    プールに無ければ宙に浮く = 壊れた文。
     const prev = segs[i - 1];
     const bound = bindAt(i);
     const src = bound ? bound.src : info(prev);
@@ -418,67 +408,207 @@ export function checkConnectors(segs, dict) {
       phrase: bound.compound, start: bound.start,
     });
     acc.used.push(s);
+  }
 
-    // 次の語と、その語に付いた形。
-    const { w: nw, f: nf } = headAt(i + 1);
-    const next = nw ? nw.text : segs[i + 1];
+  const compByConn = new Map(acc.compounds.map((c) => [c.idx, c]));
 
-    // 2. 連体と「の」のあとは名詞句。
-    if (e.role === 'adn' || (e.role === 'case' && e.next === 'noun')) {
-      if (nw && ((nw.pos === POS.verb && !nf) || (nf && nf.role === 'adv'))) {
-        return fail('connnoun',
-          `「${src.text}${s}」のあとに「${next}${nf ? nf.k : ''}」は置けない。`
-          + '連体の形や「の」のあとは名詞 (か連体の形) が来る。',
-          acc);
+  // 2. 語の単位。接続詞を挟まずに熟語になる語列は 1 語としてまとめる。
+  //    units[k] = { start, end, text, word, form, connIdx, compound }
+  const units = [];
+  for (let i = 0; i < segs.length; i++) {
+    if (isConnector(segs[i])) continue;
+    let c = i + 1;
+    while (c < segs.length && !isConnector(segs[c])) c++;
+    if (c < segs.length) {
+      const b = bindAt(c);
+      if (b && b.compound && b.start === i) {
+        units.push({
+          start: i, end: c - 1, text: b.src.text, word: b.src,
+          form: b.e, connIdx: c, compound: true,
+        });
+        i = c;                       // 熟語の内側の語は単位にしない
+        continue;
+      }
+      // 登録済みの熟語 (滅亡・毒蝕弾…) の語列は 1 つの名詞として扱う。
+      // 「焦がす滅亡の光」の 滅 を裸の動詞と見ないため。
+      if (c > i + 1) {
+        const runText = segs.slice(i, c).join('');
+        if (PHRASE_BONUS[runText] && b && !b.compound && b.start === c - 1) {
+          units.push({
+            start: i, end: c - 1, text: runText,
+            word: { text: runText, pos: POS.noun },
+            form: b.e, connIdx: c, compound: false, phrase: true,
+          });
+          i = c - 1;
+          continue;
+        }
+      }
+    } else if (i < segs.length - 1) {
+      const runText = segs.slice(i).join('');
+      if (PHRASE_BONUS[runText]) {
+        units.push({
+          start: i, end: segs.length - 1, text: runText,
+          word: { text: runText, pos: POS.noun },
+          form: null, connIdx: -1, compound: false, phrase: true,
+        });
+        break;
       }
     }
+    const own = (c === i + 1 && c < segs.length) ? bindAt(c) : null;
+    units.push({
+      start: i, end: i, text: segs[i], word: info(segs[i]),
+      form: own && !own.compound && own.start === i ? own.e : null,
+      connIdx: own && !own.compound && own.start === i ? c : -1,
+      compound: false,
+    });
+  }
 
-    // 2b. 「〜の」の直後に他動詞の連体形が来るなら、前の語がその動作の
-    //     主体でなければならない。「焔の斬る剣」は日本語に無い
-    //     (焔は斬る主体になれない)。神・魔のような主体になれる語だけ許す。
-    if (e.role === 'case' && e.next === 'noun' && nf
-      && nf.pred && !nf.intr && !nf.passive && !bound.compound
-      && src && !ANIMATE_SUBJECT.has(src.text)) {
-      return fail('subjectverb',
-        `「${src.text}の」のあとに他動詞「${next}${nf.k}」は置けない。`
-        + `「${src.text}」は「${next}」の主体になれない。`
-        + `目的語なら「${src.text}を${next}${nf.k}」の形にすること。`,
+  // 単位の述語性。形の役割まで見る。
+  //   深く (形容の連用)  … 連用修飾。述語ではない
+  //   斬り (動詞の連用)  … 述語。ただし後ろの動詞へも続く
+  //   斬る (動詞の連体) / 斬 (形なし・用言) … 述語
+  //   静かな (形容の連体) … 述語 (形容)
+  // 形の無い語は品詞で見る。光・発・志 のように動詞の形を持つ名詞でも、
+  // 裸で置かれていれば名詞句の頭であって述語ではない。
+  const predVerb = (u) => (u.form
+    ? isVerbal(u.word) && (u.form.pred || (u.form.role === 'adv' && !u.form.adj))
+    : u.word.pos === POS.verb);
+  const predAdj = (u) => (u.form
+    ? isAdjectival(u.word) && u.form.role === 'adn' && !!u.form.adj
+    : u.word.pos === POS.adj || u.word.pos === POS.naadj);
+  const advUnit = (u) => !!u.form && u.form.role === 'adv';
+  const predUnit = (u) => predVerb(u) || predAdj(u);
+  const nominal = (u) => !predUnit(u) && !advUnit(u);
+
+  // 連用形が越えられる名詞句か。名詞の連なりが格 (の・を・に・へ) で
+  // 閉じているときだけ、その句を目的語・主語として越えられる。
+  //   「深く敵を斬る」   … 敵を (をで閉じる) → 越えられる
+  //   「深く敵の剣を斬る」… 敵の + 剣を (をで閉じる) → 越えられる
+  //   「深く剣」          … 剣 (格が無い) → 越えられない
+  const nominalRunCaseClosed = (k) => {
+    let j = k;
+    let last = null;
+    while (j < units.length && nominal(units[j])) { last = units[j]; j++; }
+    return !!(last && last.form && last.form.role === 'case');
+  };
+
+  // 3. 連体と「の」のあとは名詞句。連用の語や裸の動詞は来ない。
+  for (let k = 0; k < units.length; k++) {
+    const u = units[k];
+    const f = u.form;
+    if (!f || !(f.role === 'adn' || (f.role === 'case' && f.next === 'noun'))) continue;
+    const nx = units[k + 1];
+    if (!nx) continue;
+    if ((nx.word.pos === POS.verb && !nx.form) || (nx.form && nx.form.role === 'adv')) {
+      return fail('connnoun',
+        `「${u.text}${f.k}」のあとに「${nx.text}${nx.form ? nx.form.k : ''}」は置けない。`
+        + '連体の形や「の」のあとは名詞 (か連体の形) が来る。',
         acc);
     }
 
-    // 3. 連用のあとは動詞か形容。名詞は来ない。
-    if (e.role === 'adv') {
-      const okNext = nw && (isVerbal(nw) || isAdjectival(nw))
-        && (!nf || nf.pred || nf.adj || nf.role === 'adv');
-      if (nw && !okNext) {
-        return fail('connnoun',
-          `連用形「${src.text}${s}」のあとに名詞「${next}」は置けない。`
-          + '連用形は動詞か形容を修飾する。名詞の前は連体の形 (〜い・〜な・〜る) にすること。',
+    // 3b. 「〜の」の直後に他動詞の連体形が来るなら、前の語がその動作の
+    //     主体でなければならない。「焔の斬る剣」は日本語に無い
+    //     (焔は斬る主体になれない)。神・魔のような主体になれる語だけ許す。
+    if (f.role === 'case' && f.next === 'noun' && nx.form
+      && nx.form.pred && !nx.form.intr && !nx.form.passive && !u.compound
+      && u.word && !ANIMATE_SUBJECT.has(u.word.text)) {
+      return fail('subjectverb',
+        `「${u.text}の」のあとに他動詞「${nx.text}${nx.form.k}」は置けない。`
+        + `「${u.text}」は「${nx.text}」の主体になれない。`
+        + `目的語なら「${u.text}を${nx.text}${nx.form.k}」の形にすること。`,
+        acc);
+    }
+  }
+
+  // 4. 係り先の先読み。
+  //    保留した「を」「に/へ」「連用」を、後方の述語で解決する。
+  //    節 (文) の終わりまでに解決しなければ不成文。
+  const pendingObj = [];
+  const pendingCase = [];
+  const pendingAdv = [];
+  const settle = (list, u) => {
+    for (const p of list) if (p.comp) p.comp.resolved = u.start;
+    list.length = 0;
+  };
+  const firstText = (list) => (list.length && list[0].comp ? list[0].comp.text : '');
+
+  for (let k = 0; k < units.length; k++) {
+    const u = units[k];
+    const vp = predVerb(u);
+    const ap = predAdj(u);
+
+    // 「を」の受け先。最初に出会った動詞で決める。
+    // 自動詞なら受けられない (焔を燃える剣 ✗)。
+    if (pendingObj.length && vp) {
+      if (u.form && u.form.intr) {
+        return fail('intransitive',
+          `「${firstText(pendingObj)}」の受け先が自動詞「${u.text}${u.form.k}」になっている。`
+          + '「〜を」は他動詞の形 (燃やす・凍らす など) で受けること。',
           acc);
       }
+      settle(pendingObj, u);
+    }
+    // 「に」「へ」は動作か形容で受ける。
+    if (pendingCase.length && (vp || ap)) settle(pendingCase, u);
+    // 連用形は動詞か形容で受ける。
+    if (pendingAdv.length && (vp || ap)) settle(pendingAdv, u);
+
+    if (advUnit(u)) {
+      // 動詞の連用形 (斬り) は述語を兼ねたまま、次の動詞へ続く。
+      pendingAdv.push({ comp: compByConn.get(u.connIdx) || null, unit: u });
+      continue;
+    }
+    if (vp || ap) continue;
+
+    // 名詞。保留した係り先を越えられるかを見る。
+    if (pendingObj.length) {
+      return fail('noobject',
+        `「${firstText(pendingObj)}」の受け先になる他動詞が文の中に無い。`
+        + '「〜を」のあとに、連用修飾を挟んで動詞を置くこと。'
+        + '連用形は動詞か形容を修飾する。',
+        acc);
+    }
+    if (pendingCase.length) {
+      return fail('noobject',
+        `「${firstText(pendingCase)}」の受け先になる動作か形容が文の中に無い。`
+        + `「〜${segs[units[k].connIdx] || 'に'}」のあとに動詞か形容を置くこと。`,
+        acc);
+    }
+    if (pendingAdv.length && !nominalRunCaseClosed(k)) {
+      return fail('connnoun',
+        `連用形「${firstText(pendingAdv)}」の係り先になる動詞・形容が文の中に無い。`
+        + '連用形は名詞に係らない。名詞の前は連体の形 (〜い・〜な・〜る) にすること。',
+        acc);
     }
 
-    // 4. 「を」は動作、「に」「へ」は動作か形容が要る。
-    if (e.role === 'case' && (e.next === 'verb' || e.next === 'pred')) {
-      const wantAdj = e.next === 'pred';
-      const capable = nw && (isVerbal(nw) || (wantAdj && isAdjectival(nw)));
-      const formOk = !nf || nf.pred || nf.role === 'adv' || (wantAdj && nf.adj);
-      if (!capable || !formOk) {
-        return fail('noobject',
-          `接続詞「${s}」のあとに${wantAdj ? '動作か形容' : '動作'}が無い。`
-          + `「〜${s}」のあとには ${wantAdj ? '斬る・強い' : '斬る・燃える'} のような語が要る。`,
-          acc);
-      }
-      // 4b. 「〜を」の受け先は他動詞。「焔を燃える」は日本語に無い。
-      //     連用形で続く場合 (斬り裂く) も、その形が自動詞なら受けられない。
-      if (e.next === 'verb' && nf && nf.intr) {
-        return fail('intransitive',
-          `「〜${s}」のあとに自動詞「${next}${nf.k}」は置けない。`
-          + `「${next}」を他動詞の形 (燃やす・凍らす など) にするか、`
-          + '別の語を挟むこと。',
-          acc);
+    // 名詞句の格。ここから係り先の解決を保留する。
+    if (u.form && u.form.role === 'case') {
+      if (u.form.next === 'verb') {
+        pendingObj.push({ comp: compByConn.get(u.connIdx) || null, unit: u });
+      } else if (u.form.next === 'pred') {
+        pendingCase.push({ comp: compByConn.get(u.connIdx) || null, unit: u });
       }
     }
+  }
+
+  // 節の終わりまで保留が残ったら不成文。
+  if (pendingObj.length) {
+    return fail('noobject',
+      `「${firstText(pendingObj)}」の受け先になる他動詞が文の中に無い。`
+      + '「〜を」のあとに、連用修飾を挟んで動詞を置くこと。',
+      acc);
+  }
+  if (pendingCase.length) {
+    return fail('noobject',
+      `「${firstText(pendingCase)}」の受け先になる動作か形容が文の中に無い。`
+      + '「〜に」「〜へ」のあとに動詞か形容を置くこと。',
+      acc);
+  }
+  if (pendingAdv.length) {
+    return fail('connnoun',
+      `連用形「${firstText(pendingAdv)}」の係り先になる動詞・形容が文の中に無い。`
+      + '連用形は名詞に係らない。名詞の前は連体の形 (〜い・〜な・〜る) にすること。',
+      acc);
   }
 
   return { ok: true, reason: '', reasonText: '', ...acc };

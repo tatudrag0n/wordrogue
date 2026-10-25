@@ -1236,6 +1236,200 @@ sec('pointercancel では語が動かない');
   console.log('    pointercancel では語が入らない');
 }
 
+sec('言葉鍛冶で「敵を深く斬る剣」と「深く敵を斬る剣」を作って攻撃できる');
+{
+  const r = await evalJs(`(async () => {
+    const m = await import(new URL('js/data/words.js', document.baseURI).href);
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+    app.menus.hideAll();
+    if (document.getElementById('forge').hidden) document.getElementById('btnForge').click();
+
+    // 武器 1 本と語彙を、この検査に必要な語だけにする。
+    const wi = run.weapons[0];
+    wi.sentence.clear();
+    for (let i = 0; i < run.lexicon.length; i++) run.lexicon[i] = null;
+    for (const t of ['敵', '深', '斬', '剣']) run.giveWord(m.makeWord(t), true);
+    run.refreshStats();
+    forge.render();
+
+    const realRows = () => [...document.querySelectorAll('#forgeWeapons .wrow')]
+      .filter((r) => !r.classList.contains('wrow-self') && !r.classList.contains('wrow-empty'));
+    const row = () => realRows()[0];
+    const senRow = () => row().querySelector('.sen-row');
+    const lexChip = (t) => [...document.querySelectorAll('#forgeLexicon .pword:not(.empty)')]
+      .find((n) => n.querySelector('span') && n.querySelector('span').textContent.trim() === t);
+    let pointerId = 100;
+    const ev = (node, type, x, y, id) => node.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, composed: true,
+      clientX: x, clientY: y, pointerId: id, pointerType: 'mouse',
+      isPrimary: true, button: 0,
+    }));
+    // 語を掴んで、座標へ運んで離す。ドロップ先は行 (target) の要素。
+    const drag = (src, target, x1, y1) => {
+      const a = src.getBoundingClientRect();
+      const x0 = a.left + a.width / 2, y0 = a.top + a.height / 2;
+      const id = ++pointerId;
+      ev(src, 'pointerdown', x0, y0, id);
+      ev(src, 'pointermove', x0 + 24, y0 + 16, id);
+      ev(src, 'pointermove', x1, y1, id);
+      ev(target, 'pointerup', x1, y1, id);
+    };
+    // 文の行の右端へ落とす。語と語のあいだの特定の隙間は狙わない。
+    const addWord = (t) => {
+      const chip = lexChip(t);
+      if (!chip) return false;
+      const r = senRow().getBoundingClientRect();
+      drag(chip, senRow(), r.right - 8, r.top + r.height / 2);
+      return true;
+    };
+    const tap = (node) => {
+      const r = node.getBoundingClientRect();
+      const id = ++pointerId;
+      ev(node, 'pointerdown', r.left + r.width / 2, r.top + r.height / 2, id);
+      ev(node, 'pointerup', r.left + r.width / 2, r.top + r.height / 2, id);
+    };
+    // 語の右の接続詞チップをタップし、一覧から選ぶ。
+    const setConn = (index, k) => {
+      const items = [...senRow().querySelectorAll('.sen-item')];
+      const chip = items[index] && items[index].querySelector('.sen-conn');
+      if (!chip) return { ok: false, why: 'no-chip' };
+      tap(chip);
+      const btn = [...document.querySelectorAll('.conn-pick')]
+        .find((b) => b.textContent.trim() === k);
+      if (!btn) {
+        return {
+          ok: false, why: 'no-option',
+          options: [...document.querySelectorAll('.conn-pick')].map((b) => b.textContent.trim()),
+        };
+      }
+      btn.click();
+      return { ok: true, conn: wi.sentence.at(index).conn ? wi.sentence.at(index).conn.text : null };
+    };
+    const build = async (order, conns) => {
+      for (const t of order) addWord(t);
+      await sleep(40);             // ドラッグ直後のタップ抑制を解く
+      const set = [];
+      for (const x of conns) {
+        const z = setConn(x[0], x[1]);
+        set.push(z);
+        if (!z.ok) break;
+      }
+      return { set, text: wi.sentence.text };
+    };
+    const snapshot = () => {
+      const res = wi.resolve(run.player.stats);
+      const rr = row();
+      return {
+        text: wi.sentence.text,
+        words: wi.sentence.words.map((w) => w.text),
+        conns: wi.sentence.conns.map((c) => (c ? c.text : null)),
+        valid: res.valid,
+        active: res.active,
+        dmg: res.stats.dmg,
+        kind: res.kind,
+        tail: res.tail,
+        grade: res.gradeInfo ? res.gradeInfo.name : '',
+        shownGrade: rr.querySelector('.wrow-grade')
+          ? rr.querySelector('.wrow-grade').textContent.trim() : '',
+        nat: rr.querySelector('.wrow-nat') ? rr.querySelector('.wrow-nat').textContent : '',
+        natural: res.evalResult ? res.evalResult.natural : 0,
+        pending: res.pending,
+        reason: res.reasonText || res.reason || '',
+      };
+    };
+    const returnWord = async (t) => {
+      const chip = [...senRow().querySelectorAll('.sen-word:not(.sen-tail)')]
+        .find((n) => n.textContent.trim() === t);
+      if (!chip) return { ok: false, why: 'no-word' };
+      const box = document.getElementById('forgeLexicon').getBoundingClientRect();
+      drag(chip, document.getElementById('forgeLexicon'), box.left + box.width / 2, box.top + box.height / 2);
+      await sleep(40);
+      return {
+        ok: true,
+        inSen: wi.sentence.words.some((w) => w.text === t),
+        inLex: run.lexicon.some((w) => w && w.text === t),
+      };
+    };
+
+    const firstBuild = await build(['敵', '深', '斬', '剣'], [[0, 'を'], [1, 'く'], [2, 'る']]);
+    const afterFirst = snapshot();
+
+    // 文の語を語彙へ戻す (DOM のドラッグ)。4 語すべて戻してから作り直す。
+    const returned = [];
+    for (const t of ['剣', '斬', '深', '敵']) returned.push(await returnWord(t));
+    const empty = { count: wi.sentence.count, lex: run.lexicon.filter(Boolean).map((w) => w.text) };
+
+    const secondBuild = await build(['深', '敵', '斬', '剣'], [[0, 'く'], [1, 'を'], [2, 'る']]);
+    const afterSecond = snapshot();
+
+    // 語の上に落としても置き換えない (手前に差し込む)。
+    run.giveWord(m.makeWord('火'), true);
+    run.refreshStats();
+    forge.render();
+    const fireChip = lexChip('火');
+    const targetChip = [...senRow().querySelectorAll('.sen-word:not(.sen-tail)')]
+      .find((n) => n.textContent.trim() === '斬');
+    const tc = targetChip.getBoundingClientRect();
+    drag(fireChip, targetChip, tc.left + tc.width / 2, tc.top + tc.height / 2);
+    await sleep(40);
+    const inserted = { words: wi.sentence.words.map((w) => w.text), count: wi.sentence.count };
+    const fireInSen = [...senRow().querySelectorAll('.sen-word:not(.sen-tail)')]
+      .find((n) => n.textContent.trim() === '火');
+    const lb = document.getElementById('forgeLexicon').getBoundingClientRect();
+    drag(fireInSen, document.getElementById('forgeLexicon'), lb.left + lb.width / 2, lb.top + lb.height / 2);
+    await sleep(40);
+    const afterCleanup = snapshot();
+
+    return {
+      firstBuild, afterFirst, returned, empty, secondBuild, afterSecond,
+      inserted, afterCleanup, lexCount: run.lexicon.filter(Boolean).length,
+    };
+  })()`);
+
+  ok(r.firstBuild.text === '敵を深く斬る剣', `1 つ目の文面: ${r.firstBuild.text}`);
+  ok(r.firstBuild.set.every((s) => s.ok), `接続詞を UI から選べない: ${JSON.stringify(r.firstBuild.set)}`);
+  ok(r.afterFirst.words.join('') === '敵深斬剣', `語の並び: ${r.afterFirst.words.join('')}`);
+  ok(r.afterFirst.conns.join(',') === 'を,く,る,', `接続詞の並び: ${r.afterFirst.conns.join(',')}`);
+  ok(r.afterFirst.valid, `「${r.afterFirst.text}」が不成文: ${r.afterFirst.reason}`);
+  ok(r.afterFirst.active, `「${r.afterFirst.text}」が攻撃しない`);
+  ok(r.afterFirst.dmg > 0, `威力が 0: ${r.afterFirst.dmg}`);
+  ok(r.afterFirst.tail === '剣' && r.afterFirst.kind === 'slash',
+    `武器語と攻撃の型: ${r.afterFirst.tail} / ${r.afterFirst.kind}`);
+  ok(/名文|絶句|成立/.test(r.afterFirst.shownGrade) && r.afterFirst.shownGrade !== '不成文',
+    `表示が成立していない: ${r.afterFirst.shownGrade}`);
+  ok(/連用修飾/.test(r.afterFirst.nat) && /目的語/.test(r.afterFirst.nat),
+    `自然さの内訳に連用修飾・目的語が出ない: ${r.afterFirst.nat}`);
+  console.log(`    「${r.afterFirst.text}」— ${r.afterFirst.shownGrade} / 自然さ ${r.afterFirst.natural.toFixed(2)} / 威力 ${r.afterFirst.dmg.toFixed(0)}`);
+
+  ok(r.returned.every((x) => x.ok && !x.inSen && x.inLex),
+    `文の語を語彙へ戻せない: ${JSON.stringify(r.returned)}`);
+  ok(r.empty.count === 0, `文が空にならない: ${r.empty.count}`);
+  ok(r.empty.lex.length === 4, `語彙に 4 語戻っていない: ${r.empty.lex.join('')}`);
+
+  ok(r.secondBuild.text === '深く敵を斬る剣', `2 つ目の文面: ${r.secondBuild.text}`);
+  ok(r.secondBuild.set.every((s) => s.ok), `接続詞を UI から選べない: ${JSON.stringify(r.secondBuild.set)}`);
+  ok(r.afterSecond.valid, `「${r.afterSecond.text}」が不成文: ${r.afterSecond.reason}`);
+  ok(r.afterSecond.active, `「${r.afterSecond.text}」が攻撃しない`);
+  ok(r.afterSecond.dmg > 0, `威力が 0: ${r.afterSecond.dmg}`);
+  ok(/名文|絶句|成立/.test(r.afterSecond.shownGrade) && r.afterSecond.shownGrade !== '不成文',
+    `表示が成立していない: ${r.afterSecond.shownGrade}`);
+  ok(Math.abs(r.afterSecond.natural - r.afterFirst.natural) < 1e-9,
+    `語順で自然さが変わる: ${r.afterFirst.natural} / ${r.afterSecond.natural}`);
+  console.log(`    「${r.afterSecond.text}」— ${r.afterSecond.shownGrade} / 自然さ ${r.afterSecond.natural.toFixed(2)} / 威力 ${r.afterSecond.dmg.toFixed(0)}`);
+
+  // 語の上に落としても置き換えない。すべての語が残り、1 語増える。
+  ok(r.inserted.count === 5, `置き換えが起きた: ${r.inserted.words.join('')} (${r.inserted.count} 語)`);
+  for (const t of ['深', '敵', '斬', '剣', '火']) {
+    ok(r.inserted.words.includes(t), `差し込みで「${t}」が消えた: ${r.inserted.words.join('')}`);
+  }
+  ok(r.afterCleanup.text === '深く敵を斬る剣', `差し込んだ語を戻せない: ${r.afterCleanup.text}`);
+  ok(r.afterCleanup.active, `戻したあと攻撃できない: ${r.afterCleanup.reason}`);
+  console.log(`    差し込み: ${r.inserted.words.join('')} → 戻すと「${r.afterCleanup.text}」`);
+}
+
 sec('言葉鍛冶の上から辞書を引ける');
 {
   const d = await evalJs(`(() => {

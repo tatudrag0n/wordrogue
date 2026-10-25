@@ -347,7 +347,7 @@ export class Menus {
         return;
       }
       this.save.setPart(part.id, i, this.growSel);
-      this.audio?.slot?.();
+      this.audio?.slot?.(); window.playMotion?.('sentence');
       this.renderGrow();
     });
     return slot;
@@ -381,7 +381,7 @@ export class Menus {
     word.addEventListener('click', () => {
       if (this.growSel && this.growSel !== entry.text) {
         save.setPart(part.id, i, this.growSel);   // 選んでいる語で置き換える
-        this.audio?.slot?.();
+        this.audio?.slot?.(); window.playMotion?.('sentence');
       } else if (this.growSel === entry.text) {
         save.setPart(part.id, i, entry.text);      // 同じ語 → 外す (取り外せる)
         this.audio?.tap?.();
@@ -744,7 +744,7 @@ export class Menus {
       return;
     }
 
-    this.audio?.gachaSpin?.();
+    this.audio?.gachaSpin?.(); window.playMotion?.('gacha');
     // 3 列が少しずつ止まる。音だけ先に鳴らして「止まる予感」を作る。
     this._gachaDelay(() => this.audio?.gachaLock?.(0), 720);
     this._gachaDelay(() => this.audio?.gachaLock?.(1), 880);
@@ -909,7 +909,7 @@ export class Menus {
       if (!maxed) {
         row.querySelector('.up-buy').addEventListener('click', () => {
           const r = this.save.buyMeta(key);
-          if (r.ok) this.audio?.phrase?.();
+          if (r.ok) { this.audio?.phrase?.(); window.playMotion?.('sentence'); }
           else this.audio?.broken?.();
           this.renderArchive();
         });

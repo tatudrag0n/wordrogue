@@ -751,5 +751,28 @@ document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.le
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
 <script type="module" src="js/main.js?v=1.5"></script>
+<script>
+  (function(){
+    window.playMotion = function(name){
+      try {
+        var v = document.getElementById('motionOverlay');
+        if (!v) {
+          v = document.createElement('video');
+          v.id = 'motionOverlay';
+          v.muted = true;
+          v.playsInline = true;
+          v.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;z-index:9999;opacity:0;transition:opacity .25s;background:transparent;';
+          document.body.appendChild(v);
+        }
+        v.src = 'assets/motion/' + name + '.mp4';
+        v.style.opacity = '1';
+        v.currentTime = 0;
+        var p = v.play();
+        if (p && p.catch) p.catch(function(){});
+        v.onended = function(){ v.style.opacity = '0'; };
+      } catch(e){}
+    };
+  })();
+</script>
 </body>
 </html>

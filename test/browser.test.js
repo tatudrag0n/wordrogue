@@ -412,8 +412,10 @@ ok(rows.hint === 1, `武器を追加できる旨の行が無い: ${JSON.stringif
 console.log(`    行: 自身 ${rows.self} / 武器 ${rows.weapon} / 追加案内 ${rows.hint}`);
 const words = await evalJs('document.querySelectorAll("#forgeWeapons .sen-word").length');
 ok(words >= 1, `文の中の語が表示されない: ${words}`);
-const gaps = await evalJs('document.querySelectorAll("#forgeWeapons .sen-gap").length');
-ok(gaps >= 1, `語の後ろの置き場が出ていない: ${gaps}`);
+const gaps = await evalJs('document.querySelectorAll("#forgeWeapons .sen-gap, #forgeWeapons .sen-out").length');
+ok(gaps === 0, `語のあいだの記号や空欄が残っている: ${gaps}`);
+const rowsN = await evalJs('document.querySelectorAll("#forgeWeapons .sen-row").length');
+ok(rowsN >= 1, `文の行が出ていない: ${rowsN}`);
 const conns = await evalJs('document.querySelectorAll("#forgeWeapons .sen-conn").length');
 ok(conns >= 1, `接続詞の表示がない: ${conns}`);
 
@@ -444,7 +446,7 @@ sec('語をタップすると直後の接続詞が切り替わる');
       len: wi.sentence.len,
       active: wi.resolve(run.player.stats).active,
       shown: [...document.querySelectorAll('#forgeWeapons .sen-conn.filled')].map(n => n.textContent),
-      gapText: [...document.querySelectorAll('#forgeWeapons .sen-gap')].map(n => n.textContent.trim()),
+      gaps: document.querySelectorAll('#forgeWeapons .sen-gap, #forgeWeapons .sen-out').length,
     };
   })()`);
   ok(conn.opts.length > 0, '接続詞の候補が出ない');
@@ -455,8 +457,7 @@ sec('語をタップすると直後の接続詞が切り替わる');
   ok(conn.count === 2, `語が変わった: ${conn.count}`);
   ok(conn.len <= conn.maxLen, `文が ${conn.len} 文字 (上限 ${conn.maxLen})`);
   ok(conn.active, `${conn.title} が不成立`);
-  // 隙間の「＋」は見せない (要求)。テキストは空で、置き場だけが残る。
-  ok(conn.gapText.every((t) => t === '＋'), `語の後ろの置き場に＋が出ない: ${conn.gapText.join(',')}`);
+  ok(conn.gaps === 0, `語のあいだの ✕ / 空欄が残っている: ${conn.gaps}`);
   console.log(`    「${conn.title}」— ${conn.count} 語 / ${conn.len} 文字 / 接続詞 ${conn.opts.join('→')}→なし`);
 }
 
@@ -549,22 +550,28 @@ await sleep(350);
     const row0 = [...document.querySelectorAll('#forgeWeapons .wrow')]
       .find((r) => !r.classList.contains('wrow-self') && !r.classList.contains('wrow-empty'));
     const item0 = row0 && row0.querySelector('.sen-item');
-    const gap0 = row0.querySelector('.sen-gap');
+    const senRow = row0 && row0.querySelector('.sen-row');
+    const sr = senRow && senRow.getBoundingClientRect();
+    const hr = row0 && row0.querySelector('.wrow-head').getBoundingClientRect();
+    const forge = window.__wordrogue.forge;
+    const rowPlace = !!(sr && forge.dropAt(sr.left + sr.width / 2, sr.top + sr.height / 2));
+    const headPlace = !!(hr && forge.dropAt(hr.left + 4, hr.top + hr.height / 2));
     return {
       // HTML5 の draggable は使ってない。pointer で自前実装する。
       html5: document.querySelectorAll('#forge [draggable="true"]').length,
       lexicon: lex.length,
-      // 語彙の語と文の中の語・隙間が、ドロップ先として data-place を持つこと。
       lexiconPlace: lex.filter(n => n.dataset.place).length,
-      wordPlace: !!item0 && !!item0.dataset.place,
-      gapPlace: !!gap0 && !!gap0.dataset.place,
+      itemPlace: !!item0 && !!item0.dataset.place,
+      rowPlace,
+      headPlace,
     };
   })()`);
   ok(dnd.html5 === 0, `HTML5 の draggable が残っている: ${dnd.html5} 個 (タップを奪う)`);
   ok(dnd.lexicon === dnd.lexiconPlace, `語彙の語に data-place が無い: ${dnd.lexiconPlace} / ${dnd.lexicon}`);
-  ok(dnd.wordPlace, '文の語に data-place が無い');
-  ok(dnd.gapPlace, '文の隙間に data-place が無い');
-  console.log(`    語彙 ${dnd.lexicon} 語すべてに data-place / 文の語と隙間もドロップ先`);
+  ok(!dnd.itemPlace, '文の語に古い data-place が残っている');
+  ok(dnd.rowPlace, '文の行がドロップ先になっていない');
+  ok(dnd.headPlace, '武器の見出しへのドロップが行に届かない');
+  console.log(`    語彙 ${dnd.lexicon} 語に data-place / 文の行と見出しのどこでもドロップ可`);
 }
 
 sec('ドラッグで語を文へ入れ、文の並びを変えられること');
@@ -590,7 +597,7 @@ sec('ドラッグで語を文へ入れ、文の並びを変えられること');
     const wa = run.lexicon[a].text;
     const wb = run.lexicon[b].text;
 
-    // 語彙 -> 文の末尾 (末尾の隙間に落とす = 足す)。
+    // 語彙 -> 文の末尾 (行の末尾に落とす = 足す)。
     forge.dropOnto({ kind: 'lexicon', index: a }, { kind: 'gap', wi, index: wi.sentence.count });
     const placed = {
       inSen: wi.sentence.words[wi.sentence.count - 1] && wi.sentence.words[wi.sentence.count - 1].text,
@@ -607,7 +614,7 @@ sec('ドラッグで語を文へ入れ、文の並びを変えられること');
     forge.dropOnto({ kind: 'slot', wi, index: 1 }, { kind: 'slot', wi, index: 0 });
     const moved = { s0: wi.sentence.words[0].text, s1: wi.sentence.words[1].text, count: wi.sentence.count };
 
-    // 文の末尾の隙間へ運べば、並びの末尾に来る。
+    // 文の行の末尾へ運べば、並びの末尾に来る。
     forge.dropOnto({ kind: 'slot', wi, index: 0 }, { kind: 'gap', wi, index: wi.sentence.count });
     const gapMoved = { first: wi.sentence.words[0].text, last: wi.sentence.words.at(-1).text, count: wi.sentence.count };
 
@@ -638,13 +645,13 @@ sec('ドラッグで語を文へ入れ、文の並びを変えられること');
     `並び替えが違う: ${dnd.moved.s0} / ${dnd.moved.s1}`);
   ok(dnd.moved.count === 2, `並べ替えで語が失われた: ${dnd.moved.count}`);
   ok(dnd.gapMoved.last === dnd.wb && dnd.gapMoved.count === 2,
-    `末尾の隙間へ運んでも末尾に来ない: ${JSON.stringify(dnd.gapMoved)}`);
+    `行の末尾へ運んでも末尾に来ない: ${JSON.stringify(dnd.gapMoved)}`);
   ok(dnd.back.count === 1, `文から語が戻らない: ${dnd.back.count}`);
   // 先頭の語を語彙へ戻すので、入るのは wa の語。
   ok(dnd.back.lex === dnd.wa, `語彙へ語が戻らない: ${dnd.back.lex}`);
   ok(dnd.backOccupied.ok && dnd.backOccupied.lexHasIt,
     `埋まったマスに落としても語彙へ戻らない: ${JSON.stringify(dnd.backOccupied)}`);
-  console.log(`    「${dnd.wa}」→「${dnd.title}」… 並べ替え → 末尾の隙間 → 語彙へ戻す すべて成立`);
+  console.log(`    「${dnd.wa}」→「${dnd.title}」… 並べ替え → 行の末尾 → 語彙へ戻す すべて成立`);
 }
 
 sec('語の上に落としても置き換えない (手前に差し込む)');
@@ -696,7 +703,7 @@ sec('語彙が満杯でも文から語を戻せること');
       + run.weapons.reduce((n, w) => n + w.sentence.count, 0);
     const lexText = run.lexicon[0].text;
 
-    // 語彙 -> 文 (末尾の隙間)。語彙の空きが 1 つ増えるだけ。
+    // 語彙 -> 文 (行の末尾)。語彙の空きが 1 つ増えるだけ。
     forge.dropOnto({ kind: 'lexicon', index: 0 }, { kind: 'gap', wi, index: wi.sentence.count });
     const after = run.lexicon.filter(Boolean).length
       + run.weapons.reduce((n, w) => n + w.sentence.count, 0);
@@ -1047,9 +1054,9 @@ sec('タップで語を選べる (HTML5 drag をやめた理由)');
 
     const row = [...document.querySelectorAll('#forgeWeapons .wrow')]
       .find((r) => !r.classList.contains('wrow-self') && !r.classList.contains('wrow-empty'));
-    // 文は自由に並べる。末尾の「＋」(隙間) が唯一の追加位置。
-    const gap = [...row.querySelectorAll('.sen-gap')].pop();
-    if (armed && gap) tap(gap);
+    // 文の余白をタップすると末尾に入る。特定の「＋」は無い。
+    const senRow = row.querySelector('.sen-row');
+    if (armed && senRow) tap(senRow);
     const sen = run.weapons[0].sentence;
     const got = sen.at(sen.count - 1) && sen.at(sen.count - 1).word.text;
     return { draggable, text, armed, highlighted, got, ok: got === text, stick: app.input.stick.active };
@@ -1079,13 +1086,12 @@ sec('pointer でドラッグできる');
     const word = document.querySelector('#forgeLexicon .pword:not(.empty)');
     const text = word.querySelector('span').textContent.trim();
     const from = word.getBoundingClientRect();
-    // 文の隙間 (＋) が追加位置。
+    // 文の行のどこでも追加位置になる。
     const row = [...document.querySelectorAll('#forgeWeapons .wrow')]
       .find((r) => !r.classList.contains('wrow-self') && !r.classList.contains('wrow-empty'));
-    const slots = [...row.querySelectorAll('.sen-gap')];
-    const to = slots[slots.length - 1].getBoundingClientRect();
+    const to = row.querySelector('.sen-row').getBoundingClientRect();
     const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2;
-    const x1 = to.left + to.width / 2, y1 = to.top + to.height / 2;
+    const x1 = to.right - 4, y1 = to.top + to.height / 2;
     const ev = (type, x, y) => word.dispatchEvent(new PointerEvent(type, {
       bubbles: true, cancelable: true, clientX: x, clientY: y,
       pointerId: 2, pointerType: 'mouse', isPrimary: true, button: 0,
@@ -1104,7 +1110,7 @@ sec('pointer でドラッグできる');
   console.log(`    ドラッグで「${d.text}」を文へ`);
 }
 
-sec('指がセルの上で離어도ドロップが確定する');
+sec('指が文の行の上で離れてもドロップが確定する');
 {
   // 実機では語の上で離さない。指は枠のセル上に来ている。
   // テストがソースノードで pointerup を投げていると、
@@ -1125,12 +1131,11 @@ sec('指がセルの上で離어도ドロップが確定する');
     const text = word.querySelector('span').textContent.trim();
     const row = [...document.querySelectorAll('#forgeWeapons .wrow')]
       .find((r) => !r.classList.contains('wrow-self') && !r.classList.contains('wrow-empty'));
-    const gaps = [...row.querySelectorAll('.sen-gap')];
-    const slot = gaps[gaps.length - 1];
+    const senRow = row.querySelector('.sen-row');
     const from = word.getBoundingClientRect();
-    const to = slot.getBoundingClientRect();
+    const to = senRow.getBoundingClientRect();
     const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2;
-    const x1 = to.left + to.width / 2, y1 = to.top + to.height / 2;
+    const x1 = to.right - 4, y1 = to.top + to.height / 2;
     const o = (x, y) => ({
       bubbles: true, cancelable: true, clientX: x, clientY: y,
       pointerId: 7, pointerType: 'touch', isPrimary: true, button: 0,
@@ -1138,14 +1143,57 @@ sec('指がセルの上で離어도ドロップが確定する');
     word.dispatchEvent(new PointerEvent('pointerdown', o(x0, y0)));
     word.dispatchEvent(new PointerEvent('pointermove', o(x0 + 20, y0 + 20)));
     word.dispatchEvent(new PointerEvent('pointermove', o(x1, y1)));
-    // pointerup は文の隙間へ飛ばす。ソースには届かない。
-    slot.dispatchEvent(new PointerEvent('pointerup', o(x1, y1)));
+    // pointerup は文の行へ飛ばす。ソースには届かない。
+    senRow.dispatchEvent(new PointerEvent('pointerup', o(x1, y1)));
     const got = wi.sentence.words[0] && wi.sentence.words[0].text;
     return { text, got, ok: got === text, dragFrom: forge.dragFrom };
   })()`);
-  ok(d.ok, `セル上で離しても語が入らない: ${d.got} (狙いは ${d.text})`);
+  ok(d.ok, `行の上で離しても語が入らない: ${d.got} (狙いは ${d.text})`);
   ok(!d.dragFrom, 'ドラッグの後に dragFrom が残った');
-  console.log(`    セル上で離しても「${d.text}」が入った`);
+  console.log(`    行の上で離しても「${d.text}」が入った`);
+}
+
+sec('文の語を語彙の箱へドラッグで戻せる');
+{
+  const d = await evalJs(`(async () => {
+    const m = await import(new URL('js/data/words.js', document.baseURI).href);
+    const app = window.__wordrogue;
+    const forge = app.forge;
+    const run = app.run;
+    app.menus.hideAll();
+    if (document.getElementById('forge').hidden) document.getElementById('btnForge').click();
+    const wi = run.weapons[0];
+    wi.sentence.clear();
+    for (const t of ['炎', '剛', '速']) wi.sentence.push(m.makeWord(t));
+    while (run.lexiconFull) run.forgetWord(run.lexicon.find(Boolean));
+    run.refreshStats();
+    forge.render();
+
+    const chip = document.querySelector('#forgeWeapons .sen-word');
+    const text = chip.querySelector('span').textContent.trim();
+    const box = document.getElementById('forgeLexicon').getBoundingClientRect();
+    const from = chip.getBoundingClientRect();
+    const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2;
+    const x1 = box.left + box.width / 2, y1 = box.top + box.height / 2;
+    const ev = (type, x, y) => chip.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, clientX: x, clientY: y,
+      pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0,
+    }));
+    ev('pointerdown', x0, y0);
+    ev('pointermove', x0 + 20, y0 + 20);
+    ev('pointermove', x1, y1);
+    ev('pointerup', x1, y1);
+    return {
+      text,
+      removed: !wi.sentence.words.some((w) => w.text === text),
+      inLex: run.lexicon.some((w) => w && w.text === text),
+      dragFrom: forge.dragFrom,
+    };
+  })()`);
+  ok(d.removed, `文の語が残っている: ${d.text}`);
+  ok(d.inLex, '語彙の箱へ戻っていない');
+  ok(!d.dragFrom, 'ドラッグの後に dragFrom が残った');
+  console.log(`    文の「${d.text}」を語彙の箱へ -> 戻った`);
 }
 
 sec('pointercancel では語が動かない');
@@ -1167,12 +1215,11 @@ sec('pointercancel では語が動かない');
     const text = word.querySelector('span').textContent.trim();
     const row = [...document.querySelectorAll('#forgeWeapons .wrow')]
       .find((r) => !r.classList.contains('wrow-self') && !r.classList.contains('wrow-empty'));
-    const gaps = [...row.querySelectorAll('.sen-gap')];
-    const slot = gaps[gaps.length - 1];
+    const senRow = row.querySelector('.sen-row');
     const from = word.getBoundingClientRect();
-    const to = slot.getBoundingClientRect();
+    const to = senRow.getBoundingClientRect();
     const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2;
-    const x1 = to.left + to.width / 2, y1 = to.top + to.height / 2;
+    const x1 = to.right - 4, y1 = to.top + to.height / 2;
     const o = (x, y) => ({
       bubbles: true, cancelable: true, clientX: x, clientY: y,
       pointerId: 8, pointerType: 'touch', isPrimary: true, button: 0,
@@ -1180,7 +1227,7 @@ sec('pointercancel では語が動かない');
     word.dispatchEvent(new PointerEvent('pointerdown', o(x0, y0)));
     word.dispatchEvent(new PointerEvent('pointermove', o(x0 + 20, y0 + 20)));
     word.dispatchEvent(new PointerEvent('pointermove', o(x1, y1)));
-    slot.dispatchEvent(new PointerEvent('pointercancel', o(x1, y1)));
+    senRow.dispatchEvent(new PointerEvent('pointercancel', o(x1, y1)));
     const got = wi.sentence.words[0] && wi.sentence.words[0].text;
     return { text, got, ok: got == null, dragFrom: forge.dragFrom };
   })()`);

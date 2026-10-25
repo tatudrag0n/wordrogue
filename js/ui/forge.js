@@ -2,8 +2,9 @@
 // ワードローグ — 言葉鍛冶 (文の組み立て画面)
 //
 // 枠に語を嵌めるのではない。語を自由に並べて文にする。
-//   語彙の語を文の語へドラッグすると、その手前に差し込まれる (置き換えはしない)。
-//   文の中の語はドラッグで並べ替えられる。語彙へ戻せば外れる。
+//   語彙の語を文の行へドラッグすると、落とした x 座標に近い境目へ差し込む。
+//   語の置き換えはしない。文の中の語はドラッグで並べ替えられる。
+//   文の語を語彙の箱へドラッグすると語彙へ戻る。
 //   文は語と語のあいだに空間を置かず、そのまま連結して見せる。
 //
 // 接続詞は語の直後に付く。語の横にあるだけなので、
@@ -115,6 +116,8 @@ export class Forge {
     this.dragFrom = null;
     /** data-place のキー -> 置き場。描き直すごとに作り直す。 */
     this.placeById = new Map();
+    /** 文の行 -> その文の置き場。ドロップは行のどこでも受ける。 */
+    this.senDropRows = new Map();
     this._hotId = '';
     /** ドラッグした直後。タップの誤発火を防ぐ。 */
     this.suppressClick = false;
@@ -189,6 +192,7 @@ export class Forge {
   render() {
     this.closeConnPicker();
     this.placeById.clear();
+    this.senDropRows.clear();
     this._hotId = '';
     if (this.undoBtn) this.undoBtn.disabled = this.undoStack.length === 0;
     // 語を選んだ状態。置き場が分かるよう、文の行をやや目立たせる。
@@ -260,28 +264,39 @@ export class Forge {
   /**
    * 文を 1 行に並べる。語と、その直後の接続詞。
    * 語と語のあいだには何も置かない (隙間も「＋」も出さない)。
-   * 語を足す位置は文の末尾だけ。
+   * ドロップは行のどこでも受ける。落とした x 座標に近い語の境目へ入る。
    */
   renderSentenceRow(sen, opt = {}) {
     const row = el('div', { class: 'sen-row' });
     const wordKind = 'slot';
+    const wIdx = opt.wIdx;
+    const wi = opt.wi || null;
 
-    // 文の末尾にだけ置く追加位置。ドラッグでの語の置き換えはしない。
-    const appendPlace = {
-      kind: 'gap', index: sen.entries.length, wi: opt.wi || null, wIdx: opt.wIdx,
-    };
-    const addNode = el('div', {
-      class: 'sen-gap sen-add',
-      title: 'タップ / ドロップで末尾に語を足す',
-    }, el('span', {}, '＋'));
-    this.makeDropTarget(addNode, appendPlace);
-    this.makeTappable(addNode, () => this.onGapTap(appendPlace));
+    // 文の行そのものがドロップ先。語の間の空白を狙わせない。
+    if (wi) {
+      row.dataset.sen = String(wIdx ?? '');
+      this.senDropRows.set(row, { wi, wIdx });
+      // 語を持ち上げている / 選んでいるときに、行の余白を押すと末尾へ。
+      // スクロールの指を拾わないよう、動いた量はタップと同じ 7px まで。
+      let rowDown = null;
+      row.addEventListener('pointerdown', (ev) => {
+        if (ev.target === row) rowDown = { x: ev.clientX, y: ev.clientY };
+      });
+      row.addEventListener('pointerup', (ev) => {
+        const down = rowDown;
+        rowDown = null;
+        if (ev.target !== row || !down || this.suppressClick || this.dragFrom) return;
+        if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > Forge.DRAG_SLOP) return;
+        if (!this.armed && !this.held) return;
+        this.onGapTap({ kind: 'gap', wi, wIdx, index: sen.count });
+      });
+      row.addEventListener('pointercancel', () => { rowDown = null; });
+    }
 
     sen.entries.forEach((e, i) => {
-      const place = { kind: wordKind, index: i, wi: opt.wi || null, wIdx: opt.wIdx };
+      const place = { kind: wordKind, index: i, wi, wIdx };
       row.append(this.renderWordChip(e, place, opt.idiomIdx?.has(i), opt.idiomName));
     });
-    row.append(addNode);
     // 末尾語 (「人」) は枠の外に固定で付く。
     if (sen.tailText) {
       row.append(el('div', {
@@ -316,12 +331,10 @@ export class Forge {
     // 接続詞は語の直後に置く。語と同じタップで切り替わる。
     const connChip = renderConnector(this, place, conn);
 
-    // 語を語彙へ戻すのは、語を語彙へドラッグする操作に一本化した (✕ は使わない)。
+    // 語を語彙へ戻すのは、語を語彙へドラッグする操作に一本化した。
 
     // 「語 + 接続詞」をひとまとまりの語として扱う。
-    // data-place もここに乗せるので、接続詞にポインタが出ても語として拾う。
     const item = el('div', { class: 'sen-item' }, chip, connChip);
-    this.makeDropTarget(item, place);
     return item;
   }
 
@@ -671,7 +684,7 @@ export class Forge {
         style: { borderColor: cat.color },
         title: this.forgetMode
           ? `${w.text} を忘れる（捨てる）`
-          : `${w.text} [${cat.name}]\nタップで選んで、文の語や隙間をタップすると置けます。`
+          : `${w.text} [${cat.name}]\nタップで選んで、文の語か行の余白をタップすると置けます。`
             + (info?.player ? `\n体にも効く: ${selfLine(info.player)}` : ''),
       }, el('span', {}, w.text));
       const n = counts.get(w.text);
@@ -724,12 +737,12 @@ export class Forge {
     if (!sel) {
       d.append(el('span', { class: 'dt' }, '文の中に語を自由に置く'));
       d.append(el('span', { class: 'dl' },
-        '語彙の語を文の語へドラッグすると、その手前に差し込める。'
-        + '語をタップしてから文の語をタップしても置ける。'
+        '語彙の語を文の行の好きな場所へドラッグすると、落とした位置に差し込める。'
+        + '語をタップしてから文の語か余白をタップしても置ける。'
         + 'ドラッグで語を置き換えることはしない。'));
       d.append(el('span', { class: 'dl' },
-        '文の語は語彙へドラッグすると戻せる。 ✕ でも戻せる。'
-        + '文の中の語は長押しで持ち上げ、タップだけで並べ替えられる。'));
+        '文の語は語彙の箱へドラッグすると戻せる。'
+        + '文の中の語はドラッグで並べ替えられる。'));
       d.append(el('span', { class: 'dl' },
         '接続詞は語の右のマスをタップ → 使える接続詞を一覧から一発で選べる。'
         + '語本体のタップで順に回すこともできる。'));
@@ -740,7 +753,7 @@ export class Forge {
     if (this.held) {
       d.append(el('span', { class: 'dt' }, `${sel.text}  持ち上げ中`));
       d.append(el('span', { class: 'dl' },
-        '文の語か末尾の＋をタップで移動。語彙をタップで語彙へ戻す。'
+        '文の語か行の余白をタップで移動。語彙をタップで語彙へ戻す。'
         + 'もう一度この語をタップで元のまま。'));
       return;
     }
@@ -775,7 +788,7 @@ export class Forge {
     } else if (info?.cat === 'form') {
       d.append(el('span', { class: 'dl' },
         '形態語。文に置いて効果で支えるただの語 (武器語ではない)。'
-        + '武器語 (3 択で得られる) は刃・剣・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃の 14 語だけ。'));
+        + '武器語 (3 択で得られる) は刃・剣・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃・針の 15 語だけ。'));
     } else {
       d.append(el('span', { class: 'dl' }, '文に置ける。並べた並びで文の力が上がる。'));
     }
@@ -997,7 +1010,7 @@ export class Forge {
     this.render();
   }
 
-  /** 文の隙間 (語を入れる場所) をタップ。 */
+  /** 文の余白 (語を末尾へ入れる場所) をタップ。 */
   onGapTap(place) {
     if (this.suppressClick) return;
     if (this.armed) return this.placeInto(place);
@@ -1034,7 +1047,7 @@ export class Forge {
   makeTappable(node, onTap) {
     node.addEventListener('pointerdown', (ev) => {
       this.downAt.set(node, { x: ev.clientX, y: ev.clientY });
-      // タップ用の要素 (＋ や ✕) を掴んで語のドラッグを始めない。
+      // タップ用の要素を掴んで語のドラッグを始めない。
       ev.stopPropagation();
     }, true);
     node.addEventListener('pointerup', (ev) => {
@@ -1177,77 +1190,149 @@ export class Forge {
     this.dragSrc = null;
   }
 
-  /** ドロップ先につける。座標から探し出せるよう data-place を振る。 */
+  /** ドロップ先につける。data-place は語彙の語など、行に属さない置き場用。 */
   makeDropTarget(node, place) {
     const key = placeKey(place);
     node.dataset.place = key;
     this.placeById.set(key, place);
   }
 
-  /** 座標の下にあるドロップ先。 */
-  dropAt(x, y) {
-    const host = document.elementFromPoint(x, y)?.closest('[data-place]');
-    if (!host) return null;
-    return this.placeById.get(host.dataset.place) || null;
+  /**
+   * 文の行の、x 座標にいちばん近い語の境目。
+   * 語の左半分ならその語の手前、右半分なら後ろ。
+   */
+  indexAtX(row, x) {
+    const items = [...row.children].filter((n) => n.classList?.contains('sen-item'));
+    if (!items.length) return 0;
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i].getBoundingClientRect();
+      if (x <= r.left + r.width / 2) return i;
+    }
+    return items.length;
   }
 
-  /** 座標の下にあるドロップ先を光らせる。 */
+  /**
+   * 座標の下にあるドロップ先。
+   * 文の行 (と武器の行) はどこでも受け、語彙の箱もどこでも受ける。
+   * data-place の細かなマスを狙わせない。
+   * @returns {{place:object, row?:object, index?:number}|null}
+   */
+  dropInfoAt(x, y) {
+    const hit = document.elementFromPoint(x, y);
+    if (!hit || !hit.closest) return null;
+
+    // 語彙の箱のどこでも「語彙へ戻す」受け皿にする。
+    if (this.lexiconEl && hit.closest('#forgeLexicon') === this.lexiconEl) {
+      return { place: { kind: 'lexicon', index: -1 } };
+    }
+
+    // 文の行、または武器の行 (見出し・効果表示を含む) のどこでも受ける。
+    let row = hit.closest('.sen-row');
+    if (!row) {
+      const wrow = hit.closest('.wrow');
+      if (wrow) row = wrow.querySelector('.sen-row');
+    }
+    if (row && this.senDropRows.has(row)) {
+      const ctx = this.senDropRows.get(row);
+      const index = this.indexAtX(row, x);
+      return {
+        place: { kind: 'gap', index, wi: ctx.wi, wIdx: ctx.wIdx },
+        row,
+        index,
+      };
+    }
+
+    // 語彙の語など、行に属さない置き場 (互換)。
+    const host = hit.closest('[data-place]');
+    if (!host) return null;
+    const place = this.placeById.get(host.dataset.place);
+    return place ? { place } : null;
+  }
+
+  /** 座標の下にあるドロップ先 (互換 API)。 */
+  dropAt(x, y) {
+    return this.dropInfoAt(x, y)?.place || null;
+  }
+
+  /** 座標の下にあるドロップ先を光らせる。文の行なら挿入位置も示す。 */
   markDropAt(x, y) {
-    const host = document.elementFromPoint(x, y)?.closest('[data-place]');
-    const id = host ? host.dataset.place : '';
+    const info = this.dropInfoAt(x, y);
+    const place = info?.place;
+    const id = place
+      ? `${place.kind}:${place.wIdx ?? ''}:${place.wi?.uid ?? ''}:${info.index ?? place.index ?? ''}`
+      : '';
     if (id === this._hotId) return;
     this.clearDropMarks();
     this._hotId = id;
-    if (!id) return;
-    const node = this.root.querySelector(`[data-place="${CSS.escape(id)}"]`);
-    if (node) node.classList.add('drop-hot');
+    if (!info) return;
+    if (place.kind === 'lexicon') {
+      this.lexiconEl.classList.add('drop-hot');
+      return;
+    }
+    const row = info.row;
+    if (!row) return;
+    row.classList.add('drop-hot');
+    const items = [...row.children].filter((n) => n.classList?.contains('sen-item'));
+    if (!items.length) {
+      row.classList.add('drop-empty');
+    } else if (items[info.index]) {
+      items[info.index].classList.add('drop-before');
+    } else {
+      items[items.length - 1].classList.add('drop-after');
+    }
   }
 
   clearDropMarks() {
-    for (const n of this.root.querySelectorAll('.drop-hot')) n.classList.remove('drop-hot');
+    for (const n of this.root.querySelectorAll('.drop-hot, .drop-before, .drop-after, .drop-empty')) {
+      n.classList.remove('drop-hot', 'drop-before', 'drop-after', 'drop-empty');
+    }
     this._hotId = '';
   }
 
   /**
    * from の語を to へ運ぶ。
    *
-   * 文の語の上に落としても置き換えない。落とした位置へ差し込み、
-   * 元からある語はそのまま残す。語彙へ落とせば語彙へ戻る。
-   * 語彙どうしは動かさない (並びを入れ替えない)。
+   * 文の行のどこに落としても、落とした x 座標に近い境目へ **差し込む**。
+   * 語を置き換えたり入れ替えたりはしない。文 → 語彙は語彙の箱の
+   * どこへ落としても戻せる。語彙どうしは動かさない。
    */
   dropOnto(from, to) {
     if (!from || !to) return;
-    if (from.kind === to.kind && from.index === to.index
-      && (from.wi || null) === (to.wi || null)) {
-      this.render();
-      return;
-    }
     if (from.kind === 'lexicon' && to.kind === 'lexicon') {
       this.render();
       return;
     }
+    // 同じ語の同じ位置へ落としただけなら、履歴にも残さない。
+    if (from.kind !== 'lexicon' && from.index === to.index
+      && (from.wi || null) === (to.wi || null)) {
+      this.render();
+      return;
+    }
     let r;
-    let wi = null;
+    let wi = to.wi || from.wi || null;
+    let word = null;
     this.beginEdit();
-    if (from.kind === 'lexicon' && to.kind !== 'lexicon') {
-      const word = this.run.lexicon[from.index];
-      if (!word) { this.popEdit(); this.render(); return; }
-      wi = to.kind === 'slot' || to.kind === 'gap' ? to.wi : null;
-      // 置き換えはしない。落とした位置に差し込む。
-      r = this.run.insertInto(this.senOf(to), to.index, word, wi);
-    } else if (from.kind !== 'lexicon' && to.kind === 'lexicon') {
-      // 文 → 語彙は、落としたマスが埋まっていても語彙の空きへ戻す。
-      // 満杯なら最古の 1 語が語彙から消える (run.toLexicon が処理する)。
-      const word = this.wordAt(from);
+
+    if (to.kind === 'lexicon') {
+      word = this.wordAt(from);
       if (!word) { this.popEdit(); this.render(); return; }
       r = this.run.toLexicon(word);
-      if (r.ok) this.msg = `「${word.text}」を語彙へ戻した。`;
+      if (r.ok) {
+        this.msg = `「${word.text}」を語彙へ戻した。`
+          + (r.lost ? `（「${r.lost}」は消えた）` : '');
+      }
+    } else if (from.kind === 'lexicon') {
+      word = this.run.lexicon[from.index];
+      if (!word) { this.popEdit(); this.render(); return; }
+      wi = to.wi || null;
+      const sen = this.senOf(to);
+      if (!sen) { this.popEdit(); this.render(); return; }
+      r = this.run.insertInto(sen, to.index, word, wi);
     } else {
-      // 文 → 文は並べ替え。語を置き換えるのではなく、並びを動かす。
-      wi = from.kind === 'slot' || from.kind === 'gap' ? from.wi
-        : (to.kind === 'slot' || to.kind === 'gap' ? to.wi : null);
-      r = this.run.swapPlaces(from, to);
+      // 文 → 文。置き換えず、抜いて差し込む。
+      r = this.run.moveWordTo(from, to);
     }
+
     if (r && r.ok) {
       this.opt.audio?.worn?.(wi ? wi.resolve(this.run.player.stats) : { active: true });
     } else {

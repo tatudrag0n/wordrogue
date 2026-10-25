@@ -697,6 +697,28 @@ export function evaluate(words, opt = {}) {
       parts.push({ key: 'adjectival', label: `連体「${c.connector}」`, v: 0.5 });
     }
   }
+  // 連体修飾の重なり。一つの名詞句に連体節 (〜る・〜える) と
+  // 形容の連体 (〜な・〜い) が重なると、名詞句が厚くなる。
+  //   「燃える聖なる炎」「静かに燃える聖なる炎」
+  // 格 (を・の・に・へ) で別の句に切れているものは数えない。
+  {
+    let finalPos = opt.tail ? segs.lastIndexOf(opt.tail) : segs.length - 1;
+    while (finalPos > 0 && CONNECTOR_SET.has(segs[finalPos])) finalPos--;
+    let chain = 0;
+    for (const c of compounds) {
+      if (c.role !== 'adn' || c.idx >= finalPos) continue;
+      let broken = false;
+      for (let k = c.idx + 1; k < finalPos; k++) {
+        if (!CONNECTOR_SET.has(segs[k])) continue;
+        const cc = compAt.get(k);
+        if (cc && cc.role === 'case') { broken = true; break; }
+      }
+      if (!broken) chain++;
+    }
+    if (chain >= 2) {
+      parts.push({ key: 'modifierchain', label: `連体が ${chain} 重なる`, v: 0.45 });
+    }
+  }
   // 部位の暗黙の名詞 (「速い足」の「足」)。文末の連体形が部位名に係っている。
   if (implicitClose) {
     parts.push({ key: 'implicitnoun', label: '部位の名詞に係る', v: 0.5 });
@@ -777,12 +799,24 @@ export function evaluate(words, opt = {}) {
   }
   // 述語。用言そのものか、「〜する」「〜された」「〜る」。
   if (verbs) parts.push({ key: 'verb', label: '動作', v: 0.4 * Math.min(verbs, 2) });
-  // 主語と述語が繋がって、一文として閉じているか。
-  //   「業火を斬る剣」… 動詞があって述語 (〜る / 〜された) がそろう。
-  //   「業火剛利剣」   … 用言が無いので述語にならない。
+  // 連用修飾。形容の「〜く」「〜に」や副詞、動詞の連用形が、
+  // 直後の動作・形容を修飾している関係。日本語の文を組み立てる
+  // 中心的な係り方なので、これまで無評価だったのを加点する。
+  //   「静かに燃える」「速く斬る」「必ず斬る」「斬り裂く」
+  const advMods = compounds.filter((c) => c.role === 'adv').length;
+  if (advMods) {
+    parts.push({
+      key: 'adverbial',
+      label: advMods > 1 ? `連用修飾 ${advMods} 個` : '連用修飾',
+      v: 0.5 * Math.min(advMods, 2),
+    });
+  }
+  // 述語。名詞を修飾する連体形 (〜る・〜える・〜された) だけを
+  // 「文を閉じる述語」として数える。連用形 (斬り・舞い) は
+  // 後ろの動作へ続く形なので、述語の加点を二重に取らない。
   let hasPredicate = false;
   for (const c of compounds) {
-    if (c.pred) {
+    if (c.pred && c.role === 'adn') {
       parts.push({ key: 'predicated', label: `述語「〜${c.connector}」`, v: 0.6 });
       hasPredicate = true;
     }
@@ -843,9 +877,12 @@ export function evaluate(words, opt = {}) {
   fx.power = 1 + bonusWords * 0.008 + natural * 0.38 + phraseBonus;
 
   // 評価。自然さと完成度で決まる。
+  //   連用修飾と連体の重なりを評価するようになったので、しきい値も
+  //   実際の文の厚みに合わせる (以前は 2.8 / 1.6 で、静かに燃える… が
+  //   成立のまま止まっていた)。
   let grade = 'plain';
-  if (natural >= 2.8) grade = 'great';
-  else if (natural >= 1.6) grade = 'idiom';
+  if (natural >= 2.4) grade = 'great';
+  else if (natural >= 1.5) grade = 'idiom';
 
   return {
     valid: true,

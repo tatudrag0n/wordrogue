@@ -123,10 +123,10 @@
           <div class="lexicon" id="forgeLexicon"></div>
 
           <ul class="forge-how">
-            <li><b>語を置く</b><span>語彙の語をタップ → 文の語か末尾の <em>＋</em> をタップ。ドラッグすると落とした語の手前に差し込む (<strong>置き換えない</strong>)</span></li>
+            <li><b>語を置く</b><span>語彙の語をタップ → 文の語か余白をタップ。ドラッグは文の行のどこに落としても、落とした位置に差し込む (<strong>置き換えない</strong>)</span></li>
             <li><b>接続詞</b><span>語の右のマス (無いときは右下の点) をタップ → 一覧から一発で選ぶ。語のタップで順に切り替え</span></li>
             <li><b>戻す</b><span>「戻す」で直前の操作を 1 つ取り消す</span></li>
-            <li><b>外す</b><span>語の <em>✕</em> か、語彙へドラッグ → 語彙へ戻す</span></li>
+            <li><b>外す</b><span>文の語を語彙の箱へドラッグすると語彙へ戻す</span></li>
           </ul>
 
           <div class="forge-actions">
@@ -150,7 +150,8 @@
 
       <footer class="panel-foot">
         <span class="muted">
-          ドラッグの判定は 7px。語彙へ運べば戻る。文へ運ぶと手前に差し込み、語は置き換えない。
+          ドラッグの判定は 7px。語彙の箱へ運べば戻る。文の行のどこへ落としても、
+          落とした位置に差し込み、語は置き換えない。
           動かさなければタップ（接続詞の切り替え）。
         </span>
         <button class="btn btn-primary" id="forgeBack">戦闘へ戻る</button>
@@ -261,12 +262,12 @@
       <p>
       攻撃を決める<strong>武器語</strong>は <code>刃</code> <code>剣</code> <code>刀</code> <code>斧</code>
       <code>槍</code> <code>矛</code> <code>牙</code> <code>爪</code> <code>弓</code> <code>鞭</code>
-      <code>鎖</code> <code>杖</code> <code>拳</code> <code>銃</code> の <strong>14 語だけ</strong>。
+      <code>鎖</code> <code>杖</code> <code>拳</code> <code>銃</code> <code>針</code> の <strong>15 語だけ</strong>。
       <strong>自動で付かない</strong>ので、<strong>レベルアップの 3 択</strong>で
       <strong>他の語より低い確率</strong>で引く。
       </p>
       <ul class="howto-list">
-      <li>刃・剣・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃は、それだけで武器になる（基本武器）</li>
+      <li>刃・剣・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃・針は、それだけで武器になる（基本武器）</li>
       <li>炎・雷・光・渦のような属性・現象の語は、攻撃できる動詞が付いたときだけ武器になる（特殊武器）</li>
       <li>弾・環・玉・壁・球のような語は<strong>武器語ではない</strong>。ただの語なので語彙から引けるし、文のどこに置いてもよい（文末でなくてもよい）</li>
       <li>武器語を文に置くと、その武器語が攻撃を決める。武器語どうしは隣り合えない。同じ<strong>形</strong>を表す語どうしも隣り合えない</li>
@@ -281,7 +282,7 @@
       <h3>3. 語の種類</h3>
       <ul class="howto-list">
       <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
-      <li><b>形態</b> … 剣・銃・弓と、弾・矢・球・環・壁・甲・鍔・鞘など。<strong>うち基本武器の 14 語だけが武器語</strong>で、語彙からは引けない。残りは語彙から引けるただの語（攻撃の型は決めない）</li>
+      <li><b>形態</b> … 剣・銃・弓と、弾・矢・球・環・壁・甲・鍔・鞘など。<strong>うち基本武器の 15 語だけが武器語</strong>で、語彙からは引けない。残りは語彙から引けるただの語（攻撃の型は決めない）</li>
       <li><b>効果</b> … 貫・裂・散、強・速・硬など。数値を上げる。</li>
       <li><b>動詞</b> … <code>燃</code> <code>貫</code> <code>凍</code> など。1 枚で 1 つの動作になる。</li>
       <li><b>接続</b> … <code>る</code> <code>の</code> <code>られた</code> など。語ごとに付く送り仮名が決まっている。
@@ -407,18 +408,18 @@
       </section>
       <section>      <h3>10. 語は自由に配置できる</h3>
       <p>
-      言葉鍛冶では語彙の語を<strong>文の語へドラッグすると、その手前に差し込まれる</strong>。
+      言葉鍛冶では語彙の語を<strong>文の行の好きな位置へドラッグする</strong>と、その位置に差し込まれる。
       ドラッグで語を<strong>置き換えることはしない</strong>。
-      文の中に並べた語は<strong>語彙へドラッグすると外れる</strong>。
+      文の中に並べた語は<strong>語彙の箱へドラッグすると外れる</strong>。
       語と語のあいだには隙間を置かず、そのまま連結して見える。
       <strong>タップだけで組むこともできる</strong>。
       </p>
       <ul class="howto-list">
-      <li>語彙 → 文 … 落とした位置に差し込む。語彙の空きが 1 つ減る。<strong>元の語は置き換えない</strong></li>
+      <li>語彙 → 文 … 文の行の落とした位置に差し込む。語彙の空きが 1 つ減る。<strong>元の語は置き換えない</strong></li>
       <li>文 → 文 … 並べ替え。どちらの語も消えない</li>
-      <li>文 → 語彙 … 語を外す。満杯なら<strong>語彙の最古の 1 語を捨てる</strong></li>
-      <li>語彙の語を<strong>タップ</strong> … 語を持ち上げる。文の語か末尾の＋をタップで置ける</li>
-      <li>文の語の <strong>✕</strong> … 語彙へ戻す。<strong>語彙が満杯でもできる</strong>（最古の 1 語を捨てる）</li>
+      <li>文 → 語彙 … 語彙の箱のどこへ落としても外す。満杯なら<strong>語彙の最古の 1 語を捨てる</strong></li>
+      <li>語彙の語を<strong>タップ</strong> … 語を持ち上げる。文の語か余白をタップで置ける</li>
+      <li>文の語を語彙の箱へドラッグ … 語彙へ戻す。<strong>語彙が満杯でもできる</strong>（最古の 1 語を捨てる）</li>
       <li>文の語を<strong>タップ</strong> … 後ろの接続詞が順に切り替わる</li>
       <li>文の語の<strong>右の接続詞マス (無いときは右下の点) をタップ</strong> … 使える接続詞を一覧から一発で選ぶ</li>
       <li><strong>戻す</strong> … 直前の操作を 1 つ取り消す（最大 40 回）</li>
@@ -510,7 +511,7 @@
             <li><kbd>Esc</kbd> / <kbd>P</kbd> … 一時停止メニュー（開いている画面を閉じる）</li>
             <li>タッチ … 画面を長押ししてからドラッグで移動</li>
             <li>タッチ … 画面の右にある<strong>ダッシュ</strong>を押してダッシュ（タップでも効く）</li>
-            <li>言葉鍛冶 … 語を<strong>文へドラッグ</strong>、または<strong>タップで選んでから隙間をタップ</strong>。文の語を<strong>タップ</strong>で接続詞切替、<strong>長押し</strong>で一覧 (スクロール選択)</li>
+            <li>言葉鍛冶 … 語を<strong>文の行へドラッグ</strong>、または<strong>タップで選んでから余白をタップ</strong>。文の語を<strong>タップ</strong>で接続詞切替、<strong>長押し</strong>で一覧 (スクロール選択)</li>
             <li>武器は<strong>自動で攻撃する</strong>。攻撃の向きは自動で選ぶ</li>
           </ul>
         </section>
@@ -539,9 +540,9 @@
         <section class="tut-step" data-step="1">
           <h3>2. 語を置く — タップでもドラッグでも</h3>
           <p>
-          <strong>語彙の語をタップ</strong> → 入れたい<strong>文のあいた場所をタップ</strong>で置ける。
+          <strong>語彙の語をタップ</strong> → 入れたい<strong>文の語か余白をタップ</strong>で置ける。
           <strong>ドラッグ</strong>で直接運んでもよい。文の中の語はドラッグで並べ替え、
-          <span class="k">✕</span> で語彙へ戻す。文は <strong>10 文字まで</strong>。
+          <strong>語彙の箱へドラッグ</strong>すると語彙へ戻る。文は <strong>10 文字まで</strong>。
           </p>
         </section>
         <section class="tut-step" data-step="2">
@@ -747,7 +748,7 @@ let _lastTouchEnd = 0;
 document.addEventListener('touchend', (e) => { const now = Date.now(); if (now - _lastTouchEnd <= 350) e.preventDefault(); _lastTouchEnd = now; }, { passive: false });
 document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
-document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn, .sen-gap')) e.preventDefault(); }, false);
+document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
 <script type="module" src="js/main.js?v=1.5"></script>
 </body>

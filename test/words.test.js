@@ -745,6 +745,35 @@ sec('自然さと完成度で力が決まること');
     + ` / 「焔を斬る剣」=${full.fx.power.toFixed(2)}`);
 }
 
+sec('連用修飾と連体の重なりを評価すること');
+{
+  const E3 = (...ws) => evaluate(ws.map(makeWord));
+  const target = E3('静', 'かに', '燃', 'える', '聖', 'なる', '炎');
+  ok(target.valid, `「${target.text}」が不成立: ${target.reasonText}`);
+  ok(target.naturalParts.some((p) => p.key === 'adverbial'),
+    '連用修飾 (静かに→燃える) が加点されていない');
+  ok(target.naturalParts.some((p) => p.key === 'modifierchain'),
+    '連体の重なり (燃える・聖なる→炎) が加点されていない');
+  ok(target.grade === 'great',
+    `「${target.text}」が絶句にならない: ${target.natural} / ${target.grade}`);
+
+  // 連用修飾だけ、連体の重なりだけでは絶句にしない。
+  const advOnly = E3('静', 'かに', '燃', 'える', '炎');
+  ok(advOnly.grade === 'idiom', `連用修飾だけの「${advOnly.text}」が ${advOnly.grade}`);
+  ok(target.natural > advOnly.natural, `連体が重なる文のほうが弱い: ${target.natural} <= ${advOnly.natural}`);
+  const chainOnly = E3('燃', 'える', '聖', 'なる', '炎');
+  ok(chainOnly.grade === 'idiom', `連体の重なりだけの「${chainOnly.text}」が ${chainOnly.grade}`);
+
+  // 連用形 (斬り) は述語として二重に数えない。文を閉じる連体 (裂く) だけ +0.6。
+  const cut = E3('斬', 'り', '裂', 'く', '剣');
+  const predCount = cut.naturalParts.filter((p) => p.key === 'predicated').length;
+  ok(predCount === 1, `「斬り裂く剣」の述語加点が ${predCount} 回ある`);
+  ok(cut.grade === 'idiom', `「斬り裂く剣」が ${cut.grade}`);
+  console.log(`  「${target.text}」自然さ ${target.natural.toFixed(2)} / ${target.grade}`
+    + ` / 「${advOnly.text}」${advOnly.natural.toFixed(2)}`
+    + ` / 「${chainOnly.text}」${chainOnly.natural.toFixed(2)}`);
+}
+
 sec('接続詞の規則');
 {
   const E2 = (...ws) => evaluate(ws.map((w) => ({ text: w })));

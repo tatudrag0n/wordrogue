@@ -935,7 +935,7 @@ body.touch .hud-choice-title { font-size: .76rem; }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 0;
+  gap: 0;
   padding: 4px 6px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -961,7 +961,6 @@ body.touch .hud-choice-title { font-size: .76rem; }
   /* これが無いと指がスクロールになり、ドラッグの途中で pointercancel される。 */
   touch-action: none;
 }
-.sen-gap:first-child { min-width: 40px; }
 
 .sen-word:active { cursor: grabbing; }
 .sen-word.armed {
@@ -970,7 +969,7 @@ body.touch .hud-choice-title { font-size: .76rem; }
   color: #ffffff;
   box-shadow: var(--ring);
 }
-/* 長押しで持ち上げた語。文の語や隙間をタップで移せる。 */
+/* 長押しで持ち上げた語。文の語や行の余白をタップで移せる。 */
 .sen-word.held {
   border-color: var(--accent);
   background: #fff6df;
@@ -1001,41 +1000,6 @@ body.touch .hud-choice-title { font-size: .76rem; }
   background: #edf1f8;
   color: var(--fg-mute);
   cursor: default;
-}
-/* 文の語を外すボタン。語の右上に重ねるので、語と語のあいだに空間を作らない。
-   ホバー / 選択中だけ濃くする。 */
-.sen-out {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  z-index: 1;
-  width: 12px; height: 12px;
-  margin: 0;
-  padding: 0;
-  display: grid; place-items: center;
-  border: 1px solid transparent;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--fg-mute);
-  font-size: .5rem;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  touch-action: none;
-  transition: opacity .12s, color .12s, border-color .12s, background .12s;
-}
-.sen-word:hover .sen-out,
-.sen-word.held .sen-out,
-.sen-out:focus-visible {
-  opacity: 1;
-  border-color: rgba(214, 60, 48, 0.36);
-  background: rgba(255, 255, 255, .9);
-  color: #d63c30;
-}
-.sen-out:active { background: rgba(214, 60, 48, 0.18); }
-/* タッチにはホバーが無いので、常時少し濃くしておく。 */
-@media (hover: none) {
-  .sen-out { opacity: .4; }
 }
 
 .sen-conn {
@@ -1074,29 +1038,6 @@ body.touch .hud-choice-title { font-size: .76rem; }
   opacity: 0;
 }
 .sen-conn.empty:hover { opacity: 1; }
-/* 文の末尾にだけ置く追加位置。語と語のあいだには置かない。 */
-.sen-gap {
-  width: 32px; min-height: 36px;
-  display: grid; place-items: center;
-  border: 1.5px dashed transparent;
-  border-radius: 8px;
-  color: var(--fg-mute);
-  font-size: 1rem;
-  opacity: .35;
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
-  transition: opacity .12s, border-color .12s, background .12s;
-}
-/* 語を差し込む目印。タップでも置けるので「押せる」ことが分かる。 */
-.sen-gap:hover { opacity: .9; border-color: var(--line-2); }
-.sen-gap.sen-add {
-  width: 24px;
-  margin-left: 4px;
-  border-color: var(--line);
-  background: rgba(255, 255, 255, .5);
-}
 .wrow-empty {
   padding: 8px 10px;
   border: 1px dashed var(--line-2);
@@ -1307,12 +1248,6 @@ body.touch .hud-choice-title { font-size: .76rem; }
 .placing .sen-row {
   border-color: rgba(224, 72, 45, 0.29);
   background: #f1f5fb;
-}
-.placing .sen-gap {
-  opacity: .95;
-  border-color: var(--line-2);
-  background: rgba(224, 72, 45, 0.05);
-  color: var(--accent);
 }
 .placing .sen-word { cursor: copy; }
 /* 「忘れる」モードのボタン状態は .btn-forget.on で表現する。 */
@@ -2357,12 +2292,10 @@ html, body {
 .hud-hint,
 .sen-word,
 .sen-conn,
-.sen-gap,
 .lexicon,
 .pword,
 .drag-ghost,
 .wrow,
-.sentence,
 .forge-side,
 .grow-part,
 .grow-slot,
@@ -2387,35 +2320,41 @@ html, body {
 .hud-dash { border-radius: 50% !important; }
 
 /* ═══ 文づくりの補助線を消す (要求対応) ═══════════════════════════════════
-   隙間の「＋」と、隙間・接続詞の空きマスの点線枠は見せない。
-   触り場所としてはそのまま残し、触れたとき・ドラッグのときだけ薄く出す。 */
-#forge .sen-gap {
-  width: 18px;
-  border: none;
-  opacity: 1;
-  background: transparent;
-}
-#forge .sen-gap:hover {
-  border: none;
-  opacity: 1;
-  background: rgba(214, 60, 48, 0.12);
-}
-#forge .placing .sen-gap,
-#forge .placing .sen-gap:hover {
-  border: none;
-  opacity: 1;
-  background: rgba(224, 72, 45, 0.10);
-}
-#forge .sen-gap.drop-hot {
-  border: none;
-  opacity: 1;
-  background: rgba(214, 60, 48, 0.22);
-}
+   語のあいだの ✕・空欄・隙間は出さない。文は語と接続詞が連続して見える。
+   ドロップは文の行のどこでも受け、落とした位置に縦の挿入線だけを出す。 */
 #forge .sen-conn.empty {
   display: none;
 }
 #forge .sen-conn.empty:hover,
 #forge .sen-conn.empty:focus-visible { opacity: .55; }
+#forge .sen-row.drop-hot {
+  background: #fff4ec;
+  border-color: rgba(224, 72, 45, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(224, 72, 45, 0.12);
+}
+#forge .sen-item.drop-before::before,
+#forge .sen-item.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(224, 72, 45, 0.14);
+  pointer-events: none;
+}
+#forge .sen-item.drop-before::before { left: -2px; }
+#forge .sen-item.drop-after::after { right: -2px; }
+#forge .sen-row.drop-empty {
+  background: #fff4ec;
+  border-style: dashed;
+}
+#forge .lexicon.drop-hot {
+  border-color: var(--accent);
+  background: rgba(224, 72, 45, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(224, 72, 45, 0.12);
+}
 
 /* ═══ 接続詞メニュー: 縦 1 列でスクロールして選ぶ ═══════════════════════ */
 .conn-pick-list {
@@ -2462,7 +2401,7 @@ html, body {
   #forge .lexicon { max-height: 18vh; }
   #forge .pword,
   #forge .sen-word { font-size: 1.06rem; }
-  #forge .sen-item { gap: 3px; }
+  #forge .sen-item { gap: 0; }
   #forge .forge-how { font-size: .74rem; }
   .conn-picker { max-width: min(92vw, 340px); }
 }

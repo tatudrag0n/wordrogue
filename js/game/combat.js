@@ -186,7 +186,11 @@ function doChain(run, wi, st, aim, el) {
     const tgt = run.nearestEnemy(ex, ey, hit, 340);
     if (!tgt) break;
     hit.push(tgt.uid);
-    run.lightnings.push({ x1: ex, y1: ey, x2: tgt.x, y2: tgt.y, life: 0.24, maxLife: 0.24 });
+    run.lightnings.push({
+      x1: ex, y1: ey, x2: tgt.x, y2: tgt.y,
+      life: 0.24, maxLife: 0.24,
+      color: (ELEMENTS[el] || {}).color || '#1b6ca8',
+    });
     run.damage(tgt, st, {
       crit: rollCrit(st),
       knock: st.knock,
@@ -208,7 +212,11 @@ function doBeam(run, wi, st, aim, el, elInfo) {
   const len = st.range;
   const wdt = 10 * st.size;
   const hit = new Set();
-  run.beams.push({ x: p.x, y: p.y, a: aim, len, w: wdt, life: 0.3, maxLife: 0.3 });
+  run.beams.push({
+    x: p.x, y: p.y, a: aim, len, w: wdt,
+    life: 0.3, maxLife: 0.3,
+    color: elInfo?.color || '#e8a30a',
+  });
 
   const dx = Math.cos(aim), dy = Math.sin(aim);
   for (const e of run.enemies) {
@@ -269,6 +277,10 @@ function cutByWeapon(e, st, run) {
       life: 0.7, maxLife: 0.7, vy: -30, text: `−${r.text}`,
       color: '#c1432b',
     });
+    // 斬った語が飛ぶ。火花を少しだけ散らす。
+    run.burst?.(e.x, e.y, 5, '#c1432b', {
+      spd: 170, spdMin: 40, life: 0.34, r: 1.6, shape: 'spark', drag: 5,
+    });
   }
   if (r.broken) {
     // 崩れた。止める。
@@ -317,8 +329,21 @@ export function damage(run, e, st, opt = {}) {
   e.flash = 1;
 
   // ヒットの火花。
-  if (run && run.burst) run.burst(e.x, e.y, 3, (st && st.el && st.el !== 'none')
-    ? (ELEMENTS[st.el]?.color || '#ffd43b') : '#ffd43b', { spd: 120, life: 0.25, r: 1.8 });
+  if (run && run.burst) {
+    const hitColor = (st && st.el && st.el !== 'none')
+      ? (ELEMENTS[st.el]?.color || '#ffd43b') : '#ffd43b';
+    run.burst(e.x, e.y, crit ? 7 : 4, hitColor, {
+      spd: crit ? 230 : 160, spdMin: 40, life: 0.28, r: 1.8,
+      shape: 'spark', drag: 6,
+    });
+    // 会心は朱の輪をひとつ足す。数字だけに頼らず、当たりの強さを見せる。
+    if (crit && run.rings) {
+      run.rings.push({
+        x: e.x, y: e.y, r: 26, life: 0.2, maxLife: 0.2,
+        color: '#e0482d', hit: new Set(),
+      });
+    }
+  }
 
   // 手の部位に属性語があると、接触する近接武器 (斬撃・薙ぎ) がその属性を纏う。
   // 武器側に属性が無いときだけ。手の属性は部位強化が由来。

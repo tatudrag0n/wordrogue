@@ -73,6 +73,30 @@ export class Menus {
     this.growInk = $('#growInk');
     this.gachaBtn = $('#gachaBtn');
     this.gachaResult = $('#gachaResult');
+    // くじの幕。テストの最小 DOM には無いので、すべて null 安全に扱う。
+    this.gachaVeil = $('#gachaVeil');
+    this.gachaReels = $('#gachaReels');
+    this.gachaReelSpans = this.gachaReels ? [...this.gachaReels.querySelectorAll('span')] : [];
+    this.gachaCard = $('#gachaCard');
+    this.gachaWord = $('#gachaWord');
+    this.gachaCat = $('#gachaCat');
+    this.gachaEff = $('#gachaEff');
+    this.gachaNote = $('#gachaNote');
+    this.gachaKicker = $('#gachaKicker');
+    this.gachaSeal = $('#gachaSeal');
+    this.gachaNew = $('#gachaNew');
+    this.gachaAgain = $('#gachaAgain');
+    this.gachaClose = $('#gachaClose');
+    this.gachaX = $('#gachaX');
+    /** くじの演出中か。連打で二重に引かないための錠。 */
+    this._gachaSpinning = false;
+    /** リールに流す語のプール。 */
+    this._gachaPool = null;
+    /** リールの定期更新と、停止・開示のタイマー。 */
+    this._gachaTimer = null;
+    this._gachaTimers = [];
+    /** 直近に引いた結果。幕を閉じたあとの一行に使う。 */
+    this._lastGacha = null;
     this.growParts = $('#growParts');
     this.growTotal = $('#growTotal');
     this.growSelNote = $('#growSelNote');
@@ -119,25 +143,15 @@ export class Menus {
     $('#btnArchive').addEventListener('click', () => { tap(); this.show('archive'); });
     this.gachaBtn.addEventListener('click', () => {
       tap();
-      this.gachaBtn.classList.remove('gacha-spin');
-      this.gachaResult.classList.remove('gacha-reveal');
-      void this.gachaBtn.offsetWidth;
-      this.gachaBtn.classList.add('gacha-spin');
-      const r = this.save.drawGacha();
-      this.renderGrow();
-      if (!r.ok) {
-        this.gachaResult.textContent = r.reason === 'ink' ? '言玉が足りない' : '引けなかった';
-        this.audio?.broken?.();
-      } else if (r.dup) {
-        this.gachaResult.textContent = `「${r.word}」— すでに持っている (${GACHA_REFUND} 言玉戻った)`;
-        this.audio?.tap?.();
-      } else {
-        this.gachaResult.textContent = `「${r.word}」を手に入れた！`;
-        this.audio?.phrase?.();
-      }
-      this.gachaResult.classList.remove('gacha-reveal');
-      void this.gachaResult.offsetWidth;
-      this.gachaResult.classList.add('gacha-reveal');
+      this.startGacha();
+    });
+    // 幕の中の操作。幕が無い最小 DOM ではすべて素通りする。
+    this.gachaAgain?.addEventListener('click', () => { tap(); this.startGacha(); });
+    this.gachaClose?.addEventListener('click', () => { tap(); this.closeGacha(); });
+    this.gachaX?.addEventListener('click', () => { tap(); this.closeGacha(); });
+    this.gachaVeil?.addEventListener('click', (e) => {
+      // 幕の外 (背景) を押したときだけ閉じる。
+      if (e.target === this.gachaVeil) this.closeGacha();
     });
     $('#btnDict').addEventListener('click', () => { tap(); this.show('dict'); });
     $('#btnSettings').addEventListener('click', () => { tap(); this.show('settings'); });
@@ -197,6 +211,7 @@ export class Menus {
   }
 
   hideAll() {
+    this.closeGacha();
     for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'archive', 'grow']) {
       this[k].hidden = true;
     }
@@ -206,6 +221,7 @@ export class Menus {
 
   /** 辞書を閉じる。ゲーム中は main.js 側で時間を戻す。 */
   hide(name) {
+    if (name === 'grow') this.closeGacha();
     this[name].hidden = true;
     if (name === 'dict') {
       this.dictSearch.value = '';
@@ -241,6 +257,7 @@ export class Menus {
   }
 
   back() {
+    if (this.gachaVeil && !this.gachaVeil.hidden) { this.closeGacha(); return true; }
     if (this.tutorial && !this.tutorial.hidden) { this.closeTutorial(); return true; }
     for (const name of ['howto', 'settings', 'archive', 'grow']) {
       if (!this[name].hidden) { this.closeTab(name); return true; }
@@ -320,7 +337,7 @@ export class Menus {
         return;
       }
       this.save.setPart(part.id, i, this.growSel);
-      this.audio?.phrase?.();
+      this.audio?.slot?.();
       this.renderGrow();
     });
     return slot;
@@ -354,7 +371,7 @@ export class Menus {
     word.addEventListener('click', () => {
       if (this.growSel && this.growSel !== entry.text) {
         save.setPart(part.id, i, this.growSel);   // 選んでいる語で置き換える
-        this.audio?.phrase?.();
+        this.audio?.slot?.();
       } else if (this.growSel === entry.text) {
         save.setPart(part.id, i, entry.text);      // 同じ語 → 外す (取り外せる)
         this.audio?.tap?.();
@@ -363,7 +380,7 @@ export class Menus {
         const at = list.indexOf(entry.conn);
         const next = at + 1 < list.length ? list[at + 1] : null;
         save.setPartConn(part.id, i, next);
-        if (next) this.audio?.phrase?.(); else this.audio?.tap?.();
+        if (next) this.audio?.conn?.(); else this.audio?.tap?.();
       }
       this.renderGrow();
     });
@@ -413,7 +430,7 @@ export class Menus {
     const pick = (text) => {
       this.save.setPartConn(part.id, i, text);
       this.growConn = null;
-      this.audio?.phrase?.();
+      if (text) this.audio?.conn?.(); else this.audio?.tap?.();
       this.renderGrow();
     };
     const chip = (c) => {
@@ -634,6 +651,227 @@ export class Menus {
         this.renderGrow();
       });
       this.deckWords.append(b);
+    }
+  }
+
+  // ── 言葉くじの演出 ──────────────────────────────────────────────────────
+  //
+  // 抽選そのものは save.drawGacha() が一瞬で終わる。ここで遅らせるのは
+  // 「見せ方」だけ。途中で幕を閉じても、引いた語と払った言玉は残る。
+
+  /** リールに流す短い語。1 回だけ作って使い回す。 */
+  _reelPoolWords() {
+    if (this._gachaPool) return this._gachaPool;
+    const pool = [];
+    for (const t of Object.keys(WORDS)) {
+      if (CONNECTOR_SET.has(t)) continue;
+      if ([...t].length <= 2) pool.push(t);
+    }
+    this._gachaPool = pool;
+    return pool;
+  }
+
+  /** 幕が用意されているか。無ければ従来の一行表示だけで動く。 */
+  _hasGachaStage() {
+    return !!(this.gachaVeil && this.gachaWord);
+  }
+
+  /** くじを引く。言玉はここで払い、演出だけを遅らせる。 */
+  startGacha() {
+    if (this._gachaSpinning) return;
+    const r = this.save.drawGacha();
+    if (!r.ok) {
+      const msg = r.reason === 'ink'
+        ? `言玉が足りない — ${GACHA_COST} 言玉必要`
+        : '引けなかった — 語の抽選に失敗した';
+      if (this._hasGachaStage() && !this.gachaVeil.hidden) {
+        if (this.gachaNote) this.gachaNote.textContent = msg;
+        this._denyGacha(this.gachaAgain);
+      } else {
+        if (this.gachaResult) {
+          this.gachaResult.textContent = msg;
+          this._pulseResult();
+        }
+        this._denyGacha(this.gachaBtn);
+      }
+      this.audio?.broken?.();
+      return;
+    }
+
+    // 先に結果を確定し、言玉と所持語の表示を更新してから幕を開く。
+    this._lastGacha = r;
+    this.renderGrow();
+    if (!this._hasGachaStage()) {
+      this._showGachaSummary(r);
+      this.audio?.gachaReveal?.(!!r.dup);
+      return;
+    }
+    this._openGacha(r);
+  }
+
+  _openGacha(r) {
+    this._clearGachaTimers();
+    this._gachaSpinning = true;
+    const v = this.gachaVeil;
+    v.hidden = false;
+    v.classList.remove('is-revealed', 'gacha-deny');
+    v.classList.add('is-spinning');
+    this.gachaReels?.classList.add('spinning');
+    if (this.gachaAgain) this.gachaAgain.disabled = true;
+    if (this.gachaNote) this.gachaNote.textContent = '言玉が舞う — どの語が出るか';
+    // 開くまではカードの中身を読み上げない。
+    this.gachaCard?.setAttribute?.('aria-hidden', 'true');
+    this.gachaClose?.focus?.({ preventScroll: true });
+
+    // リールの目を 55ms ごとに差し替える。
+    this._gachaTicks = 0;
+    this._reelTick();
+    this._gachaTimer = setInterval(() => this._reelTick(), 55);
+
+    if (this._prefersReduced()) {
+      // 動きを抑える設定なら、回さずにすぐ開示する。
+      this._gachaDelay(() => this._finishGacha(r, true), 60);
+      return;
+    }
+
+    this.audio?.gachaSpin?.();
+    // 3 列が少しずつ止まる。音だけ先に鳴らして「止まる予感」を作る。
+    this._gachaDelay(() => this.audio?.gachaLock?.(0), 720);
+    this._gachaDelay(() => this.audio?.gachaLock?.(1), 880);
+    this._gachaDelay(() => this._finishGacha(r), 1080);
+  }
+
+  /** リールの目を差し替える。 */
+  _reelTick() {
+    const pool = this._reelPoolWords();
+    if (!pool.length) return;
+    for (const s of this.gachaReelSpans) {
+      s.textContent = pool[(Math.random() * pool.length) | 0];
+    }
+    // 流れる音は控えめに。4 目ごとに 1 回。
+    if ((this._gachaTicks++ % 4) === 0) this.audio?.gachaTick?.(this._gachaTicks >> 2);
+  }
+
+  /** リールを止め、少し溜めてからカードを開く。 */
+  _finishGacha(r, instant = false) {
+    if (this._gachaTimer != null) {
+      clearInterval(this._gachaTimer);
+      this._gachaTimer = null;
+    }
+    this.gachaReels?.classList.remove('spinning');
+    // 止まった瞬間、真ん中の列に結果の語を残す。
+    if (this.gachaReelSpans[1]) this.gachaReelSpans[1].textContent = r.word;
+    if (!instant) this.audio?.gachaLock?.(2);
+    this._setGachaCard(r);
+    this._gachaDelay(() => this._revealGacha(r), instant ? 40 : 260);
+  }
+
+  /** カードの中身を結果で埋める。 */
+  _setGachaCard(r) {
+    const info = WORDS[r.word] || {};
+    const cat = CATEGORIES[info.cat] || null;
+    if (this.gachaWord) this.gachaWord.textContent = r.word;
+    if (this.gachaCat) {
+      this.gachaCat.textContent = cat ? cat.name : '';
+      this.gachaCat.hidden = !cat;
+    }
+    if (this.gachaCard?.style?.setProperty) {
+      this.gachaCard.style.setProperty('--cat', cat?.color || '#e0482d');
+    }
+    if (this.gachaEff) {
+      const fx = fxText(info.fx, FX_LABEL);
+      const body = info.player ? `体 ${fxText(info.player, PS_LABEL)}` : '';
+      const eff = [fx, body].filter((x) => x && x !== '効果なし').join(' / ');
+      this.gachaEff.textContent = eff || '効果なし — 文にすると力になる';
+    }
+    if (this.gachaSeal) this.gachaSeal.textContent = r.dup ? '重' : '新';
+    if (this.gachaNew) this.gachaNew.hidden = !!r.dup;
+  }
+
+  /** カードを開く。ここで初めて結果を音と文字で知らせる。 */
+  _revealGacha(r) {
+    this._gachaSpinning = false;
+    const v = this.gachaVeil;
+    if (!v) return;
+    v.classList.remove('is-spinning');
+    v.classList.add('is-revealed');
+    this.gachaCard?.removeAttribute?.('aria-hidden');
+    if (this.gachaAgain) this.gachaAgain.disabled = false;
+    if (this.gachaNote) {
+      this.gachaNote.textContent = r.dup
+        ? `すでに持っている語だった。言玉が ${GACHA_REFUND} 戻り、残り ${r.ink}。`
+        : `新しい語を引いた。部位に入れるか、デッキに加えよう。言玉は残り ${r.ink}。`;
+    }
+    this.audio?.gachaReveal?.(!!r.dup);
+    this.gachaAgain?.focus?.({ preventScroll: true });
+  }
+
+  /** 幕を閉じ、直近の結果を一行で残す。 */
+  closeGacha() {
+    if (!this.gachaVeil) return;
+    const wasOpen = !this.gachaVeil.hidden;
+    this._clearGachaTimers();
+    this._gachaSpinning = false;
+    this.gachaVeil.hidden = true;
+    this.gachaVeil.classList.remove('is-spinning', 'is-revealed', 'gacha-deny');
+    this.gachaReels?.classList.remove('spinning');
+    if (this.gachaAgain) this.gachaAgain.disabled = false;
+    if (!wasOpen) return;
+    if (this._lastGacha) this._showGachaSummary(this._lastGacha);
+    // 閉じたあとは元の「引く」へ戻す。画面ごと閉じた場合は触らない。
+    if (this.grow && !this.grow.hidden) this.gachaBtn?.focus?.({ preventScroll: true });
+  }
+
+  /** 幕の外に残す一行。幕が無い環境の結果表示も兼ねる。 */
+  _showGachaSummary(r) {
+    if (!this.gachaResult || !r) return;
+    this.gachaResult.textContent = r.dup
+      ? `「${r.word}」— すでに持っている (${GACHA_REFUND} 言玉戻った)`
+      : `「${r.word}」を手に入れた！`;
+    this._pulseResult();
+  }
+
+  _pulseResult() {
+    const n = this.gachaResult;
+    if (!n) return;
+    n.classList.remove('gacha-reveal');
+    void n.offsetWidth;
+    n.classList.add('gacha-reveal');
+  }
+
+  /** 言玉不足のとき、押したボタンを短く震わせる。 */
+  _denyGacha(node) {
+    if (!node) return;
+    node.classList.remove('gacha-deny');
+    void node.offsetWidth;
+    node.classList.add('gacha-deny');
+    setTimeout(() => node.classList.remove('gacha-deny'), 420);
+  }
+
+  _gachaDelay(fn, ms) {
+    const id = setTimeout(() => {
+      const i = this._gachaTimers.indexOf(id);
+      if (i >= 0) this._gachaTimers.splice(i, 1);
+      fn();
+    }, ms);
+    this._gachaTimers.push(id);
+    return id;
+  }
+
+  _clearGachaTimers() {
+    if (this._gachaTimer != null) {
+      clearInterval(this._gachaTimer);
+      this._gachaTimer = null;
+    }
+    for (const id of this._gachaTimers) clearTimeout(id);
+    this._gachaTimers.length = 0;
+  }
+
+  _prefersReduced() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch {
+      return false;
     }
   }
 

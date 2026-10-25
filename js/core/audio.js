@@ -123,6 +123,69 @@ export class Audio {
   }
   levelup() { [0, 4, 7, 12].forEach((n, i) => this.tone({ freq: hz(69 + n), type: 'triangle', dur: 0.18, vol: 0.12, delay: i * 0.07 })); }
 
+  /** ダッシュの風切り音。 */
+  dash() {
+    this.noise({ dur: 0.2, vol: 0.075, hp: 700, lp: 4200 });
+    this.tone({ freq: 300, type: 'sine', dur: 0.16, vol: 0.05, slide: 2.1 });
+  }
+
+  /** 回復。 */
+  heal() {
+    [0, 7, 12].forEach((n, i) => this.tone({
+      freq: hz(76 + n), type: 'sine', dur: 0.16, vol: 0.06, delay: i * 0.05,
+    }));
+  }
+
+  /** 部位に語を置く音。紙の上に置いた軽い音。 */
+  slot() {
+    this.tone({ freq: 540, type: 'triangle', dur: 0.07, vol: 0.06 });
+    this.noise({ dur: 0.045, vol: 0.035, hp: 2400, lp: 7000 });
+  }
+
+  /** 接続詞を選んだ音。 */
+  conn() {
+    this.tone({ freq: 720, type: 'triangle', dur: 0.08, vol: 0.05 });
+    this.tone({ freq: 1080, type: 'sine', dur: 0.1, vol: 0.04, delay: 0.05 });
+  }
+
+  // ── 言葉くじ ─────────────────────────────────────────────────────────────
+  /** リールが回り始める音。 */
+  gachaSpin() {
+    this.tone({ freq: 300, type: 'triangle', dur: 0.28, vol: 0.07, slide: 2.6 });
+    this.noise({ dur: 0.42, vol: 0.05, hp: 1200, lp: 7200 });
+  }
+
+  /** リールの目が流れる音。i で音程を少し上げる。 */
+  gachaTick(i = 0) {
+    const n = [84, 86, 88, 91][Math.abs(i) % 4];
+    this.tone({ freq: hz(n), type: 'square', dur: 0.025, vol: 0.018 });
+  }
+
+  /** リールが 1 列ずつ止まる音。 */
+  gachaLock(i = 0) {
+    this.tone({ freq: hz(79 + i * 5), type: 'triangle', dur: 0.14, vol: 0.085 });
+    this.noise({ dur: 0.07, vol: 0.045, hp: 2400, lp: 9000 });
+  }
+
+  /**
+   * くじの開示。新しい語なら明るく、重複なら柔らかく返す。
+   * @param {boolean} dup すでに持っている語か
+   */
+  gachaReveal(dup = false) {
+    if (dup) {
+      [0, 5, 9].forEach((n, i) => this.tone({
+        freq: hz(69 + n), type: 'triangle', dur: 0.22, vol: 0.065, delay: i * 0.075,
+      }));
+      this.tone({ freq: hz(93), type: 'sine', dur: 0.4, vol: 0.025, delay: 0.16 });
+      return;
+    }
+    [0, 7, 12, 16, 19, 24].forEach((n, i) => this.tone({
+      freq: hz(72 + n), type: 'triangle', dur: 0.3, vol: 0.075, delay: i * 0.055,
+    }));
+    this.noise({ dur: 0.55, vol: 0.035, hp: 5200, lp: 12000, delay: 0.04 });
+    this.tone({ freq: hz(48), type: 'sine', dur: 0.5, vol: 0.05 });
+  }
+
   /** 文が成立したとき。気持ちよい 2 音。 */
   phrase() {
     this.tone({ freq: hz(76), type: 'triangle', dur: 0.13, vol: 0.11 });

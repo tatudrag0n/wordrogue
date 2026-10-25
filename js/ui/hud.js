@@ -137,6 +137,8 @@ export class Hud {
     // HP / シールド
     const hpPct = clamp(p.hp / p.maxHp, 0, 1) * 100;
     this.hpFill.style.width = `${hpPct}%`;
+    this.hpFill.classList.toggle('low', hpPct <= 32);
+    this.hpFill.classList.toggle('critical', hpPct <= 15);
     const shPct = clamp(p.shield / Math.max(1, p.maxHp), 0, 1) * 100;
     this.shieldFill.style.width = `${shPct}%`;
     this.hpText.textContent = p.shield > 0.5

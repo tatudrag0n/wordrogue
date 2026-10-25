@@ -942,7 +942,20 @@ export class Run {
       spd: e.boss ? 340 : 210,
       life: e.boss ? 0.9 : 0.55,
       r: e.boss ? 5 : 3.2,
+      shape: 'ink',
+      drag: 2.8,
     });
+    // 墨の粒に混ぜる火花。色が飛ぶので「倒した」手応えが出る。
+    this.burst(e.x, e.y, e.boss ? 18 : 5, '#f0c25a', {
+      spd: e.boss ? 380 : 250, spdMin: 80,
+      life: e.boss ? 0.55 : 0.3, r: 1.7, shape: 'spark', drag: 5,
+    });
+    if (e.boss) {
+      this.rings.push({
+        x: e.x, y: e.y, r: 180, life: 0.7, maxLife: 0.7,
+        color: e.def.color || '#d39a35', hit: new Set(),
+      });
+    }
     this.audio.kill();
 
     const xp = e.xp * (1 + (this.stage.id - 1) * 0.12);
@@ -1001,9 +1014,20 @@ export class Run {
     p.invuln = 0.6;
     p.flash = 1;
     this.dmgTaken += dmg;
-    this.shake(7);
+    this.shake(8);
     this.audio.hurt();
     this.slowmo = 0.06;
+    // 朱の飛沫と衝撃の輪。被弾を「見て」理解できるようにする。
+    this.burst(p.x, p.y, 12, '#b8332b', {
+      spd: 230, life: 0.5, r: 2.6, shape: 'ink', drag: 4,
+    });
+    this.burst(p.x, p.y, 6, '#e8a30a', {
+      spd: 300, spdMin: 120, life: 0.24, r: 1.5, shape: 'spark', drag: 6,
+    });
+    this.rings.push({
+      x: p.x, y: p.y, r: 30, life: 0.28, maxLife: 0.28,
+      color: '#b8332b', hit: new Set(),
+    });
 
     // 反射。
     const rf = p.stats.reflect || 0;
@@ -1020,6 +1044,18 @@ export class Run {
       p.hp = 0;
       p.alive = false;
       this.state = 'dead';
+      // 最期の大きな墨染みと閃光。
+      this.burst(p.x, p.y, 34, '#1c2331', {
+        spd: 330, spdMin: 40, life: 1.0, r: 4.2, shape: 'ink', drag: 2.6,
+      });
+      this.burst(p.x, p.y, 22, '#c1432b', {
+        spd: 280, spdMin: 90, life: 0.7, r: 2.2, shape: 'spark', drag: 3.6,
+      });
+      this.rings.push({
+        x: p.x, y: p.y, r: 150, life: 0.9, maxLife: 0.9,
+        color: '#b8332b', hit: new Set(),
+      });
+      this.shake(20);
       this.audio.lose();
       this.onDeath?.();
     }
@@ -1085,6 +1121,7 @@ export class Run {
 
     // ── ダッシュ ──
     // スペースを押している間だけ。スタミナを交会しながら加速する。
+    const wasDashing = p.dashing;
     const wantDash = !!input?.dash && p.stamina > 1;
     if (wantDash) {
       p.stamina = Math.max(0, p.stamina - DASH_COST * dt);
@@ -1092,6 +1129,18 @@ export class Run {
       p.dashing = true;
     } else {
       p.dashing = false;
+    }
+    // 押し始めの 1 フレームだけ、音と砂煙を出す。
+    if (p.dashing && !wasDashing) {
+      this.audio.dash?.();
+      this.burst(p.x, p.y, 7, '#cf9a3f', {
+        a: p.face + Math.PI, spread: 1.15, spd: 250, spdMin: 70,
+        life: 0.3, r: 1.8, shape: 'spark', drag: 6,
+      });
+      this.rings.push({
+        x: p.x, y: p.y, r: 22, life: 0.22, maxLife: 0.22,
+        color: '#c9862b', hit: new Set(),
+      });
     }
     if (p.dashCd > 0) p.dashCd -= dt;
     if (!p.dashing && p.dashCd <= 0) {
@@ -1311,6 +1360,17 @@ export class Run {
     }));
     this.audio.explode();
     this.shake(5 + (b.explode || 0) * 0.07);
+    const c = b.color || '#e8762a';
+    this.rings.push({
+      x: b.x, y: b.y, r: r * 0.9, life: 0.3, maxLife: 0.3,
+      color: c, hit: new Set(),
+    });
+    this.burst(b.x, b.y, 12, c, {
+      spd: 270, life: 0.5, r: 2.6, shape: 'ink', drag: 3,
+    });
+    this.burst(b.x, b.y, 8, '#f0c25a', {
+      spd: 320, spdMin: 100, life: 0.3, r: 1.6, shape: 'spark', drag: 5,
+    });
   }
 
   fieldTick(dt) {
@@ -1395,7 +1455,16 @@ export class Run {
       }
     } else if (q.type === 'heal') {
       this.healPlayer(q.value);
-      this.audio.pickup();
+      this.audio.heal?.();
+      // 緑の葉が舞い、足元に小さな輪が広がる。回復したことを色で見せる。
+      this.burst(p.x, p.y, 9, '#37b24d', {
+        spd: 130, spdMin: 20, life: 0.55, r: 2.1, shape: 'leaf',
+        grav: -26, drag: 4,
+      });
+      this.rings.push({
+        x: p.x, y: p.y, r: 24, life: 0.34, maxLife: 0.34,
+        color: '#37b24d', hit: new Set(),
+      });
       this.pushHint(`回復 ${q.value}`);
     }
   }

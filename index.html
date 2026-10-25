@@ -644,6 +644,36 @@
         </section>
       </div>
     </div>
+
+    <!-- 言葉くじの演出。ガチャ本体の結果はこの中だけで見せる。 -->
+    <div class="gacha-veil" id="gachaVeil" hidden>
+      <div class="gacha-box" role="dialog" aria-modal="true" aria-labelledby="gachaKicker">
+        <button class="gacha-x" id="gachaX" type="button" aria-label="とじる">✕</button>
+        <p class="gacha-kicker" id="gachaKicker">言葉くじ</p>
+
+        <div class="gacha-stage">
+          <div class="gacha-reels" id="gachaReels" aria-hidden="true">
+            <div class="gacha-reel"><span>言</span></div>
+            <div class="gacha-reel main"><span>葉</span></div>
+            <div class="gacha-reel"><span>玉</span></div>
+          </div>
+
+          <div class="gacha-card" id="gachaCard" aria-hidden="true">
+            <span class="gacha-seal" id="gachaSeal">新</span>
+            <span class="gacha-ribbon" id="gachaNew">NEW</span>
+            <b class="gacha-word" id="gachaWord">言</b>
+            <span class="gacha-cat" id="gachaCat"></span>
+            <span class="gacha-eff" id="gachaEff"></span>
+          </div>
+        </div>
+
+        <p class="gacha-note" id="gachaNote" aria-live="polite"></p>
+        <div class="gacha-actions">
+          <button class="btn" id="gachaAgain" type="button">もう一度引く</button>
+          <button class="btn btn-primary" id="gachaClose" type="button">とじる</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ═══ 辞書 ═══════════════════════════════════════════════════════════ -->

@@ -2321,16 +2321,8 @@ html, body {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
 
-/* くじ演出: 引く瞬間の印章回転と、結果の紙吹雪風ポップ */
-#gachaBtn.gacha-spin { animation: gachaRoll .62s cubic-bezier(.2,.8,.3,1); }
+/* 幕を閉じたあと、直近の結果を一行でポップさせる。 */
 .grow-gacha-result.gacha-reveal { animation: gachaReveal .62s cubic-bezier(.16,1,.3,1); }
-@keyframes gachaRoll {
-  0% { transform: rotate(0) scale(1); filter: brightness(1); }
-  22% { transform: rotate(-7deg) scale(1.08); filter: brightness(1.35); box-shadow: 0 0 0 5px #f1d27c, 0 0 28px #e8ac3c; }
-  52% { transform: rotate(8deg) scale(.94); }
-  78% { transform: rotate(-3deg) scale(1.05); }
-  100% { transform: rotate(0) scale(1); filter: brightness(1); }
-}
 @keyframes gachaReveal {
   0% { opacity: 0; transform: translateY(14px) scale(.72); filter: brightness(2) blur(3px); }
   55% { opacity: 1; transform: translateY(-4px) scale(1.14); filter: brightness(1.35); }
@@ -2476,3 +2468,373 @@ html, body {
   #forge .forge-how { font-size: .74rem; }
   .conn-picker { max-width: min(92vw, 340px); }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   モーションと言葉くじの演出
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* 画面を開いたとき、パネルが紙のように静かに置かれる。 */
+.screen > .panel { animation: panelSettle .34s cubic-bezier(.16,1,.3,1); }
+@keyframes panelSettle {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* HP が減ったときの鼓動。数字を見なくても危険が伝わる。 */
+.bar-fill.low { animation: hpLow 1.15s ease-in-out infinite; }
+.bar-fill.low.critical { animation-duration: .72s; }
+@keyframes hpLow {
+  0%, 100% { filter: brightness(1); box-shadow: none; }
+  50% { filter: brightness(1.22); box-shadow: 0 0 10px rgba(214,60,48,.5), 0 0 0 1px rgba(255,255,255,.5) inset; }
+}
+
+/* 経験値バーを流れる光。育っている実感を出す。 */
+.bar-xp .bar-fill { overflow: hidden; }
+.bar-xp .bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,.55) 48%, transparent 76%);
+  transform: translateX(-110%);
+  animation: xpSweep 2.9s ease-in-out infinite;
+}
+@keyframes xpSweep {
+  0%, 62% { transform: translateX(-110%); }
+  100% { transform: translateX(110%); }
+}
+
+/* 語を選んだときの手応え。 */
+.grow-word { transition: transform .14s cubic-bezier(.2,.8,.2,1), box-shadow .14s, border-color .14s, background .14s, color .14s; }
+.grow-word:hover:not(.sel) { transform: translateY(-2px); box-shadow: 0 5px 12px rgba(23,43,84,.12); }
+.grow-word.sel { animation: wordPick .28s cubic-bezier(.16,1,.3,1); }
+@keyframes wordPick {
+  0%   { transform: scale(.92) translateY(3px); }
+  55%  { transform: scale(1.05) translateY(-1px); }
+  100% { transform: none; }
+}
+.grow-slot.empty:active { transform: translateY(1px) scale(.98); }
+
+/* くじを引けるときの、ごく弱い呼びかけ。 */
+#gachaBtn { position: relative; }
+#gachaBtn:not(.off) { animation: gachaReady 3.2s ease-in-out infinite; }
+@keyframes gachaReady {
+  0%, 100% { box-shadow: inset 0 1px rgba(255,232,220,.45), 0 8px 20px rgba(224,72,45,.24); }
+  50% { box-shadow: inset 0 1px rgba(255,232,220,.55), 0 9px 24px rgba(224,72,45,.34), 0 0 0 3px rgba(224,72,45,.09); }
+}
+
+/* ── 言葉くじの幕 ────────────────────────────────────────────────────── */
+
+.gacha-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: calc(14px + var(--safe-t)) calc(14px + var(--safe-r)) calc(14px + var(--safe-b)) calc(14px + var(--safe-l));
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 246, 214, .2), transparent 44%),
+    rgba(22, 28, 42, .54);
+  backdrop-filter: blur(8px) saturate(.9);
+  -webkit-backdrop-filter: blur(8px) saturate(.9);
+  animation: gachaVeilIn .18s ease-out;
+}
+.gacha-veil[hidden] { display: none !important; }
+@keyframes gachaVeilIn { from { opacity: 0; } to { opacity: 1; } }
+
+.gacha-box {
+  position: relative;
+  width: min(392px, 100%);
+  padding: 22px 22px 16px;
+  text-align: center;
+  color: var(--fg);
+  background:
+    radial-gradient(ellipse at 50% 0%, #ffffff 0%, rgba(255,255,255,0) 58%),
+    linear-gradient(180deg, #fffdf7 0%, #fbf7ec 62%, #f1ecdf 100%);
+  border: 1px solid #b9b09b;
+  outline: 1px solid rgba(255,255,255,.85);
+  outline-offset: -6px;
+  box-shadow: 0 28px 70px rgba(12, 18, 32, .38), 0 1px 0 #fff inset;
+  animation: gachaBoxIn .38s cubic-bezier(.16,1,.3,1);
+}
+.gacha-box::before,
+.gacha-box::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(165, 49, 27, .4);
+  pointer-events: none;
+}
+.gacha-box::before { left: 7px; top: 7px; border-right: 0; border-bottom: 0; }
+.gacha-box::after { right: 7px; bottom: 7px; border-left: 0; border-top: 0; }
+@keyframes gachaBoxIn {
+  from { opacity: 0; transform: translateY(18px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+.gacha-x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #8a8270;
+  font: inherit;
+  font-size: .9rem;
+  cursor: pointer;
+}
+.gacha-x:hover { color: var(--accent); background: rgba(224,72,45,.08); }
+
+.gacha-kicker {
+  margin: 0 0 2px;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .42em;
+  text-indent: .42em;
+  color: #9a6b2c;
+}
+
+.gacha-stage {
+  position: relative;
+  height: 228px;
+  margin: 0 -4px;
+  perspective: 700px;
+}
+
+/* 幕の奥に薄く置く「籤」の文字。回っている間の余白を紙の意匠で埋める。 */
+.gacha-stage::before {
+  content: '籤';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10rem;
+  font-weight: 900;
+  line-height: 1;
+  color: rgba(122, 88, 36, .05);
+  transform: rotate(-6deg);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 回っているリール。3 列の目が縦に流れる。 */
+.gacha-reels {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  transition: opacity .18s ease, transform .22s ease;
+}
+.gacha-reel {
+  width: 54px;
+  height: 72px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #ffffff, #f4f0e4);
+  border: 1px solid #c9c1ae;
+  box-shadow:
+    inset 0 12px 16px -14px rgba(40,32,18,.5),
+    inset 0 -12px 16px -14px rgba(40,32,18,.5),
+    0 1px 0 #fff;
+}
+.gacha-reel.main {
+  width: 86px;
+  height: 92px;
+  border-color: #c9a24a;
+  box-shadow:
+    0 0 0 3px rgba(232,163,10,.1),
+    inset 0 14px 18px -16px rgba(90,60,10,.45),
+    inset 0 -14px 18px -16px rgba(90,60,10,.45),
+    0 2px 10px rgba(120,80,20,.12);
+}
+.gacha-reel span {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--ink);
+  letter-spacing: .02em;
+}
+.gacha-reel.main span { font-size: 2.5rem; }
+.gacha-reels.spinning .gacha-reel span { animation: reelFlick .1s linear infinite; }
+.gacha-reels.spinning .gacha-reel:nth-child(1) span { animation-duration: .12s; }
+.gacha-reels.spinning .gacha-reel:nth-child(2) span { animation-duration: .085s; }
+.gacha-reels.spinning .gacha-reel:nth-child(3) span { animation-duration: .135s; }
+@keyframes reelFlick {
+  0%   { transform: translateY(-10px); opacity: .25; filter: blur(1.5px); }
+  40%  { transform: translateY(0); opacity: 1; filter: none; }
+  100% { transform: translateY(10px); opacity: .2; filter: blur(1.5px); }
+}
+.gacha-veil.is-revealed .gacha-reels {
+  opacity: 0;
+  transform: scale(.88) translateY(4px);
+  pointer-events: none;
+}
+
+/* 開示される一枚の紙。 */
+.gacha-card {
+  --cat: var(--accent);
+  position: absolute;
+  inset: 2px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  opacity: 0;
+  transform: scale(.84) rotateX(-16deg);
+  pointer-events: none;
+  background: linear-gradient(180deg, #fffefa, #fbf6e9);
+  border: 1px solid #c9bda4;
+  box-shadow: 0 14px 34px rgba(70,52,20,.18), inset 0 0 0 1px rgba(255,255,255,.9);
+}
+.gacha-card::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px dashed rgba(120,96,52,.24);
+  pointer-events: none;
+}
+.gacha-veil.is-revealed .gacha-card {
+  opacity: 1;
+  transform: none;
+  animation: gachaCardIn .62s cubic-bezier(.16,1,.3,1);
+}
+@keyframes gachaCardIn {
+  0%   { opacity: 0; transform: rotateX(-70deg) scale(.82); }
+  55%  { opacity: 1; transform: rotateX(8deg) scale(1.03); }
+  100% { opacity: 1; transform: none; }
+}
+
+.gacha-seal {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff8f2;
+  font-size: .9rem;
+  font-weight: 900;
+  transform: rotate(-9deg);
+  box-shadow: 0 2px 0 rgba(120,30,15,.35);
+  opacity: 0;
+}
+.gacha-veil.is-revealed .gacha-seal {
+  animation: gachaStamp .5s cubic-bezier(.2,.8,.3,1) .12s both;
+}
+@keyframes gachaStamp {
+  0%   { opacity: 0; transform: scale(2.1) rotate(-18deg); }
+  60%  { opacity: 1; transform: scale(.92) rotate(-9deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-9deg); }
+}
+
+.gacha-ribbon {
+  position: absolute;
+  top: 12px;
+  right: -6px;
+  padding: 3px 10px;
+  background: linear-gradient(115deg, #e8b23c, #c08a10);
+  color: #fffdf5;
+  font-size: .6rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+  box-shadow: 0 2px 8px rgba(150,100,10,.25);
+  transform: rotate(3deg);
+  opacity: 0;
+}
+.gacha-ribbon[hidden] { display: none !important; }
+.gacha-veil.is-revealed .gacha-ribbon {
+  animation: gachaRibbon .42s cubic-bezier(.16,1,.3,1) .26s both;
+}
+@keyframes gachaRibbon {
+  from { opacity: 0; transform: translateX(16px) rotate(10deg); }
+  to   { opacity: 1; transform: rotate(3deg); }
+}
+
+.gacha-word {
+  font-size: clamp(2.7rem, 11vw, 3.6rem);
+  line-height: 1.05;
+  font-weight: 900;
+  letter-spacing: .06em;
+  color: var(--ink);
+  text-shadow: 0 2px 0 #fff, 0 5px 14px rgba(60,40,10,.12);
+}
+.gacha-cat {
+  padding: 1px 9px;
+  border: 1px solid currentColor;
+  color: var(--cat);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+  background: rgba(255,255,255,.7);
+}
+.gacha-eff {
+  max-width: 88%;
+  font-family: var(--mono);
+  font-size: .68rem;
+  line-height: 1.45;
+  color: var(--fg-dim);
+}
+
+.gacha-note {
+  min-height: 2.5em;
+  margin: 2px 0 12px;
+  font-size: .78rem;
+  line-height: 1.55;
+  color: var(--fg-dim);
+}
+.gacha-note b { color: var(--accent-ink); }
+
+.gacha-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.gacha-actions .btn { min-width: 118px; }
+
+/* 幕の外を押したときの閉じる場所。 */
+.gacha-veil { cursor: default; }
+.gacha-box { cursor: auto; }
+
+/* 言玉が足りないとき、押したボタンが短く震えて「今は引けない」を伝える。 */
+#gachaBtn.gacha-deny,
+.btn.gacha-deny { animation: gachaDeny .36s cubic-bezier(.36,.07,.19,.97); }
+@keyframes gachaDeny {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-5px); }
+  30% { transform: translateX(4px); }
+  45% { transform: translateX(-3px); }
+  60% { transform: translateX(2px); }
+  75% { transform: translateX(-1px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gacha-deny { animation: none; }
+  .gacha-box,
+  .gacha-veil.is-revealed .gacha-card,
+  .gacha-veil.is-revealed .gacha-seal,
+  .gacha-veil.is-revealed .gacha-ribbon,
+  .gacha-reels.spinning .gacha-reel span { animation: none !important; }
+  /* アニメーションの到着状態を直に置く。animation: both を消すと
+     印章と NEW が opacity: 0 のまま残ってしまう。 */
+  .gacha-veil.is-revealed .gacha-seal { opacity: 1; transform: rotate(-9deg); }
+  .gacha-veil.is-revealed .gacha-ribbon { opacity: 1; transform: rotate(3deg); }
+}
+
+@media (max-width: 420px) {
+  .gacha-box { padding: 18px 14px 14px; }
+  .gacha-stage { height: 210px; }
+  .gacha-card { inset: 2px 6px; }
+  .gacha-actions .btn { flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px; }
+}
+

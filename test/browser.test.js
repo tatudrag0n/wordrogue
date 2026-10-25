@@ -83,6 +83,10 @@ await S('Runtime.enable');
 await S('Log.enable');
 await S('Page.enable');
 await S('Runtime.consoleAPICalled');
+// くじの演出時間をテストするので、OS の「視差効果を減らす」設定に左右されないようにする。
+await S('Emulation.setEmulatedMedia', {
+  features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+});
 
 const errors = [];
 const origHandler = ws.onmessage;
@@ -1414,6 +1418,111 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   ok(conn.totalRows > 0, '部位の合計に効果が出ていない');
   ok(conn.wordEff > 0 && conn.noEffMark > 0, '所持語に効きの表示が無い');
   console.log(`    接続詞 ${conn.first} 件 (${conn.okOwn}) → ほか ${conn.all} 件 (✕ ${conn.no}) → ${conn.conn === null ? '無し' : conn.conn}`);
+}
+
+sec('言葉くじはリールを回してからカードを開く');
+{
+  // 幕が開いた瞬間に抽選は終わっている。演出だけが遅れる。
+  const start = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    app.menus.show('grow');
+    app.save.addInk(500);
+    app.menus.renderGrow();
+    const ink = app.save.ink;
+    const coll = app.save.collection.length;
+    document.getElementById('gachaBtn').click();
+    const veil = document.getElementById('gachaVeil');
+    return {
+      ink, coll,
+      open: !veil.hidden,
+      spinning: veil.classList.contains('is-spinning'),
+      revealed: veil.classList.contains('is-revealed'),
+      againOff: document.getElementById('gachaAgain').disabled,
+      reels: [...document.querySelectorAll('#gachaReels span')].map(s => s.textContent).join(''),
+      afterInk: app.save.ink,
+      afterColl: app.save.collection.length,
+    };
+  })()`);
+  ok(start.open, 'くじの幕が開かない');
+  ok(start.spinning && !start.revealed, '回っている間の状態が違う');
+  ok(start.againOff, '回っている間にもう一度引けてしまう');
+  ok(start.reels.length >= 3, `リールに語が出ていない: ${JSON.stringify(start.reels)}`);
+  ok(start.afterInk < start.ink, `言玉が減っていない: ${start.ink} -> ${start.afterInk}`);
+  ok(start.afterColl >= start.coll, `所持語が減った: ${start.coll} -> ${start.afterColl}`);
+  console.log(`    開始: 言玉 ${start.ink} -> ${start.afterInk} / リール ${start.reels}`);
+
+  await sleep(500);
+  const mid = await evalJs(`(() => {
+    const veil = document.getElementById('gachaVeil');
+    const g = window.__wordrogue.menus._lastGacha;
+    return {
+      spinning: veil.classList.contains('is-spinning'),
+      revealed: veil.classList.contains('is-revealed'),
+      word: g ? g.word : '',
+      result: document.getElementById('gachaResult').textContent,
+    };
+  })()`);
+  ok(mid.spinning && !mid.revealed, '500ms でまだ開示されている');
+  ok(!mid.result.includes(mid.word), '演出中に一行の結果が先に出ている');
+
+  // 1080ms で停止 + 260ms 後に開示。
+  await sleep(1100);
+  const done = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const veil = document.getElementById('gachaVeil');
+    const g = app.menus._lastGacha;
+    return {
+      revealed: veil.classList.contains('is-revealed'),
+      spinning: veil.classList.contains('is-spinning'),
+      word: g.word, dup: !!g.dup, ink: g.ink,
+      card: document.getElementById('gachaWord').textContent,
+      cat: document.getElementById('gachaCat').textContent.trim(),
+      eff: document.getElementById('gachaEff').textContent.trim(),
+      note: document.getElementById('gachaNote').textContent,
+      seal: document.getElementById('gachaSeal').textContent,
+      ribbon: !document.getElementById('gachaNew').hidden,
+      againOff: document.getElementById('gachaAgain').disabled,
+    };
+  })()`);
+  ok(done.revealed && !done.spinning, 'リールが止まってもカードが開かない');
+  ok(!done.againOff, '開示後にもう一度引けない');
+  ok(done.card === done.word, `カードの語が違う: ${done.card} / ${done.word}`);
+  ok(done.cat.length > 0, 'カードにカテゴリが出ていない');
+  ok(done.eff.length > 0, 'カードに効果が出ていない');
+  ok(/言玉/.test(done.note), `残りの言玉が出ていない: ${done.note}`);
+  ok(done.ribbon === !done.dup, `NEW の出し分けが違う (dup=${done.dup})`);
+  ok(done.seal === (done.dup ? '重' : '新'), `印章が違う: ${done.seal}`);
+  console.log(`    開示: 「${done.card}」${done.dup ? '重複' : '新'} / ${done.cat} / ${done.eff} / 残り ${done.ink}`);
+
+  const closed = await evalJs(`(() => {
+    document.getElementById('gachaClose').click();
+    return {
+      hidden: document.getElementById('gachaVeil').hidden,
+      result: document.getElementById('gachaResult').textContent,
+    };
+  })()`);
+  ok(closed.hidden, 'とじるを押しても幕が閉じない');
+  ok(closed.result.includes(done.word), `閉じたあとに結果が残らない: ${closed.result}`);
+
+  // 演出の途中で閉じても、引いた語と言玉は残る。
+  const aborted = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    const ink = app.save.ink;
+    document.getElementById('gachaBtn').click();
+    const word = app.menus._lastGacha.word;
+    document.getElementById('gachaX').click();
+    return {
+      ink, afterInk: app.save.ink, word,
+      hidden: document.getElementById('gachaVeil').hidden,
+      spinning: app.menus._gachaSpinning,
+      result: document.getElementById('gachaResult').textContent,
+    };
+  })()`);
+  ok(aborted.hidden, '演出中に ✕ を押しても幕が閉じない');
+  ok(!aborted.spinning, '閉じても回転の錠が残る');
+  ok(aborted.afterInk < aborted.ink, '閉じたら言玉が戻ってしまう');
+  ok(aborted.result.includes(aborted.word), `閉じた結果が残らない: ${aborted.result}`);
+  console.log(`    途中で閉じても「${aborted.word}」は残る (言玉 ${aborted.ink} -> ${aborted.afterInk})`);
 }
 
 sec('敵の文が表示される');

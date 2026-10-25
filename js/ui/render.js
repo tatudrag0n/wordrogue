@@ -84,6 +84,7 @@ export class Renderer {
 
     g.restore();
 
+    this.step('grain', () => this.drawGrain(run));
     this.step('vignette', () => this.drawVignette(run));
     this.step('motes', () => this.drawMotes(run));
     this.step('stick', () => this.drawStickUI(stick));
@@ -138,6 +139,41 @@ export class Renderer {
     for (let y = oy; y < this.h; y += size) { g.moveTo(0, y); g.lineTo(this.w, y); }
     g.stroke();
 
+    // 和紙の染み。視点に合わせたタイルから選ぶので、スクロールしても
+    // 同じ場所に留まる。地面の色を少しだけ濁らせる。
+    const tile = 620;
+    const x0 = Math.floor(this.camX / tile) * tile;
+    const y0 = Math.floor(this.camY / tile) * tile;
+    const nx = Math.ceil(this.w / tile) + 1;
+    const ny = Math.ceil(this.h / tile) + 1;
+    for (let ix = 0; ix <= nx; ix++) {
+      for (let iy = 0; iy <= ny; iy++) {
+        const cellX = x0 / tile + ix;
+        const cellY = y0 / tile + iy;
+        const seed = st.id * 19.7 + cellX * 7.13 + cellY * 3.71;
+        for (let k = 0; k < 2; k++) {
+          const pick = hash01(seed + k * 5.3);
+          if (pick > 0.7) continue;
+          const x = x0 + ix * tile + hash01(seed + k * 9.1) * tile;
+          const y = y0 + iy * tile + hash01(seed + k * 13.7) * tile;
+          const r = 24 + hash01(seed + k * 17.3) * 58;
+          g.save();
+          g.translate(x, y);
+          g.rotate(hash01(seed + k * 23.9) * TAU);
+          g.globalAlpha = 0.03 + hash01(seed + k * 29.1) * 0.045;
+          g.fillStyle = st.accent || '#3f6b3a';
+          g.beginPath();
+          g.ellipse(0, 0, r, r * (0.4 + hash01(seed + k * 31.7) * 0.32), 0, 0, TAU);
+          g.fill();
+          // 跳ねた墨の粒をひとつ。染みの縁を不揃いにする。
+          g.beginPath();
+          g.arc(r * (0.62 + pick * 0.5), -r * 0.24, Math.max(1, r * 0.09), 0, TAU);
+          g.fill();
+          g.restore();
+        }
+      }
+    }
+
     // 紙の端がわずかに焼ける。暗闇ではなく「遠くが少し沈む」程度に。
     const rg = g.createRadialGradient(
       this.camX + this.w / 2, this.camY + this.h / 2, 0,
@@ -178,19 +214,34 @@ export class Renderer {
 
   drawVignette(run) {
     const g = this.ctx;
+    const p = run.player;
     // 残り時間の少なさで赤く染める。
     const left = run.stage.time - run.time;
     const danger = run.stage.boss ? (run.boss ? 1 : 0) : clamp(1 - left / 20, 0, 1);
-    if (danger > 0.02) {
+    // 体力が減るほど、鼓動のように赤い縁が脈打つ。
+    const low = p.maxHp > 0 ? clamp(1 - p.hp / p.maxHp, 0, 1) : 0;
+    const beat = 0.55 + 0.45 * Math.sin(run.t * 5.4);
+    const lowGlow = low > 0.55 ? (low - 0.55) / 0.45 * (0.5 + beat * 0.5) : 0;
+    // 被弾した瞬間は画面全体をうっすら朱に寄せる。
+    const hurt = clamp(p.flash || 0, 0, 1);
+    const red = Math.max(danger, lowGlow, hurt * 0.85);
+
+    if (red > 0.02) {
       const rg = g.createRadialGradient(
-        this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.3,
+        this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.28,
         this.w / 2, this.h / 2, this.viewR,
       );
       rg.addColorStop(0, 'rgba(184,51,43,0)');
-      rg.addColorStop(1, `rgba(184,51,43,${0.24 * danger})`);
+      rg.addColorStop(0.72, `rgba(184,51,43,${0.05 * red})`);
+      rg.addColorStop(1, `rgba(184,51,43,${0.34 * red})`);
       g.fillStyle = rg;
       g.fillRect(0, 0, this.w, this.h);
     }
+    if (hurt > 0.04) {
+      g.fillStyle = `rgba(196,64,45,${0.075 * hurt})`;
+      g.fillRect(0, 0, this.w, this.h);
+    }
+
     if (run.boss && run.boss.hp / run.boss.maxHp < 0.999) {
       const hp = run.boss.hp / run.boss.maxHp;
       g.fillStyle = 'rgba(184,51,43,.9)';
@@ -200,18 +251,77 @@ export class Renderer {
     }
   }
 
+  /**
+   * 画面全体に薄い紙の繊維を乗せる。ワールド座標ではなく画面に固定するので、
+   * スクロールしてもチラつかない。乱数は使わず、同じ繊維を毎フレーム描く。
+   */
+  drawGrain(run) {
+    const g = this.ctx;
+    const w = this.w, h = this.h;
+    if (!(w > 0 && h > 0)) return;
+    g.save();
+    g.globalAlpha = 0.032;
+    g.strokeStyle = '#4a3b22';
+    g.lineWidth = 1;
+    const n = Math.min(150, Math.floor((w * h) / 9000));
+    for (let i = 0; i < n; i++) {
+      const x = hash01(i * 1.37 + 0.3) * w;
+      const y = hash01(i * 2.71 + 1.7) * h;
+      const len = 4 + hash01(i * 3.19 + 0.9) * 15;
+      const a = hash01(i * 4.7 + 2.1) * TAU;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      g.stroke();
+    }
+    g.globalAlpha = 0.045;
+    g.fillStyle = '#7a5c2e';
+    for (let i = 0; i < 36; i++) {
+      const x = hash01(i * 5.13 + 4.1) * w;
+      const y = hash01(i * 6.31 + 0.7) * h;
+      const r = 0.4 + hash01(i * 7.19) * 0.9;
+      g.beginPath();
+      g.arc(x, y, r, 0, TAU);
+      g.fill();
+    }
+    g.restore();
+    void run;
+  }
+
+
   // ───────────────────────────────────────────────────────────────────────────
   // 個体
   // ───────────────────────────────────────────────────────────────────────────
   drawCorpses(run) {
     const g = this.ctx;
     for (const c of run.corpses) {
-      const a = (c.life / c.maxLife) * 0.6;
-      g.globalAlpha = a;
+      const k = c.life / c.maxLife;
+      const t = 1 - k;
+      const spread = 1 + t * 0.85;
+      g.globalAlpha = k * 0.55;
       g.fillStyle = c.color;
+      // 円ではなく、縁の不揃いな墨の染みとして残す。
       g.beginPath();
-      g.arc(c.x, c.y, c.r * (1 + (1 - c.life / c.maxLife) * 0.8), 0, TAU);
+      const lumps = 9;
+      for (let i = 0; i <= lumps; i++) {
+        const a = (i / lumps) * TAU;
+        const rr = c.r * spread * (0.8 + hash01(c.x * 0.021 + c.y * 0.013 + i * 1.7) * 0.42);
+        const x = c.x + Math.cos(a) * rr;
+        const y = c.y + Math.sin(a) * rr;
+        if (i === 0) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.closePath();
       g.fill();
+      // 飛び散った粒。
+      g.globalAlpha = k * 0.42;
+      for (let i = 0; i < 3; i++) {
+        const a = hash01(c.x + c.y + i * 3.1) * TAU;
+        const d = c.r * (1.1 + hash01(c.x + i * 7.7) * 0.9) * spread;
+        g.beginPath();
+        g.arc(c.x + Math.cos(a) * d, c.y + Math.sin(a) * d, Math.max(0.8, c.r * 0.14), 0, TAU);
+        g.fill();
+      }
     }
     g.globalAlpha = 1;
   }
@@ -236,6 +346,16 @@ export class Renderer {
       g.beginPath();
       g.arc(f.x, f.y, f.r * (1 - t * 0.25), 0, TAU);
       g.stroke();
+
+      // 内側をゆっくり回る破線。ただの円ではなく「術の輪」に見せる。
+      g.globalAlpha = t * 0.42;
+      g.lineWidth = 1.4;
+      g.setLineDash([Math.max(2, f.r * 0.09), Math.max(4, f.r * 0.13)]);
+      g.lineDashOffset = (f.life || 0) * 40;
+      g.beginPath();
+      g.arc(f.x, f.y, f.r * (1 - t * 0.25) * 0.72, 0, TAU);
+      g.stroke();
+      g.setLineDash([]);
     }
     g.globalAlpha = 1;
   }
@@ -319,6 +439,13 @@ export class Renderer {
       g.beginPath();
       g.arc(s.x, s.y, rOut * 0.97, a0, a1);
       g.stroke();
+      // 内側の縁を墨で締める。白い紙の上で刃の厚みが出る。
+      g.globalAlpha = t * t * 0.4;
+      g.strokeStyle = 'rgba(28, 35, 49, .55)';
+      g.lineWidth = 1.1;
+      g.beginPath();
+      g.arc(s.x, s.y, rIn, a0, a1);
+      g.stroke();
     }
     g.restore();
   }
@@ -348,6 +475,19 @@ export class Renderer {
       g.beginPath();
       g.arc(s.x, s.y, s.r * (1.04 - t * 0.12), 0, TAU);
       g.stroke();
+
+      // 外へ逃げる二重目の輪。破線を回して余韻を出す。
+      if (t > 0.25) {
+        g.globalAlpha = (t - 0.25) * 0.55;
+        g.strokeStyle = s.color;
+        g.lineWidth = 1.2;
+        g.setLineDash([Math.max(2, s.r * 0.08), Math.max(3, s.r * 0.11)]);
+        g.lineDashOffset = -s.life * 90;
+        g.beginPath();
+        g.arc(s.x, s.y, s.r * (1.04 - t * 0.12) * 0.82, 0, TAU);
+        g.stroke();
+        g.setLineDash([]);
+      }
     }
     g.restore();
   }
@@ -355,14 +495,59 @@ export class Renderer {
   drawParticles(run) {
     const g = this.ctx;
     g.save();
-    g.globalCompositeOperation = 'lighter';
+    g.lineCap = 'round';
     for (const p of run.particles || []) {
-      const t = p.life / p.maxLife;
-      g.globalAlpha = t * 0.85;
+      const t = clamp(p.life / (p.maxLife || 1), 0, 1);
+      const r = Math.max(0.5, p.r * (0.6 + t * 0.4));
+      const shape = p.shape || 'dot';
+      const ang = Math.atan2(p.vy, p.vx);
+      // 火花と粒は光として、墨・破片・葉は紙に乗った色として描く。
+      g.globalCompositeOperation = (shape === 'spark' || shape === 'dot') ? 'lighter' : 'source-over';
+      g.globalAlpha = t * 0.9;
       g.fillStyle = p.color;
-      g.beginPath();
-      g.arc(p.x, p.y, p.r * (0.6 + t * 0.4), 0, TAU);
-      g.fill();
+
+      if (shape === 'spark') {
+        const sp = Math.hypot(p.vx, p.vy);
+        const len = clamp(sp * 0.045, 3, 24);
+        g.strokeStyle = p.color;
+        g.lineWidth = Math.max(1, r * 0.9);
+        g.beginPath();
+        g.moveTo(p.x, p.y);
+        g.lineTo(p.x - Math.cos(ang) * len, p.y - Math.sin(ang) * len);
+        g.stroke();
+      } else if (shape === 'shard') {
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate(ang + (p.life || 0) * 3);
+        g.beginPath();
+        g.moveTo(r * 1.7, 0);
+        g.lineTo(-r, -r * 0.8);
+        g.lineTo(-r * 0.35, 0);
+        g.lineTo(-r, r * 0.8);
+        g.closePath();
+        g.fill();
+        g.restore();
+      } else if (shape === 'ink') {
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate((p.rot || 0) + (p.life || 0) * 1.6);
+        g.beginPath();
+        g.ellipse(0, 0, r * 1.15, r * (0.5 + 0.3 * Math.abs(Math.sin(p.x * 0.05 + p.life * 9))), 0, 0, TAU);
+        g.fill();
+        g.restore();
+      } else if (shape === 'leaf') {
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate(ang + Math.sin((p.life || 0) * 6 + p.x * 0.02) * 0.7);
+        g.beginPath();
+        g.ellipse(0, 0, r * 1.5, r * 0.55, 0, 0, TAU);
+        g.fill();
+        g.restore();
+      } else {
+        g.beginPath();
+        g.arc(p.x, p.y, r, 0, TAU);
+        g.fill();
+      }
     }
     g.restore();
   }
@@ -408,6 +593,39 @@ export class Renderer {
       if (e.spawned < 1) continue;
       const a = (e.alpha ?? 1) * clamp(e.spawned, 0, 1) * (e.burrowed ? 0.25 : 1);
       g.globalAlpha = a;
+
+      // 足元の影。紙の上に個体が「置かれている」ことを示す。
+      g.fillStyle = 'rgba(28, 35, 49, .14)';
+      g.beginPath();
+      g.ellipse(e.x, e.y + e.r * 0.86, e.r * 0.95, e.r * 0.3, 0, 0, TAU);
+      g.fill();
+
+      // 出現中は外へ広がる破線の輪。湧いたことが一目で分かる。
+      if (e.spawned < 1) {
+        const st = clamp(e.spawned, 0, 1);
+        g.globalAlpha = (1 - st) * 0.8;
+        g.strokeStyle = e.def.color;
+        g.lineWidth = 2;
+        g.setLineDash([4, 5]);
+        g.lineDashOffset = -run.t * 26;
+        g.beginPath();
+        g.arc(e.x, e.y, e.r * (1 + (1 - st) * 2.2), 0, TAU);
+        g.stroke();
+        g.setLineDash([]);
+        g.globalAlpha = a;
+      }
+
+      // ボスは常に薄い金の環をまとう。
+      if (e.boss) {
+        const pulse = 0.5 + 0.5 * Math.sin(run.t * 2.6);
+        g.globalAlpha = a * (0.16 + pulse * 0.1);
+        g.strokeStyle = '#e0a23a';
+        g.lineWidth = 2.5;
+        g.beginPath();
+        g.arc(e.x, e.y, e.r + 11 + pulse * 4, 0, TAU);
+        g.stroke();
+        g.globalAlpha = a;
+      }
 
       const col = e.flash > 0.05 ? '#ffffff' : e.def.color;
       g.fillStyle = col;
@@ -896,6 +1114,25 @@ export class Renderer {
       g.restore();
     }
 
+    // ダッシュ中の風切り線。進行方向の逆へ短い線を流す。
+    if (p.dashing) {
+      g.save();
+      g.strokeStyle = '#c9862b';
+      g.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        const a = p.face + Math.PI + (i - 1) * 0.34;
+        const d = p.r + 6 + i * 3;
+        const len = 10 + i * 4;
+        g.globalAlpha = 0.26 - i * 0.05;
+        g.lineWidth = 2 - i * 0.4;
+        g.beginPath();
+        g.moveTo(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d);
+        g.lineTo(p.x + Math.cos(a) * (d + len), p.y + Math.sin(a) * (d + len));
+        g.stroke();
+      }
+      g.restore();
+    }
+
     // 吸収シールド。
     if (p.shield > 0) {
       g.save();
@@ -905,6 +1142,15 @@ export class Renderer {
       g.beginPath();
       g.arc(p.x, p.y, p.r + 8, 0, TAU);
       g.stroke();
+      // 回る破線で「膜」が生きていることを示す。
+      g.globalAlpha = 0.24 + 0.1 * Math.sin(run.t * 3 + 1);
+      g.lineWidth = 1.4;
+      g.setLineDash([5, 7]);
+      g.lineDashOffset = -run.t * 30;
+      g.beginPath();
+      g.arc(p.x, p.y, p.r + 12, 0, TAU);
+      g.stroke();
+      g.setLineDash([]);
       g.restore();
     }
 
@@ -981,21 +1227,54 @@ export class Renderer {
     for (const l of run.lightnings) {
       const t = l.life / l.maxLife;
       const c = l.color || '#1b6ca8';
-      g.globalAlpha = t;
-      g.strokeStyle = c;
-      g.lineWidth = 4 * t + 1;
-      g.beginPath();
-      g.moveTo(l.x1, l.y1);
-      // ジグザグ。
-      const seg = 5;
+      const seg = 6;
       const dx = (l.x2 - l.x1) / seg, dy = (l.y2 - l.y1) / seg;
       const nx = -dy, ny = dx;
-      for (let i = 1; i < seg; i++) {
-        const j = (Math.random() - 0.5) * 16;
-        g.lineTo(l.x1 + dx * i + (nx / seg) * j, l.y1 + dy * i + (ny / seg) * j);
-      }
-      g.lineTo(l.x2, l.y2);
+      const seed = l.x1 * 0.017 + l.y1 * 0.013;
+      const jig = (n) => Math.sin(seed + n * 7.31 + l.life * 55) * 0.5;
+      const trace = () => {
+        g.beginPath();
+        g.moveTo(l.x1, l.y1);
+        for (let i = 1; i < seg; i++) {
+          const j = jig(i) * 15;
+          g.lineTo(l.x1 + dx * i + (nx / seg) * j, l.y1 + dy * i + (ny / seg) * j);
+        }
+        g.lineTo(l.x2, l.y2);
+      };
+
+      // 外側の滲み、色の芯、紙を抜く白い芯の 3 層。
+      trace();
+      g.globalAlpha = t * 0.26;
+      g.strokeStyle = c;
+      g.lineWidth = 9 * t + 2;
       g.stroke();
+      trace();
+      g.globalAlpha = t * 0.95;
+      g.strokeStyle = c;
+      g.lineWidth = 3.2 * t + 1;
+      g.stroke();
+      trace();
+      g.globalAlpha = t * 0.8;
+      g.strokeStyle = 'rgba(255, 253, 247, .92)';
+      g.lineWidth = 1.1;
+      g.stroke();
+
+      // 途中から分かれる枝。毎フレーム同じ形になるよう乱数は使わない。
+      if (t > 0.3 && hash01(seed + 2.3) > 0.42) {
+        const at = 0.42 + hash01(seed + 4.1) * 0.2;
+        const bx = l.x1 + (l.x2 - l.x1) * at;
+        const by = l.y1 + (l.y2 - l.y1) * at;
+        const side = hash01(seed + 8.7) > 0.5 ? 1 : -1;
+        const len = 34 + hash01(seed + 1.9) * 46;
+        g.globalAlpha = t * 0.55;
+        g.strokeStyle = c;
+        g.lineWidth = 1.4;
+        g.beginPath();
+        g.moveTo(bx, by);
+        g.lineTo(bx + nx / seg * side * len * 0.55 + dx * 0.25, by + ny / seg * side * len * 0.55 + dy * 0.25);
+        g.lineTo(bx + nx / seg * side * len + dx * 0.45, by + ny / seg * side * len + dy * 0.45);
+        g.stroke();
+      }
     }
     g.restore();
   }
@@ -1008,20 +1287,41 @@ export class Renderer {
     g.lineCap = 'round';
     for (const b of run.beams) {
       const t = b.life / b.maxLife;
-      // 紙の上では光ではなく「走った墨」と「その内側の白」。
-      g.globalAlpha = t * 0.55;
-      g.strokeStyle = 'rgba(28, 35, 49, .35)';
-      g.lineWidth = b.w * t * 1.3;
+      const ex = b.x + Math.cos(b.a) * b.len;
+      const ey = b.y + Math.sin(b.a) * b.len;
+      const c = b.color || '#e8a30a';
+      // 紙の上では光ではなく「走った墨」と「その内側の色」。
+      g.globalAlpha = t * 0.5;
+      g.strokeStyle = 'rgba(28, 35, 49, .4)';
+      g.lineWidth = b.w * t * 1.45;
       g.beginPath();
       g.moveTo(b.x, b.y);
-      g.lineTo(b.x + Math.cos(b.a) * b.len, b.y + Math.sin(b.a) * b.len);
+      g.lineTo(ex, ey);
       g.stroke();
-      g.globalAlpha = t * 0.95;
-      g.strokeStyle = '#e8a30a';
-      g.lineWidth = b.w * t * 0.62;
+
+      g.globalAlpha = t * 0.9;
+      g.strokeStyle = c;
+      g.lineWidth = b.w * t * 0.76;
       g.beginPath();
       g.moveTo(b.x, b.y);
-      g.lineTo(b.x + Math.cos(b.a) * b.len, b.y + Math.sin(b.a) * b.len);
+      g.lineTo(ex, ey);
+      g.stroke();
+
+      // 芯は淡く。色の帯の真ん中を白っぽく抜く。
+      g.globalAlpha = t * 0.55;
+      g.strokeStyle = 'rgba(255, 251, 235, .95)';
+      g.lineWidth = Math.max(1, b.w * t * 0.22);
+      g.beginPath();
+      g.moveTo(b.x, b.y);
+      g.lineTo(ex, ey);
+      g.stroke();
+
+      // 発射口の輪。撃った位置が分かる。
+      g.globalAlpha = t * t * 0.65;
+      g.strokeStyle = c;
+      g.lineWidth = 1.8;
+      g.beginPath();
+      g.arc(b.x, b.y, 5 + (1 - t) * 10, 0, TAU);
       g.stroke();
     }
     g.restore();
@@ -1034,13 +1334,37 @@ export class Renderer {
     g.textBaseline = 'middle';
     for (const t of run.dmgTexts) {
       const a = clamp(t.life / t.maxLife, 0, 1);
-      g.globalAlpha = a;
-      g.font = `700 ${t.crit ? 19 : 13}px system-ui, sans-serif`;
-      g.lineWidth = 3.6;
-      g.strokeStyle = 'rgba(255, 253, 247, .95)';
-      g.strokeText(String(t.v), t.x, t.y);
-      g.fillStyle = t.crit ? '#b8332b' : '#1c2331';
-      g.fillText(String(t.v), t.x, t.y);
+      const label = t.text != null ? String(t.text) : String(t.v);
+      const size = t.crit ? 20 : 13;
+      // 出た瞬間は少し大きく、消えるにつれて元の大きさへ戻る。
+      const grow = 1 + (1 - a) * (t.crit ? 0.24 : 0.08);
+      g.save();
+      g.translate(t.x, t.y);
+      g.scale(grow, grow);
+      g.globalAlpha = Math.min(1, a * 1.8);
+      g.font = `800 ${size}px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif`;
+      g.lineJoin = 'round';
+      g.lineWidth = 4.2;
+      g.strokeStyle = 'rgba(255, 253, 247, .96)';
+      g.strokeText(label, 0, 0);
+      g.fillStyle = t.color || (t.crit ? '#b8332b' : '#1c2331');
+      g.fillText(label, 0, 0);
+      if (t.crit) {
+        // 会心は下線と小さな菱形で強さを示す。
+        const w = g.measureText(label).width;
+        g.globalAlpha = Math.min(1, a) * 0.55;
+        g.fillRect(-w / 2, size * 0.55, w, 1.6);
+        for (const side of [-1, 1]) {
+          g.beginPath();
+          g.moveTo(side * (w / 2 + 5), 0);
+          g.lineTo(side * (w / 2 + 9), -3.5);
+          g.lineTo(side * (w / 2 + 13), 0);
+          g.lineTo(side * (w / 2 + 9), 3.5);
+          g.closePath();
+          g.fill();
+        }
+      }
+      g.restore();
     }
     g.restore();
   }
@@ -1066,6 +1390,12 @@ export class Renderer {
     g.fill();
     g.restore();
   }
+}
+
+/** 0..1 の決定的な擬似乱数。同じ入力からは毎回同じ絵柄になる。 */
+function hash01(n) {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453123;
+  return x - Math.floor(x);
 }
 
 function polyPath(g, n, r, ri) {

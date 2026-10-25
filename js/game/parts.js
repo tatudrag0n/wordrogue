@@ -73,7 +73,9 @@ export function makePartSentence(words) {
  */
 export function evaluatePart(words) {
   const sen = makePartSentence(words);
-  const ev = sen.evaluate({ minContent: 1 });
+  // 部位は「速い足」「焔の腕」のように、体の部位名が後ろに付く。
+  // 連体形・「の」で終わる形は、その部位名に係る形として閉じていると見る。
+  const ev = sen.evaluate({ minContent: 1, implicitTail: true });
   // 文の力をそのまま強さにしない。半分かぶせて、語そのものの価値を主にする。
   const power = ev.valid ? (ev.fx.power || 1) : 1;
   const gain = ev.valid ? Math.max(0.6, Math.min(2.4, 1 + (power - 1) * 0.6)) : 0;
@@ -145,7 +147,7 @@ export function partConnChoices(words, index, opt = {}) {
     const info = CONNECTORS[k];
     if (!info) continue;
     sen.entries[index].conn = k ? makeWord(k) : null;
-    const ev = sen.evaluate({ minContent: 1 });
+    const ev = sen.evaluate({ minContent: 1, implicitTail: true });
     const source = marked.get(k) || 'other';
     out.push({
       text: k,

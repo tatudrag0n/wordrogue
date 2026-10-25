@@ -21,7 +21,7 @@ import { CATEGORIES, ELEMENTS } from './words.core.js';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
-  PREDICATE_CONNECTORS, isAdnominal, isConnector,
+  PREDICATE_CONNECTORS, isAdnominal, isConnector, formAfter,
 } from './words.connect.js';
 import { poolOfText, posOfText } from './words.pool.js';
 
@@ -350,12 +350,14 @@ const REASONS = {
   fewwords:   '実質語が足りない。語を足してください',
   tailverb:   '末尾語を動詞が直接修飾している',
   tailparticle: '格の接続詞の後に末尾語が来る',
-  tailform:   '形を表す語が末尾語を直接修飾している',
+  tailform:   '形を表す語が隣り合っている',
   connorder:  '接続詞どうしが続いている',
   floatconn:  '接続詞が直前の語に結べない',
   tailconn:   '文末が接続詞で終わっている。最後に語を置くこと',
   connnoun:   '連用形の接続詞のあとに名詞が来ている',
   noobject:   '「〜を」のあとに動詞 (=目的語) が無い',
+  intransitive: '「〜を」のあとに自動詞が来ている',
+  subjectverb: '「〜の」のあとに他動詞が来ている (前の語が主体になれない)',
 };
 
 /**
@@ -439,12 +441,19 @@ export function evaluate(words, opt = {}) {
 
   // 文末が接続詞で終わる文は不成文。
   //   接続詞は語に付くもので、文を閉じない。「氷を斬る」は「氷を斬る…」の途中。
+  // ただし部位 (implicitTail) は「速い足」のように体の部位名が後ろに付く。
+  // 連体形 (速い・静かな・駆ける) と「の」で終わる形だけは、その名詞に係る
+  // 形として閉じてよい。連用形 (速く) や「を」で終わる形は閉じない。
+  let implicitClose = null;
   if (CONNECTOR_SET.has(segs[segs.length - 1])) {
-    return {
-      ...base, segments: segs, content, valid: false,
-      reason: 'tailconn', reasonText: REASONS.tailconn,
-      grade: 'broken', gradeInfo: GRADES.broken,
-    };
+    implicitClose = opt.implicitTail ? trailingModifier(segs) : null;
+    if (!implicitClose) {
+      return {
+        ...base, segments: segs, content, valid: false,
+        reason: 'tailconn', reasonText: REASONS.tailconn,
+        grade: 'broken', gradeInfo: GRADES.broken,
+      };
+    }
   }
 
   // 接続詞の規則。語ごとのプールと、選んだ形の役割で見る。
@@ -462,6 +471,26 @@ export function evaluate(words, opt = {}) {
   // 接続詞の合成。束ねた 1 語として数える。
   //   「爆裂」+「する」 -> 爆裂する
   const compounds = conn.compounds;
+
+  // 形を表す語どうしは隣り合えない。パーツ (部位) も武器と同じ規則で落とす。
+  // 熟語の内側 (電光石火の 光石) は 1 つの名詞なので許す。
+  // 末尾語との隣接は、下の末尾語判定が「末尾語を修飾できない」として扱う。
+  {
+    const tailIdx = opt.tail ? segs.lastIndexOf(opt.tail) : -1;
+    for (let i = 0; i + 1 < segs.length; i++) {
+      if (WORDS[segs[i]]?.cat !== 'form' || WORDS[segs[i + 1]]?.cat !== 'form') continue;
+      if (phrase.mask[i] || phrase.mask[i + 1]) continue;
+      if (opt.tail && (i === tailIdx || i + 1 === tailIdx)) continue;
+      return {
+        ...base, segments: segs, content, valid: false,
+        reason: 'tailform',
+        reasonText: `形を表す「${segs[i]}」と「${segs[i + 1]}」が隣り合っている。`
+          + '「刃剣」のような重複は日本語に無い。語を 1 つ挟むこと。',
+        conn, compounds,
+        grade: 'broken', gradeInfo: GRADES.broken,
+      };
+    }
+  }
 
   // 末尾語を日本語として正しく修飾できているか。
   //   「斬剣」「貫通を剣」… 用言や格助詞が直前にあるものは日本語に無い。
@@ -668,6 +697,10 @@ export function evaluate(words, opt = {}) {
       parts.push({ key: 'adjectival', label: `連体「${c.connector}」`, v: 0.5 });
     }
   }
+  // 部位の暗黙の名詞 (「速い足」の「足」)。文末の連体形が部位名に係っている。
+  if (implicitClose) {
+    parts.push({ key: 'implicitnoun', label: '部位の名詞に係る', v: 0.5 });
+  }
   // 末尾語を直前に修飾しているか。
   //   「業火の剛利く剣」… 結合した連体が末尾語に係っている。
   //   「業火剛利な剣」… な形容詞の連体。「〜な」が末尾語に係っている。
@@ -835,6 +868,30 @@ export function evaluate(words, opt = {}) {
     natural,
     naturalParts: parts,
   };
+}
+
+/**
+ * 文末の接続詞が、暗黙の名詞 (部位名) を修飾できる形か。
+ * 連体形と「の」だけを許す。連用形 (速く) や格「を」「に」は許さない。
+ * @param {string[]} segs 分割結果
+ * @returns {{k:string, role:string, next?:string}|null}
+ */
+function trailingModifier(segs) {
+  const last = segs[segs.length - 1];
+  if (!CONNECTOR_SET.has(last)) return null;
+  const run = [];
+  for (let i = segs.length - 2; i >= 0 && !CONNECTOR_SET.has(segs[i]); i--) {
+    run.unshift(segs[i]);
+  }
+  if (!run.length) return null;
+  const hit = formAfter(run, last);
+  if (!hit) return null;
+  const f = hit.form;
+  if (f.role === 'case' && f.next === 'noun') return f;
+  // 形容の連体 (速い・静かな) と、1 語の動詞の連体 (駆ける) は部位名に係る。
+  // 熟語の「する」(発電する) は単独で名詞を修飾させない — 名詞を置いて閉じる。
+  if (f.role === 'adn' && (f.adj || !hit.compound)) return f;
+  return null;
 }
 
 /**

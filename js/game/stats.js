@@ -46,6 +46,7 @@ export const BASE_PLAYER = {
   shield: 0,       // 吸収シールド (被弾時に消費)
   slowImmune: 0,   // 1 で完全免疫
   reflect: 0,      // 被弾を返す割合
+  rateMul: 1,      // 攻撃速度倍率 (部位の意味から)
 };
 
 /**
@@ -78,6 +79,81 @@ export const PART_POWER = {
   hpMax: 40,
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 語の意味と部位の対応
+//
+// 「速い足」は移動が速くなる、「硬い胴」は装甲が上がる、「賢い頭」は
+// 経験値が増える — 語の意味が部位の働きに直結するようにする。
+// これは語の効果 (fx) の置き換えではなく **上乗せ** で、どの語も
+// 意味の分だけ必ずプラスに働く (弱くなるだけの対応は作らない)。
+//
+// 効果は文の力 (gain) で伸び、部位が不成文なら gain=0 で何も乗らない。
+// 移動と攻撃速度は積み上げに上限を置いて、語を並べても破綻しない。
+// ─────────────────────────────────────────────────────────────────────────────
+const TRAIT_WORDS = {
+  speed: new Set([
+    '速', '疾', '迅', '颯', '翔', '風', '軽', '突', '駆', '跳', '浮', '昇', '旋', '舞', '閃', '光', '天',
+  ]),
+  power: new Set([
+    '強', '力', '剛', '鋭', '覇', '威', '撃', '打', '昂', '豪', '壮', '酷', '魔', '血', '蓮', '骨', '魂',
+  ]),
+  mind: new Set([
+    '賢', '智', '感', '心', '霊', '瞬', '虚', '幻', '神', '聖', '真', '静', '巧', '志', '気',
+  ]),
+  guard: new Set([
+    '硬', '厚', '固', '厳', '甲', '盾', '壁', '鉄', '鋼', '岩', '石', '地', '防', '護', '守', '網', '錬', '峰', '嶺', '銀',
+  ]),
+  life: new Set([
+    '魂', '血', '癒', '陽', '花', '草', '樹', '芽', '蓮', '温', '甘', '潤', '再', '回', '露',
+  ]),
+  rate: new Set([
+    '速', '軽', '捷', '瞬', '疾', '迅', '閃', '早', '活', '連', '律', '斉',
+  ]),
+};
+
+/** 部位ごとの意味の効き方。値は 1 語あたりの基本量 (gain 倍する)。 */
+const PART_TRAITS = {
+  leg: [['speed', { spd: 0.10 }], ['guard', { armor: 0.02 }], ['life', { maxHp: 2 }]],
+  arm: [['power', { atkMul: 0.03 }], ['rate', { rateMul: 0.03 }]],
+  hand: [['power', { atkMul: 0.025, crit: 0.01 }], ['rate', { rateMul: 0.025 }], ['speed', { spd: 0.02 }]],
+  head: [['mind', { xpMul: 0.06, crit: 0.015 }], ['guard', { armor: 0.01 }]],
+  chest: [['life', { maxHp: 4, regen: 0.08 }], ['guard', { armor: 0.015 }], ['power', { atkMul: 0.02 }]],
+  trunk: [['guard', { armor: 0.02, shield: 2 }], ['life', { maxHp: 2 }], ['power', { atkMul: 0.015 }]],
+};
+
+/** 部位 ID と名前から、意味対応の種類を決める。 */
+function partKindOf(id, name) {
+  const key = `${id || ''}${name || ''}`;
+  if (/fot|足/.test(key)) return 'leg';
+  if (/arm|腕/.test(key)) return 'arm';
+  if (/hnd|手/.test(key)) return 'hand';
+  if (/head|頭/.test(key)) return 'head';
+  if (/chst|胸/.test(key)) return 'chest';
+  if (/trnk|胴/.test(key)) return 'trunk';
+  return '';
+}
+
+/**
+ * 語の意味を部位の能力へ足す。
+ * @returns {boolean} 何か効いたか
+ */
+function applyPartMeaning(s, kind, text, gain) {
+  const rules = PART_TRAITS[kind];
+  if (!rules || !(gain > 0) || !text) return false;
+  let used = false;
+  for (const [trait, fx] of rules) {
+    if (!TRAIT_WORDS[trait].has(text)) continue;
+    for (const [k, v] of Object.entries(fx)) {
+      if (k === 'spd') s.spdTrait = (s.spdTrait || 0) + v * gain;
+      else if (k === 'rateMul') s.rateMul = (s.rateMul || 1) + v * gain;
+      else if (k === 'xpMul') s.xpMul += v * gain;
+      else s[k] = (s[k] || 0) + v * gain;
+    }
+    used = true;
+  }
+  return used;
+}
+
 /**
  * 部位 1 つぶんの効果をプレイヤー能力に足す。
  * @param {object} s 集計中の能力
@@ -85,9 +161,10 @@ export const PART_POWER = {
  * @param {Set<string>} keys 通すキー
  * @param {number} gain 文の力による倍率
  * @param {boolean} selfSide 語の `p.` 側か (hp / xp / spd の向きが違う)
+ * @param {number} [armorScale] 語データの装甲を割合へ直す倍率
  * @returns {boolean} 何か効いたか
  */
-function applyPartSrc(s, src, keys, gain, selfSide) {
+function applyPartSrc(s, src, keys, gain, selfSide, armorScale = 1) {
   let used = false;
   for (const [k, v] of Object.entries(src || {})) {
     if (typeof v !== 'number') continue;
@@ -102,6 +179,9 @@ function applyPartSrc(s, src, keys, gain, selfSide) {
     }
     if (!keys.has(k)) continue;
     if (k === 'hp') s.maxHp += v * gain;
+    // 語データの装甲は「点」で書かれている (硬 = 2)。体の装甲は割合なので、
+    // 1 点 = 3% として足す。1 語で 75% に張り付くのを防ぐ。
+    else if (k === 'armor') s.armor += v * gain * armorScale;
     else s[k] = (s[k] || 0) + v * gain;
     used = true;
   }
@@ -121,7 +201,10 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
   s.maxHp += meta.hp || 0;
   s.atkMul += meta.atk || 0;
   s.xpMul += meta.xp || 0;
-  s.armor += meta.armor || 0;
+  // 恒久強化の装甲は「段階数」。1 段階 = 8% として割合へ直す。
+  // 以前は段階数をそのまま足していたので、1 回買うだけで 75% 上限に
+  // 張り付いていた。段階を重ねる意味を持たせる。
+  s.armor += (meta.armor || 0) * 0.08;
   s.magnet += meta.magnet || 0;
   s.crit += meta.crit || 0;
 
@@ -130,6 +213,7 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
   s.partRows = [];      // 部位ごとの表示 (文・grade・文の力)
   s.partBroken = [];    // 不成文の部位
   s.partPowerBonus = 0; // 文の力から来たボーナス (文力 - 1 の合計)
+  s.spdTrait = 0;       // 足の「速さ」の意味から来た移動上昇 (乗算でまとめる)
   s.handElement = null;
   s.handStatus = null;
 
@@ -138,6 +222,7 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
     const words = isPart ? raw.words : [raw];
     const name = isPart ? (raw.name || raw.id || '') : '';
     const id = isPart ? (raw.id || raw.name || '') : '';
+    const kind = partKindOf(id, name);
     const p = evaluatePart(normPartEntries(words));
     if (!p.sen.count) continue;
 
@@ -166,8 +251,10 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
       if (!info) continue;
       // 語そのものの効果。`p.` で置いた体側の効果と、武器側の効果のうち体に効くもの。
       const selfOk = info.player ? applyPartSrc(s, info.player, SELF_KEYS, gain, true) : false;
-      const ok = applyPartSrc(s, info.fx || {}, PART_KEYS, gain, false) || selfOk;
-      if (ok) { used++; s.partTexts.push(info.text); }
+      const ok = applyPartSrc(s, info.fx || {}, PART_KEYS, gain, false, 0.03) || selfOk;
+      // 語の意味と部位の対応 (速い足 → 移動、硬い胴 → 装甲、賢い頭 → 経験値)。
+      const meaningOk = applyPartMeaning(s, kind, info.text, gain);
+      if (ok || meaningOk) { used++; s.partTexts.push(info.text); }
       // 語の直後の接続詞。部位ではプレイヤーに効くキーだけを通す。
       if (e.conn) {
         if (applyPartSrc(s, CONNECTORS[e.conn.text]?.fx || {}, PART_KEYS, gain, false)) used++;
@@ -175,7 +262,7 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
     }
     // 熟語が成立していれば、その効果も乗る (発電 = 感電など)。
     if (p.idiom) {
-      if (applyPartSrc(s, p.idiom.fx || {}, PART_KEYS, gain, false)) used++;
+      if (applyPartSrc(s, p.idiom.fx || {}, PART_KEYS, gain, false, 0.03)) used++;
     }
     // どんな語でも何かしら体に効くように、直接効果が無ければ汎用ボーナスを与える
     // 武器系語（炎・弾・強など）も部位で無効にならないようにする。
@@ -214,6 +301,12 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
   s.atkMul += s.partPowerAtk;
   s.maxHp += s.partPowerHp;
 
+  // 意味から来た移動上昇は最後にまとめて掛ける。上限を置いて、
+  // 「速い足」を並べまくっても移動が壊れないようにする。
+  s.spd *= 1 + Math.min(0.9, s.spdTrait || 0);
+  delete s.spdTrait;
+  s.rateMul = Math.max(1, Math.min(1.8, s.rateMul || 1));
+
   // 補正と上限。
   s.armor = clamp(s.armor, 0, 0.75);
   s.crit = clamp(s.crit, 0, 1);
@@ -244,6 +337,7 @@ const EFFECT_ROWS = [
   { key: 'armor', label: '装甲', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'crit', label: '会心', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'spd', label: '移動', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
+  { key: 'rateMul', label: '攻撃速度', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'regen', label: '回復', fmt: (d) => `${d > 0 ? '+' : ''}${d.toFixed(1)}/s` },
   { key: 'lifesteal', label: '吸血', fmt: (d) => `${d > 0 ? '+' : ''}${(d * 100).toFixed(0)}%` },
   { key: 'shield', label: '盾', fmt: (d) => `${d > 0 ? '+' : ''}${Math.round(d)}` },
@@ -355,6 +449,7 @@ export function statRows(s) {
 
   rows.push({ key: 'atk', label: '攻撃', value: pct(s.atk * s.atkMul), kind: 'up' });
   rows.push({ key: 'spd', label: '移動', value: String(Math.round(s.spd)), kind: '' });
+  if (s.rateMul > 1.02) rows.push({ key: 'rateMul', label: '攻撃速度', value: pct(s.rateMul), kind: 'up' });
   rows.push({ key: 'hp', label: '体力', value: String(Math.round(s.maxHp)), kind: '' });
   rows.push({ key: 'crit', label: '会心', value: pct(s.crit), kind: '' });
   rows.push({ key: 'critDmg', label: '会心威力', value: `${s.critDmg.toFixed(2)}倍`, kind: '' });

@@ -19,6 +19,9 @@ export class Audio {
     this._musicTimer = 0;
     this._musicStep = 0;
     this._scale = [0, 2, 3, 5, 7, 8, 10];
+    /** 属性ごとの発射音・命中音の間引き。同時に鳴りすぎないようにする。 */
+    this._castAt = new Map();
+    this._hitAt = new Map();
   }
 
   /** 最初のユーザ操作で呼ぶ。ブラウザの自動再生規約のため。 */
@@ -36,7 +39,15 @@ export class Audio {
 
     this.master = this.ctx.createGain();
     this.master.gain.value = this.volume;
-    this.master.connect(this.ctx.destination);
+    // 音が重なっても割れないように、最後に軽く潰す。
+    this.comp = this.ctx.createDynamicsCompressor();
+    this.comp.threshold.value = -16;
+    this.comp.knee.value = 18;
+    this.comp.ratio.value = 5;
+    this.comp.attack.value = 0.003;
+    this.comp.release.value = 0.22;
+    this.master.connect(this.comp);
+    this.comp.connect(this.ctx.destination);
 
     this.sfxGain = this.ctx.createGain();
     this.sfxGain.gain.value = 0.9;
@@ -45,6 +56,22 @@ export class Audio {
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = 0.16;
     this.musicGain.connect(this.master);
+
+    // 空間の余韻。短いディレイを薄く返して、紙の奥で鳴っている感じにする。
+    this.space = this.ctx.createGain();
+    this.space.gain.value = 0.16;
+    const delay = this.ctx.createDelay(0.5);
+    delay.delayTime.value = 0.17;
+    const fb = this.ctx.createGain();
+    fb.gain.value = 0.22;
+    const tone = this.ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 2600;
+    this.space.connect(delay);
+    delay.connect(tone);
+    tone.connect(fb);
+    fb.connect(delay);
+    tone.connect(this.master);
 
     // ノイズバッファ (打撃・爆発用)
     const len = this.ctx.sampleRate * 1.2;
@@ -69,8 +96,8 @@ export class Audio {
     g.exponentialRampToValueAtTime(0.0001, t0 + a + d);
   }
 
-  /** 単音を鳴らす。 */
-  tone({ freq = 440, type = 'square', dur = 0.12, vol = 0.2, slide = 0, delay = 0, dest = null }) {
+  /** 単音を鳴らす。space は薄く返す余韻の量 (0..1)。 */
+  tone({ freq = 440, type = 'square', dur = 0.12, vol = 0.2, slide = 0, delay = 0, dest = null, space = 0 }) {
     if (!this.on) return;
     const t0 = this.ctx.currentTime + delay;
     const osc = this.ctx.createOscillator();
@@ -80,12 +107,17 @@ export class Audio {
     if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq * slide), t0 + dur);
     this._env(g, t0, Math.min(0.012, dur * 0.2), dur, vol);
     osc.connect(g).connect(dest || this.sfxGain);
+    if (space > 0 && this.space) {
+      const send = this.ctx.createGain();
+      send.gain.value = space;
+      g.connect(send).connect(this.space);
+    }
     osc.start(t0);
     osc.stop(t0 + dur + 0.05);
   }
 
-  /** ノイズを鳴らす。 */
-  noise({ dur = 0.15, vol = 0.2, hp = 200, lp = 8000, delay = 0 }) {
+  /** ノイズを鳴らす。space は薄く返す余韻の量 (0..1)。 */
+  noise({ dur = 0.15, vol = 0.2, hp = 200, lp = 8000, delay = 0, space = 0 }) {
     if (!this.on) return;
     const t0 = this.ctx.currentTime + delay;
     const src = this.ctx.createBufferSource();
@@ -98,8 +130,23 @@ export class Audio {
     g.gain.setValueAtTime(vol, t0);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(f).connect(g).connect(this.sfxGain);
+    if (space > 0 && this.space) {
+      const send = this.ctx.createGain();
+      send.gain.value = space;
+      g.connect(send).connect(this.space);
+    }
     src.start(t0);
     src.stop(t0 + dur + 0.05);
+  }
+
+  /** 同じ属性の音を短い間隔で重ねない。 */
+  _throttle(map, key, gap) {
+    if (!this.ctx) return false;
+    const now = this.ctx.currentTime;
+    const last = map.get(key) || 0;
+    if (now - last < gap) return false;
+    map.set(key, now);
+    return true;
   }
 
   // ── ゲーム用の効果音 ─────────────────────────────────────────────────────
@@ -124,6 +171,166 @@ export class Audio {
     this.tone({ freq: 1560 * 2 ** (n / 12), type: 'sine', dur: 0.05, vol: 0.035 });
   }
   levelup() { [0, 4, 7, 12].forEach((n, i) => this.tone({ freq: hz(69 + n), type: 'triangle', dur: 0.18, vol: 0.12, delay: i * 0.07 })); }
+
+  // ── 属性の音 ─────────────────────────────────────────────────────────────
+  /**
+   * 武器を撃った音。属性ごとに音色を変える。
+   * 「風なら風の音」がするように、ノイズの帯域と音程を属性で分ける。
+   * @param {string} el 属性
+   * @param {string} kind 攻撃の型 (slash / shot / bomb / beam …)
+   */
+  cast(el = 'none', kind = 'shot') {
+    if (!this.on) return;
+    if (!this._throttle(this._castAt, `${el}|${kind}`, 0.05)) return;
+    const slash = kind === 'slash' || kind === 'whip';
+    const heavy = kind === 'bomb' || kind === 'beam';
+    switch (el) {
+      case 'fire':
+        this.noise({ dur: heavy ? 0.2 : 0.13, vol: 0.05, hp: 620, lp: heavy ? 2600 : 4200, space: 0.08 });
+        this.tone({ freq: 150, type: 'sine', dur: 0.14, vol: 0.045, slide: 0.55 });
+        break;
+      case 'ice':
+        this.tone({ freq: hz(96), type: 'sine', dur: 0.1, vol: 0.035, slide: 1.4 });
+        this.tone({ freq: hz(103), type: 'triangle', dur: 0.12, vol: 0.022, delay: 0.035, space: 0.16 });
+        this.noise({ dur: 0.08, vol: 0.025, hp: 5200, lp: 12000 });
+        break;
+      case 'thunder':
+        this.noise({ dur: 0.07, vol: 0.045, hp: 3200, lp: 12000 });
+        this.tone({ freq: 1700, type: 'sawtooth', dur: 0.06, vol: 0.03, slide: 0.35 });
+        break;
+      case 'poison':
+        this.tone({ freq: 210, type: 'triangle', dur: 0.12, vol: 0.04, slide: 0.62 });
+        this.noise({ dur: 0.1, vol: 0.022, hp: 500, lp: 2000 });
+        break;
+      case 'light':
+        this.tone({ freq: hz(93), type: 'sine', dur: 0.15, vol: 0.04, slide: 1.15, space: 0.2 });
+        this.tone({ freq: hz(100), type: 'sine', dur: 0.1, vol: 0.022, delay: 0.04, space: 0.2 });
+        break;
+      case 'dark':
+        this.tone({ freq: 92, type: 'sine', dur: 0.22, vol: 0.05, slide: 0.72, space: 0.1 });
+        this.noise({ dur: 0.16, vol: 0.022, hp: 300, lp: 1400 });
+        break;
+      case 'wind':
+        this.noise({ dur: slash ? 0.2 : 0.16, vol: 0.05, hp: 900, lp: 5200, space: 0.08 });
+        this.tone({ freq: slash ? 420 : 560, type: 'sine', dur: 0.13, vol: 0.022, slide: 2.2 });
+        break;
+      case 'water':
+        this.tone({ freq: 640, type: 'sine', dur: 0.1, vol: 0.04, slide: 0.5 });
+        this.noise({ dur: 0.12, vol: 0.03, hp: 500, lp: 3200 });
+        break;
+      case 'nature':
+        this.noise({ dur: 0.12, vol: 0.032, hp: 1200, lp: 5200 });
+        this.tone({ freq: 680, type: 'triangle', dur: 0.08, vol: 0.025, slide: 1.25 });
+        break;
+      case 'earth':
+      case 'steel':
+      case 'gold':
+        this.noise({ dur: 0.12, vol: 0.04, hp: 400, lp: el === 'steel' ? 7000 : 2200 });
+        this.tone({ freq: el === 'gold' ? 2100 : 180, type: el === 'gold' ? 'sine' : 'square', dur: 0.07, vol: 0.03, slide: 0.6 });
+        break;
+      case 'blood':
+        this.tone({ freq: 160, type: 'sawtooth', dur: 0.1, vol: 0.04, slide: 0.55 });
+        this.noise({ dur: 0.1, vol: 0.028, hp: 300, lp: 1800 });
+        break;
+      default:
+        this.noise({ dur: 0.07, vol: 0.025, hp: 2000, lp: 9000 });
+        break;
+    }
+    if (slash) this.noise({ dur: 0.1, vol: 0.025, hp: 2400, lp: 9000 });
+  }
+
+  /**
+   * 属性の当たり音。命中の手応えを属性ごとに変える。
+   * 連射で鳴りすぎないよう 0.055 秒で間引く。
+   */
+  elemHit(el = 'none') {
+    if (!this.on) return;
+    if (!this._throttle(this._hitAt, el, 0.055)) return;
+    switch (el) {
+      case 'fire':
+        this.noise({ dur: 0.08, vol: 0.05, hp: 500, lp: 2400 });
+        break;
+      case 'ice':
+        this.tone({ freq: 2400, type: 'sine', dur: 0.04, vol: 0.025, slide: 0.8 });
+        break;
+      case 'thunder':
+        this.noise({ dur: 0.05, vol: 0.045, hp: 4000, lp: 12000 });
+        break;
+      case 'wind':
+        this.noise({ dur: 0.09, vol: 0.04, hp: 1400, lp: 5200 });
+        this.tone({ freq: 760, type: 'sine', dur: 0.05, vol: 0.018, slide: 1.8 });
+        break;
+      case 'poison':
+        this.tone({ freq: 260, type: 'triangle', dur: 0.07, vol: 0.028, slide: 0.7 });
+        break;
+      case 'light':
+        this.tone({ freq: hz(96), type: 'sine', dur: 0.08, vol: 0.03, space: 0.18 });
+        break;
+      case 'dark':
+        this.tone({ freq: 110, type: 'sine', dur: 0.1, vol: 0.035, slide: 0.65 });
+        break;
+      case 'water':
+        this.noise({ dur: 0.07, vol: 0.03, hp: 600, lp: 2800 });
+        break;
+      case 'nature':
+        this.noise({ dur: 0.07, vol: 0.025, hp: 1600, lp: 6400 });
+        break;
+      case 'steel':
+      case 'gold':
+        this.tone({ freq: el === 'gold' ? 2600 : 1800, type: 'triangle', dur: 0.05, vol: 0.022, slide: 0.9 });
+        break;
+      case 'earth':
+        this.noise({ dur: 0.08, vol: 0.04, hp: 300, lp: 1500 });
+        break;
+      case 'blood':
+        this.noise({ dur: 0.06, vol: 0.03, hp: 350, lp: 2000 });
+        break;
+      default:
+        this.noise({ dur: 0.06, vol: 0.035, hp: 1200, lp: 7000 });
+        break;
+    }
+  }
+
+  // ── UI の音 ──────────────────────────────────────────────────────────────
+  /** 画面を開く。紙をめくるような短い上昇。 */
+  uiOpen() {
+    this.noise({ dur: 0.09, vol: 0.022, hp: 2200, lp: 9000 });
+    this.tone({ freq: hz(79), type: 'triangle', dur: 0.07, vol: 0.035 });
+    this.tone({ freq: hz(86), type: 'triangle', dur: 0.09, vol: 0.028, delay: 0.045, space: 0.1 });
+  }
+
+  /** 画面を閉じる。下降。 */
+  uiClose() {
+    this.tone({ freq: hz(84), type: 'triangle', dur: 0.07, vol: 0.03 });
+    this.tone({ freq: hz(77), type: 'triangle', dur: 0.1, vol: 0.024, delay: 0.04 });
+    this.noise({ dur: 0.07, vol: 0.016, hp: 1800, lp: 6000, delay: 0.02 });
+  }
+
+  /** 選ぶ。小さな木の音。 */
+  uiSelect() {
+    this.tone({ freq: 880, type: 'sine', dur: 0.05, vol: 0.035 });
+    this.noise({ dur: 0.03, vol: 0.02, hp: 3000, lp: 9000 });
+  }
+
+  /** できない操作。低く短く断る。 */
+  uiDeny() {
+    this.tone({ freq: 150, type: 'square', dur: 0.09, vol: 0.035, slide: 0.8 });
+  }
+
+  /** 連斬の音。n が増えるほど少し高くなる。 */
+  combo(n = 0) {
+    if (!this.on) return;
+    if (!this._throttle(this._hitAt, 'combo', 0.09)) return;
+    const step = Math.min(12, Math.max(0, n | 0));
+    this.tone({ freq: hz(72 + Math.min(14, step * 2)), type: 'triangle', dur: 0.07, vol: 0.03 });
+  }
+
+  /** ボス出現の警告。遠くで鳴る低いサイレン。 */
+  bossWarn() {
+    this.tone({ freq: 180, type: 'sawtooth', dur: 0.5, vol: 0.09, slide: 0.75, space: 0.2 });
+    this.tone({ freq: 120, type: 'sine', dur: 0.8, vol: 0.08, delay: 0.16, slide: 0.9 });
+    this.noise({ dur: 0.8, vol: 0.05, hp: 120, lp: 900, space: 0.2 });
+  }
 
   /** ダッシュの風切り音。 */
   dash() {

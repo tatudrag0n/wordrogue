@@ -6,7 +6,7 @@
 // paused は時間だけを止めるフラグ。言葉鍛冶を開いている間も世界は止まる。
 // ============================================================================
 
-import { TAU, clamp, dist2, rng } from '../core/util.js';
+import { TAU, clamp, dist2, rng, angleDiff } from '../core/util.js';
 import { getStage } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
 import {
@@ -86,8 +86,11 @@ export class Run {
       hp: 100, maxHp: 100,
       level: 1, xp: 0, xpNext: 6,
       face: -Math.PI / 2,
+      faceVis: -Math.PI / 2,
       invuln: 0, flash: 0, anim: 0,
       shield: 0,
+      // 撃った瞬間の身体の動き (描画用)
+      castFlash: 0, castDir: 0, castColor: '#d4a94e', castKind: 'shot',
       // スタミナとダッシュ
       stamina: 100, maxStamina: 100,
       dashing: false, dashCd: 0, dashTrail: [],
@@ -162,6 +165,14 @@ export class Run {
     this.shakeAmt = 0;
     this.shakeOn = true;
     this.showDamage = true;
+    /** 連斬。2.4 秒以内に倒すと繋がる。HUD が脈打つ。 */
+    this.combo = 0;
+    this.comboT = 0;
+    this.comboPulse = 0;
+    this.bestCombo = 0;
+    /** 画面全体の一瞬の色。レベルアップ・ボス出現に使う。 */
+    this.screenFlash = null;
+    this._stepT = 0;
     this.hint = '';
     this.hintT = 0;
     this.slowmo = 0;
@@ -937,14 +948,43 @@ export class Run {
     if (!e) return;
     this.boss = e;
     this.audio.boss();
+    this.audio.bossWarn?.();
+    this.screenFlash = { color: '#b8332b', life: 0.55, maxLife: 0.55 };
     this.pushHint(`${e.def.name} が来る`);
     this.shake(16);
+  }
+
+  /** レベルアップの祝祭。画面の光・輪・金の粒で、育ったことを身体で見せる。 */
+  levelBurst(level = 1) {
+    const p = this.player;
+    this.rings.push({
+      x: p.x, y: p.y, r: 74 + Math.min(40, level * 3), life: 0.55, maxLife: 0.55,
+      color: '#d9a406', hit: new Set(), thin: true,
+    });
+    this.rings.push({
+      x: p.x, y: p.y, r: 42, life: 0.35, maxLife: 0.35,
+      color: '#e8b425', hit: new Set(),
+    });
+    this.burst(p.x, p.y, 26, '#e8b425', {
+      spd: 240, spdMin: 40, life: 0.7, r: 2.2, shape: 'spark', drag: 4.2,
+    });
+    this.burst(p.x, p.y, 10, '#fdf6dd', {
+      spd: 180, spdMin: 20, life: 0.5, r: 2.6, shape: 'dot', drag: 5,
+    });
+    this.screenFlash = { color: '#f1d488', life: 0.34, maxLife: 0.34 };
+    this.shake(3);
   }
 
   killEnemy(e, st) {
     if (e.dead) return;
     e.dead = true;
     this.kills++;
+    // 連斬。前の一撃から 2.4 秒以内なら繋がる。
+    this.combo = (this.comboT > 0 ? this.combo : 0) + 1;
+    this.comboT = 2.4;
+    this.comboPulse = 0.35;
+    this.bestCombo = Math.max(this.bestCombo || 0, this.combo);
+    if (this.combo >= 3) this.audio.combo?.(this.combo);
     this.corpses.push({ x: e.x, y: e.y, r: e.r, color: e.def.color, life: 0.4, maxLife: 0.4 });
     // 地面に残る墨の染み。倒した跡がしばらく戦場に残る。
     this.decals.push({
@@ -1095,6 +1135,16 @@ export class Run {
     if (this.hintT > 0) this.hintT -= dt;
     if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - dt * 34);
     if (this.magnetPulse > 0) this.magnetPulse = Math.max(0, this.magnetPulse - dt * 3);
+    // 連斬は途切れると消える。HUD の脈も一緒に戻す。
+    if (this.comboT > 0) {
+      this.comboT -= dt;
+      if (this.comboT <= 0) this.combo = 0;
+    }
+    if (this.comboPulse > 0) this.comboPulse = Math.max(0, this.comboPulse - dt * 4);
+    if (this.screenFlash) {
+      this.screenFlash.life -= dt;
+      if (this.screenFlash.life <= 0) this.screenFlash = null;
+    }
     if (this.boss && this.boss.dead) this.boss = null;
 
     // 低体力の鼓動。体力が減るほど間隔が詰まる。
@@ -1155,7 +1205,11 @@ export class Run {
     const p = this.player;
     if (p.invuln > 0) p.invuln -= dt;
     if (p.flash > 0) p.flash = Math.max(0, p.flash - dt * 3);
+    if (p.castFlash > 0) p.castFlash = Math.max(0, p.castFlash - dt * 6);
     p.anim += dt;
+    // 向きは一瞬で回さない。目と武器の向きが滑らかに追う。
+    const turn = clamp(dt * 15, 0, 1);
+    p.faceVis += angleDiff(p.faceVis, p.face) * turn;
 
     const ax = input?.ax || 0, ay = input?.ay || 0;
     const moving = Math.hypot(ax, ay) > 0.08;
@@ -1212,6 +1266,23 @@ export class Run {
     }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
+
+    // 歩いた跡の墨。速く動くほど薄く小さく散る。
+    const speed = Math.hypot(p.vx, p.vy);
+    if (speed > 150 && !p.dashing) {
+      this._stepT = (this._stepT || 0) - dt;
+      if (this._stepT <= 0) {
+        this._stepT = 0.16;
+        const back = Math.atan2(-p.vy, -p.vx) + (this.rand() - 0.5) * 0.8;
+        this.burst(p.x + Math.cos(back) * p.r * 0.6, p.y + Math.sin(back) * p.r * 0.6,
+          1, 'rgba(82, 64, 38, .6)', {
+            a: back, spread: 0.3, spd: 34, spdMin: 8,
+            life: 0.26, r: 1.5, shape: 'ink', drag: 9,
+          });
+      }
+    } else {
+      this._stepT = 0;
+    }
 
     // 残像。
     if (p.dashing) {
@@ -1323,11 +1394,10 @@ export class Run {
         if (e.spawned < 1) continue;
       }
       updateEnemy(e, ctx, dt);
-      if (e.hp <= 0) {
-        e.dead = true;
-        this.kills++;
-        this.killEnemy(e, null);
-      }
+      // 状態異常 (燃焼・毒) のダメージで倒れた場合も、直接攻撃と同じ
+      // 報酬・墨・連斬を通す。以前はここで dead にしてしまい、
+      // killEnemy が早期 return して経験値が落ちなかった。
+      if (e.hp <= 0) this.killEnemy(e, null);
     }
   }
 
@@ -1368,7 +1438,6 @@ export class Run {
           element: b.element || st.el,
           burn: b.burn, poison: b.poison, chill: b.chill, shock: b.shock, freeze: b.freeze,
         });
-        this.audio.hit();
 
         if (b.pierce > 0) b.pierce--;
         else b.dead = true;
@@ -1393,21 +1462,38 @@ export class Run {
 
   explode(b, st) {
     const r = 40 + (st?.area || 0) + (b.explode || 0) * 0.55;
+    const el = b.element || st?.el || 'none';
     this.fields.push(makeField(b.x, b.y, r, Math.max(1, (st?.dmg || 6) * 0.8), {
       life: 0.3,
-      element: b.element || st?.el,
+      element: el,
       burn: b.burn, poison: b.poison, chill: b.chill, shock: b.shock, freeze: b.freeze,
       knock: st?.knock,
     }));
     this.audio.explode();
+    this.audio.elemHit?.(el);
     this.shake(5 + (b.explode || 0) * 0.07);
     const c = b.color || '#e8762a';
+    // 地面に残る属性の染み。爆発のあった場所がしばらく読める。
+    this.decals.push({
+      x: b.x, y: b.y, r: r * 0.55, color: c,
+      life: 2.6, maxLife: 2.6, seed: (b.x * 0.017 + b.y * 0.011) % 1,
+    });
+    if (this.decals.length > 48) this.decals.shift();
     this.rings.push({
       x: b.x, y: b.y, r: r * 0.9, life: 0.3, maxLife: 0.3,
-      color: c, hit: new Set(),
+      color: c, el, hit: new Set(),
     });
-    this.burst(b.x, b.y, 12, c, {
-      spd: 270, life: 0.5, r: 2.6, shape: 'ink', drag: 3,
+    const fxShape = el === 'fire' ? 'ember'
+      : el === 'ice' ? 'crystal'
+        : el === 'thunder' ? 'spark'
+          : el === 'poison' ? 'bubble'
+            : el === 'dark' ? 'smoke'
+              : el === 'nature' ? 'leaf'
+                : el === 'wind' ? 'gust'
+                  : el === 'earth' || el === 'steel' ? 'shard'
+                    : 'ink';
+    this.burst(b.x, b.y, 14, c, {
+      spd: 280, life: 0.55, r: 2.6, shape: fxShape, drag: 3,
     });
     this.burst(b.x, b.y, 8, '#f0c25a', {
       spd: 320, spdMin: 100, life: 0.3, r: 1.6, shape: 'spark', drag: 5,

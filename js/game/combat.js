@@ -13,6 +13,55 @@ import { ELEMENTS } from '../data/words.js';
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
 
 /**
+ * 属性ごとの当たりの粒。形そのものが属性の意味になる。
+ *   wind → 風の弧、fire → 火の粉、ice → 氷片、thunder → 稲妻…
+ */
+const ELEM_FX = {
+  fire:    { shape: 'ember',   n: 7, spd: 190, life: 0.38, r: 1.7, grav: -20 },
+  ice:     { shape: 'crystal', n: 6, spd: 210, life: 0.36, r: 2.1 },
+  thunder: { shape: 'spark',   n: 9, spd: 300, life: 0.22, r: 1.6 },
+  poison:  { shape: 'bubble',  n: 6, spd: 95,  life: 0.6,  r: 2.4, grav: -34 },
+  light:   { shape: 'spark',   n: 7, spd: 250, life: 0.3,  r: 1.5 },
+  dark:    { shape: 'smoke',   n: 5, spd: 80,  life: 0.55, r: 3.0 },
+  wind:    { shape: 'gust',    n: 5, spd: 260, life: 0.34, r: 2.4 },
+  water:   { shape: 'dot',     n: 6, spd: 170, life: 0.38, r: 2.0 },
+  nature:  { shape: 'leaf',    n: 5, spd: 140, life: 0.5,  r: 2.2 },
+  steel:   { shape: 'shard',   n: 6, spd: 230, life: 0.3,  r: 2.0 },
+  blood:   { shape: 'ink',     n: 5, spd: 180, life: 0.4,  r: 2.5 },
+  earth:   { shape: 'shard',   n: 6, spd: 170, life: 0.4,  r: 2.4 },
+  gold:    { shape: 'spark',   n: 7, spd: 260, life: 0.32, r: 1.6 },
+  none:    { shape: 'spark',   n: 5, spd: 180, life: 0.28, r: 1.8 },
+};
+
+/** 命中の粒を属性の形で散らす。会心は輪も足す。 */
+function elementHitFx(run, e, el, crit) {
+  if (!run || !run.burst) return;
+  const fx = ELEM_FX[el] || ELEM_FX.none;
+  const info = ELEMENTS[el] || ELEMENTS.none;
+  run.burst(e.x, e.y, crit ? fx.n + 3 : fx.n, info.color, {
+    spd: fx.spd, spdMin: fx.spd * 0.25, life: fx.life, r: fx.r,
+    shape: fx.shape, drag: 4.2, grav: fx.grav || 0,
+  });
+  // 白い芯。紙の上でも「当たった」瞬間が読める。
+  run.burst(e.x, e.y, crit ? 3 : 2, '#fffdf7', {
+    spd: 110, spdMin: 30, life: 0.16, r: 1.3, shape: 'dot', drag: 7,
+  });
+  if (crit && run.rings) {
+    run.rings.push({
+      x: e.x, y: e.y, r: 24, life: 0.22, maxLife: 0.22,
+      color: info.color, hit: new Set(), thin: true,
+    });
+  }
+  // 風は「斬った風が抜ける」輪をひとつ。属性の意味を形にする。
+  if (el === 'wind' && run.rings) {
+    run.rings.push({
+      x: e.x, y: e.y, r: e.r * 3.2, life: 0.24, maxLife: 0.24,
+      color: info.color, hit: new Set(), dash: true,
+    });
+  }
+}
+
+/**
  * 武器を 1 回発動させる。
  * @param {object} run
  * @param {object} wi WeaponInst
@@ -33,6 +82,13 @@ export function fireWeapon(run, wi, res) {
   const aim = tgt ? Math.atan2(tgt.y - p.y, tgt.x - p.x) : p.face;
   const el = res.element || 'none';
   const elInfo = ELEMENTS[el] || ELEMENTS.none;
+
+  // 撃つ瞬間の身体の動き。描画側がこれを見て、僅かに反って光る。
+  p.castFlash = 0.18;
+  p.castDir = aim;
+  p.castColor = elInfo.color;
+  p.castKind = kind;
+  run.audio.cast?.(el, kind);
 
   switch (kind) {
     case 'slash': doSlash(run, wi, st, aim, el, elInfo); break;
@@ -67,9 +123,16 @@ function doSlash(run, wi, st, aim, el, elInfo) {
     arc,
     life: 0.32, maxLife: 0.32,
     color: elInfo.color,
+    el,
     hit: new Set(),
   });
   run.audio.slash();
+  // 刃の先で属性が弾ける。風なら風の弧、炎なら火の粉。
+  const fx = ELEM_FX[el] || ELEM_FX.none;
+  run.burst(p.x + Math.cos(aim) * reach * 0.72, p.y + Math.sin(aim) * reach * 0.72, 6, elInfo.color, {
+    a: aim, spread: arc * 0.9, spd: fx.spd * 1.4, spdMin: fx.spd * 0.4,
+    life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
+  });
 
   // 扇形内の敵に 1 回だけ当てる。
   for (const e of run.enemies) {
@@ -91,9 +154,17 @@ function doWhip(run, wi, st, aim, el, elInfo) {
   const reach = (st.range + (st.area || 0)) * (p.stats.size || 1);
   run.rings.push({
     x: p.x, y: p.y, r: reach, life: 0.36, maxLife: 0.36,
-    color: elInfo.color, hit: new Set(),
+    color: elInfo.color, el, hit: new Set(),
   });
   run.audio.slash();
+  const fx = ELEM_FX[el] || ELEM_FX.none;
+  const n = 8;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU + Math.random() * 0.3;
+    run.burst(p.x + Math.cos(a) * reach * 0.9, p.y + Math.sin(a) * reach * 0.9, 1, elInfo.color, {
+      a, spread: 0.4, spd: fx.spd, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
+    });
+  }
   for (const e of run.enemies) {
     if (e.dead) continue;
     if (dist2(e.x, e.y, p.x, p.y) > reach * reach) continue;
@@ -190,6 +261,7 @@ function doChain(run, wi, st, aim, el) {
       x1: ex, y1: ey, x2: tgt.x, y2: tgt.y,
       life: 0.24, maxLife: 0.24,
       color: (ELEMENTS[el] || {}).color || '#1b6ca8',
+      el,
     });
     run.damage(tgt, st, {
       crit: rollCrit(st),
@@ -216,6 +288,7 @@ function doBeam(run, wi, st, aim, el, elInfo) {
     x: p.x, y: p.y, a: aim, len, w: wdt,
     life: 0.3, maxLife: 0.3,
     color: elInfo?.color || '#e8a30a',
+    el,
   });
 
   const dx = Math.cos(aim), dy = Math.sin(aim);
@@ -328,22 +401,10 @@ export function damage(run, e, st, opt = {}) {
   e.hp -= dmg;
   e.flash = 1;
 
-  // ヒットの火花。
-  if (run && run.burst) {
-    const hitColor = (st && st.el && st.el !== 'none')
-      ? (ELEMENTS[st.el]?.color || '#ffd43b') : '#ffd43b';
-    run.burst(e.x, e.y, crit ? 7 : 4, hitColor, {
-      spd: crit ? 230 : 160, spdMin: 40, life: 0.28, r: 1.8,
-      shape: 'spark', drag: 6,
-    });
-    // 会心は朱の輪をひとつ足す。数字だけに頼らず、当たりの強さを見せる。
-    if (crit && run.rings) {
-      run.rings.push({
-        x: e.x, y: e.y, r: 26, life: 0.2, maxLife: 0.2,
-        color: '#e0482d', hit: new Set(),
-      });
-    }
-  }
+  // ヒットの火花。属性の形で散らす (風は弧、氷は粒、雷は稲妻)。
+  const hitEl = opt.element || st.el || 'none';
+  elementHitFx(run, e, hitEl, !!crit);
+  run?.audio?.elemHit?.(hitEl);
 
   // 手の部位に属性語があると、接触する近接武器 (斬撃・薙ぎ) がその属性を纏う。
   // 武器側に属性が無いときだけ。手の属性は部位強化が由来。

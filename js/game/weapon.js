@@ -14,7 +14,7 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, SPECIAL_SHAPE } from '../data/weapons.js';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js';
 import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS } from '../data/words.js';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
@@ -25,6 +25,17 @@ import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
  * 同じものを使うので、判定は形態語まとめて見る。
  */
 const isForm = (text) => WORDS[text]?.cat === 'form';
+
+/** 手の属性が武器に与える、状態異常以外の小さな特徴。 */
+const HAND_TRAITS = {
+  wind:  { knock: 18, speed: 25 },
+  earth: { knock: 20 },
+  light: { crit: 0.02 },
+  dark:  { crit: 0.02, lifesteal: 0.01 },
+  blood: { lifesteal: 0.015 },
+  gold:  { magnet: 0.12 },
+  steel: { pierce: 1 },
+};
 
 let wUid = 0;
 
@@ -112,10 +123,21 @@ export class WeaponInst {
    * @param {object} e evaluate の結果
    */
   hasAttackVerb(e) {
-    return (e?.compounds || []).some((c) => {
+    return !!this.attackVerb(e);
+  }
+
+  /**
+   * 特殊武器の攻撃の型を決める動詞 (最後の述語) を返す。
+   * 「光を斬る」の 斬 のように、動詞そのものが文の述語になっているものだけ。
+   * @param {object} e evaluate の結果
+   * @returns {string|null}
+   */
+  attackVerb(e) {
+    const hits = (e?.compounds || []).filter((c) => {
       if (!c.pred) return false;
       return !!WORDS[c.source]?.cats?.includes('verb');
     });
+    return hits.length ? hits[hits.length - 1].source : null;
   }
   get tailWord() { return this.tail ? makeWord(this.tail) : null; }
 
@@ -221,7 +243,7 @@ export class WeaponInst {
    * @param {object} ps プレイヤー能力
    */
   resolve(ps) {
-    const sig = this.level + '|' + this.sentence.sig();
+    const sig = this.level + '|' + this.sentence.sig() + '|' + (ps.handElement || '-');
     if (this._sig === sig && this._cache) return this._cache;
 
     const e = this.evaluate();
@@ -234,14 +256,24 @@ export class WeaponInst {
     let info = tail ? FORM_SHAPE[tail] : null;
     if (!tail) {
       const sp = this.specialTail;
-      if (sp && this.hasAttackVerb(e)) {
+      const verb = this.attackVerb(e);
+      if (sp && verb) {
         tail = sp;
         special = true;
-        info = SPECIAL_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null;
+        // 動詞の意味が攻撃の型を決める (光を斬る → 光線ではなく斬撃)。
+        // 動詞に型が無ければ、属性・現象の既定の型にする。
+        const verbKind = VERB_SHAPE[verb] || null;
+        info = verbKind
+          ? [KIND_SHAPE[verbKind] || 'orb', verbKind]
+          : (SPECIAL_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null);
       }
     }
     const kind = (info && info[1]) || this.def.kind;
     const shape = (info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade';
+    // 手の部位に属性語を置いていれば、文に属性が無くてもその属性を纏う。
+    // 「炎の右手」で炎の斬撃になる、という意味の対応。
+    const handEl = ps.handElement && ps.handElement !== 'none' ? ps.handElement : null;
+    const effEl = e.element !== 'none' ? e.element : (handEl || 'none');
     // 属性語を頭にした文は、動詞が無くても不成文ではない。ただ撃てない。
     const pending = e.valid && this.pendingSpecialVerb(e);
     const active = e.valid && !pending;
@@ -257,8 +289,8 @@ export class WeaponInst {
         : e.reasonText,
       grade: e.grade,
       gradeInfo: e.gradeInfo,
-      element: e.element,
-      elementInfo: ELEMENTS[e.element] || ELEMENTS.none,
+      element: effEl,
+      elementInfo: ELEMENTS[effEl] || ELEMENTS.none,
       kind,
       shape,
       tail,
@@ -289,6 +321,16 @@ export class WeaponInst {
 
     // プレイヤー能力との合成。
     st.dmg = Math.max(0, st.dmg || 0) * ps.atk * ps.atkMul * (1 + (fx.atkMul || 0));
+    // 手の部位の属性を、武器そのものの属性として乗せる。
+    // 状態異常を持たない属性 (風・光・闇・金…) にも、意味に沿った
+    // わずかな特徴を足して「炎の右手」「風の右手」が体感で変わるようにする。
+    if (handEl && e.element === 'none') {
+      if (ps.handStatus) {
+        for (const [k, v] of Object.entries(ps.handStatus)) st[k] = (st[k] || 0) + v;
+      }
+      const trait = HAND_TRAITS[handEl];
+      if (trait) for (const [k, v] of Object.entries(trait)) st[k] = (st[k] || 0) + v;
+    }
     st.crit = clamp((st.crit || 0) + ps.crit, 0, 1);
     // 会心倍率は 1.5 を基準に、文の効果が足し算される。
     st.critDmg = Math.max(1, (st.critDmg || 0) + 1.5);
@@ -308,7 +350,8 @@ export class WeaponInst {
     st.size = clamp(st.size ?? 1, 0.3, 4);
     st.area = Math.max(0, st.area || 0);
     st.range = st.range || 100;
-    st.rate = Math.max(0.05, st.rate || 1);
+    // 腕・手の「速さ」の意味は攻撃速度に乗る。
+    st.rate = Math.max(0.05, (st.rate || 1) * (ps.rateMul || 1));
     st.speed = st.speed ?? 260;
     st.count = Math.max(0, Math.round(st.count || 0));
     st.pierce = Math.max(0, Math.round(st.pierce || 0));
@@ -329,7 +372,7 @@ export class WeaponInst {
     st.freeze = st.freeze || 0;
     st.reflect = st.reflect || 0;
     // 弾・分裂・フィールドが参照する属性。
-    st.el = e.element;
+    st.el = effEl;
     // 描画用の形。
     st.shape = shape;
     st.kind = kind;

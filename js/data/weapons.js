@@ -212,11 +212,18 @@ export const SPECIAL_SHAPE = {
 /**
  * 動詞 (述語の形) から決まる攻撃の型。
  * 特殊武器で動詞が付いているとき、その動詞の種類で攻撃の型を上書きする。
+ *   「光を斬る」→ 光線ではなく斬撃。「風を貫く」→ 貫通。
+ * ここに無い動詞は、属性の既定の型 (炎なら爆弾、光なら光線) のまま。
  */
 export const VERB_SHAPE = {
   斬: 'slash', 裂: 'slash', 潰: 'slash', 殴: 'slash', 叩: 'slash',
-  射: 'shot', 撃: 'shot', 散: 'shot', 貫: 'pierce',
-  爆: 'bomb', 破: 'bomb', 炸: 'bomb', 砕: 'bomb', 響: 'chain',
+  刻: 'slash', 絶: 'slash', 終: 'slash', 葬: 'slash', 屠: 'slash',
+  討: 'slash', 戮: 'slash', 刈: 'slash', 祓: 'slash',
+  射: 'shot', 撃: 'shot', 散: 'shot',
+  貫: 'pierce', 刺: 'pierce', 穿: 'pierce',
+  爆: 'bomb', 破: 'bomb', 炸: 'bomb', 砕: 'bomb',
+  響: 'chain',
+  舞: 'orbit',
 };
 
 /**
@@ -264,6 +271,10 @@ export function defForForm(text) {
   const def = {
     id,
     name: text,
+    // 基本武器から作った文は、その語 1 つで武器として成立する。
+    // 特殊武器 (光・渦) は 1 語ではまだ文にならない — 動詞を述べて初めて
+    // 「動詞待ち」の行になる (氷を足すと文として成立する)。
+    tail: head === 'basic' ? text : null,
     kind: info[1],
     shape: info[0],
     glyph: text,

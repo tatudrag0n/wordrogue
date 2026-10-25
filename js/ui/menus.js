@@ -208,6 +208,12 @@ export class Menus {
       tap();
       if (this.tutIdx > 0) { this.tutIdx--; this.renderTutorialSteps(); }
     });
+
+    // ボタン全体の小さな木の音。専用音がある操作でも、その下に薄く重なる。
+    document.addEventListener('click', (e) => {
+      if (!this.audio?.on || !this.audio?.uiSelect) return;
+      if (e.target?.closest?.('.btn')) this.audio.uiSelect();
+    }, { passive: true });
   }
 
   hideAll() {
@@ -222,7 +228,9 @@ export class Menus {
   /** 辞書を閉じる。ゲーム中は main.js 側で時間を戻す。 */
   hide(name) {
     if (name === 'grow') this.closeGacha();
+    const wasOpen = this[name] && !this[name].hidden;
     this[name].hidden = true;
+    if (wasOpen) this.audio?.uiClose?.();
     if (name === 'dict') {
       this.dictSearch.value = '';
       this.dictQuery = '';
@@ -244,6 +252,7 @@ export class Menus {
     }
     this.hideAll();
     this[name].hidden = false;
+    this.audio?.uiOpen?.();
     if (name === 'title') this.renderTitle();
     if (name === 'settings') this.renderSettings();
     if (name === 'dict') this.renderDict();
@@ -282,6 +291,7 @@ export class Menus {
     this._tabFrom = 'pause';
     this.hideAll();
     this[name].hidden = false;
+    this.audio?.uiOpen?.();
     if (name === 'settings') this.renderSettings();
   }
 

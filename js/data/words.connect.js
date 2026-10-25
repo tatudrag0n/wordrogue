@@ -316,6 +316,12 @@ const fail = (reason, reasonText, acc) => ({
 });
 
 /**
+ * 連体節の主体になれる語。ほとんどの語 (焔・風・剣) は物であって、
+ * 他動詞の主体にはならない。神・魔のような人格的な語だけ許す。
+ */
+const ANIMATE_SUBJECT = new Set(['神', '魔', '魂', '霊', '賢', '己', '心', '影', '死', '冥', '覇']);
+
+/**
  * 分割結果に接続詞の規則を適用する。
  *
  * @param {string[]} segs 分割結果
@@ -427,6 +433,19 @@ export function checkConnectors(segs, dict) {
       }
     }
 
+    // 2b. 「〜の」の直後に他動詞の連体形が来るなら、前の語がその動作の
+    //     主体でなければならない。「焔の斬る剣」は日本語に無い
+    //     (焔は斬る主体になれない)。神・魔のような主体になれる語だけ許す。
+    if (e.role === 'case' && e.next === 'noun' && nf
+      && nf.pred && !nf.intr && !nf.passive && !bound.compound
+      && src && !ANIMATE_SUBJECT.has(src.text)) {
+      return fail('subjectverb',
+        `「${src.text}の」のあとに他動詞「${next}${nf.k}」は置けない。`
+        + `「${src.text}」は「${next}」の主体になれない。`
+        + `目的語なら「${src.text}を${next}${nf.k}」の形にすること。`,
+        acc);
+    }
+
     // 3. 連用のあとは動詞か形容。名詞は来ない。
     if (e.role === 'adv') {
       const okNext = nw && (isVerbal(nw) || isAdjectival(nw))
@@ -448,6 +467,15 @@ export function checkConnectors(segs, dict) {
         return fail('noobject',
           `接続詞「${s}」のあとに${wantAdj ? '動作か形容' : '動作'}が無い。`
           + `「〜${s}」のあとには ${wantAdj ? '斬る・強い' : '斬る・燃える'} のような語が要る。`,
+          acc);
+      }
+      // 4b. 「〜を」の受け先は他動詞。「焔を燃える」は日本語に無い。
+      //     連用形で続く場合 (斬り裂く) も、その形が自動詞なら受けられない。
+      if (e.next === 'verb' && nf && nf.intr) {
+        return fail('intransitive',
+          `「〜${s}」のあとに自動詞「${next}${nf.k}」は置けない。`
+          + `「${next}」を他動詞の形 (燃やす・凍らす など) にするか、`
+          + '別の語を挟むこと。',
           acc);
       }
     }

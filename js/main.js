@@ -156,6 +156,7 @@ function startRun(weaponIds) {
   run.onClear = () => onRunEnd(true);
   run.onLevelUp = (lv) => {
     app.audio.levelup();
+    run.levelBurst?.(lv);
     run.pushHint(`レベル ${lv} — 体力回復`);
     run.healPlayer(run.player.maxHp);
   };

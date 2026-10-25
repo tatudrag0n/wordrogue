@@ -24,6 +24,8 @@ export class Hud {
     this.hudTimer = $('#hudTimer');
     this.hudScore = $('#hudScore');
     this.hudKills = $('#hudKills');
+    this.hudCombo = $('#hudCombo');
+    this.comboValue = $('#comboValue');
     this.hudHint = $('#hudHint');
     this.hudWeapons = $('#hudWeapons');
     this.hudBoss = $('#hudBoss');
@@ -191,6 +193,20 @@ export class Hud {
 
     this.hudScore.textContent = fmtNum(run.score);
     this.hudKills.textContent = fmtNum(run.kills);
+    this._bumpIfChanged('score', this.hudScore, fmtNum(run.score));
+    this._bumpIfChanged('kills', this.hudKills, fmtNum(run.kills));
+
+    // 連斬。2 体から出し、倒した瞬間だけ少し膨らむ。
+    const combo = run.combo || 0;
+    if (this.hudCombo) {
+      this.hudCombo.hidden = combo < 2;
+      if (combo >= 2) {
+        this.comboValue.textContent = String(combo);
+        const scale = 1 + Math.min(0.4, (run.comboPulse || 0) * 0.9);
+        this.hudCombo.style.setProperty('--combo-scale', scale.toFixed(3));
+        this.hudCombo.classList.toggle('hot', combo >= 8);
+      }
+    }
 
     // ボス
     const b = run.boss;
@@ -208,6 +224,10 @@ export class Hud {
       if (run.hint !== this._lastHint) {
         this._lastHint = run.hint;
         this.hudHint.textContent = run.hint;
+        // 出すたびに、下から滑り込む。
+        this.hudHint.classList.remove('pop');
+        void this.hudHint.offsetWidth;
+        this.hudHint.classList.add('pop');
       }
     } else {
       this.hudHint.hidden = true;
@@ -215,6 +235,19 @@ export class Hud {
     }
 
     this._chips(run, onChipClick);
+  }
+
+  /** スコア・討伐数の数字が変わったときだけ、小さく跳ねさせる。 */
+  _bumpIfChanged(key, node, value) {
+    if (!node) return;
+    if (!this._numCache) this._numCache = Object.create(null);
+    if (this._numCache[key] === value) return;
+    const had = this._numCache[key] != null;
+    this._numCache[key] = value;
+    if (!had) return;
+    node.classList.remove('bump');
+    void node.offsetWidth;
+    node.classList.add('bump');
   }
 
   /** 武器チップ。不成文の武器は赤くして取り消し線を付ける。 */
@@ -302,6 +335,7 @@ export class Hud {
           title: `「${w.text}」を忘れる`,
         }, el('span', {}, w.text));
         node.addEventListener('click', () => {
+          run.audio?.uiSelect?.();
           this.forgetIndex = this.forgetIndex === i ? null : i;
           this._choiceSig = '';
           this.renderChoices(run);
@@ -334,10 +368,12 @@ export class Hud {
       if (w.cat === 'connect') node.append(el('span', { class: 'conn-mark' }, '結'));
       node.addEventListener('click', () => {
         if (full && this.forgetIndex === null) {
+          run.audio?.uiDeny?.();
           this._choiceSig = '';
           this.renderChoices(run);
           return;
         }
+        run.audio?.uiSelect?.();
         this._onPick?.(c.id, i, full ? this.forgetIndex : null);
         this.forgetIndex = null;
         this._choiceSig = '';

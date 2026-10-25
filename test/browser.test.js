@@ -1429,8 +1429,8 @@ sec('言葉くじはリールを回してからカードを開く');
   ok(mid.spinning && !mid.revealed, '500ms でまだ開示されている');
   ok(!mid.result.includes(mid.word), '演出中に一行の結果が先に出ている');
 
-  // 1080ms で停止 + 260ms 後に開示。
-  await sleep(1100);
+  // 1080ms で停止 + 260ms 後に開示。描画が重い環境でも取りこぼさないよう余裕を取る。
+  await sleep(1500);
   const done = await evalJs(`(() => {
     const app = window.__wordrogue;
     const veil = document.getElementById('gachaVeil');
@@ -1540,9 +1540,12 @@ sec('描画で例外が出てもプレイヤーが消えない');
     const before = app.renderer.drawErrorCount;
     run.player.invuln = 99;   // 描画確認の間は死なせない
 
-    // 画面内の生存数を保ったまま、鉱物系と各種形状の弾を並べる。
+    // 画面内の生存数を保ったまま、全属性と各種形状の弾を並べる。
     run.enemies.length = 0;
-    const els = ['earth', 'gold', 'steel', 'fire', 'thunder', 'ice', 'poison'];
+    const els = [
+      'earth', 'gold', 'steel', 'fire', 'thunder', 'ice', 'poison',
+      'wind', 'water', 'light', 'dark', 'nature', 'blood', 'none',
+    ];
     const shapes = ['shot', 'slash', 'orb', 'beam', 'bomb', 'shard', 'ring'];
     let n = 0;
     for (const el of els) {
@@ -1555,11 +1558,41 @@ sec('描画で例外が出てもプレイヤーが消えない');
         n++;
       }
     }
+    // 属性ごとの斬撃・輪・光線・粒も通す (風の弧や状態異常のオーラを含む)。
+    run.slashes.push({
+      x: run.player.x, y: run.player.y, a: 0.3, r: 90, arc: 1.6,
+      life: 0.3, maxLife: 0.3, color: '#2f9e8f', el: 'wind', hit: new Set(),
+    });
+    run.rings.push({
+      x: run.player.x, y: run.player.y, r: 60, life: 0.3, maxLife: 0.3,
+      color: '#2f9e8f', el: 'wind', dash: true, thin: true, hit: new Set(),
+    });
+    run.beams.push({
+      x: run.player.x, y: run.player.y, a: 0.2, len: 160, w: 8,
+      life: 0.3, maxLife: 0.3, color: '#2f9e8f', el: 'wind',
+    });
+    for (const shape of ['gust', 'bubble', 'crystal', 'ember', 'smoke', 'leaf', 'shard']) {
+      run.burst(run.player.x + 40, run.player.y + 20, 2, '#2f9e8f', {
+        spd: 80, life: 0.4, r: 2, shape, drag: 4,
+      });
+    }
+    run.screenFlash = { color: '#f1d488', life: 0.2, maxLife: 0.3 };
+    run.player.castFlash = 0.15;
+    run.player.castDir = 0.4;
+    run.player.castColor = '#d9480f';
+    run.player.stats.handElement = 'fire';
     // 敵と弾、両方の描画経路を通す。位置は {x, y} で渡す。
     for (let i = 0; i < 3; i++) {
       run.spawnEnemy('slime', { x: 300 + i * 40, y: 200 });
     }
-    run.enemies.forEach((e) => { e.spawned = 1; });
+    run.enemies.forEach((e, i) => {
+      e.spawned = 1;
+      if (i === 0) {
+        e.burn = 2; e.burnT = 2; e.poison = 2; e.poisonT = 2;
+        e.chill = 0.2; e.chillT = 2; e.freeze = 0.5; e.stun = 0.5;
+      }
+      if (i === 1) { e.broken = true; e.words = e.words.slice(0, 1); }
+    });
 
     await new Promise(r => setTimeout(r, 400));
 

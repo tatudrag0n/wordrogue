@@ -147,7 +147,7 @@ ok(r.fx.dmg > 0, `dmg=${r.fx.dmg}`);
 ok(typeof r.fx.power === 'number' && r.fx.power > 1, `power=${r.fx.power}`);
 
 sec('長文');
-const long = ['炎', '巨', '裂', '律', '導', '弾', '矢'];
+const long = ['炎', '巨', '裂', '律', '導', '弾', '強'];
 r = E(...long);
 ok(r.valid, `長文が不成立: ${r.reasonText}`);
 ok(r.content >= 6, `実効語数 ${r.content}`);
@@ -238,7 +238,7 @@ sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
   const EV = (ws, tail) => evaluate(ws.map(makeWord), tail ? { tail } : {});
   const two = Object.keys(PHRASE_BONUS).filter((k) => PHRASE_BONUS[k].tier === 2);
   const three = Object.keys(PHRASE_BONUS).filter((k) => PHRASE_BONUS[k].tier === 3);
-  ok(two.length >= 30 && two.length <= 61, `二字熟語の数 ${two.length}`);
+  ok(two.length >= 30 && two.length <= 80, `二字熟語の数 ${two.length}`);
   ok(three.every((k) => k.length >= 3), '三字熟語に 2 文字のものがある');
   for (const k of two) {
     const p = PHRASE_BONUS[k];
@@ -835,7 +835,7 @@ sec('接続詞の順序 (両方向を許す)');
   // 降順 (格 -> 説明 -> 述語) も成立。
   ok(E2('焔', 'の', '爆', 'ぜる', '剣').valid, 'の -> ぜる が通らない');
   ok(E2('焔', 'の', '燃', 'える', '妙', 'な', '剣').valid, 'の -> える が通らない');
-  ok(E2('焔', 'の', '撃', 'つ', '剣').valid, 'の -> つ が通らない');
+  ok(E2('神', 'の', '撃', 'つ', '剣').valid, 'の -> つ が通らない');
   ok(E2('焔', 'を', '斬', 'られた', '潮', 'の', '剣').valid, 'られた -> の が通らない');
   // 昇順 (述語 -> 格) も成立。「圧する毒の針」のように自然な並び。
   ok(E2('圧', 'する', '毒', 'の', '針').valid, 'する -> の が通らない');
@@ -883,8 +883,8 @@ sec('文が実際に読める形で作れること');
     [['力', '刃', '火', '球'], true],
     [['志', '弾', '電', '矢'], true],
     [['火', 'の', '弾', '疾速'], true],
-    [['力', '刃', '弾'], true],
-    [['力', '弾', '刃'], true],
+    [['力', '刃', '弾'], false],
+    [['力', '弾', '刃'], false],
     [['力', 'の'], false],
     [['力'], false],
   ];

@@ -2907,3 +2907,114 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .gacha-veil.is-spinning .gacha-stage { animation: none; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   手応えのモーション — 連斬・数字・ヒント
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* 連斬。倒すたびに数字が跳ね、8 連斬から朱が少し強くなる。 */
+.hud-combo {
+  position: absolute;
+  right: calc(18px + var(--safe-r));
+  top: 118px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  pointer-events: none;
+  color: var(--accent-ink);
+  transform: scale(var(--combo-scale, 1));
+  transform-origin: 50% 30%;
+  transition: transform .09s cubic-bezier(.2,.8,.2,1);
+  z-index: 4;
+}
+.hud-combo b {
+  font: 800 1.9rem/1 var(--mono);
+  letter-spacing: -.02em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .95), 0 3px 9px rgba(23, 43, 84, .12);
+}
+.hud-combo span {
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .22em;
+  color: var(--fg-mute);
+}
+.hud-combo.hot b { color: var(--accent); animation: comboHot .55s ease-in-out infinite alternate; }
+@keyframes comboHot {
+  from { text-shadow: 0 1px 0 rgba(255,255,255,.95), 0 3px 9px rgba(23,43,84,.12); }
+  to   { text-shadow: 0 1px 0 rgba(255,255,255,.95), 0 0 14px rgba(224,72,45,.32); }
+}
+
+/* スコアと討伐数。増えた瞬間だけ跳ねる。 */
+.hud-num b.bump { animation: numPop .3s cubic-bezier(.16,1,.3,1); }
+@keyframes numPop {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.22) translateY(-2px); color: var(--accent); }
+  100% { transform: scale(1); }
+}
+
+/* ヒントは下から滑り込む。 */
+.hud-hint.pop { animation: hintIn .26s cubic-bezier(.16,1,.3,1); }
+@keyframes hintIn {
+  from { opacity: 0; transform: translateY(8px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 武器チップは押せるものとして、少し浮く。 */
+.wchip { transition: transform .12s cubic-bezier(.2,.8,.2,1), background .12s, border-color .12s, box-shadow .12s; }
+.wchip:hover { transform: translateY(-2px); }
+.wchip:active { transform: translateY(0) scale(.985); }
+
+/* レベルアップの 3 択は、1 枚ずつ少し遅れて置かれる (既存の animation-delay と併用)。 */
+.hud-choice { transform-origin: 50% 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-combo { transition: none; }
+  .hud-combo.hot b,
+  .hud-num b.bump,
+  .hud-hint.pop,
+  .wchip:hover { animation: none !important; transform: none !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   タイトルの紙面 — 大きな墨の気配と、ゆっくり動く染み
+   ════════════════════════════════════════════════════════════════════════ */
+
+#title { isolation: isolate; }
+#title::before {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 42% 34% at 28% 30%, rgba(224, 72, 45, .055), transparent 68%),
+    radial-gradient(ellipse 38% 30% at 74% 68%, rgba(27, 35, 51, .05), transparent 66%),
+    radial-gradient(ellipse 30% 24% at 58% 18%, rgba(192, 138, 16, .05), transparent 70%);
+  animation: titleWash 17s ease-in-out infinite alternate;
+}
+#title::after {
+  content: '刃';
+  position: absolute;
+  right: 4vw;
+  bottom: -2vh;
+  z-index: 0;
+  font-size: min(44vw, 380px);
+  font-weight: 900;
+  line-height: 1;
+  color: rgba(27, 35, 51, .045);
+  transform: rotate(-7deg);
+  pointer-events: none;
+  user-select: none;
+}
+#title > .title-wrap { position: relative; z-index: 1; }
+@keyframes titleWash {
+  from { transform: translate3d(-1.2%, 0.6%, 0) scale(1); }
+  to   { transform: translate3d(1.2%, -0.8%, 0) scale(1.035); }
+}
+@media (max-width: 720px) {
+  #title::after { right: -4vw; font-size: 62vw; opacity: .8; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #title::before { animation: none; }
+}

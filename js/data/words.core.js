@@ -109,6 +109,9 @@ const RAW_ELEMENT = `
 烈     element fire    dmg+5  burn+4  explode+14
 煙     element fire    dmg+2  burn+3.5  area+10
 灰     element fire    dmg+1  burn+2  speed+15
+獄     element fire    dmg+4  burn+4  explode+12
+劫     element fire    dmg+3  burn+6  area+14
+燼     element fire    dmg+2  burn+7  area+12
 
 氷     element ice     dmg+2  chill+0.10
 雪     element ice     dmg+2  chill+0.12  count+1
@@ -119,6 +122,7 @@ const RAW_ELEMENT = `
 震     element thunder dmg+4  shock+0.22  area+8
 磁     element thunder dmg+5  shock+0.18  magnet+0.35
 雷     element thunder dmg+7  pierce+5  crit+0.06  speed+30
+閃     element thunder dmg+5  crit+0.08  speed+50
 
 毒     element poison  dmg+1  poison+2
 液     element poison  dmg+2  poison+3  area+4
@@ -139,6 +143,7 @@ const RAW_ELEMENT = `
 皓     element light   dmg+1  crit+0.03  speed+10
 青     element light   dmg+2  crit+0.02  speed+8
 白     element light   dmg+1  speed+8  pierce+1
+煌     element light   dmg+4  crit+0.06  area+8
 赤     element blood   dmg+3  burn+1
 
 闇     element dark    dmg+3  crit+0.02
@@ -150,6 +155,11 @@ const RAW_ELEMENT = `
 魔     element dark    dmg+4  crit+0.07  lifesteal+0.03
 影     element dark    dmg+1  crit+0.02  homing+0.10
 漆     element dark    dmg+2  crit+0.03  homing+0.14
+冥     element dark    dmg+4  lifesteal+0.03  pierce+1
+羅     element dark    dmg+3  crit+0.05  count+1
+刹     element dark    dmg+2  crit+0.06  speed+40
+虚     element dark    dmg+3  homing+0.20  pierce+2
+幻     element dark    dmg+2  count+2  homing+0.25
 
 土     element earth   dmg+2  size+0.15  speed-10
 砂     element earth   dmg+2  count+2  size-0.05
@@ -166,6 +176,8 @@ const RAW_ELEMENT = `
 旋     element wind    dmg+4  area+18  rate+0.6  orbit+1
 疾     element wind    dmg+2  speed+70  count+1
 翔     element wind    dmg+2  homing+0.12  speed+50
+迅     element wind    dmg+3  speed+65  rate+0.3
+颯     element wind    dmg+2  speed+55  homing+0.12  knock+25
 
 草     element nature  dmg+1  poison+1.5  regen+0.3
 樹     element nature  dmg+2  regen+1.2  area+6
@@ -269,16 +281,16 @@ const RAW_MODIFIER = `
 柔    modifier  -  speed+18
 明    modifier  -  pierce+2  crit+0.02
 早    modifier  -  rate+0.30
-遅    modifier  -  rate-0.20
+遅    modifier  -  rate-0.20  dmg+7  knock+30  area+6
 高    modifier  -  crit+0.05
 深    modifier  -  dmg+3  pierce+1
 遠    modifier  -  range+30
-近    modifier  -  range-20
+近    modifier  -  range-20  dmg+6  crit+0.05
 長    modifier  -  range+25
-短    modifier  -  range-15
+短    modifier  -  range-15  dmg+7  rate+0.25
 大    modifier  -  size+0.35  area+12
 多    modifier  -  count+2  spread+0.18
-少    modifier  -  count-1
+少    modifier  -  count-1  dmg+9  crit+0.04  size+0.12
 広    modifier  -  area+8
 小    modifier  -  size-0.25  speed+30  rate+0.3
 淡    modifier  -  speed+15  pierce+2
@@ -348,7 +360,7 @@ const RAW_MODIFIER = `
 急    modifier  -  crit+0.15  critDmg+0.5
 反    modifier  -  recoil+60  dmg+6  size+0.20
 退    modifier  -  knock+55
-衰    modifier  -  dmg-2  area+8
+衰    modifier  -  dmg+3  area+10  chill+0.15
 合    modifier  -  count+2  split+2
 再    modifier  -  regen+1.4
 回    modifier  -  regen+0.9
@@ -371,6 +383,7 @@ const RAW_MODIFIER = `
 発    modifier  -  dmg+4  area+8  speed+25
 穢    modifier  -  poison+3  area+8
 爛    modifier  -  poison+3  dmg+2
+覇    modifier  -  dmg+8  size+0.18  armor+2
 優    modifier  -  regen+0.4  speed+5
 護    modifier  -  shield+16  regen+0.3
 結    modifier  -  dmg+4  chill+0.15
@@ -453,6 +466,22 @@ const RAW_VERB = `
 錆      verb  -  dmg+4  poison+2  rate-0.05
 癒      verb  -  dmg+1  regen+0.8
 鍛      verb  -  dmg+4  armor+2
+
+# ── 中二病の語。意味のままに強い効果だけを乗せる (弱くなるだけの語は作らない) ──
+絶      verb  -  dmg+8  crit+0.05  pierce+2
+終      verb  -  dmg+7  crit+0.03
+戮      verb  -  dmg+9  crit+0.08
+屠      verb  -  dmg+8  crit+0.06  knock+35
+討      verb  -  dmg+7  rate+0.15  knock+30
+刈      verb  -  dmg+5  area+10  arc+0.4
+祓      verb  -  dmg+4  regen+0.5  pierce+2
+祟      verb  -  dmg+4  poison+3  lifesteal+0.02
+葬      verb  -  dmg+8  lifesteal+0.03  crit+0.03
+刺      verb  -  dmg+5  pierce+3
+刻      verb  -  dmg+4  count+1  crit+0.04
+駆      verb  -  dmg+3  speed+70  rate+0.2
+研      verb  -  dmg+5  crit+0.07  pierce+2
+煉      verb  -  dmg+4  burn+3  area+6
 `;
 
 // 接続詞 (送り仮名) は words.connect.js が語ごとのプールから作る。

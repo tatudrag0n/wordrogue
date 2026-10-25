@@ -57,6 +57,11 @@
 
     <div class="hud-hint" id="hudHint" hidden></div>
 
+    <!-- 連斬。2 体以上を続けて倒すと出る。 -->
+    <div class="hud-combo" id="hudCombo" hidden>
+      <b id="comboValue">0</b><span>連斬</span>
+    </div>
+
     <!-- レベルアップの 3 択。時間は止まらない。 -->
     <div class="hud-choice" id="hudChoice" hidden>
       <div class="hud-choice-head">
@@ -627,7 +632,9 @@
           <p class="grow-note">下の「所持語」から語を選んで、各部位の枠を押すと入る。入っている枠を押すと外れる（語を 2 つまで）。
           語の右の<strong>「接続詞」</strong>を押すと、その語に付けられる形の一覧が開く。どの接続詞でも選べて、
           <strong>✓ は文が成る形</strong>（文の力が体に乗る）、✕ は不成文（効果なし）。
-          各部位の下に<strong>何がどれだけ変わるか</strong>が出る。</p>
+          各部位の下に<strong>何がどれだけ変わるか</strong>が出る。
+          <br><strong>語の意味も体に効く。</strong>速い足は移動、硬い胴は装甲、賢い頭は経験値、
+          炎の右手は武器の属性と炎上になる。</p>
           <div class="grow-parts" id="growParts"></div>
           <p class="grow-note" id="growSelNote">語を選んでください</p>
         </section>

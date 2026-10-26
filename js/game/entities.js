@@ -171,7 +171,14 @@ export function hitsField(en, f) {
 
 export function hitsEnemy(en, b) {
   const rr = b.r + en.r;
-  return dist2(en.x, en.y, b.x, b.y) <= rr * rr;
+  // 速い弾は 1 フレームで敵を飛び越える。前フレーム位置からの線分で見て、
+  // 弾速を上げても当たり判定が抜けないようにする。
+  const dx = b.x - (b.px ?? b.x), dy = b.y - (b.py ?? b.y);
+  const len2 = dx * dx + dy * dy;
+  if (len2 <= rr * rr) return dist2(en.x, en.y, b.x, b.y) <= rr * rr;
+  const t = Math.max(0, Math.min(1, ((en.x - b.px) * dx + (en.y - b.py) * dy) / len2));
+  const qx = b.px + dx * t, qy = b.py + dy * t;
+  return dist2(en.x, en.y, qx, qy) <= rr * rr;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

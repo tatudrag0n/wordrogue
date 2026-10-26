@@ -384,14 +384,27 @@ sec('1 ステージを最後まで回す (ボスなし)');
   setFlat(wi, ['炎', '必', '刃']);
   let steps = 0;
   const dt = 1 / 60;
-  // プレイヤーを少し動かす。
+  // プレイヤーを動かす。近くに敵がいる間は離れる方向へ逃げ、いなければ円を描く。
+  // (弾速を上げて殲滅が早まると敵も寄るので、棒立ちのままだと中ボスで落ちる)
   const inp = { ax: Math.cos(r.time), ay: Math.sin(r.time), moving: true, angle: 0 };
   let cleared = false;
   r.onClear = () => { cleared = true; };
   while (r.state === 'playing' && steps < 60 * 120) {
-    inp.angle = steps / 30;
-    inp.ax = Math.cos(inp.angle); inp.ay = Math.sin(inp.angle);
+    let bx = 0, by = 0, bd = Infinity;
+    for (const e of r.enemies) {
+      const d = (e.x - r.player.x) ** 2 + (e.y - r.player.y) ** 2;
+      if (d < bd) { bd = d; bx = e.x; by = e.y; }
+    }
+    if (bd < 200 * 200) {
+      const a = Math.atan2(r.player.y - by, r.player.x - bx);
+      inp.ax = Math.cos(a); inp.ay = Math.sin(a);
+    } else {
+      inp.angle = steps / 30;
+      inp.ax = Math.cos(inp.angle); inp.ay = Math.sin(inp.angle);
+    }
     r.update(dt, inp);
+    // 実プレイヤーと同じく、レベルアップの 3 択にはその場で答える。
+    while (r.pendingChoices.length) r.chooseWord(r.pendingChoices[0].id, 0, null);
     steps++;
   }
   ok(r.state === 'clear', `状態が ${r.state} (${steps} フレーム)`);

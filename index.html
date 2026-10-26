@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#f3eee1">
 <meta name="description" content="言葉を組み合わせて武装する 2D ローグライク。 combina 語で作った文が成立しなければ、武器は無効になる。">
 <title>ワードローグ — Wordrogue</title>
-<link rel="stylesheet" href="css/style.css?v=1.6">
+<link rel="stylesheet" href="css/style.css?v=1.15">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 </head>
 <body>
@@ -186,7 +186,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.14</div>
+      <div class="title-version">Ver. 1.15</div>
     </div>
   </div>
 
@@ -694,6 +694,23 @@
     </div>
   </div>
 
+  <!-- 開発用パネル。コナミコマンドで開く (セッション中のみ)。 -->
+  <div id="devMode" class="layer screen dev-screen" hidden>
+    <div class="panel dev-panel" role="dialog" aria-modal="true" aria-labelledby="devTitle">
+      <header class="panel-head">
+        <h2 id="devTitle">開発者モード</h2>
+        <button class="btn btn-close" id="devClose" type="button" aria-label="閉じる">✕</button>
+      </header>
+      <p class="muted">このモードは現在のセッション中だけ有効です。</p>
+      <div class="dev-actions">
+        <button class="btn btn-primary" id="devAddInk" type="button">言玉を +1000</button>
+        <button class="btn" id="devHeal" type="button">体力を全回復</button>
+      </div>
+      <p class="muted" id="devStatus" aria-live="polite"></p>
+      <p class="muted">閉じる: Esc またはコナミコマンドをもう一度</p>
+    </div>
+  </div>
+
   <!-- ═══ 辞書 ═══════════════════════════════════════════════════════════ -->
   <div id="dict" class="layer screen" hidden>
     <div class="panel panel-dict">
@@ -760,6 +777,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=2.3"></script>
+<script type="module" src="js/main.js?v=1.15"></script>
 </body>
 </html>

@@ -32,6 +32,9 @@ const app = {
 };
 
 const canvas = $('#game');
+const KONAMI_CODE = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a'];
+let konamiProgress = 0;
+let devReturnMode = 'title';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 初期化
@@ -66,6 +69,7 @@ function boot() {
   $('#btnPauseHowto').addEventListener('click', () => openTabFromPause('howto'));
   $('#btnPauseTitle').addEventListener('click', onPauseTitleClick);
   window.addEventListener('keydown', onKey);
+  window.addEventListener('keydown', onKonamiKey, true);
 
   const leave = () => {
     app.input?.clear?.();
@@ -74,6 +78,23 @@ function boot() {
   window.addEventListener('blur', leave);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) leave();
+  });
+
+  $('#devClose')?.addEventListener('click', closeDevMode);
+  $('#devAddInk')?.addEventListener('click', () => {
+    app.save.addInk(1000);
+    app.save.save();
+    $('#devStatus').textContent = `言玉を追加しました（所持 ${app.save.ink}）。`;
+    if (!app.menus.grow.hidden) app.menus.renderGrow();
+    if (!app.menus.archive.hidden) app.menus.renderArchive();
+  });
+  $('#devHeal')?.addEventListener('click', () => {
+    if (!app.run) {
+      $('#devStatus').textContent = '体力全回復はラン中のみ使用できます。';
+      return;
+    }
+    app.run.healPlayer(app.run.player.maxHp);
+    $('#devStatus').textContent = '体力を全回復しました。';
   });
 
   window.addEventListener('resize', () => app.renderer.resize());
@@ -352,9 +373,81 @@ function toggleDict() {
 // ─────────────────────────────────────────────────────────────────────────────
 // キー操作
 // ─────────────────────────────────────────────────────────────────────────────
+function onKonamiKey(e) {
+  if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+  // Capture phase lets the sequence work even when a menu handler stops bubbling.
+  // Buttons and game canvases should not prevent the code; only text-entry fields do.
+  const target = e.target;
+  if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+  const key = String(e.key || '').toLowerCase();
+  if (key === KONAMI_CODE[konamiProgress]) {
+    konamiProgress++;
+  } else {
+    konamiProgress = key === KONAMI_CODE[0] ? 1 : 0;
+  }
+  if (konamiProgress !== KONAMI_CODE.length) return;
+  konamiProgress = 0;
+  e.preventDefault();
+  toggleDevMode();
+}
+
+function toggleDevMode() {
+  const panel = $('#devMode');
+  if (!panel) return;
+  if (!panel.hidden) {
+    closeDevMode();
+    return;
+  }
+  devReturnMode = app.mode;
+  app.input?.clear?.();
+  if (app.run) {
+    app.run.paused = true;
+    app.hud?.show?.(true);
+    if (devReturnMode === 'play' || devReturnMode === 'pause') {
+      $('#hudPaused').hidden = true;
+      app.hud?.setPaused?.(false);
+    }
+  } else {
+    app.menus.hideAll();
+  }
+  app.mode = 'dev';
+  panel.hidden = false;
+  $('#devStatus').textContent = '';
+}
+
+function closeDevMode() {
+  const panel = $('#devMode');
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  app.mode = devReturnMode;
+  if (app.run) {
+    if (devReturnMode === 'forge') app.forge?.open?.();
+    else if (devReturnMode === 'play' || devReturnMode === 'pause') app.hud?.show?.(true);
+    app.run.paused = devReturnMode !== 'play';
+    if (devReturnMode === 'play') {
+      app.acc = 0;
+      app.last = performance.now();
+    }
+    if (devReturnMode !== 'forge') app.hud?.setPaused?.(devReturnMode === 'pause', app.run);
+  }
+  if (!app.run) {
+    if (devReturnMode === 'title') app.menus.show('title');
+    else if (devReturnMode === 'stages') app.menus.showStages();
+    else if (devReturnMode === 'loadout') app.menus.show('loadout');
+    else if (devReturnMode === 'result') app.menus.show('result');
+    else if (devReturnMode === 'howto' || devReturnMode === 'archive' || devReturnMode === 'settings' || devReturnMode === 'grow' || devReturnMode === 'dict') {
+      app.menus.show(devReturnMode);
+    }
+  }
+}
+
 function onKey(e) {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
+  if (app.mode === 'dev') {
+    if (k === 'escape') { e.preventDefault(); closeDevMode(); }
+    return;
+  }
   if (app.mode === 'play') {
     if (k === 'q' || k === 'tab') { e.preventDefault(); openForge(); return; }
     if (k === 'escape' || k === 'p') { e.preventDefault(); pauseRun(); return; }

@@ -2075,6 +2075,10 @@ body.touch .hud-choice-title { font-size: 1rem; }
 }
 .dict-empty { padding: 26px; text-align: center; color: var(--fg-mute); font-size: .9rem; }
 
+.dev-panel { width: min(420px, 100%); }
+.dev-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dev-screen { z-index: 70; }
+
 /* ══ 設定 ════════════════════════════════════════════════════════════ */
 
 .panel-settings { width: min(480px, 100%); }

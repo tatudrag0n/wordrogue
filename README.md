@@ -9,8 +9,9 @@ Vampire Survivors 系の放置アクションに、**日本語の文を組み立
 ## 更新時のルール
 
 - タイトル画面には必ず `Ver. X.YY` 形式のバージョンを表示する（表示箇所は `index.html` の `.title-version`）。
-- ユーザー向けの更新を行うたびにバージョンを更新し、READMEなどの更新説明と合わせて画面上の表示も変更する。表示を削除したり、更新し忘れたりしないこと。現在の表示は `Ver. 1.14`。
-- JavaScript を変更したら、`index.html` の `js/main.js?v=...` のクエリ版数も更新して古い Pages キャッシュを避ける。
+- ユーザー向けの更新を行うたびにバージョンを更新し、READMEなどの更新説明と合わせて画面上の表示も変更する。表示を削除したり、更新し忘れたりしないこと。現在の表示は `Ver. 1.15`。
+- `index.html` の `css/style.css?v=...` と `js/main.js?v=...` は、**タイトルの Ver と同じ数字**にそろえる。版数を上げれば古い Pages キャッシュを踏まないので、公開後に「Ver が上がったか」で反映を確認できる。
+- 公開は GitHub Actions。`test` ジョブ（辞書・シミュレーション）が落ちると `deploy` ジョブが走らず、**古い版のまま公開が止まる**。push 前に `npm test` を通すこと。
 
 ---
 
@@ -562,6 +563,7 @@ HUD に出て、レベルアップでは金の輪と画面の光が走ります�
 | <kbd>スペース</kbd> | **押しっぱなしでダッシュ**（スタミナを消費） |
 | <kbd>Q</kbd> | 言葉鍛冶の開閉 |
 | <kbd>Esc</kbd> / <kbd>P</kbd> | 一時停止メニュー / 開いている画面を閉じる |
+| <kbd>↑</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd><kbd>←</kbd><kbd>→</kbd><kbd>B</kbd><kbd>A</kbd> | 開発者モードの開閉（言玉 +1000 / 体力全回復。セッション中のみ） |
 | タッチ | 画面を長押ししてからドラッグで移動 |
 | タッチ | 画面の右の **ダッシュ** を長押しでダッシュ |
 
@@ -714,6 +716,9 @@ npm run shot -- title title.png 800
 `.github/workflows/pages.yml` で `main` に push すると
 GitHub Pages へ自動デプロイされます。ブラウザで
 **設定 → Pages → Build and deployment → Source: GitHub Actions** を選択してください。
+
+デプロイは `test` ジョブが通ったときだけ走ります。反映されたかは、
+公開ページのタイトル下部の `Ver. X.YY` が最新かで確認できます。
 
 ---
 

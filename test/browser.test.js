@@ -209,6 +209,23 @@ sec('書庫で言玉を使い、恒久強化と語彙の枠を買える');
 await evalJs('window.__wordrogue.menus.show("title")');
 await sleep(150);
 
+sec('コナミコマンドで開発者モードを開閉する');
+{
+  const keys = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+  const opened = await evalJs(`(() => {
+    const app = window.__wordrogue;
+    app.menus.show('title');
+    app.mode = 'title';
+    for (const key of ${JSON.stringify(keys)}) window.dispatchEvent(new KeyboardEvent('keydown', { key }));
+    return { visible: !document.getElementById('devMode').hidden, mode: app.mode };
+  })()`);
+  ok(opened.visible && opened.mode === 'dev', `開発者モードが開かない: ${JSON.stringify(opened)}`);
+  await evalJs(`for (const key of ${JSON.stringify(keys)}) window.dispatchEvent(new KeyboardEvent('keydown', { key }))`);
+  ok(await evalJs('document.getElementById("devMode").hidden'), 'コマンド再入力で開発者モードが閉じない');
+  ok(await evalJs('window.__wordrogue.mode === "title"'), '閉じた後タイトルへ戻らない');
+  console.log('    ↑↑↓↓←→←→BA で開き、再入力で閉じる');
+}
+
 sec('Esc は開いている画面を閉じ、裏のタイトルで Enter が暴発しない');
 {
   const r = await evalJs(`(() => {

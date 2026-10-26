@@ -24,7 +24,7 @@ const IDS = [
   'resultNext', 'resultRetry', 'resultStages', 'howto', 'settings',
   'dict', 'dictSearch', 'dictTabs', 'dictList', 'dictCount',
   'archive', 'archiveInk', 'archiveUpgrades', 'archiveWords',
-  'grow', 'growInk', 'gachaBtn', 'gachaResult', 'growParts', 'growSelNote', 'growWords',
+  'grow', 'growInk', 'gachaBtn', 'gachaTenBtn', 'gachaResult', 'growParts', 'growSelNote', 'growWords',
   'deckWords', 'deckCount',
   'btnStart', 'btnStages', 'btnHowto', 'btnGrow', 'btnArchive', 'btnDict', 'btnSettings',
   'recBest', 'recClear', 'recKills', 'recRuns', 'recBroken',
@@ -41,6 +41,21 @@ save.reset();
 save.data.collection = ['妙', '骨', '癒', '発', '電', '強', '弾', '斬', '炎'];
 save.data.parts = {};
 for (const p of PARTS) save.data.parts[p.id] = [];
+// 十連用の幕を置いてから Menus を生成し、実画面と同じ要素を取得させる。
+const set = (id, tag = 'div') => {
+  const e = dom.doc.createElement(tag);
+  e.setAttribute('id', id);
+  return e;
+};
+const veil = set('gachaVeil');
+veil.hidden = true;
+const reels = set('gachaReels');
+for (let i = 0; i < 3; i++) reels.append(dom.doc.createElement('span'));
+const card = set('gachaCard');
+for (const id of ['gachaWord', 'gachaCat', 'gachaEff', 'gachaSeal', 'gachaNew', 'gachaLotList']) card.append(set(id));
+veil.append(reels, card);
+for (const id of ['gachaNote', 'gachaAgain', 'gachaClose', 'gachaX']) veil.append(set(id, 'button'));
+dom.doc.body.append(veil);
 
 const menu = new Menus({ save, audio: null });
 menu.show('grow');
@@ -52,6 +67,33 @@ const nameOf = (id) => PARTS.find((p) => p.id === id).name;
 const boxOf = (id) => partsBox().find((b) => b.querySelector('.grow-part-name').textContent === nameOf(id));
 const wordsBox = () => q('#growWords .grow-word');
 const click = (node) => node.dispatchEvent({ type: 'click' });
+
+// 十連の結果表示は実際の click ハンドラーから検証する。
+sec('十連ボタンで10件を抽選し、結果一覧を開示する');
+{
+  save.addInk(1000);
+  menu.renderGrow();
+  click(dom.doc.getElementById('gachaTenBtn'));
+  ok(menu._lastGacha?.results?.length === 10, `十連結果数: ${menu._lastGacha?.results?.length}`);
+  ok(!veil.hidden && menu._gachaSpinning, '十連の演出幕が開かない');
+  menu._clearGachaTimers();
+  menu._finishGacha(menu._lastGacha, true);
+  menu._clearGachaTimers();
+  menu._revealGacha(menu._lastGacha);
+  ok(!dom.doc.getElementById('gachaLotList').hidden, '十連一覧が表示されない');
+  ok(q('.gacha-lot-item', dom.doc.getElementById('gachaLotList')).length === 10,
+    `十連の表示行が10件でない: ${q('.gacha-lot-item', dom.doc.getElementById('gachaLotList')).length}`);
+  menu.closeGacha();
+  save.data.ink = 1;
+  menu.renderGrow();
+  click(dom.doc.getElementById('gachaTenBtn'));
+  ok(menu._lastGacha?.results?.length === 10, '不足表示テスト前に十連結果が無い');
+  ok(/250/.test(dom.doc.getElementById('gachaResult').textContent), '不足時に必要言玉が表示されない');
+  ok(save.ink === 1, '不足状態で言玉が減った');
+  save.data.ink = 1000;
+  menu.closeGacha();
+  console.log('  クリック → 10回抽選 → 10行表示 / 言玉不足は無消費で必要額を表示');
+}
 
 sec('部位が 9 コマ出て、各コマに枠が PART_SLOTS 個ある');
 {

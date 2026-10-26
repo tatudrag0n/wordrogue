@@ -123,6 +123,8 @@ class Element {
   get children() { return this.childNodes.filter((c) => c.nodeType === 1); }
   get firstChild() { return this.childNodes[0] || null; }
 
+  appendChild(node) { this.append(node); return node; }
+
   append(...nodes) {
     let changed = false;
     for (const n of nodes.flat()) {
@@ -154,6 +156,7 @@ class Element {
     if (k === 'id' && globalThis.document) globalThis.document._register(this);
   }
   getAttribute(k) { return this.attrs[k] ?? null; }
+  removeAttribute(k) { delete this.attrs[k]; }
 
   /**
    * 自分の左上。lazy に計算する: 自分の左上 = 親の左上 + 前の兄弟たちの下端。

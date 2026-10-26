@@ -560,6 +560,11 @@ export class Menus {
     this.growInk.textContent = String(save.ink);
     this.gachaBtn.textContent = `引く (${GACHA_COST} 言玉)`;
     this.gachaBtn.classList.toggle('off', save.ink < GACHA_COST);
+    if (this.gachaTenBtn) {
+      this.gachaTenBtn.textContent = `十連くじ (${GACHA_COST * 10} 言玉)`;
+      this.gachaTenBtn.disabled = false;
+      this.gachaTenBtn.classList.toggle('off', save.ink < GACHA_COST * 10);
+    }
 
     // 全部位の合計。ここだけ見れば「今どう強くなっているか」が分かる。
     if (this.growTotal) {
@@ -688,11 +693,13 @@ export class Menus {
   /** くじを引く。言玉はここで払い、演出だけを遅らせる。 */
   startGacha(count = 1) {
     if (this._gachaSpinning) return;
+    count = count === 10 ? 10 : 1;
     const r = count === 10 ? this.save.drawGachaTen() : this.save.drawGacha();
     if (!r.ok) {
       const msg = r.reason === 'ink'
         ? `言玉が足りない — ${GACHA_COST * count} 言玉必要`
         : '引けなかった — 語の抽選に失敗した';
+      if (this.gachaResult) this.gachaResult.textContent = msg;
       if (this._hasGachaStage() && !this.gachaVeil.hidden) {
         if (this.gachaNote) this.gachaNote.textContent = msg;
         this._denyGacha(this.gachaAgain);
@@ -708,6 +715,9 @@ export class Menus {
     }
 
     // 先に結果を確定し、言玉と所持語の表示を更新してから幕を開く。
+    if (count === 10 && (!Array.isArray(r.results) || r.results.length !== 10)) {
+      throw new Error('十連くじの結果が10件ではありません');
+    }
     this._lastGacha = r;
     this._gachaCount = count;
     this.renderGrow();

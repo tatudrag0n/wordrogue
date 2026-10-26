@@ -1395,10 +1395,10 @@ body.touch .hud-choice-title { font-size: 1rem; }
 
 .title-record {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(92px, 1fr));
   gap: 10px;
   margin: 30px auto 0;
-  max-width: 480px;
+  width: min(100%, 640px);
 }
 .title-record div {
   text-align: center;
@@ -1424,7 +1424,10 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .title-record span { font-size: .7rem; color: var(--fg-mute); letter-spacing: .08em; }
 
 .title-version {
+  position: static;
+  clear: both;
   display: block;
+  width: max-content;
   margin: 16px auto 0;
   font-family: var(--mono);
   font-size: .82rem;
@@ -2123,7 +2126,7 @@ body.touch .hud-choice-title { font-size: 1rem; }
   .dict-row { grid-template-columns: 3.2rem 1fr; }
   .dict-cat { justify-self: start; }
   .dict-fx, .dict-tags { grid-column: 2; }
-  .title-record { grid-template-columns: repeat(2, 1fr); }
+  .title-record { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(100%, 320px); }
   .panel { padding: 16px; gap: 12px; }
   .result-stats { grid-template-columns: 1fr; }
   /* パネルは画面いっぱいに使い、内側でスクロールさせる。 */
@@ -2150,7 +2153,7 @@ body.touch .hud-choice-title { font-size: 1rem; }
   .hud-btns { gap: 4px; }
   .hud-btns .btn-icon { width: 40px; height: 40px; }
   .grow-parts { grid-template-columns: 1fr; }
-  .title-record { grid-template-columns: repeat(2, 1fr); }
+  .title-record { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(100%, 320px); }
   .panel-dict { width: 100%; }
   .dict-list { font-size: .82rem; }
 }
@@ -2163,7 +2166,8 @@ body.touch .hud-choice-title { font-size: 1rem; }
   .title-wrap { padding: 4px 0; }
   .title-menu { gap: 7px; }
   .title-menu .btn { padding: 8px 16px; }
-  .title-record { grid-template-columns: repeat(5, 1fr); max-width: 640px; margin-top: 16px; gap: 8px; }
+  .title-record { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(100%, 320px); margin-top: 16px; gap: 8px; }
+  .title-record div { min-width: 0; overflow-wrap: anywhere; }
   .title-record div { padding: 6px 3px; }
   .title-record b { font-size: 1.1rem; }
 }
@@ -2500,8 +2504,9 @@ html, body {
   position: fixed;
   inset: 0;
   z-index: 60;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   padding: calc(14px + var(--safe-t)) calc(14px + var(--safe-r)) calc(14px + var(--safe-b)) calc(14px + var(--safe-l));
   background:
     radial-gradient(circle at 50% 38%, rgba(255, 246, 214, .2), transparent 44%),
@@ -2511,6 +2516,10 @@ html, body {
   animation: gachaVeilIn .18s ease-out;
 }
 .gacha-veil[hidden] { display: none !important; }
+.gacha-veil { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; align-items: start; }
+.gacha-box { margin: auto 0; flex: 0 0 auto; }
+.gacha-veil:not(.is-revealed) { touch-action: pan-y; }
+.gacha-card-ten .gacha-lot-list { overflow-y: auto; overscroll-behavior: contain; }
 @keyframes gachaVeilIn { from { opacity: 0; } to { opacity: 1; } }
 
 .gacha-box {
@@ -2698,6 +2707,9 @@ html, body {
 .gacha-lot-number { color: #a98a52; font: .58rem var(--mono); }
 .gacha-card.gacha-card-ten { inset: 2px 4px; }
 .gacha-card.gacha-card-ten::before { inset: 4px; }
+.gacha-card.gacha-card-ten { overflow-y: auto; }
+.gacha-card-ten .gacha-lot-list { max-height: min(100%, 54vh); }
+.gacha-lot-list { touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .gacha-lot-list[hidden] { display: none !important; }
 .gacha-card::before {
   content: '';
@@ -2836,7 +2848,7 @@ html, body {
 }
 
 @media (max-width: 420px) {
-  .gacha-box { padding: 18px 14px 14px; }
+  .gacha-box { padding: 18px 14px 14px; width: min(392px, 100%); }
   .gacha-stage { height: 210px; }
   .gacha-card { inset: 2px 6px; }
   .gacha-actions .btn { flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px; }

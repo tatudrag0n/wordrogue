@@ -72,6 +72,7 @@ export class Menus {
     this.grow = $('#grow');
     this.growInk = $('#growInk');
     this.gachaBtn = $('#gachaBtn');
+    this.gachaTenBtn = $('#gachaTenBtn');
     this.gachaResult = $('#gachaResult');
     // くじの幕。テストの最小 DOM には無いので、すべて null 安全に扱う。
     this.gachaVeil = $('#gachaVeil');
@@ -81,6 +82,7 @@ export class Menus {
     this.gachaWord = $('#gachaWord');
     this.gachaCat = $('#gachaCat');
     this.gachaEff = $('#gachaEff');
+    this.gachaLotList = $('#gachaLotList');
     this.gachaNote = $('#gachaNote');
     this.gachaKicker = $('#gachaKicker');
     this.gachaSeal = $('#gachaSeal');
@@ -141,12 +143,10 @@ export class Menus {
     $('#btnHowto').addEventListener('click', () => { tap(); this.show('howto'); });
     $('#btnGrow').addEventListener('click', () => { tap(); this.show('grow'); });
     $('#btnArchive').addEventListener('click', () => { tap(); this.show('archive'); });
-    this.gachaBtn.addEventListener('click', () => {
-      tap();
-      this.startGacha();
-    });
+    this.gachaBtn?.addEventListener('click', () => { tap(); this.startGacha(1); });
+    this.gachaTenBtn?.addEventListener('click', () => { tap(); this.startGacha(10); });
     // 幕の中の操作。幕が無い最小 DOM ではすべて素通りする。
-    this.gachaAgain?.addEventListener('click', () => { tap(); this.startGacha(); });
+    this.gachaAgain?.addEventListener('click', () => { tap(); this.startGacha(this._gachaCount || 1); });
     this.gachaClose?.addEventListener('click', () => { tap(); this.closeGacha(); });
     this.gachaX?.addEventListener('click', () => { tap(); this.closeGacha(); });
     this.gachaVeil?.addEventListener('click', (e) => {
@@ -686,12 +686,12 @@ export class Menus {
   }
 
   /** くじを引く。言玉はここで払い、演出だけを遅らせる。 */
-  startGacha() {
+  startGacha(count = 1) {
     if (this._gachaSpinning) return;
-    const r = this.save.drawGacha();
+    const r = count === 10 ? this.save.drawGachaTen() : this.save.drawGacha();
     if (!r.ok) {
       const msg = r.reason === 'ink'
-        ? `言玉が足りない — ${GACHA_COST} 言玉必要`
+        ? `言玉が足りない — ${GACHA_COST * count} 言玉必要`
         : '引けなかった — 語の抽選に失敗した';
       if (this._hasGachaStage() && !this.gachaVeil.hidden) {
         if (this.gachaNote) this.gachaNote.textContent = msg;
@@ -709,6 +709,7 @@ export class Menus {
 
     // 先に結果を確定し、言玉と所持語の表示を更新してから幕を開く。
     this._lastGacha = r;
+    this._gachaCount = count;
     this.renderGrow();
     if (!this._hasGachaStage()) {
       this._showGachaSummary(r);
@@ -743,7 +744,7 @@ export class Menus {
       return;
     }
 
-    this.audio?.gachaSpin?.(); window.playMotion?.('gacha');
+    this.audio?.gachaSpin?.();
     // 3 列が少しずつ止まる。音だけ先に鳴らして「止まる予感」を作る。
     this._gachaDelay(() => this.audio?.gachaLock?.(0), 720);
     this._gachaDelay(() => this.audio?.gachaLock?.(1), 880);
@@ -769,7 +770,7 @@ export class Menus {
     }
     this.gachaReels?.classList.remove('spinning');
     // 止まった瞬間、真ん中の列に結果の語を残す。
-    if (this.gachaReelSpans[1]) this.gachaReelSpans[1].textContent = r.word;
+    if (this.gachaReelSpans[1]) this.gachaReelSpans[1].textContent = r.results?.length > 1 ? '十' : (r.word || r.results?.[0]?.word || '籤');
     if (!instant) this.audio?.gachaLock?.(2);
     this._setGachaCard(r);
     this._gachaDelay(() => this._revealGacha(r), instant ? 40 : 260);
@@ -777,12 +778,38 @@ export class Menus {
 
   /** カードの中身を結果で埋める。 */
   _setGachaCard(r) {
-    const info = WORDS[r.word] || {};
+    const batch = r.results?.length > 1 ? r.results : null;
+    if (this.gachaLotList) {
+      this.gachaLotList.hidden = !batch;
+      while (this.gachaLotList.firstChild) this.gachaLotList.removeChild(this.gachaLotList.firstChild);
+      if (batch) {
+        for (const [i, result] of batch.entries()) {
+          const item = document.createElement('div');
+          item.className = `gacha-lot-item${result.dup ? ' duplicate' : ''}`;
+          const number = document.createElement('span');
+          number.className = 'gacha-lot-number';
+          number.textContent = String(i + 1).padStart(2, '0');
+          const word = document.createElement('b');
+          word.textContent = result.word;
+          const kind = document.createElement('i');
+          kind.textContent = result.dup ? '重複' : '新規';
+          item.appendChild(number);
+          item.appendChild(word);
+          item.appendChild(kind);
+          this.gachaLotList.appendChild(item);
+        }
+      }
+    }
+    this.gachaCard?.classList.toggle('gacha-card-ten', !!batch);
+    const singleFields = [this.gachaWord, this.gachaCat, this.gachaEff, this.gachaSeal, this.gachaNew];
+    for (const field of singleFields) if (field) field.hidden = !!batch;
+    const shownResult = batch ? r.results[0] : r;
+    const info = WORDS[shownResult.word] || {};
     const cat = CATEGORIES[info.cat] || null;
-    if (this.gachaWord) this.gachaWord.textContent = r.word;
+    if (this.gachaWord) this.gachaWord.textContent = shownResult.word;
     if (this.gachaCat) {
       this.gachaCat.textContent = cat ? cat.name : '';
-      this.gachaCat.hidden = !cat;
+      this.gachaCat.hidden = !!batch || !cat;
     }
     if (this.gachaCard?.style?.setProperty) {
       this.gachaCard.style.setProperty('--cat', cat?.color || '#e0482d');
@@ -792,9 +819,11 @@ export class Menus {
       const body = info.player ? `体 ${fxText(info.player, PS_LABEL)}` : '';
       const eff = [fx, body].filter((x) => x && x !== '効果なし').join(' / ');
       this.gachaEff.textContent = eff || '効果なし — 文にすると力になる';
+      this.gachaEff.hidden = !!batch;
     }
-    if (this.gachaSeal) this.gachaSeal.textContent = r.dup ? '重' : '新';
-    if (this.gachaNew) this.gachaNew.hidden = !!r.dup;
+    if (this.gachaSeal) this.gachaSeal.textContent = shownResult.dup ? '重' : '新';
+    if (this.gachaSeal) this.gachaSeal.hidden = !!batch;
+    if (this.gachaNew) this.gachaNew.hidden = !!batch || !!shownResult.dup;
   }
 
   /** カードを開く。ここで初めて結果を音と文字で知らせる。 */
@@ -806,14 +835,21 @@ export class Menus {
     v.classList.add('is-revealed');
     this.gachaCard?.removeAttribute?.('aria-hidden');
     if (this.gachaAgain) this.gachaAgain.disabled = false;
+    const batch = r.results?.length > 1 ? r.results : null;
+    const result = batch ? null : (r.results?.[0] || r);
     if (this.gachaNote) {
-      this.gachaNote.textContent = r.dup
-        ? `すでに持っている語だった。言玉が ${GACHA_REFUND} 戻り、残り ${r.ink}。`
-        : `新しい語を引いた。部位に入れるか、デッキに加えよう。言玉は残り ${r.ink}。`;
+      if (batch) {
+        const duplicates = batch.filter((item) => item.dup).length;
+        this.gachaNote.textContent = `十連くじ完了 — 新規 ${batch.length - duplicates} 語、重複 ${duplicates} 語。言玉は残り ${r.ink}。`;
+      } else {
+        this.gachaNote.textContent = result.dup
+          ? `すでに持っている語だった。言玉が ${GACHA_REFUND} 戻り、残り ${r.ink}。`
+          : `新しい語を引いた。部位に入れるか、デッキに加えよう。言玉は残り ${r.ink}。`;
+      }
     }
-    this.audio?.gachaReveal?.(!!r.dup);
+    this.audio?.gachaReveal?.(batch ? batch.every((item) => item.dup) : !!result.dup);
     // 新しい語のときだけ、開いたあとにきらめきを重ねる。
-    if (!r.dup) this.audio?.gachaShine?.();
+    if (batch ? batch.some((item) => !item.dup) : !result.dup) this.audio?.gachaShine?.();
     this.gachaAgain?.focus?.({ preventScroll: true });
   }
 
@@ -826,6 +862,12 @@ export class Menus {
     this.gachaVeil.hidden = true;
     this.gachaVeil.classList.remove('is-spinning', 'is-revealed', 'gacha-deny');
     this.gachaReels?.classList.remove('spinning');
+    this.gachaCard?.classList.remove('gacha-card-ten');
+    if (this.gachaLotList) {
+      this.gachaLotList.hidden = true;
+      while (this.gachaLotList.firstChild) this.gachaLotList.removeChild(this.gachaLotList.firstChild);
+    }
+    for (const field of [this.gachaWord, this.gachaCat, this.gachaEff, this.gachaSeal, this.gachaNew]) if (field) field.hidden = false;
     if (this.gachaAgain) this.gachaAgain.disabled = false;
     if (!wasOpen) return;
     if (this._lastGacha) this._showGachaSummary(this._lastGacha);
@@ -836,9 +878,15 @@ export class Menus {
   /** 幕の外に残す一行。幕が無い環境の結果表示も兼ねる。 */
   _showGachaSummary(r) {
     if (!this.gachaResult || !r) return;
-    this.gachaResult.textContent = r.dup
-      ? `「${r.word}」— すでに持っている (${GACHA_REFUND} 言玉戻った)`
-      : `「${r.word}」を手に入れた！`;
+    if (r.results?.length > 1) {
+      const duplicates = r.results.filter((result) => result.dup).length;
+      this.gachaResult.textContent = `十連くじ: 新規 ${r.results.length - duplicates} 語 / 重複 ${duplicates} 語`;
+    } else {
+      const result = r.results?.[0] || r;
+      this.gachaResult.textContent = result.dup
+        ? `「${result.word}」— すでに持っている (${GACHA_REFUND} 言玉戻った)`
+        : `「${result.word}」を手に入れた！`;
+    }
     this._pulseResult();
   }
 

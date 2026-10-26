@@ -1424,14 +1424,13 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .title-record span { font-size: .7rem; color: var(--fg-mute); letter-spacing: .08em; }
 
 .title-version {
-  position: absolute;
-  right: 14px;
-  bottom: 10px;
+  display: block;
+  margin: 16px auto 0;
   font-family: var(--mono);
-  font-size: .7rem;
-  color: var(--fg-mute);
-  letter-spacing: .06em;
-  opacity: .7;
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--fg-dim);
+  letter-spacing: .08em;
   pointer-events: none;
 }
 

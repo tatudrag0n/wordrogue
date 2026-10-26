@@ -323,15 +323,34 @@ export class Save {
    * @returns {{ok:boolean, reason:string, word?:string, dup?:boolean, ink:number}}
    */
   drawGacha() {
-    if (this.ink < GACHA_COST) return { ok: false, reason: 'ink', ink: this.ink };
-    const w = drawWord(() => Math.random());
-    if (!w) return { ok: false, reason: 'empty', ink: this.ink };
-    this.data.ink -= GACHA_COST;
-    const dup = this.ownsWord(w.text);
-    if (dup) this.data.ink += GACHA_REFUND;
-    else this.data.collection.push(w.text);
+    const result = this._drawGachaBatch(1);
+    return result.ok ? { ...result, ...result.results[0] } : result;
+  }
+
+  /** 十連くじ。料金不足・抽選失敗なら一切消費せずに返す。 */
+  drawGachaTen() {
+    return this._drawGachaBatch(10);
+  }
+
+  _drawGachaBatch(count) {
+    const cost = GACHA_COST * count;
+    if (this.ink < cost) return { ok: false, reason: 'ink', ink: this.ink };
+    const words = [];
+    for (let i = 0; i < count; i++) {
+      const word = drawWord(() => Math.random());
+      if (!word) return { ok: false, reason: 'empty', ink: this.ink };
+      words.push(word.text);
+    }
+
+    this.data.ink -= cost;
+    const results = words.map((text) => {
+      const dup = this.ownsWord(text);
+      if (dup) this.data.ink += GACHA_REFUND;
+      else this.data.collection.push(text);
+      return { word: text, dup };
+    });
     this.save();
-    return { ok: true, reason: '', word: w.text, dup, ink: this.ink };
+    return { ok: true, reason: '', results, ink: this.ink };
   }
 
   /** デッキへの出し入れ。@returns {boolean} いま入っているか */

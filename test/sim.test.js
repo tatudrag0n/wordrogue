@@ -1371,6 +1371,12 @@ sec('中ボスは各章に出現し、倒すと宝箱を落とす');
   ok(r.midBoss === mid, '中ボスが run に登録されない');
   ok(mid.midBoss && !mid.boss, '中ボスのフラグが違う');
   ok(mid.words.length === 4, `中ボスの文字数 ${mid.words.length}`);
+  const midWordsBefore = mid.words.join('');
+  const brokenBefore = r.brokenCount || 0;
+  damage(r, mid, { dmg: 1, cutChance: 1, cutPower: 2, el: 'none' }, { element: 'none' });
+  ok(mid.words.join('') === midWordsBefore && !mid.broken,
+    `中ボスの文字が破壊された: ${midWordsBefore} -> ${mid.words.join('')}`);
+  ok((r.brokenCount || 0) === brokenBefore, '中ボスの文字破壊が brokenCount に加算された');
 
   const r2 = newRun(1);
   r2.time = r2.stage.midBossAt;
@@ -1678,6 +1684,20 @@ sec('言葉くじ・デッキ・部位はセーブで管理する');
     ok(save.collection.length === colBefore + 1 && save.ownsWord(g.word),
       `新しい語が増えていない: ${g.word}`);
   }
+
+  // 十連は必ず 10 回分を引き、重複返還分を含めて収支が合う。
+  const tenInkBefore = save.ink;
+  const ten = save.drawGachaTen();
+  ok(ten.ok && ten.results.length === 10, `十連くじに失敗: ${ten.reason}`);
+  const tenDuplicates = ten.results.filter((x) => x.dup).length;
+  ok(save.ink === tenInkBefore - GACHA_COST * 10 + GACHA_REFUND * tenDuplicates,
+    `十連の収支が違う: ${tenInkBefore} -> ${save.ink} (重複=${tenDuplicates})`);
+  const shortInk = save.ink;
+  save.data.ink = GACHA_COST * 10 - 1;
+  const tenDenied = save.drawGachaTen();
+  ok(!tenDenied.ok && tenDenied.reason === 'ink' && save.ink === GACHA_COST * 10 - 1,
+    '言玉不足の十連で引かれるか残高が変わった');
+  save.data.ink = shortInk;
 
   // 部位: 持っている語だけ入る。外せる。
   ok(save.setPart('head', 0, '魂'), '部位に語が入らない');

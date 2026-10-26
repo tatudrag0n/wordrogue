@@ -336,7 +336,7 @@ const rollCrit = (st) => rng() < (st.crit || 0);
  * @param {object} run
  */
 function cutByWeapon(e, st, run) {
-  if (!e.words || e.broken || e.boss) return;
+  if (!e.words || e.broken || e.boss || e.midBoss) return;
   const power = st.cutPower || 0;
   if (power <= 0) return;
   const chance = st.cutChance || 0;

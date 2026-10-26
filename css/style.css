@@ -1683,7 +1683,7 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .grow-body h3 { margin: 0 0 8px; font-size: .95rem; color: var(--accent-ink); letter-spacing: .06em; }
 .grow-note { margin: 0 0 8px; font-size: .78rem; color: var(--fg-dim); line-height: 1.65; }
 .grow-note strong { color: var(--accent); }
-.grow-gacha { display: flex; align-items: center; gap: 12px; }
+.grow-gacha { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .grow-gacha-result { font-size: .9rem; font-weight: 700; color: var(--ok); }
 
 /* 全部位の合計。ここを見れば今どれだけ強いかが分かる */
@@ -2669,6 +2669,37 @@ html, body {
   border: 1px solid #c9bda4;
   box-shadow: 0 14px 34px rgba(70,52,20,.18), inset 0 0 0 1px rgba(255,255,255,.9);
 }
+.gacha-card [hidden] { display: none !important; }
+.gacha-lot-list[hidden] { display: none !important; }
+.gacha-lot-list {
+  position: relative;
+  z-index: 1;
+  width: min(340px, 96%);
+  max-height: 208px;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.gacha-lot-item {
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  text-align: left;
+  background: rgba(255,255,255,.78);
+  border: 1px solid #ded3bd;
+}
+.gacha-lot-item b { font-size: 1rem; }
+.gacha-lot-item small { color: var(--fg-dim); font-size: .55rem; }
+.gacha-lot-item i { color: #8b6b32; font-size: .55rem; font-style: normal; }
+.gacha-lot-item.duplicate { opacity: .68; }
+.gacha-lot-number { color: #a98a52; font: .58rem var(--mono); }
+.gacha-card.gacha-card-ten { inset: 2px 4px; }
+.gacha-card.gacha-card-ten::before { inset: 4px; }
+.gacha-lot-list[hidden] { display: none !important; }
 .gacha-card::before {
   content: '';
   position: absolute;

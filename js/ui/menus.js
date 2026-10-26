@@ -516,8 +516,7 @@ export class Menus {
    */
   renderGrowPartNote(part, words) {
     if (!words.length) {
-      return el('div', { class: 'grow-part-note empty' },
-        'から — 下の所持語を選んで枠を押すと入る');
+      return el('div', { class: 'grow-part-note empty' });
     }
     const p = evaluatePart(words);
     const effects = partEffectRows(this.save.partEntries(), part.id, this.save.d.meta);

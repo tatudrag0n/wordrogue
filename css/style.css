@@ -2498,7 +2498,7 @@ html, body {
 
 /* くじを引けるときの、ごく弱い呼びかけ。 */
 #gachaBtn { position: relative; }
-#gachaBtn:not(.off) { animation: gachaReady 3.2s ease-in-out infinite; }
+#gachaBtn:not(.off), #gachaTenBtn:not(.off) { animation: gachaReady 3.2s ease-in-out infinite; }
 @keyframes gachaReady {
   0%, 100% { box-shadow: inset 0 1px rgba(255,232,220,.45), 0 8px 20px rgba(224,72,45,.24); }
   50% { box-shadow: inset 0 1px rgba(255,232,220,.55), 0 9px 24px rgba(224,72,45,.34), 0 0 0 3px rgba(224,72,45,.09); }
@@ -2523,7 +2523,8 @@ html, body {
 }
 .gacha-veil[hidden] { display: none !important; }
 .gacha-veil { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; align-items: start; }
-.gacha-box { margin: auto 0; flex: 0 0 auto; }
+#grow .gacha-veil:not([hidden]) { display: flex; }
+.gacha-box { margin: auto 0; flex: 0 0 auto; width: min(392px, 100%); }
 .gacha-veil:not(.is-revealed) { touch-action: pan-y; }
 .gacha-card-ten .gacha-lot-list { overflow-y: auto; overscroll-behavior: contain; }
 @keyframes gachaVeilIn { from { opacity: 0; } to { opacity: 1; } }
@@ -3030,7 +3031,8 @@ html, body {
   pointer-events: none;
   user-select: none;
 }
-#title > .title-wrap { position: relative; z-index: 1; }
+#title > .title-wrap { position: relative; z-index: 1; width: min(100%, 680px); margin: auto; display: flex; flex-direction: column; align-items: center; }
+#title .title-version { display: block; position: relative; clear: both; width: max-content; max-width: 100%; margin: 12px auto 0; transform: none !important; }
 @keyframes titleWash {
   from { transform: translate3d(-1.2%, 0.6%, 0) scale(1); }
   to   { transform: translate3d(1.2%, -0.8%, 0) scale(1.035); }

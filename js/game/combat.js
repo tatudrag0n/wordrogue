@@ -182,7 +182,7 @@ function doShot(run, wi, st, aim, boomerang, el, elInfo) {
   const p = run.player;
   const n = Math.max(1, Math.round(st.count));
   const spread = st.spread || 0;
-  const speed = st.speed || 300;
+  const speed = Math.max(500, st.speed || 300);
 
   for (let i = 0; i < n; i++) {
     const off = n === 1 ? 0 : (i / (n - 1) - 0.5) * spread;
@@ -223,7 +223,7 @@ function doShot(run, wi, st, aim, boomerang, el, elInfo) {
 // ─────────────────────────────────────────────────────────────────────────────
 function doBomb(run, wi, st, aim, el, elInfo) {
   const p = run.player;
-  const speed = st.speed || 200;
+  const speed = Math.max(500, st.speed || 200);
   const b = makeBullet({
     x: p.x, y: p.y,
     vx: Math.cos(aim) * speed,

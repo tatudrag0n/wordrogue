@@ -352,7 +352,7 @@ export class WeaponInst {
     st.range = st.range || 100;
     // 腕・手の「速さ」の意味は攻撃速度に乗る。
     st.rate = Math.max(0.05, (st.rate || 1) * (ps.rateMul || 1));
-    st.speed = st.speed ?? 260;
+    st.speed = Math.max(500, st.speed ?? 260) * 1.7;
     st.count = Math.max(0, Math.round(st.count || 0));
     st.pierce = Math.max(0, Math.round(st.pierce || 0));
     st.split = Math.max(0, Math.round(st.split || 0));

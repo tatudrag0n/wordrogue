@@ -1078,7 +1078,7 @@ export class Run {
       const a = (i / n) * TAU + this.rand.angle() * 0.4;
       const b = makeBullet({
         x: e.x, y: e.y,
-        vx: Math.cos(a) * 180, vy: Math.sin(a) * 180,
+        vx: Math.cos(a) * 306, vy: Math.sin(a) * 306,
         r: 4 * (st.size || 1), size: (st.size || 1) * 0.8,
         life: 0.75, pierce: 0,
         burn: st.burn, poison: st.poison, chill: st.chill,

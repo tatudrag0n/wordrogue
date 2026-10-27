@@ -16,8 +16,8 @@
 
 import {
   RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
-} from './words.core.js?v=1.24';
-import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.24';
+} from './words.core.js?v=1.26';
+import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.26';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,

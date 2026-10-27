@@ -121,8 +121,8 @@ const RAW_ELEMENT = `
 電     element thunder dmg+3  shock+0.14
 震     element thunder dmg+4  shock+0.22  area+8
 磁     element thunder dmg+5  shock+0.18  magnet+0.35
-雷     element thunder dmg+7  pierce+5  crit+0.06  speed+30
-閃     element thunder dmg+5  crit+0.08  speed+50
+雷     element thunder dmg+7  pierce+5  crit+0.06  speed+30  shock+0.14
+閃     element thunder dmg+5  crit+0.08  speed+50  shock+0.10
 
 毒     element poison  dmg+1  poison+2
 液     element poison  dmg+2  poison+3  area+4
@@ -180,12 +180,12 @@ const RAW_ELEMENT = `
 颯     element wind    dmg+2  speed+55  homing+0.12  knock+25
 
 草     element nature  dmg+1  poison+1.5  regen+0.3
-樹     element nature  dmg+2  regen+1.2  area+6
+樹     element nature  dmg+2  poison+1.2  regen+1.2  area+6
 苔     element nature  dmg+1  poison+1  chill+0.05
-芽     element nature  dmg+1  regen+0.6  homing+0.08
-緑     element nature  dmg+2  regen+0.6  speed-5
+芽     element nature  dmg+1  poison+0.8  regen+0.6  homing+0.08
+緑     element nature  dmg+2  poison+0.8  regen+0.6  speed-5
 根     element nature  dmg+2  pierce+3  poison+1
-花     element nature  dmg+1  regen+0.8  lifesteal+0.01
+花     element nature  dmg+1  poison+1  regen+0.8  lifesteal+0.01
 
 鉄     element steel   dmg+3  speed+10  size+0.10
 鋼     element steel   dmg+4  pierce+2  size+0.12
@@ -201,13 +201,13 @@ const RAW_ELEMENT = `
 紅     element blood   dmg+2  burn+2  crit+0.02
 
 水     element water   dmg+2  chill+0.06
-波     element water   dmg+3  knock+45  pierce+2
+波     element water   dmg+3  chill+0.07  knock+45  pierce+2
 流     element water   dmg+2  chill+0.06  count+1
 泡     element water   dmg+1  chill+0.08  count+2
 淵     element dark    dmg+3  pierce+2
 露     element water   dmg+1  regen+0.8  chill+0.04
-潮     element water   dmg+2  knock+20
-浪     element water   dmg+4  knock+70  area+14
+潮     element water   dmg+2  chill+0.06  knock+20
+浪     element water   dmg+4  chill+0.08  knock+70  area+14
 
 金     element gold    dmg+2  magnet+0.25
 財     element gold    dmg+3  magnet+0.60

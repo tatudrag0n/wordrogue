@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord } from '../data/words.js?v=1.23';
+import { WORDS, drawWord } from '../data/words.js?v=1.24';
 import { CONNECTORS } from '../data/words.connect.js';
 
 const KEY = 'wordrogue.save.v1';
@@ -26,6 +26,7 @@ const DEFAULTS = {
   parts: {},           // 部位強化 { partId: [text, text] }
   settings: { volume: 0.5, screenShake: true, showDamage: true },
   seenIntro: false,
+  guide: 0,            // 初回の操作ガイド。0 = まだ見ていない
 };
 
 /**

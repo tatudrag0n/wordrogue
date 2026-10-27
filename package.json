@@ -10,6 +10,7 @@
     "test:words": "node test/words.test.js",
     "test:grammar": "node test/grammar.test.mjs",
     "test:sim": "node test/sim.test.js",
+    "test:meaning": "node test/meaning.test.js",
     "test:browser": "node test/browser.test.js",
     "shot": "node test/shot.mjs"
   },

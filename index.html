@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.23">
+<link rel="stylesheet" href="css/style.css?v=1.24">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -183,6 +183,14 @@
           <button class="btn" id="btnPauseSettings" type="button">設定</button>
           <button class="btn" id="btnPauseHowto" type="button">遊び方</button>
         </div>
+        <!-- 操作の早見。一時停止は「今の操作を確かめる場所」でもある。 -->
+        <dl class="pause-keys">
+          <div><dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>移動（スマホは左スティック）</dd></div>
+          <div><dt><kbd>Space</kbd></dt><dd>ダッシュ。離すと止まり、スタミナを使う</dd></div>
+          <div><dt>攻撃</dt><dd>自動。文が成立していれば手数が多いほど強い</dd></div>
+          <div><dt><kbd>Q</kbd> / <kbd>Tab</kbd></dt><dd>言葉鍛冶。語を並べて武器の文を組む</dd></div>
+          <div><dt>語 / 辞</dt><dd>画面右下のボタン。鍛冶と辞書を開く</dd></div>
+        </dl>
         <button class="btn btn-ghost pause-quit" id="btnPauseTitle" type="button">タイトルへ戻る</button>
         <div class="pause-hint"><kbd>Esc</kbd> 再開 ／ <kbd>Q</kbd> 言葉鍛冶</div>
       </div>
@@ -272,7 +280,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.23</div>
+      <div class="title-version">Ver. 1.24</div>
     </div>
   </div>
 
@@ -863,6 +871,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.23"></script>
+<script type="module" src="js/main.js?v=1.24"></script>
 </body>
 </html>

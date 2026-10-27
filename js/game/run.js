@@ -12,13 +12,13 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.23';
+} from '../data/words.js?v=1.24';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.23';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.24';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.23';
-import { fireWeapon, damage as damageEnemy } from './combat.js?v=1.23';
+import { WeaponInst } from './weapon.js?v=1.24';
+import { fireWeapon, damage as damageEnemy } from './combat.js?v=1.24';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -838,6 +838,32 @@ export class Run {
   // 補助
   // ───────────────────────────────────────────────────────────────────────────
   pushHint(text) { this.hint = text; this.hintT = 2.6; }
+
+  /**
+   * 初回の操作ガイド。語の仕組みは「遊び方」とチュートリアルが説明するので、
+   * ここではゲーム中に実際に必要になる操作だけを、必要になる順に出す。
+   * 一度最後まで出したら保存して、次からは邪魔しない。
+   */
+  guideTick() {
+    const lines = [
+      'WASD / 矢印 / 左スティックで移動。攻撃は自動',
+      'Space でダッシュ。離すと止まる',
+      'Q か右下の「語」で言葉鍛冶。語を並べて文にすると強くなる',
+    ];
+    const step = this.guideStep || 0;
+    if (step < lines.length) {
+      if (this.time >= 3 + step * 14) {
+        this.pushHint(lines[step]);
+        this.hintT = 5;
+        this.guideStep = step + 1;
+      }
+      return;
+    }
+    if (this.time >= 3 + lines.length * 14) {
+      this.save.d.guide = 1;
+      this.save.save?.();
+    }
+  }
   shake(v) { if (this.shakeOn) this.shakeAmt = Math.min(26, this.shakeAmt + v); }
 
   burst(x, y, n, color, o = {}) {
@@ -1177,6 +1203,8 @@ export class Run {
     this.t += d;
     this.time += d;
     if (this.hintT > 0) this.hintT -= dt;
+    // 初めての 1 戦だけ、操作を順に案内する。
+    if (this.save?.d && this.save.d.guide === 0) this.guideTick();
     if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - dt * 34);
     if (this.magnetPulse > 0) this.magnetPulse = Math.max(0, this.magnetPulse - dt * 3);
     // 連斬は途切れると消える。HUD の脈も一緒に戻す。

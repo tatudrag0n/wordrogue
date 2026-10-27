@@ -20,7 +20,7 @@
 // 雑魚 (rank 1) は 1 文字なので、文としては成立しない — 斬ればすぐ崩れる。
 // ============================================================================
 
-import { evaluate, WORDS } from './words.js?v=1.22';
+import { evaluate, WORDS } from './words.js?v=1.23';
 
 
 export const ENEMIES = {

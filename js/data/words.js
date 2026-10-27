@@ -16,8 +16,8 @@
 
 import {
   RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
-} from './words.core.js?v=1.22';
-import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.22';
+} from './words.core.js?v=1.23';
+import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.23';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
@@ -38,7 +38,7 @@ let wordUid = 0;
 /** @type {Record<string, {text:string,cat:string,el:string|null,fx:Object,player:Object|null}>} */
 export const WORDS = Object.create(null);
 
-/** 分割判定に使う語の長さを用一个。 */
+/** 分割判定に使う語の長さの上限。 */
 export const MAX_WORD_LEN = 5;
 
 /** 二重定義された語。データ側のバグ検出用。 */

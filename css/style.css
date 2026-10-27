@@ -3042,3 +3042,54 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   #title::before { animation: none; }
 }
+
+/* ==========================================================================
+   異常時の案内 (#fatal)
+   JS が例外で止まっても、白い画面のまま放置しない。
+   セーブは localStorage に残っているので、この画面から再読み込みできる。
+   ========================================================================== */
+.fatal {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(248, 251, 255, .94);
+  backdrop-filter: blur(2px);
+}
+.fatal[hidden] { display: none; }
+.fatal-card {
+  width: min(100%, 620px);
+  max-height: 86vh;
+  overflow: auto;
+  padding: 22px 24px 18px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--r);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  color: var(--fg);
+  font-family: var(--font);
+}
+.fatal-title { margin: 0 0 8px; font-size: 20px; font-weight: 800; letter-spacing: .02em; }
+.fatal-what { margin: 0 0 10px; font-size: 14px; line-height: 1.7; color: var(--fg-dim); }
+.fatal-detail {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  max-height: 30vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--panel-2);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg-dim);
+}
+.fatal-detail[hidden] { display: none; }
+.fatal-note { margin: 0 0 14px; font-size: 12.5px; line-height: 1.75; color: var(--fg-mute); }
+.fatal-actions { display: flex; flex-wrap: wrap; gap: 8px; }

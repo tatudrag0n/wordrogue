@@ -2,17 +2,17 @@
 // ワードローグ — 起動とメインループ
 // ============================================================================
 
-import { $, clamp } from './core/util.js?v=1.5';
-import { Input } from './core/input.js?v=1.5';
-import { Audio } from './core/audio.js?v=2.1';
-import { Save } from './core/save.js?v=1.22';
-import { Run } from './game/run.js?v=1.22';
-import { Renderer } from './ui/render.js?v=1.22';
-import { Hud } from './ui/hud.js?v=1.22';
-import { Forge } from './ui/forge.js?v=1.22';
-import { Menus } from './ui/menus.js?v=1.22';
+import { $, clamp } from './core/util.js?v=1.23';
+import { Input } from './core/input.js?v=1.23';
+import { Audio } from './core/audio.js?v=1.23';
+import { Save } from './core/save.js?v=1.23';
+import { Run } from './game/run.js?v=1.23';
+import { Renderer } from './ui/render.js?v=1.23';
+import { Hud } from './ui/hud.js?v=1.23';
+import { Forge } from './ui/forge.js?v=1.23';
+import { Menus } from './ui/menus.js?v=1.23';
 
-import { STAGES } from './data/stages.js?v=1.5';
+import { STAGES } from './data/stages.js?v=1.23';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態
@@ -26,9 +26,10 @@ const app = {
   forge: null,
   menus: null,
   run: null,
-  mode: 'title',       // title | play | pause | forge | dict | settings | howto | result
+  mode: 'title',       // title | play | pause | forge | dict | settings | howto | result | error
   last: 0,
   acc: 0,
+  crashed: false,
 };
 
 const canvas = $('#game');
@@ -491,9 +492,27 @@ function onKey(e) {
 // ─────────────────────────────────────────────────────────────────────────────
 const STEP = 1 / 60;
 
+/** 例外を画面に知らせる。INDEX の #fatal が受け取る。 */
+function fatal(what, err) {
+  const detail = err instanceof Error ? (err.stack || err.message) : (err ? String(err) : '');
+  if (typeof window.__wordrogueFatal === 'function') window.__wordrogueFatal(what, detail);
+  else console.error(what, err);   // 案内を出せない環境 (テスト) ではログだけ。
+}
+
 function loop(now) {
   requestAnimationFrame(loop);
+  // 一度壊れたら毎フレーム同じ例外を投げ続けない。
+  if (app.crashed) return;
+  try {
+    step(now);
+  } catch (err) {
+    app.crashed = true;
+    if (app.run) app.run.paused = true;
+    fatal('実行中にエラーが起きました', err);
+  }
+}
 
+function step(now) {
   // フレーム時間を上限 0.1 秒に丸める (タブ復帰時の飛びを防ぐ)。
   let dt = (now - app.last) / 1000;
   app.last = now;
@@ -505,7 +524,7 @@ function loop(now) {
   const run = app.run;
 
   if (run && (app.mode === 'play' || app.mode === 'forge')) {
-    // 固定歩长で進める。60fps 基準。
+    // 固定の刻みで進める。60fps 基準。
     app.acc += dt;
     let guard = 0;
     while (app.acc >= STEP && guard++ < 5) {
@@ -545,9 +564,9 @@ function loop(now) {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot);
+  document.addEventListener('DOMContentLoaded', () => { try { boot(); } catch (err) { fatal('起動に失敗しました', err); } });
 } else {
-  boot();
+  try { boot(); } catch (err) { fatal('起動に失敗しました', err); }
 }
 
 // デバッグ用。

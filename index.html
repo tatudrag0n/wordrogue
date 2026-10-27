@@ -4,12 +4,98 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#f3eee1">
-<meta name="description" content="言葉を組み合わせて武装する 2D ローグライク。 combina 語で作った文が成立しなければ、武器は無効になる。">
-<title>ワードローグ — Wordrogue</title>
-<link rel="stylesheet" href="css/style.css?v=1.22">
+<meta name="description" content="言葉を組み合わせて武装する 2D ローグライク。並べた語で作った「文」が成立しなければ、その武器は無効になる。外部ライブラリ不要・ブラウザだけで遊べる。">
+<meta name="robots" content="index,follow">
+<title>ワードローグ — 言葉を組んで、武器にする。</title>
+<link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
+<link rel="stylesheet" href="css/style.css?v=1.23">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
+<link rel="apple-touch-icon" href="assets/logo-180.png">
+
+<!-- リンクを貼ったときのカード。画像は assets/og.png と assets/logo-180.png。 -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ワードローグ / Wordrogue">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:title" content="ワードローグ — 言葉を組んで、武器にする。">
+<meta property="og:description" content="並べた語で作った「文」が成立しなければ、その武器は無効になる。日本語で武装する 2D ローグライク。">
+<meta property="og:url" content="https://tatudrag0n.github.io/wordrogue/">
+<meta property="og:image" content="https://tatudrag0n.github.io/wordrogue/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="ワードローグ — 言葉を組んで、武器にする。">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ワードローグ — 言葉を組んで、武器にする。">
+<meta name="twitter:description" content="並べた語で作った「文」が成立しなければ、その武器は無効になる。日本語で武装する 2D ローグライク。">
+<meta name="twitter:image" content="https://tatudrag0n.github.io/wordrogue/assets/og.png">
 </head>
 <body>
+
+<!-- どこかで例外が出ても白い画面で終わらせない。
+     module の読み込み失敗も拾いたいので、いちばん先に置く。 -->
+<div id="fatal" class="fatal" hidden role="alertdialog" aria-live="assertive">
+  <div class="fatal-card">
+    <h2 class="fatal-title">ゲームが止まりました</h2>
+    <p class="fatal-what" id="fatalWhat">原因を調べています…</p>
+    <pre class="fatal-detail" id="fatalDetail" hidden></pre>
+    <p class="fatal-note">
+      セーブデータは残っています。再読み込みすれば続きから遊べます。
+      同じ場所で何度も止まる場合は、下の「詳細をコピー」で状況を知らせてください。
+    </p>
+    <div class="fatal-actions">
+      <button class="btn btn-primary" id="fatalReload">再読み込み</button>
+      <button class="btn" id="fatalCopy">詳細をコピー</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 起動前でも動く必要があるので、ここだけはモジュールにしない。
+(function () {
+  var shown = false;
+  function show(what, detail) {
+    if (shown) return;
+    shown = true;
+    try {
+      if (window.__wordrogue) window.__wordrogue.crashed = true;
+      var box = document.getElementById('fatal');
+      if (!box) return;
+      document.getElementById('fatalWhat').textContent = what || '不明なエラー';
+      var d = document.getElementById('fatalDetail');
+      if (detail) { d.textContent = detail; d.hidden = false; }
+      box.hidden = false;
+      var r = document.getElementById('fatalReload');
+      r.addEventListener('click', function () { location.reload(); });
+      document.getElementById('fatalCopy').addEventListener('click', function () {
+        var text = what + '\n' + (detail || '') + '\n' + location.href + '\n' + navigator.userAgent;
+        var done = function () { document.getElementById('fatalCopy').textContent = 'コピーしました'; };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, done);
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch (e) {}
+          document.body.removeChild(ta); done();
+        }
+      });
+    } catch (e) { /* ここで別の例外を出さないこと */ }
+  }
+  window.__wordrogueFatal = show;
+  // 読み込みに失敗した要素 (module 本体や CSS) も拾うため capture で見る。
+  window.addEventListener('error', function (ev) {
+    var t = ev.target;
+    if (t && t !== window && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) {
+      show('ファイルを読み込めませんでした', (t.src || t.href || '') + '\n通信状態を確かめて、再読み込みしてください。');
+      return;
+    }
+    show('予期しないエラーが起きました', (ev.message || '') +
+      (ev.filename ? '\n' + ev.filename + ':' + ev.lineno : ''));
+  }, true);
+  window.addEventListener('unhandledrejection', function (ev) {
+    var r = ev.reason;
+    show('処理に失敗しました', (r && (r.stack || r.message)) || String(r));
+  });
+})();
+</script>
 
 <div id="app">
   <canvas id="game" aria-label="ゲーム画面"></canvas>
@@ -186,7 +272,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.22</div>
+      <div class="title-version">Ver. 1.23</div>
     </div>
   </div>
 
@@ -206,7 +292,7 @@
     <div class="panel">
       <header class="panel-head">
         <h2 id="loadoutTitle">武器を選べ</h2>
-        <p class="panel-sub" id="loadoutSub">最大 4 つまで。武器ごとに末尾の語が決まっている。</p>
+        <p class="panel-sub" id="loadoutSub">基本武器を 1 つ選択。開始時の文は武器名だけ。</p>
       </header>
       <div class="loadout-list" id="loadoutList"></div>
       <footer class="panel-foot">
@@ -777,6 +863,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.22"></script>
+<script type="module" src="js/main.js?v=1.23"></script>
 </body>
 </html>

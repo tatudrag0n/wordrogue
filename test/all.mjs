@@ -10,7 +10,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { makeRng } from '../js/core/util.js';
 import { createServer } from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { join, extname, normalize, dirname } from 'node:path';
+import { join, extname, normalize, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -67,6 +67,71 @@ if (syntaxBad) {
   console.log(`== 文字化け検査 ==\n  ${targets.length} ファイル / U+FFFD ${broken.length}`);
   for (const b of broken) console.log(`\x1b[31m  ${b}\x1b[0m`);
   if (broken.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+
+  // 中国語 (簡体字) の混入。ここに挙げた字は日本語では使わないので、
+  // 見つかったらコメントや文面に紛れ込んでいる (画面に出ると読みにくい)。
+  // 共有される語 (区・号・元・系・万・写など) は含めないこと。
+  const SIMPLIFIED = '长们这说话语没见观买卖东车马鸟鱼龙凤书门题应处开认让识讲读听爱欢级组织统汉习练丽华医现产层俩脑够简飘';
+  const simpl = [];
+  for (const f of targets) {
+    const lines = (await readFile(f, 'utf8')).split('\n');
+    lines.forEach((line, i) => {
+      if (line.includes('SIMPLIFIED =')) return;   // 一覧そのものを数えない
+      const hit = [...line].filter((c) => SIMPLIFIED.includes(c));
+      if (hit.length) simpl.push(`${f.replace(ROOT, '')}:${i + 1} [${hit.join('')}]`);
+    });
+  }
+  console.log(`== 簡体字の混入検査 ==\n  混入 ${simpl.length}`);
+  for (const s of simpl) console.log(`\x1b[31m  ${s}\x1b[0m`);
+  if (simpl.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
+// 共有カードとバージョン表示。公開ページはここで止めておく。
+{
+  const html = await readFile(join(ROOT, 'index.html'), 'utf8');
+  const ver = (html.match(/class="title-version">Ver\. ([0-9]+\.[0-9]+)</) || [])[1];
+  const bad = [];
+
+  // ?v= はリリースごとにすべてそろえる。ここがずれると、更新したモジュールが
+  // キャッシュから読まれて「直したのに直らない」になるので、機械的に見る。
+  const vers = new Map();
+  const jsFiles = files.filter((f) => f.includes(`${sep}js${sep}`));
+  for (const f of [...jsFiles, join(ROOT, 'index.html')]) {
+    for (const m of (await readFile(f, 'utf8')).matchAll(/[?&]v=([0-9]+\.[0-9]+)/g)) {
+      if (!vers.has(m[1])) vers.set(m[1], f.replace(ROOT, ''));
+    }
+  }
+  const vList = [...vers.keys()];
+
+  if (!ver) bad.push('タイトルに Ver. が無い');
+  if (vList.length !== 1) {
+    bad.push(`?v= がそろっていない: ${vList.map((v) => `${v} (${vers.get(v)})`).join(' / ')}`);
+  } else if (ver && vList[0] !== ver) {
+    bad.push(`?v= がタイトルの Ver. ${ver} と違う: ${vList[0]}`);
+  }
+  if (!/<meta property="og:image" content="https:\/\/[^"]+\/assets\/og\.png">/.test(html)) {
+    bad.push('og:image が無い (リンクを貼ってもカードが出ない)');
+  }
+  if (!/<meta name="twitter:card" content="summary_large_image">/.test(html)) {
+    bad.push('twitter:card が無い');
+  }
+  // og:image とアイコンは、実際に配るファイルを見ていること。
+  for (const f of ['assets/og.png', 'assets/logo-180.png']) {
+    try { await stat(join(ROOT, f)); } catch { bad.push(`${f} が無い`); }
+  }
+  // 説明文に空白が混じった壊れた日本語が入っていないか。
+  const desc = (html.match(/<meta name="description" content="([^"]*)"/) || [])[1] || '';
+  if (!desc || /[a-z]{3,} /.test(desc)) bad.push(`説明文が壊れている: ${desc}`);
+
+  console.log(`== 共有カードと版表示 ==\n  Ver. ${ver || '?'} / ?v= ${vList.join(' ')} / 不備 ${bad.length}`);
+  for (const b of bad) console.log(`\x1b[31m  ${b}\x1b[0m`);
+  if (bad.length) {
     console.log('\n=== 失敗したテストがあります ===');
     process.exit(1);
   }

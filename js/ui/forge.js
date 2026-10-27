@@ -18,11 +18,11 @@
 import { $, el, clear } from '../core/util.js';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
-} from '../data/words.js';
+} from '../data/words.js?v=1.22';
 import { CONNECTORS, CONNECT_ORDER, formOf, ROLE_LABEL } from '../data/words.connect.js';
-import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js';
+import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.22';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { keyStats } from '../game/weapon.js';
+import { keyStats } from '../game/weapon.js?v=1.22';
 
 /**
  * 置き場到现在の内容でキーを作る。描き直しても同じキーになるので、

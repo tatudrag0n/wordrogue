@@ -39,6 +39,31 @@ const HAND_TRAITS = {
 
 let wUid = 0;
 
+/**
+ * 語 (熟語ならその語幹) が「何をする攻撃か」を持つか。
+ * 熟語 (貫通・爆裂) は辞書に語として無いので、語幹の動詞で型を決める。
+ * @returns {string|null} VERB_SHAPE の値 (slash / shot / pierce / bomb …)
+ */
+function verbKindOf(text) {
+  if (!text) return null;
+  if (VERB_SHAPE[text]) return VERB_SHAPE[text];
+  for (const ch of text) if (VERB_SHAPE[ch]) return VERB_SHAPE[ch];
+  return null;
+}
+
+/**
+ * 熟語も含めて「動詞として使える語」か。
+ * 爆・裂・貫・通 は単体では動詞だが、爆裂・貫通 は 1 つの名詞になる。
+ * 述語になれるかは語 1 つの品詞ではなく、その場の熟語で見る。
+ */
+function isVerbText(text) {
+  if (!text) return false;
+  if (WORDS[text]?.cats?.includes('verb')) return true;
+  if (!PHRASE_BONUS[text]) return false;
+  for (const ch of text) if (WORDS[ch]?.cats?.includes('verb')) return true;
+  return false;
+}
+
 export class WeaponInst {
   /**
    * @param {string} defId 武器の定義 ID。'form:剣' のような武器語由来の ID も可。
@@ -133,10 +158,9 @@ export class WeaponInst {
    * @returns {string|null}
    */
   attackVerb(e) {
-    const hits = (e?.compounds || []).filter((c) => {
-      if (!c.pred) return false;
-      return !!WORDS[c.source]?.cats?.includes('verb');
-    });
+    // 熟語 (貫通する・爆裂する) も述語になる。熟語は WORDS に無いので、
+    // 語 1 つの品詞ではなく熟語の語幹で動詞かを見る。
+    const hits = (e?.compounds || []).filter((c) => c.pred && isVerbText(c.source));
     return hits.length ? hits[hits.length - 1].source : null;
   }
   get tailWord() { return this.tail ? makeWord(this.tail) : null; }
@@ -254,22 +278,27 @@ export class WeaponInst {
     let tail = this.tail;
     let special = false;
     let info = tail ? FORM_SHAPE[tail] : null;
+    const verb = this.attackVerb(e);
     if (!tail) {
       const sp = this.specialTail;
-      const verb = this.attackVerb(e);
       if (sp && verb) {
         tail = sp;
         special = true;
-        // 動詞の意味が攻撃の型を決める (光を斬る → 光線ではなく斬撃)。
-        // 動詞に型が無ければ、属性・現象の既定の型にする。
-        const verbKind = VERB_SHAPE[verb] || null;
-        info = verbKind
-          ? [KIND_SHAPE[verbKind] || 'orb', verbKind]
-          : (SPECIAL_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null);
+        info = SPECIAL_SHAPE[sp] || ELEMENT_SHAPE[WORDS[sp]?.el] || null;
       }
     }
-    const kind = (info && info[1]) || this.def.kind;
-    const shape = (info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade';
+    // 攻撃の型は「文が何をするか」で決める。述語の動詞が最優先で、
+    // 武器語 (刃・銃) や属性語は形を決めるだけ。「貫通する刃」は斬撃ではなく貫通。
+    // 語 1 つの品詞ではなく、文の中で熟語になった語幹まで見て型を決める。
+    let kind = verbKindOf(verb) || (info && info[1]) || this.def.kind;
+    // 武器語も属性語も無い文は、頭の熟語 (爆裂・貫通) が何をする文かを決める。
+    if (!tail && !verb) {
+      const head = (e.segments || []).find((t) => WORDS[t]?.cat !== 'connect') || null;
+      if (head && isVerbText(head)) kind = verbKindOf(head) || kind;
+    }
+    const shape = verb
+      ? (KIND_SHAPE[kind] || (info && info[0]) || this.def.shape || 'blade')
+      : ((info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade');
     // 手の部位に属性語を置いていれば、文に属性が無くてもその属性を纏う。
     // 「炎の右手」で炎の斬撃になる、という意味の対応。
     const handEl = ps.handElement && ps.handElement !== 'none' ? ps.handElement : null;

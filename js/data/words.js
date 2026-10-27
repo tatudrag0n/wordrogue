@@ -307,6 +307,8 @@ export function findCompound(text) {
  */
 function phraseMask(segs, joined) {
   const mask = new Array(segs.length).fill(false);
+  /** 熟語の最後の語の位置。熟語は 1 つの名詞なので、末尾語の判定に使う。 */
+  const ends = new Set();
   let head = null;
   const offs = [];
   const boundary = new Set([0]);
@@ -323,11 +325,14 @@ function phraseMask(segs, joined) {
       if (!boundary.has(at) || !boundary.has(end)) continue;
       if (at === 0) head = key;
       for (let i = 0; i < segs.length; i++) {
-        if (offs[i] >= at && offs[i] + segs[i].length <= end) mask[i] = true;
+        if (offs[i] >= at && offs[i] + segs[i].length <= end) {
+          mask[i] = true;
+          if (offs[i] + segs[i].length === end) ends.add(i);
+        }
       }
     }
   }
-  return { mask, head };
+  return { mask, head, ends };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -501,8 +506,11 @@ export function evaluate(words, opt = {}) {
     // 接続詞なら、その場の役割 (連体・格「の」) で名詞を修飾できるかを見る。
     const lastC = isConn ? compounds.find((c) => c.idx === segs.length - 2) : null;
     const adn = !!lastC && (lastC.role === 'adn' || (lastC.role === 'case' && lastC.next === 'noun'));
+    // 熟語の末尾 (爆裂 の 裂、貫通 の 通) は、語 1 つの品詞ではなく
+    // 熟語 1 語の名詞として扱う。爆は動詞だが「爆裂弾」は日本語として正しい。
+    const compoundEnd = !isConn && phrase.ends.has(segs.length - 2);
     const tail = checkTailModifier(
-      last, isConn ? null : WORDS[last]?.pos, isConn, TAIL_UNMODIFIABLE, adn,
+      last, isConn ? null : (compoundEnd ? POS.noun : WORDS[last]?.pos), isConn, TAIL_UNMODIFIABLE, adn,
     );
     if (!tail.ok) {
       return {

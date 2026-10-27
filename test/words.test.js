@@ -585,6 +585,13 @@ sec('日本語として読めない文は落ちること');
   r = evaluate(['斬', '剣'].map(makeWord), { minContent: 2, tail: '剣' });
   ok(!r.valid && r.reason === 'tailverb', `「斬剣」の理由 ${r.reason}`);
 
+  // 熟語は 1 つの名詞。中の語が動詞でも末尾語を修飾できる。
+  // 「爆裂」の裂は動詞だが、「爆裂弾」は日本語として正しい。
+  r = evaluate(['爆', '裂', '弾'].map(makeWord), { minContent: 3, tail: '弾' });
+  ok(r.valid, `「爆裂弾」が成立しない: ${r.reasonText}`);
+  r = evaluate(['貫', '通', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
+  ok(r.valid, `「貫通剣」が成立しない: ${r.reasonText}`);
+
   r = evaluate(['刃', '剣'].map(makeWord), { minContent: 2, tail: '剣' });
   ok(!r.valid && r.reason === 'tailform', `「刃剣」の理由 ${r.reason}`);
 

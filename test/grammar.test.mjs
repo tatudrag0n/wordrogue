@@ -296,6 +296,27 @@ sec('語の意味が部位の能力になる');
     `「風を貫く風」が貫通にならない: ${special('風', ['風', 'を', '貫', 'く', '風']).kind}`);
   ok(special('光', ['光', 'を', '焦', 'がす', '光']).kind === 'beam',
     `「光を焦がす光」が光線のままにならない: ${special('光', ['光', 'を', '焦', 'がす', '光']).kind}`);
+
+  // 熟語 (貫通・爆裂) も述語になる。語 1 つの品詞ではなく、熟語の語幹で見る。
+  ok(special('光', ['光', 'を', '貫', '通', 'する', '光']).kind === 'pierce',
+    `「光を貫通する光」が貫通にならない: ${special('光', ['光', 'を', '貫', '通', 'する', '光']).kind}`);
+  // 武器語があっても、述語の動詞が「何をする攻撃か」を決める。
+  const tailed = new WeaponInst('form:刃');
+  tailed.sentence.entries = [
+    { word: makeWord('貫'), conn: null },
+    { word: makeWord('通'), conn: makeWord('する') },
+    { word: makeWord('刃'), conn: null },
+  ];
+  const tailedRes = tailed.resolve({ ...BASE_PLAYER });
+  ok(tailedRes.kind === 'pierce', `「貫通する刃」が斬撃のまま: ${tailedRes.kind}`);
+  // 武器語も属性語も無い文は、頭の熟語が何をする文かを決める。
+  const blank = new WeaponInst('sword');
+  blank.sentence.entries = [
+    { word: makeWord('爆'), conn: null },
+    { word: makeWord('裂'), conn: null },
+  ];
+  const blankRes = blank.resolve({ ...BASE_PLAYER });
+  ok(blankRes.kind === 'bomb', `「爆裂」が爆発にならない: ${blankRes.kind}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

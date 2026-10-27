@@ -1993,7 +1993,7 @@ sec('描画で例外が出てもプレイヤーが消えない');
   console.log(`    鉱物系/各種形の弾を描画 -> 例外 ${res.added} / プレイヤーに着色 ${res.painted} px`);
 }
 
-sec('武器名が文面と基本名の両方で出る');
+sec('HUD の武器チップは文面だけを出す');
 {
   // 直前の「不成文」テストで語を空にしてあるので、元の文に戻す。
   const names = await evalJs(`(async () => {
@@ -2018,7 +2018,7 @@ sec('武器名が文面と基本名の両方で出る');
     for (const node of document.querySelectorAll('.wchip')) {
       out.chips.push({
         txt: node.querySelector('.wchip-txt')?.textContent || '',
-        base: node.querySelector('.wchip-base')?.textContent || '',
+        hasBase: !!node.querySelector('.wchip-base'),
       });
     }
     for (const n of document.querySelectorAll('#forgeWeapons .wrow-name')) {
@@ -2042,12 +2042,13 @@ sec('武器名が文面と基本名の両方で出る');
   }
   ok(view.chips.length > 0, 'HUD に武器チップが無い');
   for (const c of view.chips) {
-    ok(!/undefined/.test(c.txt + c.base), `HUD に undefined が出る: ${JSON.stringify(c)}`);
+    ok(!/undefined/.test(c.txt), `HUD に undefined が出る: ${JSON.stringify(c)}`);
     ok(/[一-龥ぁ-んァ-ヶ]/.test(c.txt), `HUD に武器名が出ない: ${JSON.stringify(c)}`);
-    ok(/[一-龥]/.test(c.base), `HUD に基本名が出ない: ${JSON.stringify(c)}`);
+    // 武器の区分 (刃・銃などの基本の型) は出さない。空の文でも「刃」と出てしまうため。
+    ok(!c.hasBase, `HUD に武器区分が残っている: ${JSON.stringify(c)}`);
   }
   console.log(`    武器名: ${view.titles.map((t, i) => t + '(' + view.defNames[i] + ')').join(' / ')}`);
-  console.log(`    HUD チップ: ${view.chips.map((c) => c.base + ' ' + c.txt).join(' / ')}`);
+  console.log(`    HUD チップ: ${view.chips.map((c) => c.txt).join(' / ')}`);
 }
 
 sec('forge にリセット項目が無いこと');

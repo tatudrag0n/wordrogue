@@ -276,16 +276,14 @@ export class Hud {
         + (res.active && res.grade === 'great' ? ' great' : '')
         + (res.active && res.grade === 'idiom' ? ' idiom' : '');
       node.querySelector('.wchip-lv').textContent = `Lv${wi.level}`;
-      // 武器名はそのまま文面。基本の型も添えてどちらの武器か分かるようにする。
-      const txt = node.querySelector('.wchip-txt');
-      if (!node.querySelector('.wchip-base')) {
-        const base = el('span', { class: 'wchip-base' }, '');
-        node.insertBefore(base, txt);
-      }
-      node.querySelector('.wchip-base').textContent = wi.def.name;
-      txt.textContent = res.active ? ` ${wi.title}` : ` ${wi.title || ''} — ${res.reasonText}`;
+      // 出すのは文面だけ。武器の「区分」(刃・銃などの基本の型) は出さない。
+      // 文から作った武器は頭の語が型を決めるので、区分を添えると
+      // 空の文で「刃」と出るなど、実際の攻撃とずれる。
+      node.querySelector('.wchip-txt').textContent = res.active
+        ? wi.title
+        : (wi.title ? `${wi.title} — ${res.reasonText}` : res.reasonText);
       node.title = res.active
-        ? `${wi.def.name}「${res.fullText}」 — ${res.gradeInfo.name} / `
+        ? `${res.fullText} — ${res.gradeInfo.name} / `
           + `${KIND_LABEL[res.kind] || res.kind} / 威力 ${res.stats.dmg.toFixed(0)}`
         : `不成文: ${res.reasonText}`;
     }

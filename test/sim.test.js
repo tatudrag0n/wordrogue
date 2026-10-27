@@ -1680,6 +1680,32 @@ sec('言葉くじ・デッキ・部位はセーブで管理する');
   // 接続詞は所持語・デッキに入らない。
   ok(!save.collection.some((t) => CONNECTOR_SET.has(t)), '接続詞が所持語にいる');
 
+  // 初期語は属性・効果・動詞がそろい、雷は雷そのものを持つ (電 は熟語用)。
+  ok(save.ownsWord('雷'), '初期語に雷が無い');
+  ok(!save.ownsWord('電'), '初期語に電が残っている');
+  ok(save.ownsWord('闇'), '初期語に闇が無い');
+  ok(!save.ownsWord('焔'), '初期語の焔が炎と重なったまま');
+  ok(['強', '速', '斬', '癒'].every((t) => save.ownsWord(t)), '初期語に効果語・動詞がそろっていない');
+  console.log(`  初期語 ${save.collection.length}: ${save.collection.join('')}`);
+
+  // 旧セーブ (電・焔入り) は 1 度だけ入れ替わる。所持語・デッキ・部位が対象。
+  const old = new Save();
+  old.reset();
+  old.data.collection = ['炎', '焔', '氷', '電', '毒', '風', '水', '強', '速', '斬'];
+  old.data.deck = ['電', '炎', '強'];
+  old.data.parts = { chst: ['電', '炎'] };
+  old.data.starterRev = 0;
+  old.ensureCollection();
+  ok(old.ownsWord('雷') && !old.ownsWord('電'), `所持語の入れ替えが効かない: ${old.collection.join('')}`);
+  ok(old.ownsWord('闇') && !old.ownsWord('焔'), `属性の入れ替えが効かない: ${old.collection.join('')}`);
+  ok(!old.deck.includes('電') && old.deck.includes('雷'), `デッキの入れ替えが効かない: ${old.deck.join('')}`);
+  ok(!old.partWordList().includes('電') && old.partWordList().includes('雷'),
+    `部位の入れ替えが効かない: ${old.partWordList().join('')}`);
+  // 2 度目は何も増えない。
+  const after = old.collection.slice();
+  old.ensureCollection();
+  ok(old.collection.join() === after.join(), '初期語の入れ替えが 2 度走った');
+
   // 言玉不足では引けない。
   save.addInk(10);
   const ng = save.drawGacha();

@@ -21,6 +21,7 @@ const DEFAULTS = {
   ink: 0,              // 書庫の通貨「言玉」
   meta: {},            // 恒久強化 (hp / atk / xp / armor / magnet / crit / lexicon)
   collection: null,    // 所持語 (言葉くじで増える)。null なら初期セットを付与
+  starterRev: 0,       // 初期セットの改訂番号。古いセーブを 1 度だけ入れ替える
   deck: null,          // 戦闘に持ち込む言葉デッキ (語の text の配列)
   parts: {},           // 部位強化 { partId: [text, text] }
   settings: { volume: 0.5, screenShake: true, showDamage: true },
@@ -109,12 +110,37 @@ function compact(arr) {
   return arr.filter(Boolean).slice(0, PART_SLOTS);
 }
 
-/** 初期所持語。最初からデッキにも入っている。 */
+/**
+ * 初期所持語。最初からデッキにも入っている。
+ *
+ * 最初の 20 語で「属性・効果・動詞」の 3 つの役割をひととおり試せるようにする。
+ *   属性 … 炎 氷 雷 毒 風 水 聖 鉄 闇 (9 種)
+ *   効果 … 強 速 硬 静 妙 (攻撃・速度・装甲・冷却・会心)
+ *   動詞 … 斬 燃 貫 癒
+ *   体に効く語 … 骨 魂
+ *
+ * 雷は「電」ではなく雷そのものを初期語にする。電は発電・感電のような熟語の
+ * 部品なので、くじで引く語に回した。焔は炎と同じ属性で意味が重なるため外し、
+ * 代わりに闇を入れて属性の種類を増やしている。
+ * 並びは属性 → 効果 → 動詞 → 体の順。デッキの初期値もこの順で埋まる。
+ */
 export const STARTER_WORDS = [
-  '炎', '焔', '氷', '電', '毒', '風', '水',
+  '炎', '氷', '雷', '毒', '風', '水', '聖', '鉄', '闇',
   '強', '速', '硬', '静', '妙',
-  '斬', '燃', '貫',
-  '骨', '魂', '癒', '聖', '鉄',
+  '斬', '燃', '貫', '癒',
+  '骨', '魂',
+];
+
+/**
+ * 初期セットの改訂。
+ *   2 … 電 → 雷 / 焔 → 闇 (属性の種類をそろえ、雷を雷として持たせる)
+ * 古いセーブは、まだ新しい語を持っていないときだけ入れ替える。
+ * くじで先に得ていた語を二重に増やさないための条件。
+ */
+const STARTER_REVISION = 2;
+const STARTER_SWAPS = [
+  ['電', '雷'],
+  ['焔', '闇'],
 ];
 
 export class Save {
@@ -256,6 +282,26 @@ export class Save {
     }
     d.collection = d.collection.filter((t) => WORDS[t]);
     if (!d.collection.length) d.collection = STARTER_WORDS.filter((t) => WORDS[t]);
+    // 旧セーブの初期語を新しい初期語へ 1 度だけ入れ替える。
+    // 所持語だけでなく、デッキと部位に入っている分も同じ語に置き換える。
+    if (!(d.starterRev >= STARTER_REVISION)) {
+      const lists = [d.collection];
+      if (Array.isArray(d.deck)) lists.push(d.deck);
+      if (d.parts && typeof d.parts === 'object' && !Array.isArray(d.parts)) {
+        for (const p of PARTS) {
+          if (Array.isArray(d.parts[p.id])) lists.push(d.parts[p.id]);
+        }
+      }
+      for (const [from, to] of STARTER_SWAPS) {
+        if (!WORDS[to]) continue;
+        for (const list of lists) {
+          const i = list.indexOf(from);
+          if (i < 0 || list.includes(to)) continue;
+          list[i] = to;
+        }
+      }
+      d.starterRev = STARTER_REVISION;
+    }
     // 旧セーブにも最低 20 語を保証。新しい語は初期語彙から補う。
     for (const t of STARTER_WORDS) {
       if (d.collection.length >= DECK_MIN) break;

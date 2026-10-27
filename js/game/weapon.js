@@ -14,7 +14,7 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js';
 import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS } from '../data/words.js';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
@@ -290,7 +290,9 @@ export class WeaponInst {
     // 攻撃の型は「文が何をするか」で決める。述語の動詞が最優先で、
     // 武器語 (刃・銃) や属性語は形を決めるだけ。「貫通する刃」は斬撃ではなく貫通。
     // 語 1 つの品詞ではなく、文の中で熟語になった語幹まで見て型を決める。
-    let kind = verbKindOf(verb) || (info && info[1]) || this.def.kind;
+    // 特殊武器は頭にした属性の攻撃を使う。通常武器は武器語と動詞の従来ルールを保つ。
+    const elementKind = special ? ELEMENT_KIND[WORDS[tail]?.el] : null;
+    let kind = verbKindOf(verb) || elementKind || (info && info[1]) || this.def.kind;
     // 武器語も属性語も無い文は、頭の熟語 (爆裂・貫通) が何をする文かを決める。
     if (!tail && !verb) {
       const head = (e.segments || []).find((t) => WORDS[t]?.cat !== 'connect') || null;

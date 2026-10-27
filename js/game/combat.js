@@ -100,6 +100,8 @@ export function fireWeapon(run, wi, res) {
     case 'whip':  doWhip(run, wi, st, aim, el, elInfo); break;
     case 'aura':  doAura(run, wi, st, el); break;
     case 'beam':  doBeam(run, wi, st, aim, el, elInfo); break;
+    case 'flame': doFlame(run, wi, st, aim, el, elInfo); break;
+    case 'meteor': doMeteor(run, wi, st, el, elInfo); break;
     default: break;
   }
 
@@ -108,6 +110,39 @@ export function fireWeapon(run, wi, res) {
     p.vx -= Math.cos(aim) * st.recoil * 2.6;
     p.vy -= Math.sin(aim) * st.recoil * 2.6;
   }
+}
+
+// 炎を前方へ扇状に吹きつける。近距離の敵をまとめて焼く。
+function doFlame(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.35 * st.size;
+  const arc = Math.min(2.0, 1.15 + (st.area || 0) / 100);
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.38, maxLife: 0.38, color: elInfo.color, el, flame: true, hit: new Set() });
+  run.burst(p.x + Math.cos(aim) * reach * 0.55, p.y + Math.sin(aim) * reach * 0.55, 20, elInfo.color, {
+    a: aim, spread: arc, spd: 180, spdMin: 40, life: 0.5, r: 3, shape: 'ember', drag: 2, grav: -35,
+  });
+  for (const e of run.enemies) {
+    if (e.dead || dist2(e.x, e.y, p.x, p.y) > (reach + e.r) ** 2) continue;
+    let d = Math.atan2(e.y - p.y, e.x - p.x) - aim;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    if (Math.abs(d) <= arc / 2) run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el, burn: st.burn });
+  }
+  run.audio.tone({ freq: 180, type: 'sawtooth', dur: 0.18, vol: 0.08, slide: 2.5 });
+  run.shake(1.8);
+}
+
+// 隕石は敵の頭上から落とし、着弾で通常の爆発処理に入れる。
+function doMeteor(run, wi, st, el, elInfo) {
+  const p = run.player;
+  const target = run.nearestEnemy(p.x, p.y);
+  if (!target) return;
+  const x = target.x + (run.rand() - 0.5) * 52;
+  const y = target.y - 300;
+  const b = makeBullet({ x, y, vx: (target.x - x) * 0.25, vy: 620, r: 12 * st.size, size: st.size,
+    life: 1.1, pierce: 99, explode: Math.max(st.explode, 44 + (st.area || 0)), burn: st.burn,
+    knock: st.knock || 90, element: el, color: elInfo.color, shape: 'bomb', kindName: 'bomb' });
+  b.st = st; b.wi = wi; run.bullets.push(b);
+  run.burst(x, y, 8, elInfo.color, { spd: 95, spdMin: 25, life: 0.35, r: 3, shape: 'ember', grav: 40 });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

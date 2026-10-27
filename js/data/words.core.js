@@ -55,7 +55,7 @@ export const CATEGORIES = {
  * 武器語から外した。武器語はこの 15 語だけ。
  */
 export const WEAPON_WORDS = [
-  '刃', '剣', '刀', '斧', '槍', '矛', '牙', '爪', '弓', '鞭', '鎖', '杖', '拳', '銃', '針',
+  '刃', '剣', '刀', '斧', '槌', '槍', '矛', '牙', '爪', '弓', '鞭', '鎖', '杖', '拳', '銃', '針',
 ];
 export const WEAPON_WORD_SET = new Set(WEAPON_WORDS);
 
@@ -94,7 +94,7 @@ export const isWeaponWord = (text) => WEAPON_WORD_SET.has(text);
  * 「長柄の槍」「氷晶の剣」は の で係れば普通に読める。
  */
 export const TAIL_UNMODIFIABLE = new Set([
-  '刃', '剣', '刀', '斧', '槍', '矛', '戈', '牙', '爪',
+  '刃', '剣', '刀', '斧', '槌', '槍', '矛', '戈', '牙', '爪',
   '弾', '銃', '玉', '矢', '針', '弓', '球', '珠', '光', '雷',
   '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾', '杖', '拳',
 ]);
@@ -225,6 +225,7 @@ const RAW_FORM = `
 剣     form  -  dmg+8  size+0.20
 刀     form  -  dmg+9  arc+0.5  size+0.30
 斧     form  -  dmg+11  speed-10  size+0.35  knock+30
+槌     form  -  dmg+14  speed-20  size+0.35  knock+45
 槍     form  -  dmg+7  crit+0.04  speed+40
 矛     form  -  dmg+13  pierce+5  crit+0.06  speed+30
 戈     form  -  dmg+9  arc+0.8  size+0.25
@@ -260,7 +261,6 @@ const RAW_FORM = `
 鞘     form  -  dmg+3  speed+30  rate+0.15
 鍔     form  -  dmg+2  armor+3  shield+16
 釘     form  -  dmg+4  pierce+3  speed+25
-槌     form  -  dmg+8  knock+40  size+0.15  speed-10
 柄     form  -  size-0.12  speed+20  rate+0.15
 晶     form  -  dmg+4  crit+0.04  pierce+1
 `;

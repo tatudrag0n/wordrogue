@@ -608,6 +608,22 @@ export class Renderer {
           g.arc(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 1.6 + (i % 2), 0, TAU);
           g.fill();
         }
+        if (s.flame) {
+          // 火炎放射は刃先の火花ではなく、扇の内側を走る炎の筋で見せる。
+          for (let i = 0; i < 9; i++) {
+            const f = (i + 0.5) / 9;
+            const aa = a0 + (a1 - a0) * f;
+            const end = rOut * (0.58 + 0.32 * Math.sin(t * 18 + i * 2.3));
+            g.globalAlpha = t * 0.55;
+            g.strokeStyle = i % 2 ? '#fff1a8' : s.color;
+            g.lineWidth = 2 + (i % 3);
+            g.beginPath();
+            g.moveTo(s.x + Math.cos(aa) * rIn, s.y + Math.sin(aa) * rIn);
+            g.quadraticCurveTo(s.x + Math.cos(aa + 0.07) * end * 0.55, s.y + Math.sin(aa + 0.07) * end * 0.55,
+              s.x + Math.cos(aa - 0.04) * end, s.y + Math.sin(aa - 0.04) * end);
+            g.stroke();
+          }
+        }
       } else if (el === 'ice') {
         g.strokeStyle = s.color;
         g.lineWidth = 1.2;

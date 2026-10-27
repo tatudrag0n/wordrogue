@@ -143,6 +143,35 @@ export const WEAPONS = {
     grow: { dmg: 5.6, rate: 0.05, range: 9, arc: 0.05, area: 2 },
     startWord: '鋼', startWord2: '剛', maxLevel: 8, unlock: { stage: 7 },
   },
+  // 追加の基本武器。剣・杖・拳も既存の武器語を独立した初期武器として選べる。
+  hammer: {
+    id: 'hammer', name: '槌', kind: 'slash', glyph: '槌', tail: '槌',
+    desc: '重い打撃で敵を吹き飛ばす。',
+    base: { dmg: 20, rate: 0.52, range: 142, arc: 2.2, area: 16, size: 1.25, knock: 130, crit: 0.05 },
+    grow: { dmg: 6.2, rate: 0.045, range: 7, area: 2 },
+    startWord: '岩', startWord2: '剛', maxLevel: 8, unlock: { stage: 1 },
+  },
+  longsword: {
+    id: 'longsword', name: '剣', kind: 'slash', glyph: '剣', tail: '剣',
+    desc: '扱いやすい剣で前方を斬る。',
+    base: { dmg: 11, rate: 1.45, range: 106, arc: 2.0, size: 1.05, crit: 0.07 },
+    grow: { dmg: 3.8, rate: 0.09, range: 5, arc: 0.04 },
+    startWord: '炎', startWord2: '必', maxLevel: 8, unlock: { stage: 1 },
+  },
+  staff: {
+    id: 'staff', name: '杖', kind: 'shot', glyph: '杖', tail: '杖',
+    desc: '魔力弾を放つ。貫通して複数の敵を射抜く。',
+    base: { dmg: 9, rate: 1.25, speed: 300, pierce: 2, size: 1.15, crit: 0.08 },
+    grow: { dmg: 3.1, rate: 0.09, pierce: 0.3, speed: 10 },
+    startWord: '光', startWord2: '貫', maxLevel: 8, unlock: { stage: 1 },
+  },
+  fist: {
+    id: 'fist', name: '拳', kind: 'slash', glyph: '拳', tail: '拳',
+    desc: '素早い連打で近くの敵を打つ。',
+    base: { dmg: 6, rate: 2.8, range: 74, arc: 2.4, area: 7, size: 0.9, knock: 28, crit: 0.1 },
+    grow: { dmg: 2.0, rate: 0.16, range: 3, arc: 0.04 },
+    startWord: '血', startWord2: '速', maxLevel: 8, unlock: { stage: 1 },
+  },
   flank: {
     id: 'flank', name: '槍', kind: 'shot', glyph: '槍', tail: '槍',
     desc: '左右から同時に撃つ。',
@@ -175,7 +204,7 @@ export const WEAPON_MAX = 3;
 export const FORM_SHAPE = {
   // 斬撃
   刃: ['blade', 'slash'], 剣: ['blade', 'slash'], 刀: ['blade', 'slash'],
-  斧: ['blade', 'slash'], 牙: ['blade', 'slash'], 爪: ['blade', 'slash'],
+  斧: ['blade', 'slash'], 槌: ['blade', 'slash'], 牙: ['blade', 'slash'], 爪: ['blade', 'slash'],
   拳: ['blade', 'slash'],
   // 射撃
   銃: ['shot', 'shot'], 杖: ['orb', 'shot'],
@@ -234,6 +263,11 @@ export const ELEMENT_SHAPE = {
   earth: ['orb', 'bomb'], wind: ['orb', 'shot'], nature: ['orb', 'aura'],
   steel: ['orb', 'shot'], blood: ['blade', 'slash'], water: ['orb', 'shot'],
   gold: ['orb', 'shot'], none: ['orb', 'shot'],
+};
+
+/** 属性を頭にした特殊武器の既定攻撃。文中の述語があればそちらを優先する。 */
+export const ELEMENT_KIND = {
+  fire: 'flame', light: 'beam', thunder: 'chain', earth: 'meteor',
 };
 
 /** 攻撃の型から描画の形を引くときの既定値。 */
@@ -315,6 +349,7 @@ export function lookupDef(id) {
 export const KIND_LABEL = {
   slash: '斬撃', shot: '射撃', bomb: '爆弾', chain: '連鎖',
   orbit: '軌道', whip: '薙ぎ', aura: '城壁', beam: '光線',
+  flame: '火炎放射', meteor: '隕石',
   boomerang: '還り刃', pierce: '貫通', none: '',
 };
 

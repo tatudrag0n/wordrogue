@@ -23,7 +23,7 @@
 // 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
-import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js?v=1.28';
+import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js?v=1.29';
 import { clamp } from '../core/util.js';
 import { evaluatePart, normPartEntries } from './parts.js';
 

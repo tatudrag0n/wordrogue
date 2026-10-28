@@ -9,12 +9,12 @@ Vampire Survivors 系の放置アクションに、**日本語の文を組み立
 ## 更新時のルール
 
 - タイトル画面には必ず `Ver. X.YY` 形式のバージョンを表示する（表示箇所は `index.html` の `.title-version`）。
-- ユーザー向けの更新を行うたびにバージョンを更新し、READMEなどの更新説明と合わせて画面上の表示も変更する。表示を削除したり、更新し忘れたりしないこと。現在の表示は `Ver. 1.28`。
+- ユーザー向けの更新を行うたびにバージョンを更新し、READMEなどの更新説明と合わせて画面上の表示も変更する。表示を削除したり、更新し忘れたりしないこと。現在の表示は `Ver. 1.29`。
 - **`?v=` は、`index.html` と `js/` の全ファイルで 1 つにそろえる。** 版数は 1 か所（`index.html` の `.title-version`）を直し、残りは機械的に置き換える:
 
   ```bash
-  sed -i 's|Ver\. 1\.27|Ver. 1.28|' index.html
-  grep -rl '?v=' js/ index.html | while read f; do sed -i 's/?v=[0-9][0-9.]*/?v=1.28/g' "$f"; done
+  sed -i 's|Ver\. 1\.28|Ver. 1.29|' index.html
+  grep -rl '?v=' js/ index.html | while read f; do sed -i 's/?v=[0-9][0-9.]*/?v=1.29/g' "$f"; done
   ```
 
   モジュールの import にも `?v=` が付いている。ここを上げ忘れると、**更新したファイルがブラウザのキャッシュから読まれ、直したのに直らない**（`js/data/words.js?v=1.21` のまま単語を直した、など）。`npm test` が「共有カードと版表示」で照合するので、ずれていたらテストで止まる。

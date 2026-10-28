@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.34">
+<link rel="stylesheet" href="css/style.css?v=1.35">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -270,7 +270,7 @@
         <button class="btn" id="btnHowto">遊び方</button>
         <button class="btn" id="btnTutorial">チュートリアル</button>
         <button class="btn" id="btnGrow">強化</button>
-        <button class="btn" id="btnWords">言葉</button>
+        <button class="btn" id="btnWords">書庫</button>
         <button class="btn" id="btnDict">辞書</button>
         <button class="btn" id="btnSettings">設定</button>
       </div>
@@ -283,7 +283,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.34</div>
+      <div class="title-version">Ver. 1.35</div>
     </div>
   </div>
 
@@ -683,7 +683,7 @@
   <div id="words" class="layer screen" hidden>
     <div class="panel panel-grow">
       <header class="panel-head">
-        <h2>言葉</h2>
+        <h2>書庫</h2>
         <button class="btn btn-close" data-close="words">✕</button>
       </header>
 
@@ -725,7 +725,42 @@
       <div class="archive-ink">
         <span class="archive-ink-label">言玉</span>
         <b id="growInk">0</b>
-        <span class="archive-ink-note">書庫の恒久強化と語彙の枠に使う。言葉くじは「言葉」タブ</span>
+        <span class="archive-ink-note">書庫の恒久強化と語彙の枠に使う。言葉くじは「書庫」タブ</span>
+      </div>
+
+      <div class="grow-body">
+        <section>
+          <h3>言葉くじ</h3>
+          <div class="grow-gacha">
+            <button class="btn btn-primary" id="gachaBtn">一回引く</button>
+            <button class="btn" id="gachaTenBtn">十連くじ</button>
+            <span class="grow-gacha-result" id="gachaResult"></span>
+          </div>
+          <p class="grow-note">同じ語をもう一度引くと<strong>ランク</strong>が上がり
+          （コモン → アンコモン → レア → エピック → レジェンド）、その語の効果が最大 1.6 倍になる。</p>
+        </section>
+
+        <section>
+          <h3>言葉デッキ <span class="grow-deck-count" id="deckCount"></span></h3>
+          <p class="grow-note">戦闘開始時の語彙に入る語。押すと出し入れできる。最低 10 語に満たない分は、開始時に自動で補われる。接続詞はデッキに入らない。</p>
+          <div class="grow-words" id="deckWords"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 強化 ══════════════════════════════════════════════════════ -->
+  <div id="grow" class="layer screen" hidden>
+    <div class="panel panel-grow">
+      <header class="panel-head">
+        <h2>強化</h2>
+        <button class="btn btn-close" data-close="grow">✕</button>
+      </header>
+
+      <div class="archive-ink">
+        <span class="archive-ink-label">言玉</span>
+        <b id="growInk">0</b>
+        <span class="archive-ink-note">書庫の恒久強化と語彙の枠に使う。言葉くじは「書庫」タブ</span>
       </div>
 
       <div class="archive-body">
@@ -882,6 +917,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.34"></script>
+<script type="module" src="js/main.js?v=1.35"></script>
 </body>
 </html>

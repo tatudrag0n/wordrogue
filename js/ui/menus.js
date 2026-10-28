@@ -5,8 +5,8 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.34';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.34';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.35';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.35';
 import { evaluatePart, partConnChoices, partWordForms } from '../game/parts.js';
 import {
   partEffectRows, partTotalRows, wordEffectRows, wordDirectEffectRows,
@@ -638,7 +638,7 @@ export class Menus {
       const eff = wordEffectRows(t, save.d.meta || {});
       const b = el('button', {
         class: 'btn grow-word' + (this.growSel === t ? ' sel' : '') + (used ? ' used' : '')
-          + (direct.length ? ' has-eff' : ' no-eff'),
+          + (direct.length ? ' has-eff' : ' no-eff') + ' rk' + save.rankIndex(t),
         title: `${CATEGORIES[info.cat]?.name || info.cat} / ランク ${save.rankOf(t).name}: ${src}`
           + (direct.length ? `\n体に効く: ${direct.map((r) => `${r.label} ${r.text}`).join(' / ')}`
             : '\n体に直接は効かない (文にすれば文の力ぶん強くなる)')
@@ -683,7 +683,7 @@ export class Menus {
     for (const t of save.collection) {
       const inDeck = save.inDeck(t);
       const b = el('button', {
-        class: 'btn grow-word deck' + (inDeck ? ' in' : ''),
+        class: 'btn grow-word deck' + (inDeck ? ' in' : '') + ' rk' + save.rankIndex(t),
         disabled: inDeck && save.deck.length <= DECK_MIN,
         title: inDeck ? (save.deck.length <= DECK_MIN ? `最低 ${DECK_MIN} 語を保つため外せない` : 'デッキに入っている — 押すと外れる') : '押すとデッキに入る',
       }, (inDeck ? '✓ ' : '') + t, this.rankChip(t));

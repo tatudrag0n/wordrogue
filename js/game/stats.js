@@ -23,10 +23,10 @@
 // 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
-import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js?v=1.34';
+import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js?v=1.35';
 import { clamp } from '../core/util.js';
 import { evaluatePart, normPartEntries } from './parts.js';
-import { rankMul } from '../data/ranks.js?v=1.34';
+import { rankMul } from '../data/ranks.js?v=1.35';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {

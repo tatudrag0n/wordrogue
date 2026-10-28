@@ -3167,3 +3167,42 @@ html, body {
 .grow-word-rank.rk2 { background: #2f7fc4; }
 .grow-word-rank.rk3 { background: #8b5cf6; }
 .grow-word-rank.rk4 { background: #d9a406; }
+
+
+/* ══ 強化タブ: 1 つのスクロールにまとめる ═════════════════════════════ */
+/* 以前は恒久強化と部位が別々にスクロールしていて操作しづらかった。 */
+.panel-grow { display: flex; flex-direction: column; max-height: min(88vh, 920px); }
+.panel-grow > .grow-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.panel-grow .archive-body { overflow: visible; }
+
+/* 恒久強化は 2 列に並べて縦を詰める。 */
+.panel-grow .archive-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.panel-grow .archive-list .up-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 6px 8px;
+  align-items: center;
+}
+.panel-grow .archive-list .up-desc { grid-column: 1 / -1; font-size: .7rem; }
+.panel-grow .archive-list .up-buy { grid-row: 1 / 3; grid-column: 2; align-self: center; }
+@media (max-width: 620px) {
+  .panel-grow .archive-list { grid-template-columns: 1fr; }
+}
+
+/* ══ レアリティの色 ═══════════════════════════════════════════════════ */
+/* 語のボタンにもランクの色を付ける。C灰 / U緑 / R青 / E紫 / L金。 */
+.grow-word.rk0 { border-color: #6b7383; }
+.grow-word.rk1 { border-color: #12a58a; background: rgba(18, 165, 138, .07); }
+.grow-word.rk2 { border-color: #2f7fc4; background: rgba(47, 127, 196, .09); }
+.grow-word.rk3 { border-color: #8b5cf6; background: rgba(139, 92, 246, .11); }
+.grow-word.rk4 {
+  border-color: #d9a406;
+  background: linear-gradient(180deg, rgba(217, 164, 6, .16), rgba(217, 164, 6, .07));
+  box-shadow: 0 0 0 1px rgba(217, 164, 6, .35);
+}
+.grow-word.rk4 .grow-word-rank { box-shadow: 0 0 6px rgba(217, 164, 6, .55); }

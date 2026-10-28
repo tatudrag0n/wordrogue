@@ -5,8 +5,8 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.36';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.36';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.37';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.37';
 import { evaluatePart, partConnChoices, partWordForms } from '../game/parts.js';
 import {
   partEffectRows, partTotalRows, wordEffectRows, wordDirectEffectRows,
@@ -107,6 +107,9 @@ export class Menus {
     this.growWords = $('#growWords');
     this.deckWords = $('#deckWords');
     this.deckCount = $('#deckCount');
+    this.deckSelectAll = $('#deckSelectAll');
+    this.deckDeselectAll = $('#deckDeselectAll');
+    this.deckBack = $('#deckBack');
     /** 部位に入れるために選んでいる語。 */
     this.growSel = null;
     /** 接続詞の一覧を開いている枠 { part, slot }。 */
@@ -145,6 +148,10 @@ export class Menus {
     $('#btnHowto').addEventListener('click', () => { tap(); this.show('howto'); });
     $('#btnGrow').addEventListener('click', () => { tap(); this.show('grow'); });
     $('#btnWords').addEventListener('click', () => { tap(); this.show('words'); });
+    // 言葉デッキの一括操作。
+    this.deckSelectAll?.addEventListener('click', () => { tap(); this.selectAllDeck(); });
+    this.deckDeselectAll?.addEventListener('click', () => { tap(); this.deselectAllDeck(); });
+    this.deckBack?.addEventListener('click', () => { tap(); this.hideDeckBack(); this.closeTab('words'); });
     this.gachaBtn?.addEventListener('click', () => { tap(); this.startGacha(1); });
     this.gachaTenBtn?.addEventListener('click', () => { tap(); this.startGacha(10); });
     // 幕の中の操作。幕が無い最小 DOM ではすべて素通りする。
@@ -664,6 +671,7 @@ export class Menus {
   // 部位に入れる語を選ぶ一覧 (所持語) は強化タブに残している。
   renderWords() {
     const save = this.save;
+    this.hideDeckBack();
     if (this.wordsInk) this.wordsInk.textContent = String(save.ink);
     if (this.gachaBtn) {
       this.gachaBtn.textContent = `引く (${GACHA_COST} 言玉)`;
@@ -694,6 +702,33 @@ export class Menus {
       });
       this.deckWords.append(b);
     }
+  }
+
+  // 言葉デッキの一括選択 / 解除。
+  selectAllDeck() {
+    const save = this.save;
+    for (const t of save.collection) {
+      if (!save.inDeck(t) && save.deck.length < DECK_MAX) save.toggleDeck(t);
+    }
+    this.showDeckBack();
+    this.renderWords();
+  }
+  deselectAllDeck() {
+    const save = this.save;
+    // 最低 DECK_MIN 語は残す。
+    while (save.deck.length > DECK_MIN) {
+      const t = save.deck[save.deck.length - 1];
+      save.toggleDeck(t);
+      if (save.deck.length >= DECK_MIN && save.inDeck(t)) break;
+    }
+    this.showDeckBack();
+    this.renderWords();
+  }
+  showDeckBack() {
+    if (this.deckBack) this.deckBack.hidden = false;
+  }
+  hideDeckBack() {
+    if (this.deckBack) this.deckBack.hidden = true;
   }
 
   // ── 言葉くじの演出 ──────────────────────────────────────────────────────

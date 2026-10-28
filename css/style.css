@@ -3193,6 +3193,10 @@ html, body {
   .panel-grow .archive-list { grid-template-columns: 1fr; }
 }
 
+/* 言葉デッキの一括操作ボタン */
+.grow-deck-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.grow-deck-actions .btn { flex: 1 1 auto; min-width: 80px; }
+
 /* ══ レアリティの色 ═══════════════════════════════════════════════════ */
 /* 語のボタンにもランクの色を付ける。C灰 / U緑 / R青 / E紫 / L金。 */
 .grow-word.rk0 { border-color: #6b7383; }

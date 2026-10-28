@@ -6,6 +6,11 @@ package-lock.json
 shot-*.png
 *.png.tmp
 
+# Cloudflare Worker secrets (ローカル用)
+worker/.admin-token.txt
+worker/.dev.vars
+.wrangler/
+
 # OS / エディタ
 .DS_Store
 Thumbs.db

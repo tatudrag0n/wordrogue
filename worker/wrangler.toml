@@ -1,0 +1,13 @@
+name = "wordrogue-api"
+main = "src/index.js"
+compatibility_date = "2026-10-27"
+
+[vars]
+# Public (non-secret) configuration
+TURNSTILE_SITEKEY = "0x4AAAAAAFoIrBZA8W28_M_k"
+ALLOWED_ORIGINS = "https://tatudrag0n.github.io,http://localhost:8099,http://127.0.0.1:8099,http://localhost:5173"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wordrogue-submissions"
+database_id = "2e518ea2-86a7-4aaa-aa69-c0d10ffcffe3"

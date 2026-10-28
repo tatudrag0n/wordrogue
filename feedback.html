@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3eee1">
+<title>フィードバック — ワードローグ</title>
+<link rel="stylesheet" href="css/style.css?v=1.5">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<style>
+  .fb-wrap { max-width: 760px; margin: 0 auto; padding: 24px 18px 60px; }
+  .fb-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 16px; }
+  .fb-title { font-size: 22px; font-weight: 700; color: var(--fg); }
+  .fb-sub { color: var(--fg-dim); font-size: 13px; margin-bottom: 20px; }
+  .fb-tabs { display:flex; gap:8px; margin-bottom: 16px; }
+  .fb-tab { padding: 8px 16px; border: 1px solid var(--line-2); background: var(--panel); border-radius: 8px; cursor:pointer; font-size: 14px; color: var(--fg-dim); }
+  .fb-tab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .fb-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  .fb-field { margin-bottom: 14px; }
+  .fb-label { display:block; font-size: 13px; color: var(--fg-dim); margin-bottom: 6px; }
+  .fb-input, .fb-textarea, .fb-select { width:100%; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 8px; font-size: 14px; background: var(--panel-2); color: var(--fg); box-sizing: border-box; }
+  .fb-textarea { min-height: 120px; resize: vertical; font-family: inherit; }
+  .fb-row { display:flex; gap:10px; }
+  .fb-row > * { flex:1; }
+  .fb-actions { display:flex; gap:10px; align-items:center; margin-top: 16px; flex-wrap: wrap; }
+  .fb-btn { padding: 10px 20px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--panel); cursor:pointer; font-size: 14px; }
+  .fb-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .fb-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .fb-status { font-size: 13px; }
+  .fb-status.ok { color: var(--ok); }
+  .fb-status.err { color: var(--ng); }
+  .fb-hint { font-size: 12px; color: var(--fg-mute); margin-top: 8px; }
+  .fb-back { font-size: 13px; color: var(--fg-dim); text-decoration: none; }
+  .turnstile-widget { margin: 12px 0; }
+</style>
+</head>
+<body>
+<div class="fb-wrap">
+  <div class="fb-head">
+    <div>
+      <div class="fb-title">フィードバック</div>
+      <div class="fb-sub">語の追加申請やバグ報告を受け付けています。送信内容は開発者が確認します。</div>
+    </div>
+    <a class="fb-back" href="index.html">← ゲームに戻る</a>
+  </div>
+
+  <div class="fb-tabs">
+    <button class="fb-tab active" data-tab="word">語の追加申請</button>
+    <button class="fb-tab" data-tab="bug">バグ報告</button>
+  </div>
+
+  <!-- 語の追加申請 -->
+  <div class="fb-card" data-panel="word">
+    <div class="fb-field">
+      <label class="fb-label">追加したい語 *</label>
+      <input class="fb-input" id="wWord" type="text" maxlength="20" placeholder="例: 焔">
+    </div>
+    <div class="fb-row">
+      <div class="fb-field">
+        <label class="fb-label">カテゴリ</label>
+        <select class="fb-select" id="wCat">
+          <option value="">未選択</option>
+          <option value="基本武器">基本武器</option>
+          <option value="属性">属性</option>
+          <option value="現象">現象</option>
+          <option value="接続詞">接続詞</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div class="fb-field">
+        <label class="fb-label">属性 (任意)</label>
+        <input class="fb-input" id="wEl" type="text" maxlength="10" placeholder="例: 火">
+      </div>
+    </div>
+    <div class="fb-field">
+      <label class="fb-label">説明・根拠 (任意)</label>
+      <textarea class="fb-textarea" id="wNote" placeholder="この語が文として成立する例、出典など"></textarea>
+    </div>
+    <div class="fb-field">
+      <label class="fb-label">お名前 (任意)</label>
+      <input class="fb-input" id="wName" type="text" maxlength="40" placeholder="匿名でも可">
+    </div>
+    <div class="turnstile-widget" id="tsWord"></div>
+    <div class="fb-actions">
+      <button class="fb-btn primary" id="btnSubmitWord">送信する</button>
+      <span class="fb-status" id="statusWord"></span>
+    </div>
+  </div>
+
+  <!-- バグ報告 -->
+  <div class="fb-card" data-panel="bug" hidden>
+    <div class="fb-field">
+      <label class="fb-label">タイトル *</label>
+      <input class="fb-input" id="bTitle" type="text" maxlength="200" placeholder="例: ステージ2でクラッシュする">
+    </div>
+    <div class="fb-field">
+      <label class="fb-label">再現手順・詳細 *</label>
+      <textarea class="fb-textarea" id="bDesc" placeholder="何をしたか、何が起きたか"></textarea>
+    </div>
+    <div class="fb-field">
+      <label class="fb-label">ブラウザ / 環境 (任意)</label>
+      <input class="fb-input" id="bEnv" type="text" maxlength="120" placeholder="例: Chrome 128 / Windows 11">
+    </div>
+    <div class="fb-field">
+      <label class="fb-label">お名前 (任意)</label>
+      <input class="fb-input" id="bName" type="text" maxlength="40" placeholder="匿名でも可">
+    </div>
+    <div class="turnstile-widget" id="tsBug"></div>
+    <div class="fb-actions">
+      <button class="fb-btn primary" id="btnSubmitBug">送信する</button>
+      <span class="fb-status" id="statusBug"></span>
+    </div>
+  </div>
+
+  <p class="fb-hint">送信には Cloudflare Turnstile によるボット対策の確認が必要です。送信内容は D1 データベースに保存されます。</p>
+</div>
+
+<script>
+  const API = "https://wordrogue-api.tatudragon0327.workers.dev";
+  const SITEKEY = "0x4AAAAAAFoIrBZA8W28_M_k";
+
+  // タブ切替
+  const tabs = document.querySelectorAll(".fb-tab");
+  const panels = document.querySelectorAll("[data-panel]");
+  tabs.forEach((t) => {
+    t.addEventListener("click", () => {
+      tabs.forEach((x) => x.classList.remove("active"));
+      t.classList.add("active");
+      panels.forEach((p) => { p.hidden = p.dataset.panel !== t.dataset.tab; });
+    });
+  });
+
+  function setStatus(el, msg, ok) {
+    el.textContent = msg;
+    el.className = "fb-status " + (ok ? "ok" : "err");
+  }
+
+  function renderTurnstile(containerId, widgetId) {
+    if (!window.turnstile) { setTimeout(() => renderTurnstile(containerId, widgetId), 300); return; }
+    window.turnstile.render("#" + containerId, {
+      sitekey: SITEKEY,
+      theme: "light",
+      callback: (token) => { window["__ts_" + widgetId] = token; },
+    });
+  }
+  renderTurnstile("tsWord", "word");
+  renderTurnstile("tsBug", "bug");
+
+  async function submit(type, payload, statusEl, btn) {
+    const token = type === "word" ? window.__ts_word : window.__ts_bug;
+    if (!token) { setStatus(statusEl, "Turnstile の確認が完了していません", false); return; }
+    btn.disabled = true;
+    setStatus(statusEl, "送信中...", true);
+    try {
+      const res = await fetch(API + "/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, payload, turnstileToken: token }),
+      });
+      const data = await res.json();
+      if (data && data.ok) {
+        setStatus(statusEl, "送信しました (ID: " + data.id + ")", true);
+        // reset token
+        if (type === "word") window.__ts_word = null; else window.__ts_bug = null;
+      } else {
+        setStatus(statusEl, "失敗: " + (data && data.error ? data.error : res.status), false);
+      }
+    } catch (e) {
+      setStatus(statusEl, "通信エラー: " + e.message, false);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById("btnSubmitWord").addEventListener("click", () => {
+    const word = document.getElementById("wWord").value.trim();
+    if (!word) { setStatus(document.getElementById("statusWord"), "語を入力してください", false); return; }
+    const payload = {
+      word,
+      category: document.getElementById("wCat").value,
+      element: document.getElementById("wEl").value.trim(),
+      note: document.getElementById("wNote").value.trim(),
+      name: document.getElementById("wName").value.trim(),
+    };
+    submit("word", payload, document.getElementById("statusWord"), document.getElementById("btnSubmitWord"));
+  });
+
+  document.getElementById("btnSubmitBug").addEventListener("click", () => {
+    const title = document.getElementById("bTitle").value.trim();
+    const desc = document.getElementById("bDesc").value.trim();
+    if (!title || !desc) { setStatus(document.getElementById("statusBug"), "タイトルと詳細を入力してください", false); return; }
+    const payload = {
+      title,
+      description: desc,
+      environment: document.getElementById("bEnv").value.trim(),
+      name: document.getElementById("bName").value.trim(),
+      userAgent: navigator.userAgent,
+    };
+    submit("bug", payload, document.getElementById("statusBug"), document.getElementById("btnSubmitBug"));
+  });
+</script>
+</body>
+</html>

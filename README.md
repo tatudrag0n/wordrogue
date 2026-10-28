@@ -761,6 +761,19 @@ VERB 81 形 (斬る・貫く…)、VADV 63 形 (斬り・突き…)、INTR 46 �
 npm run shot -- title title.png 800
 ```
 
+## フィードバック (Cloudflare)
+
+プレイヤーからの語の追加申請とバグ報告は Cloudflare Worker + D1 で受け付ける。
+
+- フロント: `feedback.html` (ゲーム画面の「フィードバック」ボタンから遷移)
+- API: `https://wordrogue-api.tatudragon0327.workers.dev`
+  - `POST /api/submit` — `{ type: "word"|"bug", payload, turnstileToken }`
+  - `GET /api/submissions` — 管理用 (ヘッダ `X-Admin-Token` 必須)
+- ボット対策: Cloudflare Turnstile
+- 管理画面: `admin.html` (admin token を入力して閲覧)
+- Worker コード: `worker/` (wrangler.toml, src/index.js, schema.sql)
+- admin token は `worker/.admin-token.txt` (gitignore 済み) に保存
+
 ---
 
 ## 公開

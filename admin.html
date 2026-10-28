@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>管理 — ワードローグ</title>
+<link rel="stylesheet" href="css/style.css?v=1.5">
+<style>
+  .ad-wrap { max-width: 960px; margin: 0 auto; padding: 24px 18px 60px; }
+  .ad-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 16px; }
+  .ad-title { font-size: 22px; font-weight: 700; color: var(--fg); }
+  .ad-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .ad-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .ad-input { padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 8px; font-size: 13px; background: var(--panel-2); color: var(--fg); }
+  .ad-btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--panel); cursor:pointer; font-size: 13px; }
+  .ad-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .ad-item { border-top: 1px solid var(--line); padding: 12px 0; }
+  .ad-item:first-child { border-top: none; }
+  .ad-meta { font-size: 12px; color: var(--fg-mute); margin-bottom: 6px; }
+  .ad-type { display:inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+  .ad-type.word { background: rgba(36,87,214,.12); color: var(--conn); }
+  .ad-type.bug { background: rgba(214,60,48,.12); color: var(--ng); }
+  .ad-pre { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 12px; white-space: pre-wrap; word-break: break-word; margin-top: 6px; }
+  .ad-status { font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="ad-wrap">
+  <div class="ad-head">
+    <div class="ad-title">管理パネル</div>
+    <a href="index.html" style="font-size:13px;color:var(--fg-dim);text-decoration:none">← ゲームに戻る</a>
+  </div>
+
+  <div class="ad-card">
+    <div class="ad-row">
+      <input class="ad-input" id="token" type="password" placeholder="Admin token" style="flex:1;min-width:240px">
+      <select class="ad-input" id="filterType">
+        <option value="">すべての種別</option>
+        <option value="word">語の申請</option>
+        <option value="bug">バグ報告</option>
+      </select>
+      <select class="ad-input" id="filterStatus">
+        <option value="">すべての状態</option>
+        <option value="pending">pending</option>
+        <option value="approved">approved</option>
+        <option value="rejected">rejected</option>
+        <option value="fixed">fixed</option>
+      </select>
+      <button class="ad-btn primary" id="btnLoad">読み込む</button>
+    </div>
+    <div class="ad-status" id="status"></div>
+  </div>
+
+  <div class="ad-card" id="list"></div>
+</div>
+
+<script>
+  const API = "https://wordrogue-api.tatudragon0327.workers.dev";
+  const btnLoad = document.getElementById("btnLoad");
+  const list = document.getElementById("list");
+  const status = document.getElementById("status");
+
+  btnLoad.addEventListener("click", async () => {
+    const token = document.getElementById("token").value.trim();
+    if (!token) { status.textContent = "トークンを入力してください"; status.style.color = "var(--ng)"; return; }
+    const type = document.getElementById("filterType").value;
+    const st = document.getElementById("filterStatus").value;
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    if (st) params.set("status", st);
+    params.set("limit", "200");
+    status.textContent = "読み込み中...";
+    status.style.color = "var(--fg-dim)";
+    try {
+      const res = await fetch(API + "/api/submissions?" + params.toString(), {
+        headers: { "X-Admin-Token": token },
+      });
+      const data = await res.json();
+      if (!data.ok) { status.textContent = "失敗: " + (data.error || res.status); status.style.color = "var(--ng)"; return; }
+      status.textContent = data.items.length + " 件";
+      status.style.color = "var(--ok)";
+      list.innerHTML = "";
+      if (data.items.length === 0) { list.innerHTML = '<div style="color:var(--fg-mute);padding:12px">データなし</div>'; return; }
+      for (const it of data.items) {
+        const div = document.createElement("div");
+        div.className = "ad-item";
+        div.innerHTML = `
+          <div class="ad-meta">
+            <span class="ad-type ${it.type}">${it.type}</span>
+            #${it.id} · ${it.created_at} · ${it.status}
+          </div>
+          <div class="ad-pre">${escapeHtml(JSON.stringify(it.payload, null, 2))}</div>
+        `;
+        list.appendChild(div);
+      }
+    } catch (e) {
+      status.textContent = "通信エラー: " + e.message;
+      status.style.color = "var(--ng)";
+    }
+  });
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+</script>
+</body>
+</html>

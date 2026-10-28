@@ -497,8 +497,12 @@ if (syntaxBad) {
     if (p.tier === 3 && k.length < 3) broken.push(`${k} (三字熟語が 3 文字未満)`);
     if (p.tier === 2) {
       if (k.length !== 2 || segs.length !== 2) broken.push(`${k} (二字熟語が 1 文字 2 語でない)`);
-      if (segs.some((w) => WORDS[w]?.cat === 'form')) broken.push(`${k} (二字熟語に形の語)`);
-      if (segs.some((w) => !drawable.has(w))) broken.push(`${k} (語彙から引けない語)`);
+      // 形の語・語彙から引けない語の規則は手書きの熟語だけのもの。
+      // 辞書に実在する熟語 (雷光・剣豪) は形の語や武器語を含んでよい。
+      if (p.src !== 'dict') {
+        if (segs.some((w) => WORDS[w]?.cat === 'form')) broken.push(`${k} (二字熟語に形の語)`);
+        if (segs.some((w) => !drawable.has(w))) broken.push(`${k} (語彙から引けない語)`);
+      }
     }
     if (p.tier !== 2 && p.tier !== 3) broken.push(`${k} (格が無い)`);
   }

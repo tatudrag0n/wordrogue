@@ -16,8 +16,8 @@
 
 import {
   RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
-} from './words.core.js?v=1.26';
-import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.26';
+} from './words.core.js?v=1.28';
+import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.28';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
@@ -273,6 +273,29 @@ export function segment(s) {
 const MAX_COMPOUND = Object.keys(PHRASE_BONUS).reduce((m, k) => Math.max(m, k.length), 2);
 
 /**
+ * 文面の [start, end) が登録済み熟語の内側にあるか。
+ *
+ * 熟語は最長 MAX_COMPOUND 文字。文面を熟語ごとに走査すると、辞書から拾った
+ * 熟語が数千あるときに毎回の評価が重くなるので、位置の前後だけを見る。
+ *
+ * @param {string} joined 文面
+ * @param {number} start 範囲の開始 (文字位置)
+ * @param {number} end 範囲の終了 (文字位置)
+ * @returns {boolean}
+ */
+export function inCompoundSpan(joined, start, end) {
+  if (!joined || start < 0 || end <= start) return false;
+  const width = end - start;
+  for (let len = Math.max(2, width); len <= MAX_COMPOUND; len++) {
+    for (let at = start - (len - width); at <= start; at++) {
+      if (at < 0 || at + len > joined.length) continue;
+      if (PHRASE_BONUS[joined.slice(at, at + len)]) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 文面の中から最長の合成語を探す。
  * @param {string} text
  * @returns {{phrase:string,name:string,desc:string,fx:Object}|null}
@@ -310,26 +333,27 @@ function phraseMask(segs, joined) {
   /** 熟語の最後の語の位置。熟語は 1 つの名詞なので、末尾語の判定に使う。 */
   const ends = new Set();
   let head = null;
+  // offs[i] は i 番目の語の開始位置。offs[segs.length] は文末。
   const offs = [];
-  const boundary = new Set([0]);
   let off = 0;
   for (const t of segs) {
     offs.push(off);
     off += t.length;
-    boundary.add(off);
   }
-  for (const key of Object.keys(PHRASE_BONUS)) {
-    for (let at = joined.indexOf(key); at >= 0; at = joined.indexOf(key, at + 1)) {
-      const end = at + key.length;
-      // 語の切れ目とずれた部分一致は熟語とみなさない。
-      if (!boundary.has(at) || !boundary.has(end)) continue;
-      if (at === 0) head = key;
-      for (let i = 0; i < segs.length; i++) {
-        if (offs[i] >= at && offs[i] + segs[i].length <= end) {
-          mask[i] = true;
-          if (offs[i] + segs[i].length === end) ends.add(i);
-        }
-      }
+  offs.push(off);
+
+  // 熟語は語の切れ目から切れ目までしか作れない。候補は語境界の組だけなので、
+  // 熟語が何千と登録されていても調べる回数は語数の 2 乗で済む
+  // (以前は熟語の数だけ文面を走査していて、辞書の熟語を入れると重くなった)。
+  for (let i = 0; i < segs.length; i++) {
+    for (let j = i + 1; j < segs.length; j++) {
+      const len = offs[j + 1] - offs[i];
+      if (len > MAX_COMPOUND) break;
+      const key = joined.slice(offs[i], offs[j + 1]);
+      if (len < 2 || !PHRASE_BONUS[key]) continue;
+      if (i === 0) head = key;
+      for (let x = i; x <= j; x++) mask[x] = true;
+      ends.add(j);
     }
   }
   return { mask, head, ends };
@@ -631,14 +655,7 @@ export function evaluate(words, opt = {}) {
     const segOff = [];
     let off = 0;
     for (const t of segs) { segOff.push(off); off += t.length; }
-    const inPhraseAt = (pos) => {
-      for (const key of Object.keys(PHRASE_BONUS)) {
-        for (let at = joined.indexOf(key); at >= 0; at = joined.indexOf(key, at + 1)) {
-          if (at <= pos && pos < at + key.length) return true;
-        }
-      }
-      return false;
-    };
+    const inPhraseAt = (pos) => inCompoundSpan(joined, pos, pos + 1);
     // 同じ「語」が 2 回以上ある (炎を燃やす炎)。同じ属性でも語が違えば
     // 炎焔・鋼鉄のような正当な複合があるので、属性単位では数えない。
     const byWord = Object.create(null);
@@ -782,14 +799,7 @@ export function evaluate(words, opt = {}) {
     const segOff = [];
     let off = 0;
     for (const t of segs) { segOff.push(off); off += t.length; }
-    const inPhrase = (a, b) => {
-      for (const key of Object.keys(PHRASE_BONUS)) {
-        for (let at = joined.indexOf(key); at >= 0; at = joined.indexOf(key, at + 1)) {
-          if (at <= a && b <= at + key.length) return true;
-        }
-      }
-      return false;
-    };
+    const inPhrase = (a, b) => inCompoundSpan(joined, a, b);
     for (let i = 1; i < segs.length; i++) {
       if (WORDS[segs[i]]?.cat !== 'form') continue;
       // 末尾語として渡された語は tail 側の判定 (bareadj 等) に任せる。

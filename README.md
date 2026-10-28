@@ -9,15 +9,16 @@ Vampire Survivors 系の放置アクションに、**日本語の文を組み立
 ## 更新時のルール
 
 - タイトル画面には必ず `Ver. X.YY` 形式のバージョンを表示する（表示箇所は `index.html` の `.title-version`）。
-- ユーザー向けの更新を行うたびにバージョンを更新し、READMEなどの更新説明と合わせて画面上の表示も変更する。表示を削除したり、更新し忘れたりしないこと。現在の表示は `Ver. 1.26`。
+- ユーザー向けの更新を行うたびにバージョンを更新し、READMEなどの更新説明と合わせて画面上の表示も変更する。表示を削除したり、更新し忘れたりしないこと。現在の表示は `Ver. 1.28`。
 - **`?v=` は、`index.html` と `js/` の全ファイルで 1 つにそろえる。** 版数は 1 か所（`index.html` の `.title-version`）を直し、残りは機械的に置き換える:
 
   ```bash
-  sed -i 's|Ver\. 1\.25|Ver. 1.26|' index.html
-  grep -rl '?v=' js/ index.html | while read f; do sed -i 's/?v=[0-9][0-9.]*/?v=1.26/g' "$f"; done
+  sed -i 's|Ver\. 1\.27|Ver. 1.28|' index.html
+  grep -rl '?v=' js/ index.html | while read f; do sed -i 's/?v=[0-9][0-9.]*/?v=1.28/g' "$f"; done
   ```
 
   モジュールの import にも `?v=` が付いている。ここを上げ忘れると、**更新したファイルがブラウザのキャッシュから読まれ、直したのに直らない**（`js/data/words.js?v=1.21` のまま単語を直した、など）。`npm test` が「共有カードと版表示」で照合するので、ずれていたらテストで止まる。
+- **熟語は辞書から機械的に登録する。** `js/data/words.compounds.js` は自動生成で、手で編集しない。出典・ライセンス・再生成の手順は [docs/dictionary.md](docs/dictionary.md) を見ること。辞書に無い熟語を足すときは `js/data/words.phrase.js` に書く（生成分より優先される）。
 - 公開後に反映を確かめるときは、タイトル下部の `Ver. X.YY` と、配信中のファイルの中身（`curl` で `?v=` を見る）の両方を見る。`Ctrl+Shift+R` までは利用者に求めなくてよい。
 - 画面が白く固まる可能性を減らすため、起動とフレームの例外は `index.html` の `#fatal` が受け取って案内を出す。例外を握りつぶす場所を増やさず、案内を出せない環境（テスト）では `console.error` に落とす。
 - 公開は GitHub Actions。`test` ジョブ（辞書・シミュレーション）が落ちると `deploy` ジョブが走らず、**古い版のまま公開が止まる**。push 前に `npm test` を通すこと。

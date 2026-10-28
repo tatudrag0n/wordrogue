@@ -32,6 +32,8 @@
 //   熟語を足すときは必ずそのテストを通してから入れること。
 // ============================================================================
 
+import { DICT_COMPOUNDS } from './words.compounds.js';
+
 /** 熟語の格。文力 (power) と自然さ (natural) への加点。 */
 export const PHRASE_TIER = {
   3: { power: 0.2, natural: 0.7 },
@@ -175,7 +177,7 @@ add2('鋼鉄', '鋼鉄', '硬い鉄',                   { armor: 2, pierce: 2 })
 add2('吸血', '吸血', '血を吸う',                 { lifesteal: 0.04 }, SURU_P);
 
 // ── 動作 ───────────────────────────────────────────────────────────────────
-add2('必殺', '必殺', '必ず仕留める',             { crit: 0.12, critDmg: 0.4 });
+add2('必殺', '必殺', '必ず仕留める',             { crit: 0.12, critDmg: 0.4 }, 'の:case>noun');
 add2('瞬殺', '瞬殺', '一瞬で仕留める',           { crit: 0.10, critDmg: 0.4 }, SURU_P);
 add2('斬殺', '斬殺', '斬り捨てる',               { crit: 0.06, dmg: 4 }, SURU_P);
 add2('圧殺', '圧殺', '押し潰す',                 { knock: 50, dmg: 4 }, SURU_P);
@@ -212,5 +214,19 @@ add('冥暗刃',   '冥暗刃',   '冥暗の刃',                   { dmg: 8, cr
 add('絶影刃',   '絶影刃',   '影を絶つ刃',                 { crit: 0.14, speed: 70, dmg: 5 });
 add('迅雷刃',   '迅雷刃',   '迅雷のごとき刃',             { speed: 80, shock: 0.20, crit: 0.10, dmg: 4 });
 
+
+// ── 辞書から拾った熟語 ────────────────────────────────────────────────────────
+// tools/mine-compounds.py が JMdict から生成する (words.compounds.js)。
+// 語彙の語 2〜4 個で書ける熟語のうち、辞書に名詞として載っているものだけ。
+// 効果は構成語の効果から導いてあるので、名前と効果がずれることはない。
+// 手で書いた熟語 (上の add / add2) が常に優先する。
+for (const c of DICT_COMPOUNDS) {
+  if (P[c.phrase]) continue;
+  const tier = c.phrase.length >= 3 ? 3 : 2;
+  P[c.phrase] = {
+    phrase: c.phrase, name: c.phrase, desc: c.desc, fx: c.fx,
+    tier, pool: '', src: 'dict', ...PHRASE_TIER[tier],
+  };
+}
 
 export const PHRASE_BONUS = P;

@@ -106,9 +106,15 @@ ok(r.valid, '「火の球」が不成立');
 ok(r.segments.length === 3, `分割数 ${r.segments.length}`);
 ok(r.element === 'fire', `属性 ${r.element}`);
 
+// 火球 は辞書 (JMdict) に載っている実在の熟語。辞書から拾って登録してある。
 r = E('火', '球');
 ok(r.valid, '「火球」が不成立');
-ok(!r.idiom, `2 文字の熟語が乗る: ${r.idiom?.phrase}`);
+ok(r.idiom?.phrase === '火球', `「火球」が熟語にならない: ${r.idiom?.phrase}`);
+
+// 辞書に無い組み合わせは熟語にしない (造語にボーナスを付けない)。
+r = E('焔', '弾');
+ok(r.valid, '「焔弾」が不成立');
+ok(!r.idiom, `辞書に無い「焔弾」に熟語が乗る: ${r.idiom?.phrase}`);
 
 r = E('毒', '蝕', '弾');
 ok(r.valid, '「毒蝕弾」が不成立');
@@ -239,13 +245,22 @@ sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
   const EV = (ws, tail) => evaluate(ws.map(makeWord), tail ? { tail } : {});
   const two = Object.keys(PHRASE_BONUS).filter((k) => PHRASE_BONUS[k].tier === 2);
   const three = Object.keys(PHRASE_BONUS).filter((k) => PHRASE_BONUS[k].tier === 3);
-  ok(two.length >= 30 && two.length <= 80, `二字熟語の数 ${two.length}`);
+  // 手で書いた熟語 (src が dict でないもの)。辞書から拾った熟語はここに含めない。
+  const handTwo = two.filter((k) => PHRASE_BONUS[k].src !== 'dict');
+  ok(two.length >= 30, `二字熟語の数 ${two.length}`);
+  ok(handTwo.length >= 30 && handTwo.length <= 80, `手書きの二字熟語の数 ${handTwo.length}`);
+  ok(handTwo.every((k) => PHRASE_BONUS[k].phrase === k && !!PHRASE_BONUS[k].desc),
+    '手書きの二字熟語に説明が無い');
   ok(three.every((k) => k.length >= 3), '三字熟語に 2 文字のものがある');
   for (const k of two) {
     const p = PHRASE_BONUS[k];
     ok(k.length === 2, `二字熟語「${k}」が 2 文字でない`);
-    // 形を表す語 (刃・弾・球・光・雷…) は二字熟語に使わない (火球のずれの再発防止)。
-    ok([...k].every((c) => WORDS[c] && WORDS[c].cat !== 'form'), `二字熟語「${k}」に形の語`);
+    ok([...k].every((c) => WORDS[c]), `二字熟語「${k}」に辞書の無い語`);
+    // 形を表す語 (刃・弾・球・光・雷…) は手書きの二字熟語に使わない (火球のずれの再発防止)。
+    // 辞書に実在する熟語 (雷光・光速) は形の語を含んでよい。
+    if (p.src !== 'dict') {
+      ok([...k].every((c) => WORDS[c].cat !== 'form'), `二字熟語「${k}」に形の語`);
+    }
     // 効果は三字熟語より小さい。
     ok(p.power < PHRASE_BONUS['毒蝕弾'].power && p.natural < PHRASE_BONUS['毒蝕弾'].natural,
       `二字熟語「${k}」の加点が三字熟語以上`);
@@ -255,8 +270,23 @@ sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
     for (const e of COMPOUND_POOLS[k].pool) ok(!!CONNECTORS[e.k], `熟語「${k}」の形「${e.k}」が接続詞に無い`);
   }
 
+  // 二字熟語「必殺」は、熟語全体を名詞句にして「必殺の刃」と結べる。
+  let r = EV(['必', '殺', 'の', '刃'], '刃');
+  ok(r.valid, `「必殺の刃」が不成立: ${r.reason} ${r.reasonText}`);
+  ok(r.idiom?.phrase === '必殺', `必殺の熟語効果が乗らない: ${r.idiom?.phrase}`);
+  const genitive = r.compounds.find((c) => c.connector === 'の');
+  ok(genitive?.phrase && genitive.source === '必殺' && genitive.role === 'case' && genitive.next === 'noun',
+    `「の」が熟語「必殺」に結びつかない: ${JSON.stringify(genitive)}`);
+  ok(r.fx.crit > 0 && r.fx.critDmg > 0, '必殺の効果が武器性能に反映されない');
+
+  // 熟語由来の動詞形は述語として働き、動詞の型が武器に反映される。
+  r = EV(['爆', '裂', 'する', '刃'], '刃');
+  ok(r.valid && r.predicated, `「爆裂する刃」が述語として成立しない: ${r.reasonText}`);
+  ok(r.compounds.some((c) => c.phrase && c.source === '爆裂' && c.pred),
+    `爆裂の述語形が認識されない: ${JSON.stringify(r.compounds)}`);
+
   // 電熱 … 二字熟語として検出される。
-  let r = EV(['電', '熱', '剣'], '剣');
+  r = EV(['電', '熱', '剣'], '剣');
   ok(r.valid, `「電熱剣」が不成立: ${r.reasonText}`);
   ok(r.idiom?.phrase === '電熱', `電熱が熟語にならない: ${r.idiom?.phrase}`);
   ok(Math.abs(r.phraseBonus - 0.1) < 1e-9, `二字熟語のボーナス ${r.phraseBonus}`);

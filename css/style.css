@@ -3169,10 +3169,9 @@ html, body {
 .grow-word-rank.rk4 { background: #d9a406; }
 
 
-/* ══ 強化タブ: 1 つのスクロールにまとめる ═════════════════════════════ */
-/* 以前は恒久強化と部位が別々にスクロールしていて操作しづらかった。 */
-.panel-grow { display: flex; flex-direction: column; max-height: min(88vh, 920px); }
-.panel-grow > .grow-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+/* ══ 強化タブ: スクロールなしで全体を表示 ═══════════════════════════════ */
+.panel-grow { display: flex; flex-direction: column; max-height: none !important; height: auto; }
+.panel-grow > .grow-body { overflow: visible; flex: none; min-height: 0; }
 .panel-grow .archive-body { overflow: visible; }
 
 /* 恒久強化は 2 列に並べて縦を詰める。 */

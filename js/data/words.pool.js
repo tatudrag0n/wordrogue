@@ -36,17 +36,32 @@
 
 import { PHRASE_BONUS } from './words.phrase.js';
 
-/** 名詞が共通で持つ格の接続詞。 */
-export const NOUN_POOL_SPEC = 'の:case>noun を:case>verb に:case>pred へ:case>pred';
+/**
+ * 名詞が共通で持つ格の接続詞。
+ *
+ * 名詞は動詞や形容と違って形を持たないので、格で文をつなぐ。
+ *   の・と・も・や … 名詞を受ける (炎の剣 / 炎と剣 / 炎も剣 / 炎や剣)
+ *   を           … 他動詞を受ける (炎を斬る)
+ *   に・へ・で・から・まで・より … 動作か形容を受ける (炎に走る / 炎で斬る)
+ *   が・は       … 主体 (炎が燃える / 炎は燃える)
+ * 4 つだけだったころは「炎と剣」のような並列や「炎で斬る」のような手段が作れず、
+ * 語の組み合わせによっては文にできなかった。
+ */
+export const NOUN_POOL_SPEC = [
+  'の:case>noun', 'と:case>noun', 'も:case>noun', 'や:case>noun',
+  'を:case>verb',
+  'に:case>pred', 'へ:case>pred', 'で:case>pred', 'から:case>pred',
+  'まで:case>pred', 'より:case>pred', 'が:case>pred', 'は:case>pred',
+].join(' ');
 
 const RAW_POOL = `
 # ── 属性 (既定は体言 +N。形を持つ語だけ書く) ──
 熱  a   い:adn+ く:adv+ +N
 烈  n   しい:adn+ しく:adv+
 震  n   える:adn*x えし:adn*x えて:advx
-蝕  n   む:adn* まれた:adn*p
-輝  n   く:adn*x ける:adn*x
-耀  n   く:adn*x
+蝕  n   む:adn* まれた:adn*p んで:adv
+輝  n   く:adn*x ける:adn*x いて:advx
+耀  n   く:adn*x いて:advx
 霞  n   む:adn*x +N
 青  a   い:adn+ く:adv+ +N
 白  a   い:adn+ く:adv+ +N
@@ -55,10 +70,10 @@ const RAW_POOL = `
 黒  a   い:adn+ く:adv+ +N
 突  n   く:adn* き:adv*
 疾  n   き:adn
-翔  n   ける:adn*x
+翔  n   ける:adn*x けて:advx
 錬  n   る:adn* +N
 呪  n   う:adn* われた:adn*p いの:case>noun いを:case>verb
-流  n   れる:adn*x す:adn*
+流  n   れる:adn*x す:adn* れて:advx して:adv
 閃  n   く:adn*x いた:adn*x き:adv*x
 煌  n   めく:adn*x めいて:advx めき:advx
 迅  n   き:adn
@@ -101,7 +116,7 @@ const RAW_POOL = `
 冷  a   たい:adn+ たく:adv+ える:adn*x
 正  a   しい:adn+ しく:adv+
 賢  a   い:adn+ く:adv+
-巨  a   きな:adn+ きい:adn+
+巨  a   きな:adn+ きい:adn+ きく:adv+
 酷  a   い:adn+ く:adv+
 清  a   い:adn+ く:adv+ らかな:adn+
 宏  a   い:adn+ く:adv+
@@ -117,11 +132,11 @@ const RAW_POOL = `
 静  na  かな:adn+ かに:adv+
 穏  na  やかな:adn+ やかに:adv+
 奇  na  なる:adn+
-雅  na  な:adn+ やかな:adn+
+雅  na  な:adn+ やかな:adn+ やかに:adv+
 華  na  やかな:adn+ やかに:adv+
 密  na  な:adn+ に:adv+
 壮  na  なる:adn+
-燦  na  なる:adn+ めく:adn*x
+燦  na  なる:adn+ めく:adn*x めいて:advx
 聖  na  なる:adn+ +N
 確  na  かな:adn+ かに:adv+
 滑  na  らかな:adn+ らかに:adv+ る:adn*x
@@ -129,55 +144,55 @@ const RAW_POOL = `
 急  na  な:adn+ に:adv+ ぐ:adn*x
 
 # ── 効果語 (体言だが動詞・副詞の形を持つ) ──
-眠  n   る:adn*x れる:adn*x
+眠  n   る:adn*x れる:adn*x って:advx
 香  n   る:adn*x +N
 無  n   き:adn +N
 豪  n   の:case>noun
-真  n   の:case>noun なる:adn+
+真  n   の:case>noun なる:adn+ に:adv
 素  n   の:case>noun
 剛  n   の:case>noun
-活  n   きる:adn*x かす:adn*
-準  n   ずる:adn*x
-適  n   う:adn*x した:adn*x
+活  n   きる:adn*x かす:adn* きて:advx かして:adv
+準  n   ずる:adn*x じて:advx
+適  n   う:adn*x した:adn*x して:adv いて:advx
 圧  n   する:adn* +N
-律  n   する:adn*
+律  n   する:adn* して:adv
 引  n   く:adn* き:adv*
 導  n   く:adn* き:adv* かれた:adn*p
-徹  n   する:adn*x
-執  n   る:adn* する:adn*
-瞬  n   く:adn*x
-会  n   う:adn*x の:case>noun
+徹  n   する:adn*x して:advx
+執  n   る:adn* する:adn* って:adv して:adv
+瞬  n   く:adn*x いて:advx
+会  n   う:adn*x の:case>noun って:advx
 必  n   ず:adv
-反  n   る:adn*x する:adn*x
-退  n   く:adn*x ける:adn*
-衰  n   える:adn*x
-合  n   う:adn*x する:adn*x
+反  n   る:adn*x する:adn*x って:advx して:advx
+退  n   く:adn*x ける:adn* いて:advx けて:adv
+衰  n   える:adn*x えて:advx
+合  n   う:adn*x する:adn*x って:advx して:advx
 再  n   び:adv
 回  n   る:adn*x す:adn* り:adv* された:adn*p
-続  n   く:adn*x ける:adn*
-減  n   る:adn*x らす:adn*
+続  n   く:adn*x ける:adn* いて:advx けて:adv
+減  n   る:adn*x らす:adn* って:advx らして:adv
 特  n   に:adv
-囲  n   む:adn* う:adn* まれた:adn*p
-昂  n   る:adn* ぶる:adn*
+囲  n   む:adn* う:adn* まれた:adn*p んで:adv って:advx
+昂  n   る:adn* ぶる:adn* って:adv ぶって:adv
 打  n   つ:adn* ち:adv*
-防  n   ぐ:adn*
+防  n   ぐ:adn* いで:adv
 撃  n   つ:adn* ち:adv*
-連  n   なる:adn*x ねる:adn*
-湧  n   く:adn*x
-潤  n   う:adn*x す:adn*
+連  n   なる:adn*x ねる:adn* なって:advx ねて:adv
+湧  n   く:adn*x いて:advx
+潤  n   う:adn*x す:adn* って:advx して:adv
 発  n   する:adn* +N
-穢  n   れた:adn*x す:adn*
+穢  n   れた:adn*x す:adn* れて:advx して:adv
 爛  n   れる:adn*x れた:adn*x れて:advx
-護  n   る:adn*
-結  n   ぶ:adn* ばれた:adn*p
+護  n   る:adn* って:adv
+結  n   ぶ:adn* ばれた:adn*p んで:adv ばれて:adv
 穿  n   つ:adn* ち:adv*
-通  n   る:adn*x す:adn*
+通  n   る:adn*x す:adn* って:advx して:adv
 
 # ── 核語 ──
 志  n   す:adn* +N
 巧  na  みな:adn+ みに:adv+
-守  n   る:adn*
-感  n   じる:adn*
+守  n   る:adn* って:adv
+感  n   じる:adn* じて:adv
 
 # ── 動詞 (全部書く) ──
 爆  v   ぜる:adn*x ぜて:advx
@@ -232,12 +247,12 @@ const RAW_POOL = `
 浴  v   びる:adn* びた:adn* びて:adv
 浸  v   す:adn* した:adn* された:adn*p して:adv
 錆  v   びる:adn*x びた:adn*x びて:advx
-癒  v   す:adn* える:adn*x
+癒  v   す:adn* える:adn*x して:adv えて:advx
 
 # ── 中二病の動詞 ──
 絶  v   つ:adn* たれた:adn*p て:adv える:adn*x えて:advx
 終  v   わる:adn*x わった:adn*x わり:advx わって:advx える:adn* えて:adv
-戮  v   する:adn* された:adn*p
+戮  v   する:adn* された:adn*p して:adv
 屠  v   る:adn* られた:adn*p り:adv* って:adv
 討  v   つ:adn* たれた:adn*p ち:adv* って:adv
 刈  v   る:adn* られた:adn*p り:adv* って:adv

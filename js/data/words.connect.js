@@ -88,6 +88,15 @@ const LEGACY = {
   に:     { desc: '格 / 連用。「〜に」', fx: { dmg: 1, homing: 0.1 } },
   を:     { desc: '格。「〜を」', fx: { dmg: 2, knock: 12 } },
   へ:     { desc: '方向。「〜へ」', fx: { dmg: 1, speed: 22 } },
+  と:     { desc: '並列。「〜と」', fx: { count: 1, spread: 0.10 } },
+  も:     { desc: '並列。「〜も」', fx: { count: 1, dmg: 1 } },
+  や:     { desc: '列挙。「〜や」', fx: { count: 2, spread: 0.15 } },
+  で:     { desc: '手段・場所。「〜で」', fx: { dmg: 2, area: 6 } },
+  から:   { desc: '起点。「〜から」', fx: { range: 8, speed: 15 } },
+  まで:   { desc: '到達。「〜まで」', fx: { range: 10, pierce: 1 } },
+  より:   { desc: '比較。「〜より」', fx: { pierce: 2, crit: 0.02 } },
+  が:     { desc: '主格。「〜が」', fx: { dmg: 1, crit: 0.02 } },
+  は:     { desc: '主題。「〜は」', fx: { dmg: 1, rate: 0.05 } },
 };
 
 /**
@@ -324,6 +333,9 @@ const fail = (reason, reasonText, acc) => ({
  */
 const ANIMATE_SUBJECT = new Set(['神', '魔', '魂', '霊', '賢', '己', '心', '影', '死', '冥', '覇']);
 
+/** 主体を表す格。この格のあとに他動詞の形が来るときは、主体になれる語が要る。 */
+const SUBJECT_CASES = new Set(['が', 'は']);
+
 /**
  * 分割結果に接続詞の規則を適用する。
  *
@@ -548,8 +560,23 @@ export function checkConnectors(segs, dict) {
       }
       settle(pendingObj, u);
     }
-    // 「に」「へ」は動作か形容で受ける。
-    if (pendingCase.length && (vp || ap)) settle(pendingCase, u);
+    // 「に」「へ」「で」「から」「まで」「より」は動作か形容で受ける。
+    // 「が」「は」は主体なので、人格の無い語 (炎・剣) を他動詞の主体にはできない。
+    //   NG「炎が斬る剣」 / OK「炎が燃える剣」「神が斬る剣」
+    if (pendingCase.length && (vp || ap)) {
+      if (vp) {
+        const bad = pendingCase.find((p) => p.subject && !p.animate
+          && u.form && u.form.pred && !u.form.intr && !u.form.passive);
+        if (bad) {
+          return fail('subjectverb',
+            `「${bad.unit.text}${bad.comp ? bad.comp.connector : ''}」のあとに他動詞「${u.text}${u.form.k}」は置けない。`
+            + `「${bad.unit.text}」は「${u.text}${u.form.k}」の主体になれない。`
+            + `目的語なら「${bad.unit.text}を${u.text}${u.form.k}」の形にすること。`,
+            acc);
+        }
+      }
+      settle(pendingCase, u);
+    }
     // 連用形は動詞か形容で受ける。
     if (pendingAdv.length && (vp || ap)) settle(pendingAdv, u);
 
@@ -586,7 +613,12 @@ export function checkConnectors(segs, dict) {
       if (u.form.next === 'verb') {
         pendingObj.push({ comp: compByConn.get(u.connIdx) || null, unit: u });
       } else if (u.form.next === 'pred') {
-        pendingCase.push({ comp: compByConn.get(u.connIdx) || null, unit: u });
+        const comp = compByConn.get(u.connIdx) || null;
+        pendingCase.push({
+          comp, unit: u,
+          subject: !!comp && SUBJECT_CASES.has(comp.connector),
+          animate: ANIMATE_SUBJECT.has(u.text),
+        });
       }
     }
   }

@@ -217,13 +217,15 @@ sec('部位の文は能力に乗り、不成文は何も乗せない');
 
 sec('部位はどの接続詞でも選べる。成る / 成らない が一覧に出る');
 {
-  // 癒 + 斬 は、癒 に付く送り仮名 (す・える) が両方とも文を壊す並び。
+  // 癒 + 斬 は、連用形 (して) だけが文になる。連体形 (す・える) は
+  // 裸の動詞の前に置けないので ✕ のまま出す。
   // プールを絞ると「1 つも選べない」状態になるので、部位は自由に選べる。
   const words = [{ text: '癒', conn: null }, { text: '斬', conn: null }];
   const ownC = partConnChoices(words, 0).filter((c) => c.source === 'word');
   const own = ownC.map((c) => `${c.text}${c.valid ? '✓' : '✕'}`);
   ok(ownC.length >= 2, `癒 の形が出ない: ${own}`);
-  ok(ownC.every((c) => !c.valid), `癒 の形が文を壊さない: ${own}`);
+  ok(ownC.some((c) => c.valid), `癒 の形が 1 つも文にならない: ${own}`);
+  ok(ownC.some((c) => !c.valid), `不成文の形が ✕ で出ない: ${own}`);
   ok(partConnChoices(words, 0).length > 100, '自由に選べる候補が出ていない');
 
   // UI: 癒 + 斬 を入れて接続詞の一覧を開くと、その語の形が ✕ 付きで出る。

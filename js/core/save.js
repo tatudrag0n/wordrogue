@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord } from '../data/words.js?v=1.29';
+import { WORDS, drawWord } from '../data/words.js?v=1.30';
 import { CONNECTORS } from '../data/words.connect.js';
 
 const KEY = 'wordrogue.save.v1';

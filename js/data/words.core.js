@@ -132,7 +132,7 @@ const RAW_ELEMENT = `
 瘴     element poison  dmg+3  poison+5  count+2  area+6
 
 聖     element light   dmg+3  pierce+1
-神     element light   dmg+5  lifesteal+0.02
+神     element light   dmg+5  lifesteal+0.002
 輝     element light   dmg+3  burn+1
 耀     element light   dmg+2  crit+0.04
 虹     element light   dmg+2  pierce+1  chain+2
@@ -150,12 +150,12 @@ const RAW_ELEMENT = `
 暗     element dark    dmg+2  crit+0.04  homing+0.10
 黒     element dark    dmg+3  pierce+2  armor+1
 夜     element dark    dmg+5  pierce+3  crit+0.04
-死     element dark    dmg+3  lifesteal+0.03
+死     element dark    dmg+3  lifesteal+0.003
 亡     element dark    dmg+3  crit+0.03
-魔     element dark    dmg+4  crit+0.07  lifesteal+0.03
+魔     element dark    dmg+4  crit+0.07  lifesteal+0.003
 影     element dark    dmg+1  crit+0.02  homing+0.10
 漆     element dark    dmg+2  crit+0.03  homing+0.14
-冥     element dark    dmg+4  lifesteal+0.03  pierce+1
+冥     element dark    dmg+4  lifesteal+0.003  pierce+1
 羅     element dark    dmg+3  crit+0.05  count+1
 刹     element dark    dmg+2  crit+0.06  speed+40
 虚     element dark    dmg+3  homing+0.20  pierce+2
@@ -305,7 +305,7 @@ const RAW_MODIFIER = `
 眠    modifier  -  regen+0.6  speed-10
 香    modifier  -  poison+2  regen+0.3
 良    modifier  -  dmg+3  armor+1
-悪    modifier  -  dmg+6  lifesteal+0.03
+悪    modifier  -  dmg+6  lifesteal+0.003
 荒    modifier  -  area+10  dmg+3
 寒    modifier  -  chill+0.30  speed-8
 温    modifier  -  regen+1.0  size+0.05
@@ -397,7 +397,7 @@ const RAW_MODIFIER = `
 通    modifier  -  dmg+4  pierce+4
 
 骨    modifier  -  dmg+3  armor+2
-魂    modifier  -  dmg+2  lifesteal+0.03
+魂    modifier  -  dmg+2  lifesteal+0.003
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -481,8 +481,8 @@ const RAW_VERB = `
 討      verb  -  dmg+7  rate+0.15  knock+30
 刈      verb  -  dmg+5  area+10  arc+0.4
 祓      verb  -  dmg+4  regen+0.5  pierce+2
-祟      verb  -  dmg+4  poison+3  lifesteal+0.02
-葬      verb  -  dmg+8  lifesteal+0.03  crit+0.03
+祟      verb  -  dmg+4  poison+3  lifesteal+0.002
+葬      verb  -  dmg+8  lifesteal+0.003  crit+0.03
 刺      verb  -  dmg+5  pierce+3
 刻      verb  -  dmg+4  count+1  crit+0.04
 駆      verb  -  dmg+3  speed+70  rate+0.2
@@ -530,8 +530,8 @@ const RAW_EXT_ELEMENT = `
 紫     element dark    dmg+2  crit+0.04
 黎     element dark    dmg+1  speed+10
 鬼     element dark    dmg+6  crit+0.05
-屍     element dark    dmg+4  poison+2  lifesteal+0.02
-閻     element dark    dmg+5  crit+0.04  lifesteal+0.02
+屍     element dark    dmg+4  poison+2  lifesteal+0.002
+閻     element dark    dmg+5  crit+0.04  lifesteal+0.002
 黄     element gold    dmg+2  magnet+0.20
 純     element steel   dmg+2  armor+1
 木     element nature  dmg+3  poison+1  regen+0.5
@@ -581,7 +581,7 @@ const RAW_EXT_FORM = `
 朶     form  -  dmg+2  count+2
 杆     form  -  dmg+3  range+30
 束     form  -  dmg+3  count+2
-棺     form  -  dmg+5  lifesteal+0.03
+棺     form  -  dmg+5  lifesteal+0.003
 殿     form  -  dmg+3  armor+3
 牛     form  -  dmg+7  knock+40
 犀     form  -  dmg+6  pierce+4
@@ -712,7 +712,7 @@ const RAW_EXT_MODIFIER = `
 情     modifier  -  regen+0.6  homing+0.10
 想     modifier  -  homing+0.40
 意     modifier  -  crit+0.06  rate+0.2
-愛     modifier  -  regen+0.8  lifesteal+0.02
+愛     modifier  -  regen+0.8  lifesteal+0.002
 愧     modifier  -  regen+0.3
 慈     modifier  -  regen+1.2
 慚     modifier  -  dmg+2
@@ -805,7 +805,7 @@ const RAW_EXT_VERB = `
 吹     verb  -  dmg+2  knock+40
 呈     verb  -  dmg+2  area+4
 哭     verb  -  dmg+3
-啜     verb  -  regen+0.6  lifesteal+0.02
+啜     verb  -  regen+0.6  lifesteal+0.002
 在     verb  -  armor+2
 坐     verb  -  dmg+3  size+0.20
 垂     verb  -  dmg+2  area+8

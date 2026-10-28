@@ -23,10 +23,10 @@
 // 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
-import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js?v=1.37';
+import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js?v=1.38';
 import { clamp } from '../core/util.js';
 import { evaluatePart, normPartEntries } from './parts.js';
-import { rankMul } from '../data/ranks.js?v=1.37';
+import { rankMul } from '../data/ranks.js?v=1.38';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {
@@ -322,7 +322,7 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
   s.atk = Math.max(0.1, s.atk);
   s.atkMul = Math.max(0.1, s.atkMul);
   s.xpMul = Math.max(0.1, s.xpMul);
-  s.lifesteal = clamp(s.lifesteal, 0, 1.2);
+  s.lifesteal = clamp(s.lifesteal, 0, 0.2);
   s.luck = clamp(s.luck, 0, 3);
 
   return s;

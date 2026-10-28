@@ -14,8 +14,8 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js?v=1.37';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan } from '../data/words.js?v=1.37';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js?v=1.38';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan } from '../data/words.js?v=1.38';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
@@ -31,8 +31,8 @@ const HAND_TRAITS = {
   wind:  { knock: 18, speed: 25 },
   earth: { knock: 20 },
   light: { crit: 0.02 },
-  dark:  { crit: 0.02, lifesteal: 0.01 },
-  blood: { lifesteal: 0.015 },
+  dark:  { crit: 0.02, lifesteal: 0.001 },
+  blood: { lifesteal: 0.0015 },
   gold:  { magnet: 0.12 },
   steel: { pierce: 1 },
 };
@@ -359,7 +359,7 @@ export class WeaponInst {
     st.crit = clamp((st.crit || 0) + ps.crit, 0, 1);
     // 会心倍率は 1.5 を基準に、文の効果が足し算される。
     st.critDmg = Math.max(1, (st.critDmg || 0) + 1.5);
-    st.lifesteal = clamp((st.lifesteal || 0) + ps.lifesteal, 0, 1.2);
+    st.lifesteal = clamp((st.lifesteal || 0) + ps.lifesteal, 0, 0.2);
     st.magnet = (st.magnet || 0) + ps.magnet;
     st.xpMul = (fx.xpMul || 0) + ps.xpMul;
     st.power = 1;

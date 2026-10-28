@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord } from '../data/words.js?v=1.37';
+import { WORDS, drawWord } from '../data/words.js?v=1.38';
 import { CONNECTORS } from '../data/words.connect.js';
 import {
   RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
-} from '../data/ranks.js?v=1.37';
+} from '../data/ranks.js?v=1.38';
 
 const KEY = 'wordrogue.save.v1';
 

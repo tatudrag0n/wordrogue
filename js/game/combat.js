@@ -7,7 +7,7 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.37';
+import { ELEMENTS } from '../data/words.js?v=1.38';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -481,7 +481,7 @@ export function damage(run, e, st, opt = {}) {
 
   // 吸血。
   const ls = st.lifesteal || 0;
-  if (ls > 0) run.healPlayer(dmg * ls);
+  if (ls > 0) run.healPlayer(dmg * ls * 0.5);
 
   // 撃退。
   const kn = opt.knock ?? st.knock ?? 0;

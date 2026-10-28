@@ -16,8 +16,8 @@
 
 import {
   RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
-} from './words.core.js?v=1.31';
-import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.31';
+} from './words.core.js?v=1.32';
+import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.32';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
@@ -669,19 +669,23 @@ export function evaluate(words, opt = {}) {
       }
     }
   }
-  // 実体語が 4 つ以上続けて並ぶと羅列になる。
-  //   「業火剛利必殺吸血剣」… 修飾が重なると名詞の列であって文ではない。
-  //   「業火の鋭く斬る剣」  … 係り結びがあるので羅列にならない。
-  let runLen = 0;
+  // 接続詞を挟まずに並んだ語は、連続する文字数が長いほど羅列に近づく。
+  //   「聖杖」        … 2 字。名詞の複合として読めるので減点しない。
+  //   「聖杖剛剣」    … 4 字。まだ名前として読めるが、少しだけ下げる。
+  //   「業火剛利必殺吸血剣」… 9 字。修飾が係らず名詞の列になるので大きく下げる。
+  //   「業火の鋭く斬る剣」  … 接続詞で切れているので羅列にならない。
+  //
+  // 語数ではなく **文字数** で数える。熟語 (2 字以上) が混ざっても同じ尺度になる。
+  // 減点は 4 字目から 1 字ごとに一定 (-0.30)。段差を作らず、長いほどなだらかに弱くする。
+  let runChars = 0;
   let worstRun = 0;
   for (const w of segWords) {
-    if (!w.info) { runLen = 0; continue; }
-    if (w.info.cat === 'connect') { runLen = 0; continue; }
-    runLen++;
-    if (runLen > worstRun) worstRun = runLen;
+    if (!w.info || w.info.cat === 'connect') { runChars = 0; continue; }
+    runChars += w.s.length;
+    if (runChars > worstRun) worstRun = runChars;
   }
   if (worstRun >= 4) {
-    parts.push({ key: 'enumeration', label: `${worstRun} 語が羅列`, v: -0.45 * (worstRun - 3) });
+    parts.push({ key: 'enumeration', label: `${worstRun} 字が連接`, v: -0.3 * (worstRun - 3) });
   }
   // 同じ接続詞の 2 回目以降。不成立にはしないが、くどいので減点。
   //   「風の潮の銃」… 読めるが「の」の連続は少し重い。

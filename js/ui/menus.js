@@ -65,7 +65,7 @@ export class Menus {
     this.howto = $('#howto');
     this.settings = $('#settings');
     this.dict = $('#dict');
-    this.archive = $('#archive');
+    // 書庫は「強化」タブに統合した。言玉の表示は growInk を使う。
     this.archiveInk = $('#archiveInk');
     this.archiveUpgrades = $('#archiveUpgrades');
     this.archiveWords = $('#archiveWords');
@@ -979,7 +979,7 @@ export class Menus {
   // ── 書庫 (恒久進行) ──────────────────────────────────────────────────────
   renderArchive() {
     const save = this.save;
-    this.archiveInk.textContent = String(save.ink);
+    if (this.archiveInk) this.archiveInk.textContent = String(save.ink);
 
     clear(this.archiveUpgrades);
     for (const [key, u] of Object.entries(META_UPGRADES)) {

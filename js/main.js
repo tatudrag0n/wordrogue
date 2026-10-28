@@ -2,17 +2,17 @@
 // ワードローグ — 起動とメインループ
 // ============================================================================
 
-import { $, clamp } from './core/util.js?v=1.33';
-import { Input } from './core/input.js?v=1.33';
-import { Audio } from './core/audio.js?v=1.33';
-import { Save } from './core/save.js?v=1.33';
-import { Run } from './game/run.js?v=1.33';
-import { Renderer } from './ui/render.js?v=1.33';
-import { Hud } from './ui/hud.js?v=1.33';
-import { Forge } from './ui/forge.js?v=1.33';
-import { Menus } from './ui/menus.js?v=1.33';
+import { $, clamp } from './core/util.js?v=1.34';
+import { Input } from './core/input.js?v=1.34';
+import { Audio } from './core/audio.js?v=1.34';
+import { Save } from './core/save.js?v=1.34';
+import { Run } from './game/run.js?v=1.34';
+import { Renderer } from './ui/render.js?v=1.34';
+import { Hud } from './ui/hud.js?v=1.34';
+import { Forge } from './ui/forge.js?v=1.34';
+import { Menus } from './ui/menus.js?v=1.34';
 
-import { STAGES } from './data/stages.js?v=1.33';
+import { STAGES } from './data/stages.js?v=1.34';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態
@@ -86,8 +86,8 @@ function boot() {
     app.save.addInk(1000);
     app.save.save();
     $('#devStatus').textContent = `言玉を追加しました（所持 ${app.save.ink}）。`;
-    if (!app.menus.grow.hidden) app.menus.renderGrow();
-    if (!app.menus.archive.hidden) app.menus.renderArchive();
+    if (app.menus.grow && !app.menus.grow.hidden) app.menus.renderGrow();
+    if (app.menus.words && !app.menus.words.hidden) app.menus.renderWords();
   });
   $('#devHeal')?.addEventListener('click', () => {
     if (!app.run) {
@@ -436,7 +436,7 @@ function closeDevMode() {
     else if (devReturnMode === 'stages') app.menus.showStages();
     else if (devReturnMode === 'loadout') app.menus.show('loadout');
     else if (devReturnMode === 'result') app.menus.show('result');
-    else if (devReturnMode === 'howto' || devReturnMode === 'archive' || devReturnMode === 'settings' || devReturnMode === 'grow' || devReturnMode === 'dict') {
+    else if (devReturnMode === 'howto' || devReturnMode === 'words' || devReturnMode === 'settings' || devReturnMode === 'grow' || devReturnMode === 'dict') {
       app.menus.show(devReturnMode);
     }
   }

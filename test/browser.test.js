@@ -149,15 +149,15 @@ ok(await evalJs('document.getElementById("btnStart") !== null'), '開始ボタ�
 
 sec('書庫で言玉を使い、恒久強化と語彙の枠を買える');
 {
-  await evalJs('window.__wordrogue.menus.show("archive")');
+  await evalJs('window.__wordrogue.menus.show("grow")');
   await sleep(250);
   const a = await evalJs(`(() => ({
-    hidden: document.getElementById('archive').hidden,
+    hidden: document.getElementById('grow').hidden,
     ink: document.getElementById('archiveInk').textContent,
     up: document.querySelectorAll('#archiveUpgrades .up-row').length,
     note: (document.getElementById('archiveWords').textContent || '').slice(0, 40),
   }))()`);
-  ok(!a.hidden, '書庫が開いていない');
+  ok(!a.hidden, '強化タブが開いていない');
   ok(a.up === 7, `恒久強化の行数: ${a.up} (7 のはず)`);
   ok(/語彙/.test(a.note), `語彙の説明が無い: ${a.note}`);
 

@@ -5,8 +5,8 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.33';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.33';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.34';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.34';
 import { evaluatePart, partConnChoices, partWordForms } from '../game/parts.js';
 import {
   partEffectRows, partTotalRows, wordEffectRows, wordDirectEffectRows,
@@ -71,6 +71,8 @@ export class Menus {
     this.archiveWords = $('#archiveWords');
     this.grow = $('#grow');
     this.growInk = $('#growInk');
+    this.words = $('#words');
+    this.wordsInk = $('#wordsInk');
     this.gachaBtn = $('#gachaBtn');
     this.gachaTenBtn = $('#gachaTenBtn');
     this.gachaResult = $('#gachaResult');
@@ -142,7 +144,7 @@ export class Menus {
     $('#btnStages').addEventListener('click', () => { tap(); this.showStages(); });
     $('#btnHowto').addEventListener('click', () => { tap(); this.show('howto'); });
     $('#btnGrow').addEventListener('click', () => { tap(); this.show('grow'); });
-    $('#btnArchive').addEventListener('click', () => { tap(); this.show('archive'); });
+    $('#btnWords').addEventListener('click', () => { tap(); this.show('words'); });
     this.gachaBtn?.addEventListener('click', () => { tap(); this.startGacha(1); });
     this.gachaTenBtn?.addEventListener('click', () => { tap(); this.startGacha(10); });
     // 幕の中の操作。幕が無い最小 DOM ではすべて素通りする。
@@ -218,8 +220,8 @@ export class Menus {
 
   hideAll() {
     this.closeGacha();
-    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'archive', 'grow']) {
-      this[k].hidden = true;
+    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'grow', 'words']) {
+      if (this[k]) this[k].hidden = true;
     }
     // #tutorial は DOM ごと無い環境があるので、存在するときだけ伏せる。
     if (this.tutorial) this.tutorial.hidden = true;
@@ -243,7 +245,7 @@ export class Menus {
 
   show(name) {
     // タブ系 (遊び方/書庫/辞書/設定) を開くときは、下に見えている画面を覚える。
-    if (['howto', 'archive', 'dict', 'settings', 'grow', 'tutorial'].includes(name)) {
+    if (['howto', 'dict', 'settings', 'grow', 'words', 'tutorial'].includes(name)) {
       const base = ['title', 'stages', 'loadout', 'result']
         .find((k) => !this[k].hidden);
       this._tabFrom = base || null;
@@ -256,8 +258,8 @@ export class Menus {
     if (name === 'title') this.renderTitle();
     if (name === 'settings') this.renderSettings();
     if (name === 'dict') this.renderDict();
-    if (name === 'archive') this.renderArchive();
     if (name === 'grow') this.renderGrow();
+    if (name === 'words') this.renderWords();
     if (name === 'tutorial') this.renderTutorial();
   }
 
@@ -268,7 +270,7 @@ export class Menus {
   back() {
     if (this.gachaVeil && !this.gachaVeil.hidden) { this.closeGacha(); return true; }
     if (this.tutorial && !this.tutorial.hidden) { this.closeTutorial(); return true; }
-    for (const name of ['howto', 'settings', 'archive', 'grow']) {
+    for (const name of ['howto', 'settings', 'grow', 'words']) {
       if (!this[name].hidden) { this.closeTab(name); return true; }
     }
     if (!this.dict.hidden) { this.cb.onCloseDict?.(); return true; }
@@ -569,13 +571,8 @@ export class Menus {
   renderGrow() {
     const save = this.save;
     this.growInk.textContent = String(save.ink);
-    this.gachaBtn.textContent = `引く (${GACHA_COST} 言玉)`;
-    this.gachaBtn.classList.toggle('off', save.ink < GACHA_COST);
-    if (this.gachaTenBtn) {
-      this.gachaTenBtn.textContent = `十連くじ (${GACHA_COST * 10} 言玉)`;
-      this.gachaTenBtn.disabled = false;
-      this.gachaTenBtn.classList.toggle('off', save.ink < GACHA_COST * 10);
-    }
+    // 書庫 (恒久強化・語彙) はこの画面にまとめた。所持語の枠も同じ画面にある。
+    this.renderArchive();
 
     // 全部位の合計。ここだけ見れば「今どう強くなっているか」が分かる。
     if (this.growTotal) {
@@ -660,9 +657,28 @@ export class Menus {
       this.growWords.append(b);
     }
 
+  }
+
+  // ── 言葉 (くじ・デッキ) ──────────────────────────────────────────────────
+  // 言葉くじと言葉デッキは部位強化から分けて、独立したタブにした。
+  // 部位に入れる語を選ぶ一覧 (所持語) は強化タブに残している。
+  renderWords() {
+    const save = this.save;
+    if (this.wordsInk) this.wordsInk.textContent = String(save.ink);
+    if (this.gachaBtn) {
+      this.gachaBtn.textContent = `引く (${GACHA_COST} 言玉)`;
+      this.gachaBtn.classList.toggle('off', save.ink < GACHA_COST);
+    }
+    if (this.gachaTenBtn) {
+      this.gachaTenBtn.textContent = `十連くじ (${GACHA_COST * 10} 言玉)`;
+      this.gachaTenBtn.disabled = false;
+      this.gachaTenBtn.classList.toggle('off', save.ink < GACHA_COST * 10);
+    }
+
     // 言葉デッキ。押すと出し入れ。戦闘開始時の語彙になる。
     const maxLabel = Number.isFinite(DECK_MAX) ? `${DECK_MAX}` : '∞';
-    this.deckCount.textContent = `${save.deck.length} / ${maxLabel} 語 (最低 ${DECK_MIN})`;
+    if (this.deckCount) this.deckCount.textContent = `${save.deck.length} / ${maxLabel} 語 (最低 ${DECK_MIN})`;
+    if (!this.deckWords) return;
     clear(this.deckWords);
     for (const t of save.collection) {
       const inDeck = save.inDeck(t);
@@ -670,11 +686,11 @@ export class Menus {
         class: 'btn grow-word deck' + (inDeck ? ' in' : ''),
         disabled: inDeck && save.deck.length <= DECK_MIN,
         title: inDeck ? (save.deck.length <= DECK_MIN ? `最低 ${DECK_MIN} 語を保つため外せない` : 'デッキに入っている — 押すと外れる') : '押すとデッキに入る',
-      }, (inDeck ? '✓ ' : '') + t);
+      }, (inDeck ? '✓ ' : '') + t, this.rankChip(t));
       b.addEventListener('click', () => {
         save.toggleDeck(t);
         this.audio?.tap?.();
-        this.renderGrow();
+        this.renderWords();
       });
       this.deckWords.append(b);
     }

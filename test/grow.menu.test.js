@@ -23,10 +23,10 @@ const IDS = [
   'loadoutTitle', 'loadoutSub', 'result', 'resultStats', 'resultTitle', 'resultSub',
   'resultNext', 'resultRetry', 'resultStages', 'howto', 'settings',
   'dict', 'dictSearch', 'dictTabs', 'dictList', 'dictCount',
-  'archive', 'archiveInk', 'archiveUpgrades', 'archiveWords',
+  'archiveInk', 'archiveUpgrades', 'archiveWords', 'words', 'wordsInk',
   'grow', 'growInk', 'gachaBtn', 'gachaTenBtn', 'gachaResult', 'growParts', 'growSelNote', 'growWords',
   'deckWords', 'deckCount',
-  'btnStart', 'btnStages', 'btnHowto', 'btnGrow', 'btnArchive', 'btnDict', 'btnSettings',
+  'btnStart', 'btnStages', 'btnHowto', 'btnGrow', 'btnWords', 'btnDict', 'btnSettings',
   'recBest', 'recClear', 'recKills', 'recRuns', 'recBroken',
 ];
 for (const id of [...IDS, 'growTotal']) {

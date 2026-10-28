@@ -262,6 +262,98 @@ const RAW_POOL = `
 刺  v   す:adn* された:adn*p して:adv
 刻  v   む:adn* まれた:adn*p み:adv* んで:adv
 煉  v   る:adn* られた:adn*p り:adv* って:adv
+
+# ── 追加動詞 (1 文字で動作になる語) ──
+分  v   ける:adn* けて:adv かれた:adn*p
+切  v   る:adn* り:adv* られた:adn*p
+刳  v   る:adn* り:adv*
+動  v   く:adn*x き:advx
+化  v   する:adn* して:adv
+吟  v   じる:adn* じて:adv
+吹  v   く:adn* き:adv*
+呈  v   する:adn* して:adv
+哭  v   く:adn*x
+啜  v   る:adn*
+在  v   る:adn*x
+坐  v   る:adn*x
+垂  v   れる:adn*x れて:advx
+壊  v   す:adn* れた:adn*p して:adv
+変  v   じる:adn* じて:adv わった:adn*x
+失  v   う:adn* って:adv
+奏  v   でる:adn* でて:adv
+奔  v   る:adn*x って:advx
+封  v   じる:adn* じて:adv
+尽  v   くす:adn* きる:adn*x くして:adv きて:advx
+崩  v   す:adn* れた:adn*p して:adv
+嵌  v   る:adn*x めた:adn*p
+干  v   す:adn* した:adn*p
+廻  v   る:adn*x す:adn* り:adv
+弁  v   じる:adn* じて:adv
+従  v   う:adn*x って:advx
+成  v   る:adn*x した:adn*
+戯  v   れる:adn*x れて:advx
+拘  v   る:adn*x って:advx
+捕  v   らえる:adn* らえた:adn*p えて:adv
+揺  v   れる:adn*x らす:adn* れて:advx らして:adv
+損  v   じる:adn* じて:adv
+操  v   る:adn*
+攻  v   める:adn* めて:adv めた:adn*p
+放  v   つ:adn* って:adv
+敗  v   れる:adn*x れて:advx
+斂  v   する:adn* して:adv
+断  v   つ:adn* ち:adv*
+来  v   る:adn*x た:adn*x
+枯  v   れる:adn*x らす:adn* れて:advx
+歌  v   う:adn* って:adv
+歩  v   く:adn*x き:advx
+残  v   る:adn*x す:adn*
+毀  v   つ:adn* ち:adv*
+消  v   す:adn* えた:adn*x して:adv えて:advx
+游  v   ぐ:adn*x いで:advx
+犯  v   す:adn* した:adn*p
+猟  v   る:adn*
+生  v   きる:adn*x きた:adn*x きて:advx
+盗  v   む:adn* んだ:adn*p んで:adv
+知  v   る:adn* った:adn*p って:adv
+移  v   る:adn*x す:adn* って:advx して:adv
+繚  v   る:adn*x
+聚  v   する:adn* して:adv
+脱  v   する:adn* して:adv
+落  v   ちる:adn*x とす:adn* ちて:advx として:adv
+蕩  v   ける:adn*x
+衝  v   く:adn* いた:adn*x き:adv*
+見  v   る:adn* た:adn*p て:adv
+誅  v   する:adn* した:adn*p
+賜  v   る:adn* った:adn*p
+走  v   る:adn*x り:advx
+躇  v   う:adn*x って:advx
+躊  v   う:adn*x って:advx
+躍  v   る:adn*x り:advx
+転  v   ぶ:adn*x がす:adn* んで:advx
+追  v   う:adn* った:adn*p って:adv
+逐  v   う:adn* って:adv
+造  v   る:adn* った:adn*p
+遁  v   れる:adn*x れて:advx
+遊  v   ぶ:adn*x んで:advx
+遡  v   る:adn*x って:advx
+避  v   ける:adn* けて:adv
+酌  v   む:adn* んで:adv
+閉  v   じる:adn* じて:adv
+開  v   く:adn*x いた:adn*x いて:advx
+闘  v   う:adn*x った:adn*x って:advx
+闢  v   く:adn*x
+飛  v   ぶ:adn*x んだ:adn*x んで:advx
+鳴  v   る:adn*x いた:adn*x いて:advx
+
+# ── 追加の形容語 ──
+安  a   い:adn+ く:adv+
+太  a   い:adn+ く:adv+
+細  a   い:adn+ く:adv+
+薄  a   い:adn+ く:adv+
+若  a   い:adn+ く:adv+
+苦  a   い:adn+ く:adv+
+危  a   ない:adn+ なく:adv+
+平  na  らかな:adn+ らかに:adv+
 `;
 
 /** 品詞の略号。 */

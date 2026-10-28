@@ -95,10 +95,10 @@ sec('十連ボタンで10件を抽選し、結果一覧を開示する');
   console.log('  クリック → 10回抽選 → 10行表示 / 言玉不足は無消費で必要額を表示');
 }
 
-sec('部位が 9 コマ出て、各コマに枠が PART_SLOTS 個ある');
+sec('部位が 7 コマ出て、各コマに枠が PART_SLOTS 個ある');
 {
   const parts = partsBox();
-  ok(parts.length === 9, `部位のコマが ${parts.length} 個`);
+  ok(parts.length === 7, `部位のコマが ${parts.length} 個`);
   for (const b of parts) {
     const cells = q('.grow-slot', b);
     ok(cells.length === PART_SLOTS, `枠の数が ${cells.length}`);
@@ -293,13 +293,13 @@ sec('体に効かない語は、そう表示する');
   click(w);
   ok(/体に直接は効かない/.test(dom.doc.getElementById('growSelNote').textContent),
     `効かない説明が出ない: ${dom.doc.getElementById('growSelNote').textContent}`);
-  click(q('.grow-slot.empty', boxOf('larm'))[0]);
-  const note = q('.grow-part-note', boxOf('larm'))[0];
+  click(q('.grow-slot.empty', boxOf('lhnd'))[0]);
+  const note = q('.grow-part-note', boxOf('lhnd'))[0];
   // 文の力ぶんの効果は出る (体力/攻撃の数字が付く)。
-  ok(q('.grow-part-eff .eff', boxOf('larm')).length > 0,
+  ok(q('.grow-part-eff .eff', boxOf('lhnd')).length > 0,
     `文の力ぶんの効果が出ない: ${note.textContent}`);
   // 部位の効きは、直接効く語でも文の力ぶんでも数字のチップで出る。
-  click(q('.gs-out', boxOf('larm'))[0]);
+  click(q('.gs-out', boxOf('lhnd'))[0]);
   click(w);   // 選択解除
   console.log(`  炎 → 「体に直接は効かない」+ 文の力ぶん ${note.textContent.replace(/\s+/g, ' ').slice(0, 60)}`);
 }

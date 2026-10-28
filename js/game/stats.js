@@ -2,7 +2,7 @@
 // ワードローグ — プレイヤー能力の解決
 //
 // プレイヤーの強化はメインメニューの「部位強化」で行う (戦闘中には行わない)。
-// 頭・右腕・左腕・右手・左手・右足・左足・胸・胴の 9 部位に語を入れると、
+// 頭・右手・左手・胸・胴・左足・右足の 7 部位に語を入れると、
 // その語の効果のうち、プレイヤーに効くキーがそのまま能力に乗る。
 // 体に効く専用語という分類は無い — どの語も武器の文で使える語で、
 // 体に効くかは語が持つキーで決まる。
@@ -23,9 +23,10 @@
 // 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
-import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js?v=1.32';
+import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js?v=1.33';
 import { clamp } from '../core/util.js';
 import { evaluatePart, normPartEntries } from './parts.js';
+import { rankMul } from '../data/ranks.js?v=1.33';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {
@@ -250,10 +251,12 @@ export function resolvePlayerStats(parts, meta = {}, opt = {}) {
       const info = WORDS[e.word.text];
       if (!info) continue;
       // 語そのものの効果。`p.` で置いた体側の効果と、武器側の効果のうち体に効くもの。
-      const selfOk = info.player ? applyPartSrc(s, info.player, SELF_KEYS, gain, true) : false;
-      const ok = applyPartSrc(s, info.fx || {}, PART_KEYS, gain, false, 0.03) || selfOk;
+      // 語のランク (言葉くじの重複で上がる) ぶん、体に効く量も伸ばす。
+      const rgain = gain * rankMul(info.text);
+      const selfOk = info.player ? applyPartSrc(s, info.player, SELF_KEYS, rgain, true) : false;
+      const ok = applyPartSrc(s, info.fx || {}, PART_KEYS, rgain, false, 0.03) || selfOk;
       // 語の意味と部位の対応 (速い足 → 移動、硬い胴 → 装甲、賢い頭 → 経験値)。
-      const meaningOk = applyPartMeaning(s, kind, info.text, gain);
+      const meaningOk = applyPartMeaning(s, kind, info.text, rgain);
       if (ok || meaningOk) { used++; s.partTexts.push(info.text); }
       // 語の直後の接続詞。部位ではプレイヤーに効くキーだけを通す。
       if (e.conn) {

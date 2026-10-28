@@ -3122,3 +3122,48 @@ html, body {
 @media (max-width: 520px) {
   .pause-keys > div { grid-template-columns: 1fr; gap: 2px; }
 }
+
+
+/* ══ 部位の人型レイアウト ══════════════════════════════════════════════ */
+/* 7 部位を体の位置に置く。頭 → 手 → 胸 → 胴 → 足。 */
+.grow-parts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    ".    head ."
+    "rhnd chst lhnd"
+    ".    trnk ."
+    "lfot .    rfot";
+  align-items: stretch;
+}
+.grow-part[data-part="head"] { grid-area: head; }
+.grow-part[data-part="rhnd"] { grid-area: rhnd; }
+.grow-part[data-part="lhnd"] { grid-area: lhnd; }
+.grow-part[data-part="chst"] { grid-area: chst; }
+.grow-part[data-part="trnk"] { grid-area: trnk; }
+.grow-part[data-part="lfot"] { grid-area: lfot; }
+.grow-part[data-part="rfot"] { grid-area: rfot; }
+@media (max-width: 620px) {
+  .grow-parts {
+    grid-template-areas:
+      "head head head"
+      "rhnd chst lhnd"
+      "trnk trnk trnk"
+      "lfot lfot rfot";
+  }
+}
+
+/* 空き枠は ＋ を大きく。押すと選んだ語が入る。 */
+.grow-slot.empty { border: 2px dashed rgba(120, 90, 60, .45); min-height: 34px; }
+.grow-slot.empty span { font-size: 1.15rem; font-weight: 900; line-height: 1; }
+
+/* 語のランク札。C / U / R / E / L の 1 文字。 */
+.grow-word-rank {
+  font-style: normal; font-size: .58rem; font-weight: 900; line-height: 1;
+  margin-left: 4px; padding: 2px 4px; border-radius: 5px;
+  color: #fff; letter-spacing: .02em;
+}
+.grow-word-rank.rk0 { background: #6b7383; }
+.grow-word-rank.rk1 { background: #12a58a; }
+.grow-word-rank.rk2 { background: #2f7fc4; }
+.grow-word-rank.rk3 { background: #8b5cf6; }
+.grow-word-rank.rk4 { background: #d9a406; }

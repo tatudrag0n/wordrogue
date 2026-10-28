@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.32">
+<link rel="stylesheet" href="css/style.css?v=1.33">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -283,7 +283,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.32</div>
+      <div class="title-version">Ver. 1.33</div>
     </div>
   </div>
 
@@ -437,8 +437,9 @@
       <section>
 <h3>5. プレイヤーの強化はメニューで</h3>
       <p>
-      タイトルの<strong>部位強化</strong>で、頭・右腕・左腕・右手・左手・
-      右足・左足・胸・胴の 9 部位に語を入れると、その語の効果が能力に効く。
+      タイトルの<strong>部位強化</strong>で、頭・右手・左手・胸・胴・左足・右足の
+      7 部位に語を入れると、その語の効果が能力に効く。部位は人型に並び、
+      空いた枠の<strong>＋</strong>を押すと選んだ語が入る。
       <strong>1 部位 = 1 文</strong>。語は 2 つまで入れられて、
       語の右の<strong>「接続詞」</strong>を押すと付けられる形の一覧が開く。
       部位は<strong>どの接続詞でも選べる</strong> — <strong>✓ は文が成る形</strong>（効きが伸びる）、
@@ -448,7 +449,8 @@
       （語彙で <b style="color:#6a4bd0">紫</b> の語が、体にも効く効果を持つ語）
       <strong>何がどれだけ変わるか</strong>は、各部の下と「部位の合計」に数字で出る。
       語は<strong>言玉</strong>を払う<strong>言葉くじ</strong>で手に入り、
-      戦闘で使う語と同じプールから出る。
+      戦闘で使う語と同じプールから出る。同じ語をもう一度引くと<strong>ランク</strong>が上がり
+      （コモン → アンコモン → レア → エピック → レジェンド）、その語の効果が最大 1.6 倍になる。
       <strong>言葉デッキ</strong>もここで組み替えられ、戦闘開始時の語彙になる。
       戦闘中にプレイヤー自身が強化されることはない。
       </p>
@@ -874,6 +876,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.32"></script>
+<script type="module" src="js/main.js?v=1.33"></script>
 </body>
 </html>

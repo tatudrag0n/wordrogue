@@ -1672,8 +1672,8 @@ sec('言葉くじ・デッキ・部位はセーブで管理する');
 {
   const save = new Save();
   save.reset();
-  // 初期セットが所持語に入り、デッキも同じ内容で始まる。部位は 9 つ。
-  ok(PARTS.length === 9, `部位の数: ${PARTS.length}`);
+  // 初期セットが所持語に入り、デッキも同じ内容で始まる。部位は 7 つ。
+  ok(PARTS.length === 7, `部位の数: ${PARTS.length}`);
   ok(save.collection.length >= 10, `初期所持語が少ない: ${save.collection.length}`);
   ok(save.deck.length === save.collection.length, '初期デッキが所持語と違う');
   ok(save.deck.every((t) => save.ownsWord(t)), '持っていない語がデッキにいる');

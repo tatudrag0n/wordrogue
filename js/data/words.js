@@ -16,14 +16,15 @@
 
 import {
   RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
-} from './words.core.js?v=1.32';
-import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.32';
+} from './words.core.js?v=1.33';
+import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.33';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
   PREDICATE_CONNECTORS, isAdnominal, isConnector, formAfter,
 } from './words.connect.js';
 import { poolOfText, posOfText } from './words.pool.js';
+import { rankMul } from './ranks.js?v=1.33';
 
 export {
   CATEGORIES, ELEMENTS, PHRASE_BONUS, CONNECTORS, CONNECT_ORDER, POS,
@@ -78,6 +79,12 @@ for (const table of RAW_TABLES) {
     const { fx: effects, player } = parseFx(fx);
     // 品詞と接続詞プールは語ごとに words.pool.js で決める。
     const pool = poolOfText(text);
+    // 接続詞を 1 つしか持たない語 (必 → ず / 特 → に) は文に組み込みにくい。
+    // どの接続詞も付けられない語が選ぶ価値を失わないよう、効果を少し強くする。
+    if (new Set(pool.map((e) => e.k)).size <= 1) {
+      for (const k of Object.keys(effects)) effects[k] *= 1.2;
+      if (player) for (const k of Object.keys(player)) player[k] *= 1.2;
+    }
     // 複数カテゴリ: 本来の分類 (cat) に加え、動詞の形 (述語) を持つ語は
     // 用言としても扱う (震える・還る・鍛える・癒える …)。cats は複数持ちうる。
     const cats = [cat];
@@ -450,8 +457,10 @@ export function evaluate(words, opt = {}) {
     if (!filler) content++;
     if (w.cat === 'verb' && !phrase.mask[i]) verbs++;
     if (w.el) elWeight[w.el] = (elWeight[w.el] || 0) + 1;
+    // 語のランク (言葉くじの重複で上がる) ぶんだけ効果を伸ばす。
+    const rmul = rankMul(s);
     for (const [k, v] of Object.entries(w.fx)) {
-      fx[k] = (fx[k] || 0) + v;
+      fx[k] = (fx[k] || 0) + v * rmul;
     }
   }
 
@@ -586,7 +595,8 @@ export function evaluate(words, opt = {}) {
     for (let i = c.start; i < c.idx; i++) {
       const w = WORDS[segs[i]];
       if (!w) continue;
-      for (const [k, v] of Object.entries(w.fx)) fx[k] = (fx[k] || 0) - v * 0.5;
+      const pmul = rankMul(segs[i]);
+      for (const [k, v] of Object.entries(w.fx)) fx[k] = (fx[k] || 0) - v * 0.5 * pmul;
     }
   }
 

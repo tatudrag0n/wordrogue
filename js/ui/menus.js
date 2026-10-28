@@ -5,8 +5,8 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.32';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.32';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.33';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.33';
 import { evaluatePart, partConnChoices, partWordForms } from '../game/parts.js';
 import {
   partEffectRows, partTotalRows, wordEffectRows, wordDirectEffectRows,
@@ -359,6 +359,17 @@ export class Menus {
       el('i', {}, r.label), r.text));
   }
 
+  /** 語のランクの小さな札。色はランクごとに CSS (.rk0〜.rk4)。 */
+  rankChip(text) {
+    const r = this.save.rankOf(text);
+    const i = this.save.rankIndex(text);
+    return el('i', {
+      class: `grow-word-rank rk${i}`,
+      title: `ランク: ${r.name} (効果 ×${r.mul.toFixed(2)})`
+        + (i < 4 ? '\n同じ語をもう一度くじで引くと上がる' : '\n最上位'),
+    }, r.short);
+  }
+
   /** 語が入っている部位の枠。語 (タップで接続詞が回る) + 接続詞 + ✕。 */
   renderGrowSlot(part, i, entry, words) {
     const save = this.save;
@@ -592,6 +603,7 @@ export class Menus {
     for (const p of PARTS) {
       const words = save.partRaw(p.id).filter(Boolean);
       const box = el('div', { class: 'grow-part' + (words.length ? ' filled' : '') });
+      box.dataset.part = p.id;   // 人型の位置は CSS が data-part で決める
       box.append(el('span', { class: 'grow-part-name' }, p.name));
       const sen = el('div', { class: 'grow-sen' });
       for (let i = 0; i < PART_SLOTS; i++) {
@@ -630,12 +642,12 @@ export class Menus {
       const b = el('button', {
         class: 'btn grow-word' + (this.growSel === t ? ' sel' : '') + (used ? ' used' : '')
           + (direct.length ? ' has-eff' : ' no-eff'),
-        title: `${CATEGORIES[info.cat]?.name || info.cat}: ${src}`
+        title: `${CATEGORIES[info.cat]?.name || info.cat} / ランク ${save.rankOf(t).name}: ${src}`
           + (direct.length ? `\n体に効く: ${direct.map((r) => `${r.label} ${r.text}`).join(' / ')}`
             : '\n体に直接は効かない (文にすれば文の力ぶん強くなる)')
           + (eff.length && !direct.length ? '\n文にすれば文の力ぶんだけ強くなる' : '')
           + (used ? `\n部位に ${used} 語入っている (同じ語をいくつでも置ける)` : ''),
-      }, t, used ? el('i', { class: 'grow-word-used' }, `×${used}`) : null);
+      }, t, this.rankChip(t), used ? el('i', { class: 'grow-word-used' }, `×${used}`) : null);
       if (direct.length) b.append(el('i', { class: 'grow-word-eff' }, direct.map((r) => r.text).join(' ')));
       b.addEventListener('click', () => {
         this.growSel = this.growSel === t ? null : t;
@@ -853,8 +865,10 @@ export class Menus {
         this.gachaNote.textContent = `十連くじ完了 — 新規 ${batch.length - duplicates} 語、重複 ${duplicates} 語。言玉は残り ${r.ink}。`;
       } else {
         this.gachaNote.textContent = result.dup
-          ? `すでに持っている語だった。言玉が ${GACHA_REFUND} 戻り、残り ${r.ink}。`
-          : `新しい語を引いた。部位に入れるか、デッキに加えよう。言玉は残り ${r.ink}。`;
+          ? (result.rankUp
+            ? `すでに持っている語だった — ランクが「${result.rankName}」に上がった。言玉は残り ${r.ink}。`
+            : `すでに最上位 (${result.rankName}) だった。言玉が ${GACHA_REFUND} 戻り、残り ${r.ink}。`)
+          : `新しい語を引いた (コモン)。部位に入れるか、デッキに加えよう。言玉は残り ${r.ink}。`;
       }
     }
     this.audio?.gachaReveal?.(batch ? batch.every((item) => item.dup) : !!result.dup);
@@ -894,8 +908,10 @@ export class Menus {
     } else {
       const result = r.results?.[0] || r;
       this.gachaResult.textContent = result.dup
-        ? `「${result.word}」— すでに持っている (${GACHA_REFUND} 言玉戻った)`
-        : `「${result.word}」を手に入れた！`;
+        ? (result.rankUp
+          ? `「${result.word}」— ランク「${result.rankName}」に上がった！`
+          : `「${result.word}」— 最上位 (${GACHA_REFUND} 言玉戻った)`)
+        : `「${result.word}」を手に入れた (コモン)！`;
     }
     this._pulseResult();
   }

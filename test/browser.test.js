@@ -1632,7 +1632,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
     };
   })()`);
   ok(menu.shown, '部位強化の画面が開かない');
-  ok(menu.parts === 9, `部位の数: ${menu.parts}`);
+  ok(menu.parts === 7, `部位の数: ${menu.parts}`);
   ok(menu.words >= 10, `所持語の表示が少ない: ${menu.words}`);
   ok(menu.gachaOk, '言葉くじが引けない');
   ok(menu.coll >= menu.gachaBefore, `くじで所持語が減った: ${menu.gachaBefore} -> ${menu.coll}`);

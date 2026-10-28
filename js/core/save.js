@@ -5,8 +5,11 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord } from '../data/words.js?v=1.32';
+import { WORDS, drawWord } from '../data/words.js?v=1.33';
 import { CONNECTORS } from '../data/words.connect.js';
+import {
+  RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
+} from '../data/ranks.js?v=1.33';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -21,6 +24,7 @@ const DEFAULTS = {
   ink: 0,              // 書庫の通貨「言玉」
   meta: {},            // 恒久強化 (hp / atk / xp / armor / magnet / crit / lexicon)
   collection: null,    // 所持語 (言葉くじで増える)。null なら初期セットを付与
+  ranks: {},           // 語 → ランク段階 (0 = コモン)。重複で上がる
   starterRev: 0,       // 初期セットの改訂番号。古いセーブを 1 度だけ入れ替える
   deck: null,          // 戦闘に持ち込む言葉デッキ (語の text の配列)
   parts: {},           // 部位強化 { partId: [text, text] }
@@ -59,16 +63,21 @@ function deepMerge(base, patch) {
 }
 
 /** プレイヤー強化の部位。1 部位に PART_SLOTS 語まで入る。 */
+/**
+ * プレイヤー強化の部位。1 部位に PART_SLOTS 語まで入る。
+ *
+ * 並びは人型の見た目 (頭 → 手 → 胸 → 胴 → 足) に合わせてある。
+ * 画面はこの順ではなく data-part で体の位置に置く。
+ * 腕は手に統合した (右腕・左腕は右手・左手が受け取る)。
+ */
 export const PARTS = [
   { id: 'head', name: '頭' },
-  { id: 'rarm', name: '右腕' },
-  { id: 'larm', name: '左腕' },
   { id: 'rhnd', name: '右手' },
   { id: 'lhnd', name: '左手' },
-  { id: 'rfot', name: '右足' },
-  { id: 'lfot', name: '左足' },
   { id: 'chst', name: '胸' },
   { id: 'trnk', name: '胴' },
+  { id: 'lfot', name: '左足' },
+  { id: 'rfot', name: '右足' },
 ];
 export const PART_SLOTS = 2;    // 1 部位に入る語の数
 /**
@@ -316,15 +325,39 @@ export class Save {
       if (!d.deck.includes(t)) d.deck.push(t);
     }
     if (!d.parts || typeof d.parts !== 'object' || Array.isArray(d.parts)) d.parts = {};
+    // 腕 (rarm / larm) は廃止して手に統合した。旧セーブの語は手へ移す。
+    for (const [from, to] of [['rarm', 'rhnd'], ['larm', 'lhnd']]) {
+      const old = Array.isArray(d.parts[from]) ? d.parts[from] : [];
+      delete d.parts[from];
+      if (!old.length) continue;
+      d.parts[to] = (Array.isArray(d.parts[to]) ? d.parts[to] : []).concat(old).slice(0, PART_SLOTS);
+    }
     for (const p of PARTS) {
       d.parts[p.id] = normalizePart(d.parts[p.id], d.collection);
     }
+    // ランク。持っていない語の段階は捨て、段階を範囲内に丸める。
+    const ranks = {};
+    if (d.ranks && typeof d.ranks === 'object' && !Array.isArray(d.ranks)) {
+      for (const t of d.collection) {
+        const n = d.ranks[t];
+        if (Number.isInteger(n) && n > 0) ranks[t] = Math.min(RANK_MAX, n);
+      }
+    }
+    d.ranks = ranks;
+    setRanks(d.ranks);
     this.save();
   }
 
   /** 所持語の text 一覧。 */
   get collection() { return this.data.collection || []; }
   ownsWord(text) { return this.collection.includes(text); }
+
+  /** 語のランク段階 (0 = コモン)。 */
+  rankIndex(text) { return rankIndex(text); }
+  /** 語のランク定義 ({name, short, mul, color})。 */
+  rankOf(text) { return rankOf(text); }
+  /** 次のランク名。最上位なら null。 */
+  nextRankName(text) { return nextRankName(text); }
   /** 戦闘デッキの text 一覧。 */
   get deck() { return this.data.deck || []; }
   inDeck(text) { return this.deck.includes(text); }
@@ -390,12 +423,28 @@ export class Save {
     }
 
     this.data.ink -= cost;
+    if (!this.data.ranks || typeof this.data.ranks !== 'object') this.data.ranks = {};
     const results = words.map((text) => {
       const dup = this.ownsWord(text);
-      if (dup) this.data.ink += GACHA_REFUND;
-      else this.data.collection.push(text);
-      return { word: text, dup };
+      if (!dup) {
+        this.data.collection.push(text);
+        this.data.ranks[text] = 0;      // 新しい語はコモンから
+        return { word: text, dup, rank: 0, rankUp: false, rankName: RANKS[0].name };
+      }
+      // 重複はランクアップ。最上位まで来ていたら言玉を返す。
+      const now = rankIndex(text);
+      if (now < RANK_MAX) {
+        this.data.ranks[text] = now + 1;
+        return {
+          word: text, dup, rank: now + 1, rankUp: true, rankName: RANKS[now + 1].name,
+        };
+      }
+      this.data.ink += GACHA_REFUND;
+      return {
+        word: text, dup, rank: now, rankUp: false, rankName: RANKS[now].name, maxed: true,
+      };
     });
+    setRanks(this.data.ranks);
     this.save();
     return { ok: true, reason: '', results, ink: this.ink };
   }

@@ -1716,6 +1716,55 @@ body.touch .hud-choice-title { font-size: 1rem; }
 }
 .grow-part-row { display: flex; align-items: center; gap: 7px; }
 .grow-part-row .grow-part-name { flex: 0 0 auto; min-width: 3.4em; }
+/* 部位の文は 1 行。行のどこへ落としてもその位置に入る。 */
+.grow-part-row .sen-row { flex: 1 1 auto; min-width: 0; }
+.grow-part-row .sen-row.empty { border-style: dashed; background: #f4f7fc; }
+.grow-part-placeholder { font-size: .74rem; color: var(--fg-mute); }
+.grow-part-lv { flex: 0 0 auto; font-size: .7rem; color: var(--fg-mute); font-variant-numeric: tabular-nums; }
+.grow-part-clear {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  font-size: .72rem;
+  font-weight: 700;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--fg-dim);
+}
+.grow-part-clear:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.grow-part-clear:disabled { opacity: .35; }
+.grow-undo { margin-left: 6px; padding: 2px 10px; font-size: .72rem; }
+.grow-undo:disabled { opacity: .35; }
+/* 空の接続詞のマスも、部位では見えるようにする (タップで一覧が開く)。 */
+#growParts .sen-conn.empty { opacity: .45; }
+#growParts .sen-conn.empty:hover { opacity: 1; }
+#growParts .sen-word { min-height: 28px; font-size: .9rem; }
+#growParts .sen-row.drop-hot {
+  background: #fff4ec;
+  border-color: rgba(224, 72, 45, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(224, 72, 45, 0.12);
+}
+#growParts .sen-item.drop-before::before,
+#growParts .sen-item.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(224, 72, 45, 0.14);
+  pointer-events: none;
+}
+#growParts .sen-item.drop-before::before { left: -2px; }
+#growParts .sen-item.drop-after::after { right: -2px; }
+#growWords.drop-hot {
+  outline: 2px dashed rgba(224, 72, 45, 0.55);
+  outline-offset: 3px;
+  border-radius: var(--r-s);
+}
+#growWords .grow-word { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+#growWords .grow-word:active { cursor: grabbing; }
 .grow-part {
   display: flex;
   flex-direction: column;

@@ -12,8 +12,8 @@
 // 恒久強化が与えていた効果 (体力 / 攻撃 / 装甲 / 経験値 / 吸引 / 会心 / 語彙) は、
 // 部位に意味の合う語を入れると得られる (下の「語の意味と部位の対応」を参照)。
 //
-// 部位は **1 文として数える** (武器と同じ)。1 部位に 2 語まで入れられて、
-// 語の直後には接続詞が選べる。
+// 部位は **1 文として数える** (武器と同じ)。1 部位は 10 文字までで、
+// 語の数に上限はない。語の直後には接続詞が選べる。
 //   癒 + 骨       … 2 語が並ぶだけ。文の力は少しだけ乗る。
 //   発 + 電する   … 熟語「発電」が成立して、部位まるごとの効果が伸びる。
 // 不成文の部位 (接続詞が結べていない等) は何も効かない。
@@ -27,10 +27,10 @@
 
 import {
   WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS,
-} from '../data/words.js?v=1.41';
+} from '../data/words.js?v=1.42';
 import { clamp } from '../core/util.js';
 import { evaluatePart, normPartEntries } from './parts.js';
-import { rankMul } from '../data/ranks.js?v=1.41';
+import { rankMul } from '../data/ranks.js?v=1.42';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {

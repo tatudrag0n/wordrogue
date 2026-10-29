@@ -1,8 +1,8 @@
 // ============================================================================
 // ワードローグ — 部位強化の文
 //
-// 部位にも武器と同じ「文」の仕組みを使う。1 部位に 2 語まで入れられて、
-// 語の直後には **接続詞 (送り仮名)** が付く。
+// 部位にも武器と同じ「文」の仕組みをそのまま使う。語の数に上限はなく、
+// **10 文字まで**並べられる。語の直後には接続詞 (送り仮名) が付く。
 //
 // **戦闘中の言葉鍛冶と同じ仕組み・同じルール** で作る。
 //   ・語の直後に付く接続詞 (送り仮名) は **その語のプールと熟語の形** だけ。
@@ -18,12 +18,12 @@
 //   2. 文が完成するほど強くなる … 部位の文の力 (power) が効果と体に乗る
 // ============================================================================
 
-import { makeWord, WORDS, CONNECTOR_SET } from '../data/words.js?v=1.41';
+import { makeWord, WORDS, CONNECTOR_SET } from '../data/words.js?v=1.42';
 import {
   canConnect, connectorFor, CONNECTORS, CONNECT_ORDER, ROLE_LABEL,
 } from '../data/words.connect.js';
 import { Sentence } from './sentence.js';
-import { PART_MAX_LEN, PART_SLOTS } from '../core/save.js';
+import { PART_MAX_LEN } from '../core/save.js';
 
 /** 接続詞の役割。画面の見出しに使う。 */
 export const ROLE_ORDER = ['adn', 'adv', 'case'];
@@ -43,7 +43,6 @@ export function normPartEntries(words) {
     if (!text || !WORDS[text] || CONNECTOR_SET.has(text)) continue;
     const conn = typeof raw === 'string' ? null : raw.conn || raw.c || null;
     out.push({ text, conn: conn && CONNECTORS[conn] ? conn : null });
-    if (out.length >= PART_SLOTS) break;   // 1 部位に入りきるのは PART_SLOTS 語まで
   }
   // 付けられない接続詞 (旧仕様のセーブなど) は落とす。語そのものは消さない。
   for (let i = 0; i < out.length; i++) {

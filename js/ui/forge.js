@@ -18,21 +18,12 @@
 import { $, el, clear } from '../core/util.js';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
-} from '../data/words.js?v=1.41';
-import { CONNECTORS, CONNECT_ORDER, formOf, ROLE_LABEL } from '../data/words.connect.js';
-import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.41';
+} from '../data/words.js?v=1.42';
+import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js';
+import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.42';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { keyStats } from '../game/weapon.js?v=1.41';
-
-/**
- * 置き場と今の内容でキーを作る。描き直しても同じキーになるので、
- * ドロップ先の data-place は安定する。
- * @param {{kind:string,index:number,wi?:object}} place
- */
-function placeKey(place) {
-  if (place.kind === 'lexicon') return `L${place.index}`;
-  return `W${place.wIdx ?? '?'}_${place.index}`;
-}
+import { keyStats } from '../game/weapon.js?v=1.42';
+import { SenPad } from './senpad.js';
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
 
@@ -50,16 +41,6 @@ function selfLine(player) {
  * 語に付く接続詞のチップ。語チップのすぐ右に並べて「語の直後」を表す。
  * ここをタップしても、その語が持つ接続詞が切り替わる (語と同じ操作)。
  */
-/** 接続詞メニューの説明。その語での役割を出す (同じ「に」でも 焔に=格 / 妙に=連用)。 */
-/** 熟語に付く形 (発電する) なら熟語ごと出す。 */
-function pickTitle(wordText, k, hit) {
-  if (hit && hit.compound) {
-    return `${hit.source}${k} — ${ROLE_LABEL[hit.form.role] || ''} (熟語「${hit.source}」の形)`;
-  }
-  const f = formOf({ text: wordText }, k);
-  return f ? `${wordText}${k} — ${ROLE_LABEL[f.role] || ''}` : (CONNECTORS[k]?.desc || '');
-}
-
 function renderConnector(forge, place, conn) {
   const title = conn
     ? `接続詞「${conn.text}」 — ${CONNECTORS[conn.text]?.desc || ''}`
@@ -75,9 +56,10 @@ function renderConnector(forge, place, conn) {
   return node;
 }
 
-export class Forge {
+export class Forge extends SenPad {
   /** @param {object} run */
   constructor(run, opt) {
+    super(opt);
     this.run = run;
     this.opt = opt;
     this.root = $('#forge');
@@ -117,7 +99,7 @@ export class Forge {
     /** data-place のキー -> 置き場。描き直すごとに作り直す。 */
     this.placeById = new Map();
     /** 文の行 -> その文の置き場。ドロップは行のどこでも受ける。 */
-    this.senDropRows = new Map();
+    this.senDropRows = this.rows;
     this._hotId = '';
     /** ドラッグした直後。タップの誤発火を防ぐ。 */
     this.suppressClick = false;
@@ -404,133 +386,12 @@ export class Forge {
     this.run.refreshStats();
   }
 
-  /** 変更の前に控えを積む。失敗したら popEdit() で捨てる。 */
-  beginEdit() {
-    this.undoStack.push(this.snapshot());
-    if (this.undoStack.length > 40) this.undoStack.shift();
-  }
 
-  /** 何も変わらなかった変更の控えを捨てる。 */
-  popEdit() { this.undoStack.pop(); }
 
-  /** 直前の操作を戻す。 */
-  undo() {
-    const s = this.undoStack.pop();
-    if (!s) {
-      this.msg = '戻せる操作がない。';
-      this.render();
-      return { ok: false, reason: 'empty' };
-    }
-    this.armed = null;
-    this.held = null;
-    this.restore(s);
-    this.msg = '直前の操作を戻した。';
-    this.opt.audio?.tap?.();
-    this.opt.onChange?.();
-    this.render();
-    return { ok: true, reason: 'undone' };
-  }
 
-  /** 接続詞を選ぶメニューを開く。候補 (＋なし) を一発で選べる。 */
-  openConnPicker(place, anchor) {
-    this.closeConnPicker();
-    if (this.armed || this.held) return this.onWordTap(place);
-    const sen = this.senOf(place);
-    const e = sen && sen.at(place.index);
-    if (!e) return null;
-    const opts = sen.connOptions(place.index);
-    const cur = e.conn ? e.conn.text : null;
-    const menu = el('div', { class: 'conn-picker' });
-    // 直前の語と熟語になっていれば見出しに出す (「発電」の直後 → する が選べる)。
-    const phrase = opts.map((c) => sen.connForm(place.index, c)).find((h) => h && h.compound);
-    menu.append(el('div', { class: 'conn-picker-head' },
-      phrase ? `${e.word.text} の直後 (熟語「${phrase.source}」)` : `${e.word.text} の直後`));
-    // 候補は縦 1 列に並べてスクロールできるようにする (要求)。
-    // 指で押せる高さに取り、スクロールで中心に来た候補を少し強調する。
-    const list = el('div', { class: 'conn-pick-list' });
-    const add = (text, label) => {
-      const b = el('button', {
-        class: 'conn-pick' + (text === cur ? ' cur' : ''),
-        type: 'button',
-        title: text ? pickTitle(e.word.text, text, sen.connForm(place.index, text)) : '接続詞を外す',
-      }, el('span', {}, label));
-      b.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        this.pickConnector(place, text);
-      });
-      list.append(b);
-    };
-    add(null, 'なし');
-    for (const c of opts) add(c, c);
-    menu.append(list);
-    list.addEventListener('scroll', () => this.hintConnScroll(list));
-    document.body.append(menu);
-    // いまの接続詞 (無ければ「なし」) を最初に見せる。中心に来るよう合わせる。
-    // 本物の DOM でだけ動かす。偽 DOM では位置合わせを飛ばす。
-    try {
-      const cEl = list.querySelector('.cur');
-      if (cEl && list.clientHeight && list.scrollHeight > list.clientHeight
-        && cEl.offsetTop != null) {
-        list.scrollTop = cEl.offsetTop - (list.clientHeight - cEl.offsetHeight) / 2;
-      }
-    } catch { /* 初回位置は出なくても支障はない */ }
-    // チップの下に出す。画面外なら上へ逃がす。
-    try {
-      const r = anchor.getBoundingClientRect();
-      const h = menu.getBoundingClientRect?.().height || 0;
-      const below = (r.bottom ?? 0) + 6;
-      const top = (h && below + h > (window.innerHeight || 0))
-        ? Math.max(4, (r.top ?? 0) - h - 6) : below;
-      menu.style.left = `${Math.max(4, Math.round(r.left ?? 0))}px`;
-      menu.style.top = `${Math.round(top)}px`;
-    } catch { /* 位置が取れなければそのまま */ }
-    this.pickerEl = menu;
-    return menu;
-  }
 
-  /** スクロールで中心に来た候補を強調する。決定はタップで行う。 */
-  hintConnScroll(list) {
-    try {
-      const kids = [...list.children];
-      if (!kids.length || !list.clientHeight) return;
-      const mid = (list.scrollTop || 0) + list.clientHeight / 2;
-      let best = null, bd = Infinity;
-      for (const k of kids) {
-        const d = Math.abs((k.offsetTop || 0) + (k.offsetHeight || 0) / 2 - mid);
-        if (d < bd) { bd = d; best = k; }
-      }
-      if (best && !best.classList.contains('snap')) {
-        for (const x of kids) x.classList.remove('snap');
-        best.classList.add('snap');
-      }
-    } catch { /* 本物の DOM でだけ動く。偽 DOM では何もしない */ }
-  }
 
-  /** メニューから接続詞を選んで付ける。null なら外す。 */
-  pickConnector(place, text) {
-    this.closeConnPicker();
-    this.beginEdit();
-    const r = this.run.setConnAt(place, text ? makeWord(text) : null);
-    if (!r || !r.ok) {
-      this.popEdit();
-      this.msg = `接続詞は付けられなかった (${r?.reason || 'error'})。`;
-      this.opt.audio?.broken?.();
-    } else {
-      this.msg = text ? `接続詞「${text}」を付けた。` : '接続詞を外した。';
-      this.focusPlace = { ...place };
-      this.opt.audio?.phrase?.();
-    }
-    this.opt.onChange?.();
-    this.render();
-    return r;
-  }
 
-  /** 接続詞のメニューを閉じる。 */
-  closeConnPicker() {
-    if (this.pickerEl?.parentNode) this.pickerEl.parentNode.removeChild(this.pickerEl);
-    this.pickerEl = null;
-  }
 
   // ───────────────────────────────────────────────────────────────────────────
   // 武器の文
@@ -565,6 +426,8 @@ export class Forge {
         class: 'wrow' + (res.active ? ` ${res.grade}` : res.pending ? ' pending' : ' broken')
           + (born ? ' idiom-born' : ''),
       });
+      // 行の余白 (見出し・効果表示) へ落としても文に入れられる。
+      row.dataset.padRow = '1';
 
       const head = el('div', { class: 'wrow-head' },
         // 武器名 (文面) は語の並びそのものなので、ここでは表示しない (要求)。
@@ -691,8 +554,8 @@ export class Forge {
       if (n > 1) node.append(el('span', { class: 'pword-n' }, `×${n}`));
       const place = { kind: 'lexicon', index: i };
       this.makeDropTarget(node, place);
-      if (this.forgetMode) this.makeTappable(node, () => this.onLexiconClick(w));
-      else this.makeDraggable(node, place, () => this.onLexiconClick(w));
+      if (this.forgetMode) this.makeTappable(node, () => this.onPoolTap(w));
+      else this.makeDraggable(node, place, () => this.onPoolTap(w));
       // 武器語 (基本武器) と属性語・現象語は、この語から新しい文を作れる。
       // 形態語 (弾・環・玉…) は武器語ではないので + が出ない。
       const canCraft = !this.forgetMode && this.run.canCraftFromWord(w);
@@ -723,8 +586,8 @@ export class Forge {
     // 直前に接続詞を切り替えた語。その語に使える接続詞を全部見せる。
     // (どれが使えるかを毎回覚える必要をなくす。)
     if (!this.armed && !this.held && this.focusPlace) {
-      const fw = this.run.wordAtPlace(this.focusPlace);
-      const fsen = this.senOf(this.focusPlace);
+      const fw = this.padWordAt(this.focusPlace);
+      const fsen = this.padSenOf(this.focusPlace);
       const fe = fsen && fsen.at(this.focusPlace.index);
       if (fw && fe) {
         d.append(el('span', { class: 'dt' }, `${fw.text}  ${fe.conn ? `接続詞 ${fe.conn.text}` : '接続詞なし'}`));
@@ -878,40 +741,6 @@ export class Forge {
     return r;
   }
 
-  /** 語彙の語をタップ。選ぶか、忘れるモードなら捨てる。 */
-  onLexiconClick(word) {
-    if (this.suppressClick) return;
-    this.opt.audio?.tap?.();
-    if (this.forgetMode) {
-      this.beginEdit();
-      const gone = this.run.forgetWord(word);
-      if (gone) {
-        if (!this.run.lexiconFreeCount) this.forgetMode = false;
-        this.opt.onChange?.();
-      } else {
-        this.popEdit();
-      }
-      this.render();
-      return;
-    }
-    // 文から持ち上げた語なら、語彙へ戻す (タップだけで外せる)。
-    if (this.held) {
-      const held = this.held;
-      this.held = null;
-      const r = this.run.toLexicon(held.word);
-      if (r.ok) {
-        this.opt.audio?.tap?.();
-        this.opt.onChange?.();
-      } else {
-        this.opt.audio?.broken?.();
-      }
-      this.render();
-      return;
-    }
-    this.armed = this.armed === word ? null : word;
-    this.held = null;
-    this.render();
-  }
 
   /** 文の語を全部語彙へ戻す (「空にする」ボタン)。 */
   clearSentence(sen) {
@@ -933,418 +762,58 @@ export class Forge {
     return { ok: true, reason: 'cleared', count: n };
   }
 
-  /** 文の中の語を持ち上げる (長押し)。 */
-  pickUp(place) {
-    const word = this.run.wordAtPlace(place);
-    if (!word) return;
-    this.held = { word, place: { ...place } };
-    this.armed = null;
-    this.opt.audio?.tap?.();
-    this.render();
-  }
 
-  /** 選んだ語を文の place へ入れる。 */
-  placeInto(place) {
-    const word = this.armed;
-    this.armed = null;
-    if (!word) return { ok: false, reason: 'noword' };
-    const sen = this.senOf(place);
-    this.beginEdit();
-    const r = this.run.insertInto(sen, place.index, word, place.wi || null);
-    if (r.ok) {
-      this.msg = `「${word.text}」を文に入れた。`;
-      this.opt.audio?.worn?.(place.wi ? place.wi.resolve(this.run.player.stats) : { active: true });
-    } else {
-      this.popEdit();
-      // 入れたのに何も起きない を無くす。理由を出す。
-      this.msg = r.reason === 'len'
-        ? `文は ${sen ? sen.maxLen : 10} 文字まで。「${word.text}」は ${word.text.length} 文字なので入らない。`
-        : `「${word.text}」は置けなかった (${r.reason})。`;
-      this.opt.audio?.broken?.();
-    }
-    this.opt.onChange?.();
-    this.render();
-    return r;
-  }
 
-  /** 持ち上げた語を place へ移す。元の位置には残る。 */
-  moveHeldTo(place) {
-    const held = this.held;
-    if (!held) return { ok: false, reason: 'noword' };
-    // 持ち上げた語をもう一度タップしたら、元のまま戻す。
-    if (place.kind === held.place.kind && place.index === held.place.index
-      && (place.wi || null) === (held.place.wi || null)) {
-      this.held = null;
-      this.opt.audio?.tap?.();
-      this.render();
-      return { ok: true, reason: 'same' };
-    }
-    this.held = null;
-    this.beginEdit();
-    const r = this.run.moveWordTo(held.place, place);
-    if (r.ok) {
-      if (place.kind === 'lexicon') this.opt.audio?.uns?.();
-      else this.opt.audio?.worn?.(place.wi ? place.wi.resolve(this.run.player.stats) : { active: true });
-    } else {
-      this.popEdit();
-      this.opt.audio?.broken?.();
-    }
-    this.opt.onChange?.();
-    this.render();
-    return r;
-  }
 
-  /** 文の中の語をタップ。 */
-  onWordTap(place) {
-    if (this.suppressClick) return;
-    if (this.armed) return this.placeInto(place);
-    if (this.held) return this.moveHeldTo(place);
-    this.beginEdit();
-    const r = this.run.cycleConnector(place);
-    if (!r.ok) this.popEdit();
-    this.focusPlace = { ...place };
-    if (r.text) { this.opt.audio?.phrase?.(); }
-    else if (r.reason === 'none') this.opt.audio?.broken?.();
-    else this.opt.audio?.tap?.();
-    this.armed = null;
-    this.opt.onChange?.();
-    this.render();
-  }
 
-  /** 文の余白 (語を末尾へ入れる場所) をタップ。 */
-  onGapTap(place) {
-    if (this.suppressClick) return;
-    if (this.armed) return this.placeInto(place);
-    if (this.held) return this.moveHeldTo(place);
-    this.opt.audio?.tap?.();
-    this.render();
-    return { ok: false, reason: 'none' };
-  }
 
-  /** 「忘れる」モードの切り替え。語彙の語をタップすると捨てる。 */
-  toggleForget() {
-    this.forgetMode = !this.forgetMode;
-    if (this.forgetMode) this.armed = null;
-    this.forgetBtn.classList.toggle('on', this.forgetMode);
-    this.render();
-  }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // ドラッグで移動・並べ替え
+  // 共通の操作 (SenPad) に渡すもの
   //
-  // Pointer Events で自前実装する。HTML5 の drag & drop はタップ端末で
-  // 動かない。draggable な要素をタップすると click ではなく native drag が
-  // 始まって、語を選べなくなる。pointer ならマウスとタッチで同じ動き。
-  // 少し動くまでドラッグ開始しないので、いつものタップは普通の選択になる。
+  // タップ・ドラッグ・接続詞の一覧・取り消しは senpad.js の 1 つの実装。
+  // ここは「語彙と武器の文」をそれが扱える形に橋渡しするだけ。
+  // 部位強化も同じ土台を使うので、操作はどこでも同じになる。
   // ───────────────────────────────────────────────────────────────────────────
 
-  /** ドラッグ開始とみなす移動量 (px)。 */
-  static get DRAG_SLOP() { return 7; }
+  padScope() { return [this.root]; }
+  padPoolEl() { return this.lexiconEl; }
+  padRows() { return this.rows; }
+  padPlaceAt(ctx, index) { return { kind: 'slot', index, wi: ctx.wi, wIdx: ctx.wIdx }; }
+  padPoolPlace() { return { kind: 'lexicon', index: -1 }; }
+  padPoolItem(index) { return this.run.lexicon[index] || null; }
 
-  /** 長押しとみなす時間 (ms)。押したままの語は接続詞の一覧を出す。 */
-  static get HOLD_MS() { return 480; }
-
-  /** タップで選べるようにする。 */
-  makeTappable(node, onTap) {
-    node.addEventListener('pointerdown', (ev) => {
-      this.downAt.set(node, { x: ev.clientX, y: ev.clientY });
-      // タップ用の要素を掴んで語のドラッグを始めない。
-      ev.stopPropagation();
-    }, true);
-    node.addEventListener('pointerup', (ev) => {
-      if (this.suppressClick || this.dragFrom) return;
-      const d = this.downAt.get(node);
-      if (!d) return;
-      this.downAt.delete(node);
-      if (Math.abs(ev.clientX - d.x) > Forge.DRAG_SLOP) return;
-      if (Math.abs(ev.clientY - d.y) > Forge.DRAG_SLOP) return;
-      ev.stopPropagation();
-      onTap();
-    });
-    node.addEventListener('pointercancel', () => this.downAt.delete(node));
+  /** 置き場のキー。描き直しても同じになるので data-place が安定する。 */
+  padKeyOf(place) {
+    if (!place) return '';
+    if (place.kind === 'lexicon') return `L${place.index}`;
+    return `W${place.wIdx ?? '?'}_${place.index}`;
   }
 
-  /** ドラッグを始める要素につける。タップでの選択も兼ねる。 */
-  makeDraggable(node, place, onTap, onHold) {
-    node.draggable = false;
-    node.addEventListener('dragstart', (ev) => ev.preventDefault());
+  padSenOf(place) { return this.senOf(place); }
+  padWordAt(place) { return this.wordAt(place); }
+  padConnAt(place) { return this.run.connAt(place); }
 
-    node.addEventListener('pointerdown', (ev) => {
-      if (ev.button !== undefined && ev.button > 0) return;
-      const sx = ev.clientX, sy = ev.clientY;
-      const pid = ev.pointerId;
-      let dragging = false;
-      let held = false;
-      let holdTimer = null;
-      const dropHold = () => {
-        if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-      };
-
-      if (onHold) {
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          held = true;
-          // onHold は画面を作り直すので pointerup が届かない。
-          // 先に window の監視を外さないと関数がたまる。
-          detach();
-          onHold();
-        }, Forge.HOLD_MS);
-      }
-
-      const onMove = (e) => {
-        if (e.pointerId !== pid) return;
-        if (!dragging) {
-          if (Math.hypot(e.clientX - sx, e.clientY - sy) < Forge.DRAG_SLOP) return;
-          dragging = true;
-          dropHold();
-          this.dragFrom = place;
-          this.held = null;
-          // この瞬間に render() してはいけない。DOM が作り直され、
-          // pointerup が届かない。選択状態だけ直接落とす。
-          this.armed = null;
-          for (const n of this.root.querySelectorAll('.armed')) n.classList.remove('armed');
-          this.clearDropMarks();
-          // 掴んでいる語は指へ追従させる。元の DOM には残さないので、
-          // 描画を作り直しても消えないよう body に置く。
-          this.startGhost(node, place, sx, sy, e.clientX, e.clientY);
-        }
-        e.preventDefault();
-        this.moveGhost(e.clientX, e.clientY);
-        this.markDropAt(e.clientX, e.clientY);
-      };
-
-      const detach = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', finish);
-        window.removeEventListener('pointercancel', cancel);
-      };
-      const finish = (e) => {
-        if (e.pointerId !== pid) return;
-        detach();
-        dropHold();
-        this.clearDropMarks();
-        this.endGhost();
-        if (!dragging) {
-          // 長押しなら onHold が走っている。タップは実行しない。
-          if (!held && onTap) onTap();
-          return;
-        }
-        const from = this.dragFrom;
-        const to = this.dropAt(e.clientX, e.clientY);
-        this.dragFrom = null;
-        // ドラッグ終了直後のタップで二重に動かさない。
-        this.suppressClick = true;
-        setTimeout(() => { this.suppressClick = false; }, 0);
-        if (from && to) this.dropOnto(from, to);
-        else this.render();
-      };
-      // ブラウザや OS にジェスチャを奪われたときは何もしない。
-      const cancel = (e) => {
-        if (e.pointerId !== pid) return;
-        detach();
-        dropHold();
-        this.clearDropMarks();
-        this.endGhost();
-        this.dragFrom = null;
-        this.render();
-      };
-
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', finish);
-      window.addEventListener('pointercancel', cancel);
-    });
+  padInsert(place, word) {
+    const sen = this.senOf(place);
+    if (!sen) return { ok: false, reason: 'range' };
+    return this.run.insertInto(sen, place.index, word, place.wi || null);
   }
-
-  /**
-   * ドラッグ中の語の影を作り、指の下へ追従させる。
-   * 元の要素は薄くして、影が「掴んでいるもの」として見えるようにする。
-   */
-  startGhost(node, place, sx, sy, cx, cy) {
-    this.endGhost();
-    const word = this.run.wordAtPlace(place);
-    const ghost = el('div', { class: 'drag-ghost' },
-      el('span', { class: 'dg-word' }, word ? word.text : ''));
-    const conn = this.run.connAt(place);
-    if (conn) ghost.append(el('span', { class: 'dg-conn' }, conn.text));
-    document.body.append(ghost);
-    const r = node.getBoundingClientRect();
-    this.ghost = ghost;
-    // 掴んだ位置のままだと指先から語がぶら下がるので、同じ比率を保つ。
-    this.ghostOff = { x: sx - r.left, y: sy - r.top };
-    const src = node.parentNode?.classList?.contains('sen-item') ? node.parentNode : node;
-    src.classList.add('dragging');
-    this.dragSrc = src;
-    this.moveGhost(cx, cy);
+  padMove(from, to) { return this.run.moveWordTo(from, to); }
+  padReturn(place) {
+    const word = this.wordAt(place);
+    if (!word) return { ok: false, reason: 'empty' };
+    return this.run.toLexicon(word);
   }
-
-  moveGhost(x, y) {
-    const g = this.ghost;
-    if (!g) return;
-    g.style.left = `${Math.round(x - this.ghostOff.x)}px`;
-    g.style.top = `${Math.round(y - this.ghostOff.y)}px`;
-  }
-
-  endGhost() {
-    if (this.ghost?.parentNode) this.ghost.parentNode.removeChild(this.ghost);
-    this.ghost = null;
-    if (this.dragSrc?.classList) this.dragSrc.classList.remove('dragging');
-    this.dragSrc = null;
-  }
-
-  /** ドロップ先につける。data-place は語彙の語など、行に属さない置き場用。 */
-  makeDropTarget(node, place) {
-    const key = placeKey(place);
-    node.dataset.place = key;
-    this.placeById.set(key, place);
-  }
-
-  /**
-   * 文の行の、x 座標にいちばん近い語の境目。
-   * 語の左半分ならその語の手前、右半分なら後ろ。
-   */
-  indexAtX(row, x) {
-    const items = [...row.children].filter((n) => n.classList?.contains('sen-item'));
-    if (!items.length) return 0;
-    for (let i = 0; i < items.length; i++) {
-      const r = items[i].getBoundingClientRect();
-      if (x <= r.left + r.width / 2) return i;
-    }
-    return items.length;
-  }
-
-  /**
-   * 座標の下にあるドロップ先。
-   * 文の行 (と武器の行) はどこでも受け、語彙の箱もどこでも受ける。
-   * data-place の細かなマスを狙わせない。
-   * @returns {{place:object, row?:object, index?:number}|null}
-   */
-  dropInfoAt(x, y) {
-    const hit = document.elementFromPoint(x, y);
-    if (!hit || !hit.closest) return null;
-
-    // 語彙の箱のどこでも「語彙へ戻す」受け皿にする。
-    if (this.lexiconEl && hit.closest('#forgeLexicon') === this.lexiconEl) {
-      return { place: { kind: 'lexicon', index: -1 } };
-    }
-
-    // 文の行、または武器の行 (見出し・効果表示を含む) のどこでも受ける。
-    let row = hit.closest('.sen-row');
-    if (!row) {
-      const wrow = hit.closest('.wrow');
-      if (wrow) row = wrow.querySelector('.sen-row');
-    }
-    if (row && this.senDropRows.has(row)) {
-      const ctx = this.senDropRows.get(row);
-      const index = this.indexAtX(row, x);
-      return {
-        place: { kind: 'gap', index, wi: ctx.wi, wIdx: ctx.wIdx },
-        row,
-        index,
-      };
-    }
-
-    // 語彙の語など、行に属さない置き場 (互換)。
-    const host = hit.closest('[data-place]');
-    if (!host) return null;
-    const place = this.placeById.get(host.dataset.place);
-    return place ? { place } : null;
-  }
-
-  /** 座標の下にあるドロップ先 (互換 API)。 */
-  dropAt(x, y) {
-    return this.dropInfoAt(x, y)?.place || null;
-  }
-
-  /** 座標の下にあるドロップ先を光らせる。文の行なら挿入位置も示す。 */
-  markDropAt(x, y) {
-    const info = this.dropInfoAt(x, y);
-    const place = info?.place;
-    const id = place
-      ? `${place.kind}:${place.wIdx ?? ''}:${place.wi?.uid ?? ''}:${info.index ?? place.index ?? ''}`
-      : '';
-    if (id === this._hotId) return;
-    this.clearDropMarks();
-    this._hotId = id;
-    if (!info) return;
-    if (place.kind === 'lexicon') {
-      this.lexiconEl.classList.add('drop-hot');
-      return;
-    }
-    const row = info.row;
-    if (!row) return;
-    row.classList.add('drop-hot');
-    const items = [...row.children].filter((n) => n.classList?.contains('sen-item'));
-    if (!items.length) {
-      row.classList.add('drop-empty');
-    } else if (items[info.index]) {
-      items[info.index].classList.add('drop-before');
-    } else {
-      items[items.length - 1].classList.add('drop-after');
-    }
-  }
-
-  clearDropMarks() {
-    for (const n of this.root.querySelectorAll('.drop-hot, .drop-before, .drop-after, .drop-empty')) {
-      n.classList.remove('drop-hot', 'drop-before', 'drop-after', 'drop-empty');
-    }
-    this._hotId = '';
-  }
-
-  /**
-   * from の語を to へ運ぶ。
-   *
-   * 文の行のどこに落としても、落とした x 座標に近い境目へ **差し込む**。
-   * 語を置き換えたり入れ替えたりはしない。文 → 語彙は語彙の箱の
-   * どこへ落としても戻せる。語彙どうしは動かさない。
-   */
-  dropOnto(from, to) {
-    if (!from || !to) return;
-    if (from.kind === 'lexicon' && to.kind === 'lexicon') {
-      this.render();
-      return;
-    }
-    // 同じ語の同じ位置へ落としただけなら、履歴にも残さない。
-    if (from.kind !== 'lexicon' && from.index === to.index
-      && (from.wi || null) === (to.wi || null)) {
-      this.render();
-      return;
-    }
-    let r;
-    let wi = to.wi || from.wi || null;
-    let word = null;
-    this.beginEdit();
-
-    if (to.kind === 'lexicon') {
-      word = this.wordAt(from);
-      if (!word) { this.popEdit(); this.render(); return; }
-      r = this.run.toLexicon(word);
-      if (r.ok) {
-        this.msg = `「${word.text}」を語彙へ戻した。`
-          + (r.lost ? `（「${r.lost}」は消えた）` : '');
-      }
-    } else if (from.kind === 'lexicon') {
-      word = this.run.lexicon[from.index];
-      if (!word) { this.popEdit(); this.render(); return; }
-      wi = to.wi || null;
-      const sen = this.senOf(to);
-      if (!sen) { this.popEdit(); this.render(); return; }
-      r = this.run.insertInto(sen, to.index, word, wi);
-    } else {
-      // 文 → 文。置き換えず、抜いて差し込む。
-      r = this.run.moveWordTo(from, to);
-    }
-
-    if (r && r.ok) {
-      if (to.kind === 'lexicon') this.opt.audio?.uns?.();
-      else this.opt.audio?.worn?.(wi ? wi.resolve(this.run.player.stats) : { active: true });
-    } else {
-      this.popEdit();
-      this.opt.audio?.broken?.();
-      this.msg = r?.reason === 'len'
-        ? '文は 10 文字まで。その位置には入らない。'
-        : '語を動かせなかった。';
-    }
-    this.opt.onChange?.();
-    this.render();
+  padSetConn(place, text) { return this.run.setConnAt(place, text ? makeWord(text) : null); }
+  padCycle(place) { return this.run.cycleConnector(place); }
+  padSnapshot() { return this.snapshot(); }
+  padRestore(state) { this.restore(state); }
+  padRender() { this.render(); }
+  padChanged() { this.opt.onChange?.(); }
+  padForget(word) {
+    const gone = this.run.forgetWord(word);
+    if (gone && !this.run.lexiconFreeCount) this.forgetMode = false;
+    return gone;
   }
 }

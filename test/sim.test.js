@@ -1832,15 +1832,13 @@ sec('部位強化は 1 文。接続詞が使える');
       `「発電する」が成立してしまった: ${dangling.reasonText}`);
   }
 
-  // 取り外す: 枠の ✕ 相当 (null) と、同じ語をもう一度押すトグル。
+  // 取り外す: 語を外す (null)。同じ語をもう一度置いても何も変わらない。
   save.setPart('chst', 0, '癒');
   ok(save.partSlotText('chst', 0) === '癒', '語が入らない');
-  ok(save.setPart('chst', 0, '癒'), '同じ語を押して何も返らない');
-  ok(!save.partRaw('chst').filter(Boolean).some((e) => e.t === '癒'),
-    '同じ語を押しても外れない (取り外せない不具合)');
-  save.setPart('chst', 0, '癒');
+  ok(save.setPart('chst', 0, '癒') === false, '同じ語をもう一度置いて変化した');
+  ok(save.partSlotText('chst', 0) === '癒', '同じ語をもう一度置いたら消えた');
   save.setPart('chst', 0, null);
-  ok(!save.partSlot('chst', 0), '✕ (null) で外れない');
+  ok(!save.partWordList().includes('癒'), 'null で外れない');
   ok(!save.partWordList().includes('癒'), '語一覧に残っている');
 
   // 部位の語は RUN に渡して初めて能力になる。

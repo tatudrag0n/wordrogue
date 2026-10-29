@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.41';
+import { ELEMENTS } from '../data/words.js?v=1.42';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */

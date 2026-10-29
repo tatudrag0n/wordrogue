@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord } from '../data/words.js?v=1.41';
+import { WORDS, drawWord } from '../data/words.js?v=1.42';
 import { CONNECTORS, canConnect } from '../data/words.connect.js';
 import {
   RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
-} from '../data/ranks.js?v=1.41';
+} from '../data/ranks.js?v=1.42';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -26,7 +26,7 @@ const DEFAULTS = {
   ranks: {},           // 語 → ランク段階 (0 = コモン)。重複で上がる
   starterRev: 0,       // 初期セットの改訂番号。古いセーブを 1 度だけ入れ替える
   deck: null,          // 戦闘に持ち込む言葉デッキ (語の text の配列)
-  parts: {},           // 部位強化 { partId: [text, text] }
+  parts: {},           // 部位強化 { partId: [{ t, c }] }
   settings: { volume: 0.5, screenShake: true, showDamage: true },
   seenIntro: false,
   guide: 0,            // 初回の操作ガイド。0 = まだ見ていない
@@ -44,9 +44,8 @@ function deepMerge(base, patch) {
   return out;
 }
 
-/** プレイヤー強化の部位。1 部位に PART_SLOTS 語まで入る。 */
 /**
- * プレイヤー強化の部位。1 部位に PART_SLOTS 語まで入る。
+ * プレイヤー強化の部位。
  *
  * 並びは人型の見た目 (頭 → 手 → 胸 → 胴 → 足) に合わせてある。
  * 画面はこの順ではなく data-part で体の位置に置く。
@@ -61,12 +60,11 @@ export const PARTS = [
   { id: 'lfot', name: '左足' },
   { id: 'rfot', name: '右足' },
 ];
-export const PART_SLOTS = 2;    // 1 部位に入る語の数
 /**
  * 部位の文の長さの上限 (接続詞込み)。
- * 部位は武器より短くする — 武器は 10 文字なので、そこを真似ない。
+ * **戦闘中の言葉鍛冶と同じ 10 文字**。語の数は文字数で決まるので上限を置かない。
  */
-export const PART_MAX_LEN = 8;
+export const PART_MAX_LEN = 10;
 export const DECK_MIN = 10;     // デッキの最低語数 (戦闘開始時に満たなければ補充)
 export const DECK_MAX = Infinity;     // デッキの最大語数 (上限撤廃)
 export const GACHA_COST = 25;   // 言葉くじ 1 回の言玉
@@ -88,9 +86,18 @@ function normalizePart(arr, collection) {
     if (!text || !collection.includes(text)) continue;
     const conn = typeof raw === 'string' ? null : raw.c || null;
     out.push({ t: text, c: conn && CONNECTORS[conn] ? conn : null });
-    if (out.length >= PART_SLOTS) break;
   }
   return out;
+}
+
+/** 部位の語の並びの文字数 (接続詞込み)。Sentence.len と同じ数え方。 */
+function partTextLen(list) {
+  let n = 0;
+  for (const e of list || []) {
+    if (!e) continue;
+    n += e.text.length + (e.conn ? e.conn.length : 0);
+  }
+  return n;
 }
 
 /**
@@ -99,7 +106,7 @@ function normalizePart(arr, collection) {
  * 穴を残すと、表示の番号と保存の番号がずれて ✕ が効かなくなる。
  */
 function compact(arr) {
-  return arr.filter(Boolean).slice(0, PART_SLOTS);
+  return arr.filter(Boolean);
 }
 
 /**
@@ -268,7 +275,7 @@ export class Save {
       const old = Array.isArray(d.parts[from]) ? d.parts[from] : [];
       delete d.parts[from];
       if (!old.length) continue;
-      d.parts[to] = (Array.isArray(d.parts[to]) ? d.parts[to] : []).concat(old).slice(0, PART_SLOTS);
+      d.parts[to] = (Array.isArray(d.parts[to]) ? d.parts[to] : []).concat(old);
     }
     for (const p of PARTS) {
       d.parts[p.id] = normalizePart(d.parts[p.id], d.collection);
@@ -404,32 +411,73 @@ export class Save {
   }
 
   /**
-   * 部位の枠に語を入れる (text=null で外す)。
-   * 語を変えると、その語に付けない接続詞は落ちて当然なので枠ごと買い替える。
-   * @returns {boolean} 変わったか (枠が同じ語のままなら false)
+   * 部位の語を index の位置に差し込む。鍛冶の Sentence.insertAt と同じ規則で、
+   * 文字数 (PART_MAX_LEN = 10) に収まるときだけ入る。既存の語は動かさない。
+   *
+   * 同じ語は部位に何度でも置ける (所持語は減らない)。
+   * @returns {{ok:boolean, reason:string}}
+   */
+  partInsert(partId, index, text) {
+    if (!PARTS.some((p) => p.id === partId)) return { ok: false, reason: 'part' };
+    if (!text || !this.ownsWord(text)) return { ok: false, reason: 'noword' };
+    if (CONNECTORS[text]) return { ok: false, reason: 'notword' };
+    const arr = this.data.parts[partId] || (this.data.parts[partId] = []);
+    const at = Math.max(0, Math.min(index ?? arr.length, arr.length));
+    if (partTextLen(this.partRaw(partId)) + text.length > PART_MAX_LEN) {
+      return { ok: false, reason: 'len' };
+    }
+    arr.splice(at, 0, { t: text, c: null });
+    this.save();
+    return { ok: true, reason: 'placed' };
+  }
+
+  /** 部位の語を 1 つ外す (接続詞も一緒に消える)。 */
+  partRemove(partId, index) {
+    const arr = this.data.parts?.[partId];
+    if (!arr || !arr[index]) return { ok: false, reason: 'empty' };
+    const [e] = arr.splice(index, 1);
+    this.save();
+    return { ok: true, reason: 'removed', text: e.t, conn: e.c || null };
+  }
+
+  /** 部位の中で語を並べ替える。長さは変わらないので必ず通る。 */
+  partMove(partId, from, to) {
+    const arr = this.data.parts?.[partId];
+    if (!arr || !arr[from]) return { ok: false, reason: 'empty' };
+    const at = Math.max(0, Math.min(to, arr.length));
+    if (at === from || at === from + 1) return { ok: true, reason: 'same' };
+    const [e] = arr.splice(from, 1);
+    arr.splice(at > from ? at - 1 : at, 0, e);
+    this.save();
+    return { ok: true, reason: 'moved' };
+  }
+
+  /** 部位を空にする (語も接続詞も外す)。 */
+  partClear(partId) {
+    if (!PARTS.some((p) => p.id === partId)) return false;
+    if (!(this.data.parts[partId] || []).length) return false;
+    this.data.parts[partId] = [];
+    this.save();
+    return true;
+  }
+
+  /**
+   * 部位の index の位置に語を置く (互換 API)。null で外す。
+   * 入っている位置に別の語を置くと、その語を差し替える。
+   * @returns {boolean} 変わったか
    */
   setPart(partId, slot, text) {
     if (!PARTS.some((p) => p.id === partId)) return false;
-    if (text && !this.ownsWord(text)) return false;
+    if (!text) return this.partRemove(partId, slot).ok;
     const arr = this.data.parts[partId] || (this.data.parts[partId] = []);
+    if (slot >= arr.length) return this.partInsert(partId, slot, text).ok;
+    if (!this.ownsWord(text)) return false;
     const was = arr[slot];
-    if (!text) {
-      if (!was) return false;            // もともと空
-      arr[slot] = null;
-      this.data.parts[partId] = compact(arr);
-      this.save();
-      return true;
-    }
-    // 同じ語が入っている枠をもう一度押したら、外す (取り外せない不具合の修正)。
-    if (was && was.t === text) {
-      arr[slot] = null;
-      this.data.parts[partId] = compact(arr);
-      this.save();
-      return true;
-    }
-    if (was && !was.t) return false;
+    if (was && was.t === text) return false;   // 同じ語のまま
+    // 語を変えると、その語に付けない接続詞は落ちる (枠ごと買い替える)。
+    const len = partTextLen(this.partRaw(partId)) - was.t.length - (was.c ? was.c.length : 0) + text.length;
+    if (len > PART_MAX_LEN) return false;
     arr[slot] = { t: text, c: null };
-    this.data.parts[partId] = compact(arr);
     this.save();
     return true;
   }
@@ -437,9 +485,8 @@ export class Save {
   /**
    * 部位の語に接続詞を付ける (null で外す)。
    *
-   * 部位は **どの接続詞でも選べる**。言葉鍛冶 (武器) はその語のプールの
-   * 送り仮名だけだが、部位は語が少なく、プールを絞ると「1 つも選べない」
-   * 語が出るため。文として成り立つかは選んだあとに画面が示す。
+   * 付くのは **その語 (または熟語) の送り仮名** だけ — 言葉鍛冶とまったく同じ規則。
+   * 文字数を超える形も付かない。成る / 成らないは付けたあとの評価が決める。
    * @returns {{ok:boolean, reason:string}}
    */
   setPartConn(partId, slot, conn) {
@@ -448,16 +495,19 @@ export class Save {
     if (!e || !e.t) return { ok: false, reason: 'empty' };
     if (!conn) { e.c = null; this.save(); return { ok: true, reason: 'cleared' }; }
     if (!CONNECTORS[conn]) return { ok: false, reason: 'unknown' };
-    // 付くのは **その語 (または熟語) の送り仮名** だけ — 鍛冶と同じルール。
+    // 段冶と同じルール: その語 (または熟語) の送り仮名だけ。
     if (!partCanConnect(this.partRaw(partId), slot, conn)) {
       return { ok: false, reason: 'nomatch' };
     }
+    // 接続詞を足して 10 文字を超えるなら付かない。
+    const len = partTextLen(this.partRaw(partId)) - (e.c ? e.c.length : 0) + conn.length;
+    if (len > PART_MAX_LEN) return { ok: false, reason: 'len' };
     e.c = conn;
     this.save();
     return { ok: true, reason: 'placed' };
   }
 
-  /** 部位の枠を空にする (語も接続詞も外す)。 */
+  /** 部位の枠を空にする (互換 API)。 */
   clearPart(partId, slot) { return this.setPart(partId, slot, null); }
 
   // ── 設定 ─────────────────────────────────────────────────────────────────

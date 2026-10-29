@@ -5,27 +5,15 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.41';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.41';
-import { evaluatePart, partConnChoices, partWordForms } from '../game/parts.js';
-import {
-  partEffectRows, partTotalRows, wordEffectRows, wordDirectEffectRows,
-  isPartUsable, wordMeaningParts, PART_KIND_LABELS,
-} from '../game/stats.js';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.42';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.42';
+import { evaluatePart, partConnChoices } from '../game/parts.js';
+import { partEffectRows, partTotalRows } from '../game/stats.js';
+import { GrowPad } from './growpad.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
-  PARTS, PART_SLOTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
+  PARTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
 } from '../core/save.js';
-
-/**
- * この枠に今この接続詞を付けたとき、部位の文が成っているか。
- * 接続詞を外した状態は語だけで決まる。
- */
-function partValidWithConn(words, index, conn) {
-  const w = (words || []).map((x) => ({ text: x.text, conn: x.conn }));
-  if (w[index]) w[index].conn = conn || null;
-  return evaluatePart(w.filter(Boolean)).valid;
-}
 
 /** 語の効果を 1 行にまとめる (ツールチップ用)。 */
 function fxText(src, label) {
@@ -103,20 +91,16 @@ export class Menus {
     this.deckSelectAll = $('#deckSelectAll');
     this.deckDeselectAll = $('#deckDeselectAll');
     this.deckBack = $('#deckBack');
-    /** 部位に入れるために選んでいる語。 */
-    this.growSel = null;
-    /** 接続詞の一覧を開いている枠 { part, slot }。 */
-    this.growConn = null;
+    /** 部位を組む土台。言葉鍛冶と同じ操作 (senpad.js) を使う。 */
+    this.growUndo = $('#btnGrowUndo');
+    this.growPad = new GrowPad(this);
     // チュートリアル。初回の 1 回だけ自動で出す (save.d.seenIntro)。
     // #tutorial が無い環境 (テストの最小 DOM) でも死なないように取っておく。
     this.tutorial = $('#tutorial');
     this.tutStepEl = this.tutorial ? $('#tutStep') : null;
     this.tutSteps = this.tutorial ? [...this.tutorial.querySelectorAll('.tut-step')] : [];
     this.tutIdx = 0;
-    /** 「ほかの接続詞」を開いている枠 ("part:slot")。 */
-    this.growConnAll = null;
-    /** 詳細 note に出す一次性のメッセージ。renderGrow で消す。 */
-    this.growNote = '';
+
 
     /** 辞書。検索語と絞り込みカテゴリ。 */
     this.dictQuery = '';
@@ -145,6 +129,7 @@ export class Menus {
     this.deckSelectAll?.addEventListener('click', () => { tap(); this.selectAllDeck(); });
     this.deckDeselectAll?.addEventListener('click', () => { tap(); this.deselectAllDeck(); });
     this.deckBack?.addEventListener('click', () => { tap(); this.hideDeckBack(); this.closeTab('words'); });
+    this.growUndo?.addEventListener('click', () => { tap(); this.growPad.undo(); });
     this.gachaBtn?.addEventListener('click', () => { tap(); this.startGacha(1); });
     this.gachaTenBtn?.addEventListener('click', () => { tap(); this.startGacha(10); });
     // 幕の中の操作。幕が無い最小 DOM ではすべて素通りする。
@@ -258,7 +243,7 @@ export class Menus {
     if (name === 'title') this.renderTitle();
     if (name === 'settings') this.renderSettings();
     if (name === 'dict') this.renderDict();
-    if (name === 'grow') this.renderGrow();
+    if (name === 'grow') { this.growPad.reset(); this.renderGrow(); }
     if (name === 'words') this.renderWords();
     if (name === 'tutorial') this.renderTutorial();
   }
@@ -331,29 +316,10 @@ export class Menus {
 
   // ── 部位強化 (言葉くじ・部位・言葉デッキ) ──────────────────────────────
   //
-  // 部位は 1 文として数える (武器と同じ仕組み)。1 部位に 2 語まで入れられて、
+  // 部位は 1 文として数える (武器と同じ仕組み)。**10 文字まで**、語の数は自由。
   // 語の直後に **接続詞** が選べる。接続詞はその語のプール (送り仮名) だけ。
-  // 枠の ✕ でいつでも外れる — 語を選んだまま枠を押しても外れる。
+  // 組む操作は GrowPad (senpad.js) — 戦闘中の言葉鍛冶と同じ実装。
 
-  /** 空いている部位の枠。選んだ語をここに置く。 */
-  renderGrowGap(part, i) {
-    const slot = el('button', {
-      class: 'btn grow-slot empty', type: 'button',
-      title: this.growSel ? `選んだ「${this.growSel}」をここに入れる` : 'まず下の所持語から語を選んでください',
-    }, el('span', {}, '＋'));
-    slot.addEventListener('click', () => {
-      if (!this.growSel) {
-        this.growNote = '先に下の「所持語」から語を選んでください';
-        this.audio?.broken?.();
-        this.renderGrow();
-        return;
-      }
-      this.save.setPart(part.id, i, this.growSel);
-      this.audio?.slot?.();
-      this.renderGrow();
-    });
-    return slot;
-  }
 
   /** 能力の差分を 1 行のチップにする (「体力 +25」など)。 */
   effectChips(rows, cls = 'eff') {
@@ -373,121 +339,7 @@ export class Menus {
       + (i < 4 ? '\n同じ語をもう一度くじで引くと上がる' : '\n最上位');
   }
 
-  /** 語が入っている部位の枠。語 (タップで接続詞が回る) + 接続詞 + ✕。 */
-  renderGrowSlot(part, i, entry, words) {
-    const save = this.save;
-    const box = el('div', { class: 'grow-slot filled' });
-    const open = this.growConn && this.growConn.part === part.id && this.growConn.slot === i;
-    // 候補は戦闘中の言葉鍛冶と同じ — その語の送り仮名と、熟語の形だけ。
-    const choices = partConnChoices(words, i);
-    // 語をタップして回る順番も同じ候補 (プールの順)。
-    const list = choices.length ? choices.map((c) => c.text) : partWordForms(entry.text);
 
-    const word = el('button', {
-      class: 'btn gs-word', type: 'button',
-      title: `「${entry.text}」\nタップ: 接続詞を順に切り替える (${list.join(' → ') || '無し'} → 無し)`
-        + (this.growSel && this.growSel !== entry.text
-            ? `\n今「${this.growSel}」を選んでいるので、押すとその語に置き換わる` : '')
-        + (this.growSel === entry.text ? '\n選んでいる語と同じなので、押すとこの枠から外れる' : ''),
-    }, el('span', {}, entry.text));
-    word.addEventListener('click', () => {
-      if (this.growSel && this.growSel !== entry.text) {
-        save.setPart(part.id, i, this.growSel);   // 選んでいる語で置き換える
-        this.audio?.slot?.();
-      } else if (this.growSel === entry.text) {
-        save.setPart(part.id, i, entry.text);      // 同じ語 → 外す (取り外せる)
-        this.audio?.tap?.();
-      } else {
-        // 接続詞を 1 つ進める。一周したら無し。
-        const at = list.indexOf(entry.conn);
-        const next = at + 1 < list.length ? list[at + 1] : null;
-        save.setPartConn(part.id, i, next);
-        if (next) this.audio?.conn?.(); else this.audio?.tap?.();
-      }
-      this.renderGrow();
-    });
-
-    const validNow = partValidWithConn(words, i, entry.conn);
-    const conn = el('button', {
-      class: 'btn gs-conn' + (entry.conn ? ' filled' : '') + (entry.conn && !validNow ? ' bad' : ''),
-      type: 'button',
-      title: entry.conn
-        ? `接続詞「${entry.conn}」— 別の接続詞を選ぶ`
-        : '接続詞を選ぶ (押すと一覧が開く)',
-    }, el('span', {}, entry.conn || '接続詞'));
-    if (open) conn.classList.add('on');
-    conn.addEventListener('click', () => {
-      this.growConn = open ? null : { part: part.id, slot: i };
-      this.audio?.tap?.();
-      this.renderGrow();
-    });
-
-    const out = el('button', {
-      class: 'gs-out', type: 'button',
-      title: `${entry.text} を部位から外す`, 'aria-label': `${entry.text} を外す`,
-    }, el('span', {}, '✕'));
-    out.addEventListener('click', () => {
-      save.setPart(part.id, i, null);
-      this.growConn = null;
-      this.audio?.tap?.();
-      this.renderGrow();
-    });
-
-    box.append(word, conn, out);
-    if (open) box.append(this.renderGrowConnMenu(part, i, words, choices));
-    return box;
-  }
-
-  /**
-   * 接続詞の一覧。枠の下にインラインで出す (画面の位置を計算しない)。
-   * 候補は **戦闘中の言葉鍛冶と同じ** — その語の送り仮名と、熟語の形だけ。
-   * どの語にも付く自由な接続詞は選べない (並べるだけ無駄な形を出さない)。
-   * ✓ は文が成る形 (効果が出る)、✕ は不成文 (理由はボタンの title に出る)。
-   */
-  renderGrowConnMenu(part, i, words, choices) {
-    const menu = el('div', { class: 'grow-conn-menu' });
-    const cur = (words[i] && words[i].conn) || null;
-    const pick = (text) => {
-      this.save.setPartConn(part.id, i, text);
-      this.growConn = null;
-      if (text) this.audio?.conn?.(); else this.audio?.tap?.();
-      this.renderGrow();
-    };
-    const chip = (c) => {
-      const b = el('button', {
-        class: 'btn grow-conn-pick' + (c.text === cur ? ' cur' : '')
-          + (c.valid ? ' ok' : ' no') + (c.compound ? ' idiom' : ' own'),
-        type: 'button',
-        title: `${c.formText} — ${c.valid ? '文が成る' : '不成文'}\n${c.roleLabel}。${c.desc}`
-          + (c.compound ? '\n熟語の形' : '\nこの語の形')
-          + (!c.valid && c.reason ? `\n${c.reason}` : ''),
-      }, el('span', {}, c.text));
-      b.addEventListener('click', () => pick(c.text));
-      return b;
-    };
-
-    const off = el('button', {
-      class: 'btn grow-conn-pick' + (!cur ? ' cur' : ''), type: 'button', title: '接続詞を外す',
-    }, el('span', {}, '無し'));
-    off.addEventListener('click', () => pick(null));
-    menu.append(off);
-    // 縦に伸びないよう、候補は横に並べる (語の送り仮名は数個しかない)。
-    menu.append(el('div', { class: 'grow-conn-list' }, ...choices.map(chip)));
-
-    if (!choices.length) {
-      menu.append(el('span', { class: 'grow-conn-none' },
-        `「${words[i].text}」に付く送り仮名が無い — 送り仮名なしで置く`));
-    } else if (!choices.some((c) => c.valid)) {
-      menu.append(el('span', { class: 'grow-conn-none' },
-        'この並びで文になる形が無い — 語を入れ替えるか、順番を変える'));
-    }
-
-    const mark = el('span', { class: 'grow-conn-legend' },
-      '付く形はその語の送り仮名だけ (戦闘中の文と同じ)。',
-      el('i', { class: 'ok' }, '✓'), 'は文が成る形。', el('i', { class: 'no' }, '✕'), 'は不成文 (効果なし)。');
-    menu.append(mark);
-    return menu;
-  }
 
   /**
    * 部位の評価。**何がどれだけ変わるか** を必ず数字で出す。
@@ -536,7 +388,7 @@ export class Menus {
 
   renderGrow() {
     const save = this.save;
-    this.growInk.textContent = String(save.ink);
+    if (this.growInk) this.growInk.textContent = String(save.ink);
 
     // 全部位の合計。ここだけ見れば「今どう強くなっているか」が分かる。
     if (this.growTotal) {
@@ -558,86 +410,9 @@ export class Menus {
       }
     }
 
-    // 部位。空いた枠に選んだ語が入る。語の右が接続詞、✕ で外れる。
-    clear(this.growParts);
-    for (const p of PARTS) {
-      const words = save.partRaw(p.id).filter(Boolean);
-      const box = el('div', { class: 'grow-part' + (words.length ? ' filled' : '') });
-      box.dataset.part = p.id;   // 目印。並びは CSS が決める
-      const row = el('div', { class: 'grow-part-row' });
-      row.append(el('span', { class: 'grow-part-name' }, p.name));
-      const sen = el('div', { class: 'grow-sen' });
-      for (let i = 0; i < PART_SLOTS; i++) {
-        sen.append(words[i]
-          ? this.renderGrowSlot(p, i, words[i], words)
-          : this.renderGrowGap(p, i));
-      }
-      row.append(sen);
-      box.append(row);
-      box.append(this.renderGrowPartNote(p, words));
-      this.growParts.append(box);
-    }
-
-    const note = this.growNote ? `${this.growNote} — ` : '';
-    const body = this.growSel
-      ? `「${this.growSel}」を選択中 — 空いた枠を押すと入り、入っている語を押すと外れる。語の右の「接続詞」で送り仮名を選べる`
-      : '部位は 1 文。語を押すとその語に付く送り仮名が順に回り、「接続詞」を押すと一覧が開く';
-    const extra = this._growEffectNote ? ` — ${this._growEffectNote}` : '';
-    this.growSelNote.textContent = `${note}${body}${extra}`;
-    this.growNote = '';
-    this._growEffectNote = '';
-
-    // 所持語 (部位用)。押すと選択。部位の語はそのまま能力に効く。
-    // 部位で何も起きない語 (武器の文で使う語) は出さない — 選ぶ語を絞ると、
-    // 入れる語がすぐ見つかる。
-    clear(this.growWords);
-    const owned = save.collection.filter((t) => !!WORDS[t]);
-    const usableList = owned.filter((t) => isPartUsable(t));
-    const hiddenN = owned.length - usableList.length;
-    if (this.growWordsNote) {
-      this.growWordsNote.textContent = hiddenN
-        ? `体に効く ${usableList.length} 語。ほか ${hiddenN} 語は武器の文で使う語 (部位では何も起きない) なので隠している`
-        : `体に効く ${usableList.length} 語`;
-    }
-    for (const t of usableList) {
-      const info = WORDS[t];
-      if (!info) continue;
-      // 語が持つ効果は武器側 (fx) と体側 (player) の 2 つ。両方見せる。
-      const src = [fxText(info.fx, FX_LABEL), info.player ? `体 ${fxText(info.player, PS_LABEL)}` : '']
-        .filter((x) => x && x !== '効果なし').join(' / ') || '効果なし';
-      const used = save.partWordList().filter((x) => x === t).length;
-      // この語を単体で部位に入れると何が変わるか。
-      //   direct … 語そのものが体に効くか (体力 +25 など)
-      //   eff    … 文の力ぶんも含めた効き (文が成ればどの語でも少し乗る)
-      const direct = wordDirectEffectRows(t);
-      const eff = wordEffectRows(t);
-      // 語の意味が効く部位 (「賢」→ 頭)。
-      const kinds = wordMeaningParts(t);
-      const where = kinds.map((k) => PART_KIND_LABELS[k] || k).join('・');
-      const b = el('button', {
-        class: 'btn grow-word' + (this.growSel === t ? ' sel' : '') + (used ? ' used' : '')
-          + (direct.length || kinds.length ? ' has-eff' : ' no-eff') + ' rk' + save.rankIndex(t),
-        title: `${CATEGORIES[info.cat]?.name || info.cat} / ランク ${save.rankOf(t).name}: ${src}\n${this.rankTip(t)}`
-          + (direct.length ? `\n体に効く: ${direct.map((r) => `${r.label} ${r.text}`).join(' / ')}`
-            : '\n体に直接は効かない (文にすれば文の力ぶん強くなる)')
-          + (kinds.length ? `\n効く部位: ${where} (語の意味が${where}で働く)` : '')
-          + (eff.length && !direct.length ? '\n文にすれば文の力ぶんだけ強くなる' : '')
-          + (used ? `\n部位に ${used} 語入っている (同じ語をいくつでも置ける)` : ''),
-      }, t, used ? el('i', { class: 'grow-word-used' }, `×${used}`) : null);
-      if (direct.length) b.append(el('i', { class: 'grow-word-eff' }, direct.map((r) => r.text).join(' ')));
-      // 語の意味が効く部位 (「賢」→ 頭)。どこに入れると効くかが語だけで分かる。
-      if (where) b.append(el('i', { class: 'grow-word-eff where' }, where));
-      b.addEventListener('click', () => {
-        this.growSel = this.growSel === t ? null : t;
-        this.growConn = null;
-        if (where) this._growEffectNote = `「${t}」は${where}に入れると効く (語の意味が部位の働きに合う)`;
-        else if (!direct.length) this._growEffectNote = `「${t}」は体に直接は効かない — 装甲・盾などの効果を持つ語 (甲・鍔…) は部位で強く効く`;
-        this.audio?.tap?.();
-        this.renderGrow();
-      });
-      this.growWords.append(b);
-    }
-
+    // 部位 7 行と所持語は GrowPad が描く。組む操作は言葉鍛冶と同じ土台
+    // (senpad.js) なので、タップ・ドラッグ・接続詞・戻すがすべて同じ。
+    this.growPad.render();
   }
 
   // ── 言葉 (くじ・デッキ) ──────────────────────────────────────────────────

@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.41">
+<link rel="stylesheet" href="css/style.css?v=1.42">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -284,7 +284,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.41</div>
+      <div class="title-version">Ver. 1.42</div>
     </div>
   </div>
 
@@ -440,11 +440,14 @@
       <p>
       タイトルの<strong>部位強化</strong>で、頭・右手・左手・胸・胴・左足・右足の
       7 部位に語を入れると、その語の効果が能力に効く。部位は<strong>縦に並び</strong>、
-      空いた枠の<strong>+</strong>を押すと選んだ語が入る。
-      <strong>1 部位 = 1 文</strong>。語は 2 つまで入れられて、
-      語の右の<strong>「接続詞」</strong>を押すと付けられる形の一覧が開く。
-      <strong>戦闘中の言葉鍛冶と同じルール</strong>で、付くのはその語の送り仮名(と熟語の形)だけ —
-      <strong>✓ は文が成る形</strong>(効きが伸びる)、✕ は不成文(何も効かない)。
+      <strong>1 部位 = 1 文</strong>。組むのは<strong>戦闘中の言葉鍛冶と同じ操作</strong>：
+      所持語を部位の行へ<strong>ドラッグ</strong>すると落とした位置に入り、語をタップして選んでから行を押しても入る。
+      語は<strong>ドラッグで並べ替え・別の部位へ移動</strong>でき、所持語の箱へ戻すと外れる。
+      <strong>文は 10 文字まで</strong>で語の数に上限はない。下の語をタップすると接続詞が順に回り、
+      語の右の<strong>接続詞</strong>を押すと鍛冶と同じ一覧が開く。
+      <strong>戦闘中の言葉鍛冶と同じルール</strong>で、付くのはその語の送り仮名(と熟語の形)だけ。
+      不成文の並びは何も効かず、その理由が部位の下に出る。
+      <strong>「戻す」</strong>で直前の操作を 1 つ戻せる。
       文の力は<strong>体そのもの</strong>(攻撃と体力)にも乗る。
       <strong>所持語は体に効く語だけ</strong>を並べる(剣・弾・炎のように武器の文で使う語は隠す)。
       その語の効果のうち<strong>装甲・回復・吸血・会心・幸運・吸引・盾</strong>などの分だけ体が受け取る。
@@ -746,11 +749,15 @@
         </section>
 
         <section>
-          <h3>部位</h3>
-          <p class="grow-note">下の「所持語」から語を選んで、各部位の枠を押すと入る。入っている枠を押すと外れる(語を 2 つまで)。
-          語の右の<strong>「接続詞」</strong>を押すと、その語に付く送り仮名の一覧が開く。
+          <h3>部位 <button class="btn grow-undo" id="btnGrowUndo" type="button" disabled>戻す</button></h3>
+          <p class="grow-note">部位は<strong>言葉鍛冶とまったく同じ操作</strong>で組む。
+          下の「所持語」を部位の行へ<strong>ドラッグ</strong>すると、落とした位置に入る。
+          語をタップして選んでから行を押しても入る。文の中の語はドラッグで並べ替え・別の部位へ移動、
+          所持語の箱へドラッグすると外れる。
+          語をタップすると接続詞が順に回り、語の右の<strong>接続詞</strong>を押すと一覧から一発で選べる。
+          <strong>文は 1 部位 10 文字まで</strong> (武器と同じ)。語の数に上限はない。
           <strong>戦闘中の言葉鍛冶と同じルール</strong>で、付くのはその語の送り仮名(と熟語の形)だけ。
-          <strong>✓ は文が成る形</strong>(文の力が体に乗る)、✕ は不成文(効果なし)。
+          不成文の並びは効果なし。「戻す」で直前の操作を 1 つ戻せる。
           各部位の下に<strong>何がどれだけ変わるか</strong>が出る。
           <br><strong>語の意味も体に効く。</strong>速い足は移動、硬い胴は装甲、賢い頭は経験値と語彙、
           炎の右手は武器の属性と炎上になる。
@@ -884,6 +891,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.41"></script>
+<script type="module" src="js/main.js?v=1.42"></script>
 </body>
 </html>

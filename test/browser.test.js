@@ -179,7 +179,8 @@ sec('恒久強化は廃止。体を強くするのは部位の語だけ');
       plainLex: plain.lexicon, wiseLex: buffed.lexicon,
       plainXp: plain.xpMul, wiseXp: buffed.xpMul,
       plainArmor: plain.armor, wiseArmor: buffed.armor,
-      slots: document.querySelectorAll('#growParts [data-part="head"] .grow-slot').length,
+      slots: document.querySelectorAll('#growParts [data-part="head"] .sen-row .sen-word').length,
+      limit: (document.querySelector('#growParts [data-part="head"] .grow-part-lv') || {}).textContent || '',
       total: (document.getElementById('growTotal').textContent || '').slice(0, 80),
     };
   })()`);
@@ -187,7 +188,8 @@ sec('恒久強化は廃止。体を強くするのは部位の語だけ');
   ok(st.wiseLex > 0, `賢い頭で語彙が広がらない: ${st.wiseLex}`);
   ok(st.wiseXp > st.plainXp, `賢い頭で経験値が上がらない: ${st.plainXp} -> ${st.wiseXp}`);
   ok(st.wiseArmor > st.plainArmor, `硬い胴で装甲が上がらない: ${st.plainArmor} -> ${st.wiseArmor}`);
-  ok(st.slots === 2, `頭の枠が 2 つでない: ${st.slots}`);
+  ok(st.slots === 1, `頭の語が 1 つでない: ${st.slots}`);
+  ok(/\/ 10 文字/.test(st.limit), `部位の上限が 10 文字でない: ${st.limit}`);
   ok(/語彙/.test(st.total), `部位の合計に語彙が出ない: ${st.total}`);
   console.log(`    頭「賢」で語彙 +${st.wiseLex} / 胴「硬」で装甲 +${(st.wiseArmor * 100).toFixed(0)}%`);
 
@@ -1618,7 +1620,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
     app.menus.renderGrow();
     const gachaBefore = save.collection.length;
     const g = save.drawGacha();
-    // 部位は 2 語まで。文末は語で閉じるので、接続詞は前の語に付ける
+    // 部位は 10 文字まで。文末は語で閉じるので、接続詞は前の語に付ける
     // (癒す骨)。1 語 + 接続詞は文末が接続詞になり、不成文になる。
     save.setPart('head', 0, '癒');
     save.setPart('head', 1, '骨');
@@ -1665,59 +1667,49 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   console.log(`    部位 ${applied.partCount} 語 / 体力 ${applied.maxHp} / 語彙 ${applied.filled} 語`);
 
   // 接続詞を実際に押して選ぶ。候補は **その語の送り仮名だけ** (鍛冶と同じルール)。
-  // 頭には 癒 + 骨 が入っている。癒 の送り仮名は す / える / して / えて。
+  // 頭には 癒 が入っている。癒 の送り仮名は す / える / して / えて。
+  // 部位の接続詞の一覧は、戦闘中の言葉鍛冶と **同じ .conn-picker** を開く。
   const conn = await evalJs(`(() => {
     const app = window.__wordrogue;
     app.menus.show('grow');
     app.menus.renderGrow();
     const live = () => [...document.querySelectorAll('#growParts .grow-part')]
       .find(p => p.querySelector('.grow-part-name').textContent === '頭');
-    const chips = () => [...live().querySelectorAll('.grow-conn-pick')];
-    // 一覧が開くまで押す (すでに開いていれば閉じてしまうため)。
     const open = () => {
-      if (!live().querySelector('.grow-conn-pick')) live().querySelector('.gs-conn').click();
-      return chips();
+      if (!document.querySelector('.conn-picker')) live().querySelector('.sen-conn').click();
+      return [...document.querySelectorAll('.conn-picker .conn-pick')];
     };
-    const first = open();
-    const labels = first.map(n => n.textContent.replace(/[✓✕]/g, '').trim());
-    // 不成文になる形も、その語の送り仮名なら選べる (理由と直し方が出る)。
-    const noPick = first.find(n => n.classList.contains('no'));
-    let broken = '';
-    if (noPick) {
-      noPick.click();
-      const bad = live().querySelector('.grow-part-note.bad');
-      broken = (bad ? bad.textContent : '') + (live().querySelector('.grow-part-fix') ? ' / 直し方あり' : '');
-      open();
-    }
-    // 成る形へ戻す。
-    open().find(n => n.classList.contains('ok')).click();
+    const labels = open().map(n => n.textContent.trim());
+    // 「す」(癒す) を選ぶと文が成る。
+    const pick = [...document.querySelectorAll('.conn-picker .conn-pick')]
+      .find(n => n.textContent.trim() === 'す');
+    if (pick) pick.click();
     const note = live().querySelector('.grow-part-note');
     return {
-      first: first.length, labels, no: first.filter(n => n.classList.contains('no')).length,
-      broken, more: !!live().querySelector('.grow-conn-more'),
+      labels,
+      pickerSameAsForge: !!document.querySelector('.conn-picker'),
       note: note ? note.textContent.trim() : '',
       conn: (app.save.partRaw('head') || []).filter(Boolean)[0].conn,
       words: document.querySelectorAll('#growWords .grow-word').length,
       noteEl: document.getElementById('growWordsNote').textContent,
       totalRows: document.querySelectorAll('#growTotal .eff').length,
       wordEff: document.querySelectorAll('#growWords .grow-word-eff').length,
+      undoDisabled: document.getElementById('btnGrowUndo').disabled,
+      limit: (live().querySelector('.grow-part-lv') || {}).textContent || '',
     };
   })()`);
-  ok(conn.labels[0] === '無し', `接続詞の一覧の先頭が無しでない: ${JSON.stringify(conn.labels)}`);
-  ok(conn.first >= 2 && conn.first <= 5,
-    `候補が語の送り仮名に限られていない: ${JSON.stringify(conn.labels)}`);
+  ok(conn.labels[0] === 'なし', `接続詞の一覧の先頭が無しでない: ${JSON.stringify(conn.labels)}`);
   ok(conn.labels.slice(1).every(t => ['す', 'える', 'して', 'えて'].includes(t)),
     `癒 に付かない形が出ている: ${JSON.stringify(conn.labels)}`);
-  ok(conn.no > 0, `不成文になる形 (✕) が出ていない: ${conn.first} 件`);
-  ok(/不成文/.test(conn.broken) && /直し方/.test(conn.broken),
-    `✕ を選んでも不成文と直し方が出ない: ${conn.broken}`);
-  ok(!conn.more, '自由な接続詞の一覧 (ほかの接続詞) が残っている');
-  ok(conn.note.length > 0 && !/不成文/.test(conn.note), `成る形に戻っていない: ${conn.note}`);
+  ok(conn.conn === 'す', `接続詞がセーブに入らない: ${conn.conn}`);
+  ok(!/不成文/.test(conn.note), `癒す が不成文になっている: ${conn.note}`);
+  ok(/10 文字/.test(conn.limit), `文字数の表示が無い: ${conn.limit}`);
+  ok(conn.undoDisabled === false, '「戻す」が押せない');
   ok(conn.totalRows > 0, '部位の合計に効果が出ていない');
   ok(conn.wordEff > 0, '所持語に効きの表示が無い');
   ok(conn.words > 0 && conn.words < 40, `所持語が絞られていない: ${conn.words}`);
   ok(/体に効く/.test(conn.noteEl), `絞り込みの説明が出ない: ${conn.noteEl}`);
-  console.log(`    接続詞 ${conn.labels.join(' ')} (✕ ${conn.no}) → ${conn.conn === null ? '無し' : conn.conn} / 所持語 ${conn.words}`);
+  console.log(`    接続詞 ${conn.labels.join(' ')} → ${conn.conn} / 所持語 ${conn.words} / ${conn.limit}`);
 }
 
 

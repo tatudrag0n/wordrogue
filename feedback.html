@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f3eee1">
 <title>フィードバック — ワードローグ</title>
-<link rel="stylesheet" href="css/style.css?v=1.38">
+<link rel="stylesheet" href="css/style.css?v=1.39">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
   .fb-wrap { max-width: 760px; margin: 0 auto; padding: 24px 18px 60px; }
@@ -22,7 +22,7 @@
   .fb-textarea { min-height: 120px; resize: vertical; font-family: inherit; }
   .fb-row { display:flex; gap:10px; }
   .fb-row > * { flex:1; }
-  .fb-actions { display:flex; gap:10px; align-items:center; margin-top: 16px; flex-wrap: wrap; position: sticky; bottom: 8px; background: var(--panel); padding: 8px 0; z-index: 2; }
+  .fb-actions { display:flex; gap:10px; align-items:center; margin-top: 16px; flex-wrap: wrap; }
   .fb-btn { padding: 10px 20px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--panel); cursor:pointer; font-size: 14px; }
   .fb-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .fb-btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -31,10 +31,10 @@
   .fb-status.err { color: var(--ng); }
   .fb-hint { font-size: 12px; color: var(--fg-mute); margin-top: 8px; }
   .fb-back { font-size: 13px; color: var(--fg-dim); text-decoration: none; }
-  .turnstile-widget { margin: 12px 0; position: relative; z-index: 1; min-height: 64px; display: flex; justify-content: center; }
+  .turnstile-widget { margin: 0; min-height: 0; height: 0; overflow: hidden; position: absolute; left: -9999px; }
   /* ゲーム本体用の css で html/body のスクロールが止められているため、
      フィードバックページでは通常どおり縦スクロールできるようにする。 */
-  html, body { height: auto; min-height: 100%; overflow-y: auto; overscroll-behavior: auto; touch-action: auto; }
+  html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; overscroll-behavior: auto !important; touch-action: auto !important; }
   body { user-select: auto; }
 </style>
 </head>
@@ -144,16 +144,42 @@
     window.turnstile.render("#" + containerId, {
       sitekey: SITEKEY,
       theme: "light",
+      size: "invisible",
       callback: (token) => { window["__ts_" + widgetId] = token; },
     });
   }
   renderTurnstile("tsWord", "word");
   renderTurnstile("tsBug", "bug");
 
+  async function ensureToken(type, statusEl) {
+    const key = type === "word" ? "__ts_word" : "__ts_bug";
+    const containerId = type === "word" ? "tsWord" : "tsBug";
+    if (window[key]) return window[key];
+    if (!window.turnstile) {
+      setStatus(statusEl, "認証ライブラリを読み込み中...", true);
+      for (let i = 0; i < 50 && !window.turnstile; i++) await new Promise((r) => setTimeout(r, 100));
+      if (!window.turnstile) { setStatus(statusEl, "認証ライブラリを読み込めませんでした", false); return null; }
+    }
+    setStatus(statusEl, "ボット対策を確認中...", true);
+    window.turnstile.execute("#" + containerId);
+    return await new Promise((resolve) => {
+      const deadline = Date.now() + 30000;
+      const iv = setInterval(() => {
+        if (window[key]) { clearInterval(iv); resolve(window[key]); }
+        else if (Date.now() > deadline) { clearInterval(iv); resolve(null); }
+      }, 100);
+    });
+  }
+
   async function submit(type, payload, statusEl, btn) {
-    const token = type === "word" ? window.__ts_word : window.__ts_bug;
-    if (!token) { setStatus(statusEl, "Turnstile の確認が完了していません", false); return; }
+    const containerId = type === "word" ? "tsWord" : "tsBug";
+    const key = type === "word" ? "__ts_word" : "__ts_bug";
     btn.disabled = true;
+    let token = window[key];
+    if (!token) {
+      token = await ensureToken(type, statusEl);
+    }
+    if (!token) { setStatus(statusEl, "Turnstile の確認が完了しませんでした", false); btn.disabled = false; return; }
     setStatus(statusEl, "送信中...", true);
     try {
       const res = await fetch(API + "/api/submit", {
@@ -164,8 +190,8 @@
       const data = await res.json();
       if (data && data.ok) {
         setStatus(statusEl, "送信しました (ID: " + data.id + ")", true);
-        // reset token
-        if (type === "word") window.__ts_word = null; else window.__ts_bug = null;
+        if (window.turnstile) window.turnstile.reset("#" + containerId);
+        window[key] = null;
       } else {
         setStatus(statusEl, "失敗: " + (data && data.error ? data.error : res.status), false);
       }

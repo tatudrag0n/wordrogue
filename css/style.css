@@ -1991,7 +1991,9 @@ body.touch .hud-choice-title { font-size: 1rem; }
 }
 .grow-word.sel .grow-word-eff { color: rgba(255, 248, 242, .92); }
 .grow-word.deck { opacity: .55; }
-.grow-word.deck.in { opacity: 1; border-color: var(--ok); color: var(--ok); background: rgba(22, 145, 90, .07); }
+/* デッキに入っている印は「✓」と文字の色で出す。枠と地の色はランクに譲る
+   (どれが入っているかより、どのランクかが色で読めるようにする)。 */
+.grow-word.deck.in { opacity: 1; color: var(--ok); }
 .grow-deck-count { font-size: .8rem; color: var(--fg-dim); font-weight: 400; }
 
 /* ══ 辞書 ══════════════════════════════════════════════════════════════ */
@@ -3156,17 +3158,7 @@ html, body {
 .grow-slot.empty { border: 2px dashed rgba(120, 90, 60, .45); min-height: 34px; }
 .grow-slot.empty span { font-size: 1.15rem; font-weight: 900; line-height: 1; }
 
-/* 語のランク札。C / U / R / E / L の 1 文字。 */
-.grow-word-rank {
-  font-style: normal; font-size: .58rem; font-weight: 900; line-height: 1;
-  margin-left: 4px; padding: 2px 4px; border-radius: 5px;
-  color: #fff; letter-spacing: .02em;
-}
-.grow-word-rank.rk0 { background: #6b7383; }
-.grow-word-rank.rk1 { background: #12a58a; }
-.grow-word-rank.rk2 { background: #2f7fc4; }
-.grow-word-rank.rk3 { background: #8b5cf6; }
-.grow-word-rank.rk4 { background: #d9a406; }
+/* 語のランクは札の文字を出さず、下の「レアリティの色」だけで示す。 */
 
 
 /* ══ 強化タブ: スクロールなしで全体を表示 ═══════════════════════════════ */
@@ -3198,7 +3190,8 @@ html, body {
 .grow-deck-actions .btn { flex: 1 1 auto; min-width: 80px; }
 
 /* ══ レアリティの色 ═══════════════════════════════════════════════════ */
-/* 語のボタンにもランクの色を付ける。C灰 / U緑 / R青 / E紫 / L金。 */
+/* 語のボタンの色がそのままランク。灰=コモン / 緑=アンコモン / 青=レア /
+   紫=エピック / 金=レジェンド。文字の札は出さない。 */
 .grow-word.rk0 { border-color: #6b7383; }
 .grow-word.rk1 { border-color: #12a58a; background: rgba(18, 165, 138, .07); }
 .grow-word.rk2 { border-color: #2f7fc4; background: rgba(47, 127, 196, .09); }
@@ -3208,4 +3201,3 @@ html, body {
   background: linear-gradient(180deg, rgba(217, 164, 6, .16), rgba(217, 164, 6, .07));
   box-shadow: 0 0 0 1px rgba(217, 164, 6, .35);
 }
-.grow-word.rk4 .grow-word-rank { box-shadow: 0 0 6px rgba(217, 164, 6, .55); }

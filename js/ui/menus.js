@@ -5,8 +5,8 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.38';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.38';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.39';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.39';
 import { evaluatePart, partConnChoices, partWordForms } from '../game/parts.js';
 import {
   partEffectRows, partTotalRows, wordEffectRows, wordDirectEffectRows,
@@ -368,15 +368,16 @@ export class Menus {
       el('i', {}, r.label), r.text));
   }
 
-  /** 語のランクの小さな札。色はランクごとに CSS (.rk0〜.rk4)。 */
-  rankChip(text) {
+  /**
+   * 語のランクは **色だけ** で示す (札の文字は出さない)。
+   * 色は語のボタン自身に付く (.grow-word.rk0〜.rk4)。
+   * ランク名と段階はツールチップで補う。
+   */
+  rankTip(text) {
     const r = this.save.rankOf(text);
     const i = this.save.rankIndex(text);
-    return el('i', {
-      class: `grow-word-rank rk${i}`,
-      title: `ランク: ${r.name} (効果 ×${r.mul.toFixed(2)})`
-        + (i < 4 ? '\n同じ語をもう一度くじで引くと上がる' : '\n最上位'),
-    }, r.short);
+    return `ランク: ${r.name} (効果 ×${r.mul.toFixed(2)})`
+      + (i < 4 ? '\n同じ語をもう一度くじで引くと上がる' : '\n最上位');
   }
 
   /** 語が入っている部位の枠。語 (タップで接続詞が回る) + 接続詞 + ✕。 */
@@ -646,12 +647,12 @@ export class Menus {
       const b = el('button', {
         class: 'btn grow-word' + (this.growSel === t ? ' sel' : '') + (used ? ' used' : '')
           + (direct.length ? ' has-eff' : ' no-eff') + ' rk' + save.rankIndex(t),
-        title: `${CATEGORIES[info.cat]?.name || info.cat} / ランク ${save.rankOf(t).name}: ${src}`
+        title: `${CATEGORIES[info.cat]?.name || info.cat} / ランク ${save.rankOf(t).name}: ${src}\n${this.rankTip(t)}`
           + (direct.length ? `\n体に効く: ${direct.map((r) => `${r.label} ${r.text}`).join(' / ')}`
             : '\n体に直接は効かない (文にすれば文の力ぶん強くなる)')
           + (eff.length && !direct.length ? '\n文にすれば文の力ぶんだけ強くなる' : '')
           + (used ? `\n部位に ${used} 語入っている (同じ語をいくつでも置ける)` : ''),
-      }, t, this.rankChip(t), used ? el('i', { class: 'grow-word-used' }, `×${used}`) : null);
+      }, t, used ? el('i', { class: 'grow-word-used' }, `×${used}`) : null);
       if (direct.length) b.append(el('i', { class: 'grow-word-eff' }, direct.map((r) => r.text).join(' ')));
       b.addEventListener('click', () => {
         this.growSel = this.growSel === t ? null : t;
@@ -693,8 +694,9 @@ export class Menus {
       const b = el('button', {
         class: 'btn grow-word deck' + (inDeck ? ' in' : '') + ' rk' + save.rankIndex(t),
         disabled: inDeck && save.deck.length <= DECK_MIN,
-        title: inDeck ? (save.deck.length <= DECK_MIN ? `最低 ${DECK_MIN} 語を保つため外せない` : 'デッキに入っている — 押すと外れる') : '押すとデッキに入る',
-      }, (inDeck ? '✓ ' : '') + t, this.rankChip(t));
+        title: (inDeck ? (save.deck.length <= DECK_MIN ? `最低 ${DECK_MIN} 語を保つため外せない` : 'デッキに入っている — 押すと外れる') : '押すとデッキに入る')
+          + `\n${this.rankTip(t)}`,
+      }, (inDeck ? '✓ ' : '') + t);
       b.addEventListener('click', () => {
         save.toggleDeck(t);
         this.audio?.tap?.();

@@ -17,11 +17,11 @@
 
 /** ランクの並び。index がそのまま段階。 */
 export const RANKS = [
-  { name: 'コモン',      short: 'C', mul: 1.00, color: '#6b7383' },
-  { name: 'アンコモン',  short: 'U', mul: 1.12, color: '#12a58a' },
-  { name: 'レア',        short: 'R', mul: 1.25, color: '#2f7fc4' },
-  { name: 'エピック',    short: 'E', mul: 1.40, color: '#8b5cf6' },
-  { name: 'レジェンド',  short: 'L', mul: 1.60, color: '#d9a406' },
+  { name: 'コモン',      mul: 1.00, color: '#6b7383' },
+  { name: 'アンコモン',  mul: 1.12, color: '#12a58a' },
+  { name: 'レア',        mul: 1.25, color: '#2f7fc4' },
+  { name: 'エピック',    mul: 1.40, color: '#8b5cf6' },
+  { name: 'レジェンド',  mul: 1.60, color: '#d9a406' },
 ];
 
 /** 最大の段階 (レジェンド)。 */

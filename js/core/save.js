@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord } from '../data/words.js?v=1.38';
+import { WORDS, drawWord } from '../data/words.js?v=1.39';
 import { CONNECTORS } from '../data/words.connect.js';
 import {
   RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
-} from '../data/ranks.js?v=1.38';
+} from '../data/ranks.js?v=1.39';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -354,7 +354,7 @@ export class Save {
 
   /** 語のランク段階 (0 = コモン)。 */
   rankIndex(text) { return rankIndex(text); }
-  /** 語のランク定義 ({name, short, mul, color})。 */
+  /** 語のランク定義 ({name, mul, color})。 */
   rankOf(text) { return rankOf(text); }
   /** 次のランク名。最上位なら null。 */
   nextRankName(text) { return nextRankName(text); }

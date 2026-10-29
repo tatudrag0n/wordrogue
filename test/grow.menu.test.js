@@ -23,7 +23,7 @@ const IDS = [
   'loadoutTitle', 'loadoutSub', 'result', 'resultStats', 'resultTitle', 'resultSub',
   'resultNext', 'resultRetry', 'resultStages', 'howto', 'settings',
   'dict', 'dictSearch', 'dictTabs', 'dictList', 'dictCount',
-  'archiveInk', 'archiveUpgrades', 'archiveWords', 'words', 'wordsInk',
+  'words', 'wordsInk',
   'grow', 'growInk', 'gachaBtn', 'gachaTenBtn', 'gachaResult', 'growParts', 'growSelNote', 'growWords',
   'deckWords', 'deckCount',
   'btnStart', 'btnStages', 'btnHowto', 'btnGrow', 'btnWords', 'btnDict', 'btnSettings',
@@ -267,9 +267,9 @@ sec('部位はどの接続詞でも選べる。成る / 成らない が一覧�
 
 sec('部位の効きが数字で出る (何がどれだけ変わるか)');
 {
-  const rows = partEffectRows(save.partEntries(), 'chst', {});
+  const rows = partEffectRows(save.partEntries(), 'chst');
   ok(Array.isArray(rows), 'partEffectRows が配列を返さない');
-  const total = partTotalRows(save.partEntries(), {});
+  const total = partTotalRows(save.partEntries());
   ok(total.length > 0, `部位の合計が出ない: ${JSON.stringify(total)}`);
   const hp = total.find((r) => r.key === 'maxHp');
   ok(hp && /^\+\d+$/.test(hp.text), `合計の体力が数値で出ない: ${JSON.stringify(hp)}`);
@@ -302,6 +302,29 @@ sec('体に効かない語は、そう表示する');
   click(q('.gs-out', boxOf('lhnd'))[0]);
   click(w);   // 選択解除
   console.log(`  炎 → 「体に直接は効かない」+ 文の力ぶん ${note.textContent.replace(/\s+/g, ' ').slice(0, 60)}`);
+}
+
+sec('恒久強化は無い。語彙の枠は頭の賢い語から');
+{
+  // 書庫の恒久強化 (up-row / up-buy) を作る道はもう無い。
+  ok(typeof menu.renderArchive === 'undefined', '恒久強化の描画が残っている');
+  ok(q('.up-row').length === 0 && q('.up-buy').length === 0, '恒久強化の行が描かれている');
+
+  // 頭に賢い語を入れると、語彙の枠が広がって合計に出る。
+  save.setPart('head', 0, null);
+  save.setPart('head', 1, null);
+  if (!save.ownsWord('賢')) save.data.collection.push('賢');
+  menu.renderGrow();
+  const before = resolvePlayerStats(save.partEntries()).lexicon;
+  click(wordsBox().find((b) => b.textContent.trim().startsWith('賢')));
+  click(q('.grow-slot.empty', boxOf('head'))[0]);
+  const after = resolvePlayerStats(save.partEntries()).lexicon;
+  ok(after > before, `賢い頭で語彙が広がらない: ${before} -> ${after}`);
+
+  const totalEl = dom.doc.getElementById('growTotal');
+  ok(q('.eff', totalEl).some((x) => /語彙/.test(x.textContent)),
+    `合計に語彙が出ない: ${totalEl.textContent.replace(/\s+/g, ' ').slice(0, 80)}`);
+  console.log(`  頭「賢」→ 語彙 +${after} 枠 / 合計 ${q('.eff', totalEl).map((x) => x.textContent.replace(/\s+/g, '')).join(' ')}`);
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

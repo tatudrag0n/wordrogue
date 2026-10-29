@@ -25,7 +25,7 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL:', m); 
 const sec = (t) => console.log(`\n== ${t} ==`);
 const audio = new Proxy({}, { get: () => () => {} });
 const run = new Run({
-  stageId: 1, audio, save: { d: { meta: {} } }, weaponIds: ['sword'], lexiconSize: 12,
+  stageId: 1, audio, save: { d: {} }, weaponIds: ['sword'], lexiconSize: 12,
   rng: makeRng(31337),
 });
 const ps = run.player.stats;

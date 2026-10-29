@@ -12,13 +12,13 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.39';
+} from '../data/words.js?v=1.40';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.39';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.40';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.39';
-import { fireWeapon, damage as damageEnemy } from './combat.js?v=1.39';
+import { WeaponInst } from './weapon.js?v=1.40';
+import { fireWeapon, damage as damageEnemy } from './combat.js?v=1.40';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -38,7 +38,15 @@ export const PICKUP_STEER = 9;       // 目標速度へ寄る速さ (大きい�
 // レベルアップの 3 択。選ばないと時間切れで 1 番目が自動採用される。
 export const WORD_CHOICES = 3;
 export const CHOICE_TIME = 7;         // 選べる秒数
-export const LEXICON_MAX = 30;        // 語彙の容量の上限 (言玉で拡張)
+export const LEXICON_MAX = 30;        // 語彙の容量の上限
+
+/**
+ * 部位強化から来る語彙の枠。頭に入れた賢い語 (賢・智・心...) で広がる。
+ * 廃止した恒久強化「語彙」(言玉で 1 個ずつ買う) の受け皿。
+ */
+function partLexiconBonus(parts) {
+  return Math.max(0, Math.round(resolvePlayerStats(parts || []).lexicon || 0));
+}
 
 /** レベルアップの 3 択に武器語 (剣・弾・銃…) が入る確率。他の語より低い。 */
 export const FORM_CHOICE_CHANCE = 0.22;
@@ -57,11 +65,8 @@ export class Run {
     this.stage = getStage(opt.stageId);
     this.save = opt.save;
     this.audio = opt.audio;
-    // 語彙の容量。ステージクリア報酬の「言玉」で増える。
-    // 言玉で買った分 (meta.lexicon) はステージをまたいで持ち越す。
-    const bought = opt.save?.d?.meta?.lexicon || 0;
+    // 語彙の容量の土台。増えた分は部位強化の語 (頭の賢い語) から来る。
     this.lexiconBase = opt.lexiconSize ?? 12;
-    this.lexiconGrown = bought;
     this.rand = opt.rng || rng;
     // 描画側から毎フレーム更新される画面サイズ。
     this.viewW = opt.viewW || 960;
@@ -79,6 +84,10 @@ export class Run {
     if (!this.partEntries.length && this.partWords.length) {
       this.partEntries = this.partWords.map((t) => ({ name: '', words: [{ text: t, conn: null }] }));
     }
+
+    // 語彙の枠。部位強化の語 (頭に入れた賢・智・心 など) のぶんだけ広がる。
+    // 廃止した恒久強化「語彙」の受け皿で、ランをまたいで持ち越せる。
+    this.lexiconGrown = partLexiconBonus(this.partEntries);
 
     this.player = {
       x: 0, y: 0, vx: 0, vy: 0,
@@ -191,10 +200,7 @@ export class Run {
   // 能力
   // ───────────────────────────────────────────────────────────────────────────
   refreshStats(full = false) {
-    const s = resolvePlayerStats(
-      this.partEntries.length ? this.partEntries : this.partWords,
-      this.save?.d.meta || {},
-    );
+    const s = resolvePlayerStats(this.partEntries.length ? this.partEntries : this.partWords);
     const p = this.player;
     const ratio = p.maxHp > 0 ? clamp(p.hp / p.maxHp, 0, 1) : 1;
     p.stats = s;
@@ -264,17 +270,13 @@ export class Run {
   get lexiconFull() { return this.lexiconFreeCount === 0; }
 
   /**
-   * 語彙の容量を n 個増やす。ステージクリア報酬の「言玉」で使う。
-   * 増えた分はセーブの meta.lexicon に記録して、次のステージへ持ち越す。
+   * 語彙の容量を n 個増やす。
+   * 戦闘中に広げる道は無い (枠はメニューの「部位強化」で決める)。
    */
   growLexicon(n = 1) {
     this.lexiconGrown += n;
     const want = Math.min(LEXICON_MAX, this.lexiconBase + this.lexiconGrown);
     while (this.lexicon.length < want) this.lexicon.push(null);
-    if (this.save?.d) {
-      this.save.d.meta = this.save.d.meta || {};
-      this.save.d.meta.lexicon = this.lexiconGrown;
-    }
     return this.lexicon.length;
   }
 

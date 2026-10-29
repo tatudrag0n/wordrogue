@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.39">
+<link rel="stylesheet" href="css/style.css?v=1.40">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -284,7 +284,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.39</div>
+      <div class="title-version">Ver. 1.40</div>
     </div>
   </div>
 
@@ -483,8 +483,8 @@
       <li><strong>5 の倍数</strong> … 自分の文の空きに <strong>1 個</strong>（自動で入る）</li>
       </ul>
       <p>
-      語彙は <strong>12 個</strong>から始まり、書庫で<strong>言玉</strong>を使い
-      「語彙」を買うと 1 個ずつ広がる（<strong>上限 30</strong>、次のステージへ持ち越す）。
+      語彙は <strong>12 個</strong>から始まり、タイトルの<strong>部位強化</strong>で
+      頭に「賢」「智」などの<strong>賢い語</strong>を入れて文にすると広がる（<strong>上限 30</strong>、次のステージへ持ち越す）。
       <strong>武器語</strong>は他の語より出にくい。選ぶと<strong>新しい文</strong>ができる（満杯なら古い語を 1 つ捨てる）。
       </p>
       </section>
@@ -601,13 +601,17 @@
       累計がタイトル画面に<strong>「文を崩した数」</strong>として出る。
       </p>
       <p>
-      書庫では<strong>恒久強化</strong>が買える。
+      <strong>恒久強化は廃止</strong>した。言玉は<strong>言葉くじ</strong>だけに使う。
+      プレイヤーを強くするのはタイトルの<strong>「強化」= 部位強化</strong>だけで、
+      <strong>部位に入れた語</strong>がそのまま次のランにも効く。
       </p>
       <ul class="howto-list">
-      <li>恒久強化 … 体力 / 攻撃 / 装甲 / 経験値 / 引き寄せ / 会心。各 6 〜 10 段階</li>
-      <li><strong>語彙</strong> … 言玉で<strong>手持ちの語を 1 つ多く</strong>。最大 30 個</li>
-      <li>段階を上げるほど<strong>値段が上がる</strong>。使い切りはできない</li>
-      <li>どれも次のランに持ち越す。死んでも失わない</li>
+      <li>体力・回復 ... 癒・花・草 のような語を<strong>胸・胴・足</strong>に入れる</li>
+      <li>攻撃 ... 強・力・剛 を<strong>腕・手・胸</strong>に入れる</li>
+      <li>装甲 ... 硬・甲 を<strong>胴</strong>に入れる</li>
+      <li>経験値 ... <strong>賢い頭</strong>(賢・智・心)を<strong>頭</strong>に入れる</li>
+      <li><strong>語彙</strong> ... <strong>頭</strong>に賢い語を入れると<strong>手持ちの語が増える</strong>(上限 30 個)</li>
+      <li>部位の語は次のランにも持ち越す。死んでも失わない</li>
       </ul>
       </section>
 
@@ -668,7 +672,7 @@
           <p>
           <strong>日本語として成立する文</strong>だけが武器になる。属性で始まって 格を挟み 述語で締めるほど<strong>文の力</strong>が上がり、
           <strong>熟語</strong>（発電する剣 など）ができるとさらに強くなる。
-          クリアで <strong>言玉</strong> が手に入る。書庫で恒久強化、タイトルの<strong>言葉くじ</strong>で語を増やして次のステージへ。
+          クリアで <strong>言玉</strong> が手に入る。タイトルの<strong>強化</strong>で部位に語を入れ、<strong>言葉くじ</strong>で語を増やして次のステージへ。
           </p>
         </section>
       </div>
@@ -731,20 +735,7 @@
       <div class="archive-ink">
         <span class="archive-ink-label">言玉</span>
         <b id="growInk">0</b>
-        <span class="archive-ink-note">書庫の恒久強化と語彙の枠に使う。言葉くじは「書庫」タブ</span>
-      </div>
-
-      <div class="archive-body">
-        <section>
-          <h3>恒久強化</h3>
-          <div class="archive-list" id="archiveUpgrades"></div>
-        </section>
-
-        <section>
-          <h3>語彙</h3>
-          <p class="archive-note">言玉は「語彙」の枠を買うか、恒久強化に使う。</p>
-          <div class="archive-words" id="archiveWords"></div>
-        </section>
+        <span class="archive-ink-note">言葉くじ (「書庫」タブ) に使う</span>
       </div>
 
       <div class="grow-body">
@@ -759,8 +750,10 @@
           語の右の<strong>「接続詞」</strong>を押すと、その語に付けられる形の一覧が開く。どの接続詞でも選べて、
           <strong>✓ は文が成る形</strong>（文の力が体に乗る）、✕ は不成文（効果なし）。
           各部位の下に<strong>何がどれだけ変わるか</strong>が出る。
-          <br><strong>語の意味も体に効く。</strong>速い足は移動、硬い胴は装甲、賢い頭は経験値、
-          炎の右手は武器の属性と炎上になる。</p>
+          <br><strong>語の意味も体に効く。</strong>速い足は移動、硬い胴は装甲、賢い頭は経験値と語彙、
+          炎の右手は武器の属性と炎上になる。
+          <br>体力・回復は癒・花、攻撃は強・力、装甲は硬・甲、吸引は引・金のような語で伸びる。
+          恒久強化は廃止して、体を強くする道はここだけになった。</p>
           <div class="grow-parts" id="growParts"></div>
           <p class="grow-note" id="growSelNote">語を選んでください</p>
         </section>
@@ -888,6 +881,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.39"></script>
+<script type="module" src="js/main.js?v=1.40"></script>
 </body>
 </html>

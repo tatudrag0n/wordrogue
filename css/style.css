@@ -1637,29 +1637,6 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .archive-ink-note { font-size: .76rem; color: var(--fg-mute); margin-left: auto; }
 .archive-ink-note strong { color: var(--fg-dim); }
 
-.archive-body { overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
-.archive-body h3 { margin: 0 0 8px; font-size: .95rem; color: var(--accent); letter-spacing: .04em; }
-.archive-note { margin: 0 0 8px; font-size: .78rem; color: var(--fg-dim); }
-.archive-list { display: flex; flex-direction: column; gap: 5px; }
-
-.up-row {
-  display: grid;
-  grid-template-columns: 4.2rem 3.4rem 1fr auto;
-  gap: 10px;
-  align-items: center;
-  padding: 8px 10px;
-  background: #f1f5fb;
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-}
-.up-row.can { border-color: rgba(224, 72, 45, 0.30); }
-.up-name { font-size: .88rem; font-weight: 700; }
-.up-lv { font-family: var(--mono); font-size: .76rem; color: var(--fg-mute); }
-.up-desc { font-size: .76rem; color: var(--fg-dim); }
-.up-buy { font-size: .78rem; padding: 6px 11px; }
-.up-buy.off { opacity: .45; cursor: not-allowed; }
-
-.archive-words { display: flex; gap: 6px; flex-wrap: wrap; }
 .shop-word {
   background: #f1f5fb;
   border: 1.5px solid;
@@ -2125,7 +2102,6 @@ body.touch .hud-choice-title { font-size: 1rem; }
 }
 
 @media (max-width: 860px) {
-  .up-row { grid-template-columns: 3.6rem 3rem 1fr auto; }
   .archive-ink-note { display: none; }
   .dict-row { grid-template-columns: 3.2rem 1fr; }
   .dict-cat { justify-self: start; }
@@ -2217,10 +2193,10 @@ button:focus-visible, .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-button, .btn, .up-buy, .stage-card, .lo-card {
+button, .btn, .stage-card, .lo-card {
   transition: transform .12s ease, box-shadow .12s ease, filter .12s ease, background .12s ease;
 }
-button:hover:not(:disabled), .btn:hover:not(.off), .up-buy:hover:not(.off) {
+button:hover:not(:disabled), .btn:hover:not(.off) {
   transform: translateY(-1px);
   filter: brightness(1.08);
 }
@@ -3164,26 +3140,6 @@ html, body {
 /* ══ 強化タブ: スクロールなしで全体を表示 ═══════════════════════════════ */
 .panel-grow { display: flex; flex-direction: column; max-height: none !important; height: auto; }
 .panel-grow > .grow-body { overflow: visible; flex: none; min-height: 0; }
-.panel-grow .archive-body { overflow: visible; }
-
-/* 恒久強化は 2 列に並べて縦を詰める。 */
-.panel-grow .archive-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-.panel-grow .archive-list .up-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 2px 8px;
-  padding: 6px 8px;
-  align-items: center;
-}
-.panel-grow .archive-list .up-desc { grid-column: 1 / -1; font-size: .7rem; }
-.panel-grow .archive-list .up-buy { grid-row: 1 / 3; grid-column: 2; align-self: center; }
-@media (max-width: 620px) {
-  .panel-grow .archive-list { grid-template-columns: 1fr; }
-}
 
 /* 言葉デッキの一括操作ボタン */
 .grow-deck-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }

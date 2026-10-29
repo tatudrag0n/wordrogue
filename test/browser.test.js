@@ -147,64 +147,65 @@ await evalJs(`(() => {
 ok(await evalJs('!document.getElementById("title").hidden'), 'タイトルが表示されている');
 ok(await evalJs('document.getElementById("btnStart") !== null'), '開始ボタンがある');
 
-sec('書庫で言玉を使い、恒久強化と語彙の枠を買える');
+sec('恒久強化は廃止。体を強くするのは部位の語だけ');
 {
   await evalJs('window.__wordrogue.menus.show("grow")');
   await sleep(250);
   const a = await evalJs(`(() => ({
     hidden: document.getElementById('grow').hidden,
-    ink: document.getElementById('archiveInk').textContent,
-    up: document.querySelectorAll('#archiveUpgrades .up-row').length,
-    note: (document.getElementById('archiveWords').textContent || '').slice(0, 40),
+    ink: document.getElementById('growInk').textContent,
+    parts: document.querySelectorAll('#growParts .grow-part').length,
   }))()`);
   ok(!a.hidden, '強化タブが開いていない');
-  ok(a.up === 7, `恒久強化の行数: ${a.up} (7 のはず)`);
-  ok(/語彙/.test(a.note), `語彙の説明が無い: ${a.note}`);
+  ok(a.parts === 7, `部位が 7 コマでない: ${a.parts}`);
 
-  // 言玉を 5000 貯めて、強化と語彙の枠を買う。
-  const buy = await evalJs(`(() => {
+  // 旧・恒久強化ぶんの効果は、部位に意味の合う語を入れて取る。
+  const st = await evalJs(`(async () => {
     const app = window.__wordrogue;
-    app.save.data.ink = 5000;
-    app.menus.renderArchive();
-    const ink0 = app.save.ink;
-    const row = document.querySelector('#archiveUpgrades .up-row');
-    row.querySelector('.up-buy').click();
-    const lv = app.save.metaLevel('hp');
-    const spent = ink0 - app.save.ink;
-    // 語彙の枠も買う。
-    const lexRow = [...document.querySelectorAll('#archiveUpgrades .up-row')]
-      .find(n => /語彙/.test(n.textContent || ''));
-    const inkBeforeLex = app.save.ink;
-    lexRow.querySelector('.up-buy').click();
+    const save = app.save;
+    for (const t of ['賢', '硬', '強']) if (!save.ownsWord(t)) save.data.collection.push(t);
+    save.clearPart('head', 0);
+    save.clearPart('head', 1);
+    save.clearPart('trnk', 0);
+    save.clearPart('rhnd', 0);
+    const stats = await import(new URL('js/game/stats.js', document.baseURI).href);
+    const plain = stats.resolvePlayerStats(save.partEntries());
+    save.setPart('head', 0, '賢');
+    save.setPart('trnk', 0, '硬');
+    save.setPart('rhnd', 0, '強');
+    const buffed = stats.resolvePlayerStats(save.partEntries());
+    app.menus.renderGrow();
     return {
-      lv, spent,
-      lexLv: app.save.metaLevel('lexicon'),
-      lexBonus: app.save.lexiconBonus,
-      ink: app.save.ink,
-      lexCost: inkBeforeLex - app.save.ink,
-      metaHp: app.save.metaValue('hp'),
+      plainLex: plain.lexicon, wiseLex: buffed.lexicon,
+      plainXp: plain.xpMul, wiseXp: buffed.xpMul,
+      plainArmor: plain.armor, wiseArmor: buffed.armor,
+      slots: document.querySelectorAll('#growParts [data-part="head"] .grow-slot').length,
+      total: (document.getElementById('growTotal').textContent || '').slice(0, 80),
     };
   })()`);
-  ok(buy.lv === 1, `強化の段階が上がっていない: ${buy.lv}`);
-  ok(buy.spent > 0, `言玉が減っていない: ${buy.spent}`);
-  ok(buy.metaHp > 0, `強化の最終値が 0: ${buy.metaHp}`);
-  ok(buy.lexLv === 1 && buy.lexBonus === 1, `語彙の枠が増えていない: ${buy.lexLv} / ${buy.lexBonus}`);
-  ok(buy.lexCost > 0, `語彙を買っても言玉が減っていない: ${buy.lexCost}`);
-  console.log(`    書庫: 強化を 1 段階 (${buy.spent} 言玉) / 語彙 +1 (${buy.lexCost} 言玉)`);
+  ok(st.plainLex === 0, `部位が空なのに語彙が増えている: ${st.plainLex}`);
+  ok(st.wiseLex > 0, `賢い頭で語彙が広がらない: ${st.wiseLex}`);
+  ok(st.wiseXp > st.plainXp, `賢い頭で経験値が上がらない: ${st.plainXp} -> ${st.wiseXp}`);
+  ok(st.wiseArmor > st.plainArmor, `硬い胴で装甲が上がらない: ${st.plainArmor} -> ${st.wiseArmor}`);
+  ok(st.slots === 2, `頭の枠が 2 つでない: ${st.slots}`);
+  ok(/語彙/.test(st.total), `部位の合計に語彙が出ない: ${st.total}`);
+  console.log(`    頭「賢」で語彙 +${st.wiseLex} / 胴「硬」で装甲 +${(st.wiseArmor * 100).toFixed(0)}%`);
 
-  // 買えない 提高。保険。
-  const no = await evalJs(`(() => {
+  // 書庫タブは言葉くじとデッキだけ。恒久強化の入れ物は残っていない。
+  const w = await evalJs(`(() => {
     const app = window.__wordrogue;
-    app.save.data.ink = 0;
-    app.menus.renderArchive();
-    const btn = [...document.querySelectorAll('#archiveUpgrades .up-buy')][1];
-    const off = btn.classList.contains('off');
-    const lv0 = Object.keys(app.save.d.meta).length;
-    btn.click();
-    return { off, lv0, ink: app.save.ink };
+    app.menus.show('words');
+    return {
+      growHidden: document.getElementById('grow').hidden,
+      gacha: !!document.getElementById('gachaBtn') && !!document.getElementById('gachaTenBtn'),
+      deck: document.querySelectorAll('#deckWords .grow-word').length,
+      leftovers: document.querySelectorAll('#archiveUpgrades, #archiveWords, .up-row, .up-buy').length,
+    };
   })()`);
-  ok(no.off, '買えないのにボタンが有効');
-  ok(no.ink === 0, `買えないのに言玉が減った: ${no.ink}`);
+  ok(w.growHidden, '書庫タブで強化タブが残っている');
+  ok(w.gacha, '言葉くじのボタンが無い');
+  ok(w.deck > 0, '言葉デッキの語が出ていない');
+  ok(w.leftovers === 0, `恒久強化の入れ物が残っている: ${w.leftovers}`);
 }
 await evalJs('window.__wordrogue.menus.show("title")');
 await sleep(150);

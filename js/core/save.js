@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord } from '../data/words.js?v=1.39';
+import { WORDS, drawWord } from '../data/words.js?v=1.40';
 import { CONNECTORS } from '../data/words.connect.js';
 import {
   RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
-} from '../data/ranks.js?v=1.39';
+} from '../data/ranks.js?v=1.40';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -22,7 +22,6 @@ const DEFAULTS = {
   totalRuns: 0,
   totalBroken: 0,     // 文を崩した敵の累計
   ink: 0,              // 書庫の通貨「言玉」
-  meta: {},            // 恒久強化 (hp / atk / xp / armor / magnet / crit / lexicon)
   collection: null,    // 所持語 (言葉くじで増える)。null なら初期セットを付与
   ranks: {},           // 語 → ランク段階 (0 = コモン)。重複で上がる
   starterRev: 0,       // 初期セットの改訂番号。古いセーブを 1 度だけ入れ替える
@@ -31,23 +30,6 @@ const DEFAULTS = {
   settings: { volume: 0.5, screenShake: true, showDamage: true },
   seenIntro: false,
   guide: 0,            // 初回の操作ガイド。0 = まだ見ていない
-};
-
-/**
- * 書庫で買える恒久強化。stats.js の resolvePlayerStats がそのまま読む。
- * cost は 1 段階あたりの言玉。max は買える上限。
- *
- * lexicon は特別: 語彙の枠を 1 つ増やす強化。
- * per=1 なので meta.lexicon がそのまま追加した個数になる。
- */
-export const META_UPGRADES = {
-  hp: { name: '体力', desc: '最大体力が上がる', cost: 30, max: 10, per: 4 },
-  atk: { name: '攻撃', desc: 'すべての攻撃が上がる', cost: 45, max: 10, per: 0.03 },
-  armor: { name: '装甲', desc: '被ダメージが減る', cost: 35, max: 8, per: 1 },
-  xp: { name: '経験値', desc: 'レベルが早く上がる', cost: 40, max: 8, per: 0.06 },
-  magnet: { name: '引き寄せ', desc: '経験値を引き寄せる', cost: 25, max: 6, per: 0.2 },
-  crit: { name: '会心', desc: '会心率が上がる', cost: 50, max: 8, per: 0.02 },
-  lexicon: { name: '語彙', desc: '手持ちの語を 1 つ多く持つ', cost: 90, max: 18, per: 1 },
 };
 
 function deepMerge(base, patch) {
@@ -169,8 +151,10 @@ export class Save {
       this.available = false;
       this.data = { ...DEFAULTS };
     }
-    // 古いセーブに残っている「恒久の語」は読み飛ばす。
+    // 古いセーブに残っている「恒久の語」と、廃止した恒久強化の記録は読み捨てる。
+    // 恒久強化の効果は部位強化の語で取り直す。
     delete this.data.startingWords;
+    delete this.data.meta;
     return this.data;
   }
 
@@ -215,7 +199,8 @@ export class Save {
   }
   hasWeapon(id) { return this.data.unlockedWeapons.includes(id); }
 
-  // ── 書庫 (恒久進行) ───────────────────────────────────────────────────────
+  // ── 書庫 (言玉) ──────────────────────────────────────────────────────────
+  // 言玉は言葉くじにだけ使う。恒久強化 (言玉で能力を買う仕組み) は廃止した。
   get ink() { return this.data.ink || 0; }
 
   addInk(n) {
@@ -223,53 +208,6 @@ export class Save {
     this.save();
     return this.data.ink;
   }
-
-  /**
-   * 強化を何段階買っているか。
-   * 保存は「最終値」なので、段階数は per で割って出す。
-   * 例: 体力は 1 段階 4。meta.hp = 12 なら 3 段階。
-   */
-  metaLevel(key) {
-    const u = META_UPGRADES[key];
-    const v = (this.data.meta || {})[key] || 0;
-    if (!u || !u.per) return 0;
-    return Math.round(v / u.per);
-  }
-
-  /** 強化の最終値。stats.js がそのまま読む。 */
-  metaValue(key) { return (this.data.meta || {})[key] || 0; }
-
-  /** 次の 1 段階を買うのに必要な言玉。買えないなら null。 */
-  metaCost(key) {
-    const u = META_UPGRADES[key];
-    if (!u) return null;
-    const lv = this.metaLevel(key);
-    if (lv >= u.max) return null;
-    // 段階が上がるごとに少し高くなる。
-    return u.cost + Math.floor(u.cost * 0.5 * (lv / u.max));
-  }
-
-  /**
-   * 恒久強化を 1 段階買う。
-   * @returns {{ok:boolean, reason:string, level?:number}}
-   */
-  buyMeta(key) {
-    const u = META_UPGRADES[key];
-    if (!u) return { ok: false, reason: 'unknown' };
-    const cost = this.metaCost(key);
-    if (cost === null) return { ok: false, reason: 'max' };
-    if (this.ink < cost) return { ok: false, reason: 'ink' };
-    this.data.ink -= cost;
-    this.data.meta = this.data.meta || {};
-    const lv = this.metaLevel(key) + 1;
-    // stats.js は最終値を読むので、段階数に per を掛けて保存する。
-    this.data.meta[key] = lv * u.per;
-    this.save();
-    return { ok: true, reason: '', level: lv };
-  }
-
-  /** 言玉で広げた語彙の枠の数 (追加した個数)。 */
-  get lexiconBonus() { return Math.round(this.metaValue('lexicon') || 0); }
 
   // ── 走者記録 ─────────────────────────────────────────────────────────────
   recordRun({ score, kills, stageId, cleared, broken = 0, ink = 0 }) {

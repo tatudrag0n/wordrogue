@@ -13,10 +13,10 @@ import { ENEMIES, ENEMY_IDS, MID_BOSS_IDS, BOSS_IDS } from '../js/data/enemies.j
 import { WeaponInst } from '../js/game/weapon.js';
 import { makePickup, makeEnemy, updateEnemy } from '../js/game/entities.js';
 import { damage } from '../js/game/combat.js';
-import { resolvePlayerStats } from '../js/game/stats.js';
+import { resolvePlayerStats, PART_LEXICON } from '../js/game/stats.js';
 import { Sentence, MAX_SENTENCE_LEN } from '../js/game/sentence.js';
 import { STAGES } from '../js/data/stages.js';
-import { Save, META_UPGRADES, GACHA_COST, GACHA_REFUND, PARTS } from '../js/core/save.js';
+import { Save, GACHA_COST, GACHA_REFUND, PARTS } from '../js/core/save.js';
 import { evaluatePart, partConnOptions, partConnChoices } from '../js/game/parts.js';
 import { WEAPON_MAX } from '../js/data/weapons.js';
 import { makeRng } from '../js/core/util.js';
@@ -26,7 +26,7 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL:', m); 
 const sec = (t) => console.log(`\n== ${t} ==`); 
 // 音声とセーブのスタブ。
 const audio = new Proxy({}, { get: () => () => {} });
-const save = { d: { meta: {} } };
+const save = { d: {} };
 
 const input = { ax: 0, ay: 0, moving: false, angle: 0 };
 const dt1 = 1 / 60;
@@ -116,15 +116,15 @@ function setFlat(wi, list) {
 
 /** セーブの初期値。テストごとに分けて、言玉などの持ち越しが混ざらないようにする。 */
 function freshSave() {
-  return { d: { meta: {} }, unlockWeapon() {} };
+  return { d: {}, unlockWeapon() {} };
 }
 
 function newRun(stageId, weaponIds, sv, extra = {}) {
   const save = sv || freshSave();
   return new Run({
     stageId, audio, save, weaponIds,
-    // 本番 (main.js) と同じく、書庫で広げたぶんだけ語彙が増える。
-    lexiconSize: 12 + (save.lexiconBonus || 0),
+    // 本番 (main.js) と同じく 12 枠から。増える分は部位の賢い語 (頭) から来る。
+    lexiconSize: 12,
     rng: makeRng(stageId * 7919 + 13),
     ...extra,
   });
@@ -630,7 +630,7 @@ sec('部位強化の語が能力に効く');
   ok(r.player.maxHp === 100, `最大体力に反映されない: ${r.player.maxHp}`);
 
   // resolvePlayerStats を直接呼んでも同じ。
-  const direct = resolvePlayerStats(['骨', '魂'], {});
+  const direct = resolvePlayerStats(['骨', '魂']);
   ok(direct.maxHp === 100 && direct.partCount === 2, `直接呼んだ部位が違う: ${direct.maxHp}/${direct.partCount}`);
   ok(direct.armor > 0 && direct.lifesteal > 0, `直接呼んだ部位の効果が違う: ${direct.armor}/${direct.lifesteal}`);
 
@@ -762,7 +762,7 @@ sec('レベルアップは 3 択 1 択');
   console.log(`  Lv${r5.player.level} で ${r5.pendingChoices.length} 件の 3 択 / 語彙 ${n0} -> ${r4.lexicon.filter(Boolean).length}`);
 }
 
-sec('語彙の容量は言玉で増える');
+sec('語彙の枠は 12 から。広げても上限を守る');
 {
   const { LEXICON_MAX } = await import('../js/game/run.js');
   const sv = freshSave();
@@ -770,21 +770,15 @@ sec('語彙の容量は言玉で増える');
   const size0 = r.lexicon.length;
   ok(size0 === 12, `初期サイズが変わった: ${size0}`);
   r.growLexicon(3);
-  ok(r.lexicon.length === size0 + 3, `言玉で広がらない: ${size0} -> ${r.lexicon.length}`);
-  // 次のステージへ持ち越す。
-  const r2 = newRun(2, undefined, sv);
-  ok(r2.lexicon.length === size0 + 3, `持ち越されない: ${r2.lexicon.length}`);
+  ok(r.lexicon.length === size0 + 3, `枠が広がらない: ${size0} -> ${r.lexicon.length}`);
   // 上限がある。
   r.growLexicon(999);
   ok(r.lexicon.length === LEXICON_MAX, `上限を守らない: ${r.lexicon.length}`);
   r.growLexicon(5);
   ok(r.lexicon.length === LEXICON_MAX, `上限を超えて増える: ${r.lexicon.length}`);
-  // セーブ側の値がおかしくて配列が肥大化しない。
-  const r3 = newRun(3, undefined, sv);
-  ok(r3.lexicon.length <= LEXICON_MAX, `壊れたセーブで肥大する: ${r3.lexicon.length}`);
   // 別セーブなら影響を受けない。
   ok(newRun(1).lexicon.length === size0, '別セーブまで影響する');
-  console.log(`  語彙 ${size0} -> ${size0 + 3} -> 上限 ${LEXICON_MAX}`);
+  console.log(`  語彙 ${size0} -> 上限 ${LEXICON_MAX}`);
 }
 
 sec('語彙が満杯なら 3 択は「捨てる」を求める');
@@ -1596,76 +1590,64 @@ sec('熟語か述語なら、一撃で 2 語斬る');
   ok(!b.broken, 'ボスが崩れてしまった');
 }
 
-sec('書庫の言玉で恒久強化を買える');
+sec('恒久強化は廃止した。言玉は言葉くじだけに使う');
 {
   const save = new Save();
   save.reset();
+  // 能力を言玉で買う口はもう無い。
+  ok(typeof save.buyMeta === 'undefined', '恒久強化を買う口が残っている');
+  ok(typeof save.metaLevel === 'undefined', '恒久強化の段階が残っている');
   ok(save.ink === 0, `最初から言玉がある: ${save.ink}`);
 
-  // 買えない。
-  let r = save.buyMeta('hp');
-  ok(!r.ok && r.reason === 'ink', `言玉がないのに買えた: ${r.reason}`);
-  ok(save.metaLevel('hp') === 0, '買えなかったのに段階上がった');
-
-  // enough .put って買う。
+  // 言玉は言葉くじの通貨としてそのまま使える。
   save.addInk(1000);
   ok(save.ink === 1000, `言玉が入らない: ${save.ink}`);
-
   const before = save.ink;
-  r = save.buyMeta('hp');
-  ok(r.ok, `買えない: ${r.reason}`);
-  ok(save.ink < before, `言玉が減っていない: ${before} -> ${save.ink}`);
-  ok(save.metaLevel('hp') === 1, `段階が 1 でない: ${save.metaLevel('hp')}`);
+  const g = save.drawGacha();
+  ok(g && save.ink < before, `くじで言玉が減らない: ${before} -> ${save.ink}`);
 
-  // 段階ごとに高くなる。
-  const c1 = save.metaCost('hp');
-  save.buyMeta('hp');
-  const c2 = save.metaCost('hp');
-  ok(c2 > c1, `段階を上げても値段が変わらない: ${c1} -> ${c2}`);
-  ok(save.metaLevel('hp') === 2, `段階が 2 でない: ${save.metaLevel('hp')}`);
-
-  // 上限まで/debug 買えて、それ以上は買えない。
-  let lv = save.metaLevel('hp');
-  while (save.metaCost('hp') !== null) {
-    save.addInk(10000);
-    save.buyMeta('hp');
-    lv++;
-    if (lv > 50) break;
-  }
-  ok(save.metaLevel('hp') === META_UPGRADES.hp.max, `上限を守らない: ${save.metaLevel('hp')}`);
-  r = save.buyMeta('hp');
-  ok(!r.ok && r.reason === 'max', `上限を越して買えた: ${r.reason}`);
-
-  console.log(`  体力 ${save.metaLevel('hp')} 段階 (最終値 ${save.metaValue('hp')}) / 上限 ${META_UPGRADES.hp.max}`);
+  // 古いセーブに残っている恒久強化の記録は、読み込みで捨てる。
+  save.data.meta = { hp: 40, lexicon: 5 };
+  save.save();
+  save.load();
+  ok(save.data.meta === undefined, '古い恒久強化の記録が残っている');
+  console.log(`  言玉 ${before} -> ${save.ink} (くじ) / 旧 meta は読み捨て`);
 }
 
-sec('買った恒久強化がプレイヤーに効く');
+sec('恒久強化ぶんの効果は部位の語から取る');
 {
   const save = new Save();
   save.reset();
-  save.addInk(100000);
-  save.buyMeta('hp');
-  save.buyMeta('hp');
-  save.buyMeta('atk');
-  save.buyMeta('armor');
-  save.buyMeta('crit');
-  save.buyMeta('magnet');
-  save.buyMeta('xp');
+  for (const t of ['賢', '硬', '強', '癒', '引', '瞬']) if (!save.ownsWord(t)) save.data.collection.push(t);
 
-  const plain = resolvePlayerStats([], {});
-  const buffed = resolvePlayerStats([], save.d.meta);
-  ok(buffed.maxHp > plain.maxHp, `体力が上がっていない: ${plain.maxHp} -> ${buffed.maxHp}`);
+  const plain = resolvePlayerStats([]);
+  // 体力・回復は 命 の語、装甲は 守り の語、攻撃は 力 の語、経験値と語彙は 賢さ の語。
+  ok(save.setPart('head', 0, '賢'), '頭に賢を入れられない');
+  ok(save.setPart('trnk', 0, '硬'), '胴に硬を入れられない');
+  ok(save.setPart('rhnd', 0, '強'), '右手に強を入れられない');
+  ok(save.setPart('chst', 0, '癒'), '胸に癒を入れられない');
+  ok(save.setPart('lfot', 0, '引'), '左足に引を入れられない');
+  const buffed = resolvePlayerStats(save.partEntries());
+
+  ok(buffed.xpMul > plain.xpMul, `経験値が上がっていない: ${plain.xpMul} -> ${buffed.xpMul}`);
+  ok(buffed.armor > plain.armor, `装甲が上がっていない: ${plain.armor} -> ${buffed.armor}`);
   ok(buffed.atkMul > plain.atkMul, `攻撃が上がっていない: ${plain.atkMul} -> ${buffed.atkMul}`);
-  ok(buffed.armor > plain.armor, `装甲が上がっていない`);
-  ok(buffed.crit > plain.crit, `会心が上がっていない`);
-  ok(buffed.magnet > plain.magnet, `引き寄せが上がっていない`);
-  ok(buffed.xpMul > plain.xpMul, `経験値が上がっていない`);
-  console.log(`  体力 ${plain.maxHp}->${buffed.maxHp} / 攻撃 x${plain.atkMul.toFixed(2)}->x${buffed.atkMul.toFixed(2)}`
-    + ` / 装甲 ${plain.armor}->${buffed.armor} / 会心 ${(plain.crit * 100).toFixed(0)}%->${(buffed.crit * 100).toFixed(0)}%`);
+  ok(buffed.maxHp > plain.maxHp, `体力が上がっていない: ${plain.maxHp} -> ${buffed.maxHp}`);
+  ok(buffed.magnet > plain.magnet, `引き寄せが上がっていない: ${plain.magnet} -> ${buffed.magnet}`);
+  ok(buffed.lexicon === PART_LEXICON.per, `語彙の枠が広がっていない: ${buffed.lexicon}`);
 
-  // ランにも反映される。
-  const r = newRun(1, undefined, save);
-  ok(r.player.maxHp === buffed.maxHp, `ランに体力が反映されない: ${r.player.maxHp} != ${buffed.maxHp}`);
+  // 会心は 瞬 のような語から。
+  const head = resolvePlayerStats([{ id: 'head', name: '頭', words: [{ text: '瞬', conn: null }] }]);
+  ok(head.crit > plain.crit, `会心が上がっていない: ${plain.crit} -> ${head.crit}`);
+
+  console.log(`  体力 ${plain.maxHp}->${buffed.maxHp} / 攻撃 x${plain.atkMul.toFixed(2)}->x${buffed.atkMul.toFixed(2)}`
+    + ` / 装甲 ${plain.armor.toFixed(2)}->${buffed.armor.toFixed(2)} / 吸引 x${plain.magnet.toFixed(2)}->x${buffed.magnet.toFixed(2)}`
+    + ` / 語彙 +${buffed.lexicon}`);
+
+  // ランにも反映される (メニューは partEntries で渡す — main.js と同じ)。
+  const r = newRun(1, undefined, save, { partEntries: save.partEntries() });
+  ok(r.player.stats.xpMul === buffed.xpMul, `ランに経験値が乗らない: ${r.player.stats.xpMul}`);
+  ok(r.player.maxHp === Math.round(buffed.maxHp), `ランに体力が乗らない: ${r.player.maxHp} != ${buffed.maxHp}`);
 }
 
 sec('言葉くじ・デッキ・部位はセーブで管理する');
@@ -1775,14 +1757,14 @@ sec('部位強化は 1 文。接続詞が使える');
 
   // 1 語だけの部位 — 従来どおり、そのまま効く (倍率 1.00)。魂 は吸血 +0.03。
   ok(save.setPart('head', 0, '魂'), '部位に語が入らない');
-  const one = resolvePlayerStats(save.partEntries(), {});
+  const one = resolvePlayerStats(save.partEntries());
   ok(one.lifesteal > 0, `1 語の部位が効かない: ${one.lifesteal}`);
   ok(one.maxHp === 100, `体に効かない語で体力が増えた: ${one.maxHp}`);
   ok(one.partCount === 1, `部位の語数が違う: ${one.partCount}`);
 
   // 同じ部位にもう 1 語。2 語の文になるので少しだけ強くなる。
   save.setPart('head', 1, '骨');
-  const two = resolvePlayerStats(save.partEntries(), {});
+  const two = resolvePlayerStats(save.partEntries());
   ok(two.lifesteal > one.lifesteal, `2 語の部位が 1 語ぶんより弱いです: ${one.lifesteal} -> ${two.lifesteal}`);
   ok(two.armor > 0, `2 語目の効果が乗らない: ${two.armor}`);
   ok(two.partCount === 2, `2 語が数えていない: ${two.partCount}`);
@@ -1827,7 +1809,7 @@ sec('部位強化は 1 文。接続詞が使える');
       `接続詞で強くない: ${bare.power.toFixed(2)} -> ${withConn.power.toFixed(2)}`);
     withPower = withConn.power;
     // 部位まるごとの効果が文の力ぶん伸びる (妙な骨 の倍率)。
-    const loose = resolvePlayerStats(save.partEntries(), {});
+    const loose = resolvePlayerStats(save.partEntries());
     const withRegen = evaluatePart([{ text: '癒', conn: null }]);
     ok(withRegen.valid, '1 語の部位が不成文になっている');
     ok(loose.partRows.some((x) => x.text === '妙な骨' && x.gain > 1),
@@ -1943,23 +1925,27 @@ sec('属性語から特殊武器を戦闘中に作れる');
   console.log(`  光の文 → 動詞待ち → 焦がすで ${lit.kind} / 形態語は不可 / 満杯でも文が増える`);
 }
 
-sec('言玉で語彙の枠を広げると次のランで入る');
+sec('頭の賢い語で語彙の枠が広がる');
 {
   const save = new Save();
   save.reset();
-  save.addInk(2000);
-  const r = save.buyMeta('lexicon');
-  ok(r.ok, `買えない: ${r.reason}`);
-  ok(save.metaLevel('lexicon') === 1, `段階 ${save.metaLevel('lexicon')}`);
-  ok(save.lexiconBonus === 1, `語彙の追加数 ${save.lexiconBonus}`);
+  for (const t of ['賢', '強']) if (!save.ownsWord(t)) save.data.collection.push(t);
 
-  const before = newRun(1, undefined, save);
-  const plain = newRun(1, undefined, new Save());
-  plain.save?.reset?.();
-  ok(before.lexicon.length > plain.lexicon.length,
-    `語彙が広がっていない: ${before.lexicon.length} vs ${plain.lexicon.length}`);
-  console.log(`  語彙 ${plain.lexicon.length} → ${before.lexicon.length} 個`);
+  const none = newRun(1, undefined, save, { partEntries: save.partEntries() });
+  ok(none.lexicon.length === 12, `何も入れていないのに広がっている: ${none.lexicon.length}`);
+
+  // 頭に賢い語を入れると、次のランから枠が増える。
+  ok(save.setPart('head', 0, '賢'), '頭に賢を入れられない');
+  const wise = newRun(1, undefined, save, { partEntries: save.partEntries() });
+  ok(wise.lexicon.length === none.lexicon.length + PART_LEXICON.per,
+    `賢い頭で語彙が広がらない: ${none.lexicon.length} -> ${wise.lexicon.length}`);
+
+  // 頭以外の語では増えない (意味の対応が違う)。
+  save.clearPart('head', 0);
+  ok(save.setPart('trnk', 0, '強'), '胴に強を入れられない');
+  const other = newRun(1, undefined, save, { partEntries: save.partEntries() });
+  ok(other.lexicon.length === none.lexicon.length,
+    `頭以外で語彙が増えた: ${none.lexicon.length} -> ${other.lexicon.length}`);
+
+  console.log(`  語彙 ${none.lexicon.length} -> 賢い頭 ${wise.lexicon.length} 枠`);
 }
-
-console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
-process.exit(fail ? 1 : 0);

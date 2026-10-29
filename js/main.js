@@ -2,17 +2,17 @@
 // ワードローグ — 起動とメインループ
 // ============================================================================
 
-import { $, clamp } from './core/util.js?v=1.39';
-import { Input } from './core/input.js?v=1.39';
-import { Audio } from './core/audio.js?v=1.39';
-import { Save } from './core/save.js?v=1.39';
-import { Run } from './game/run.js?v=1.39';
-import { Renderer } from './ui/render.js?v=1.39';
-import { Hud } from './ui/hud.js?v=1.39';
-import { Forge } from './ui/forge.js?v=1.39';
-import { Menus } from './ui/menus.js?v=1.39';
+import { $, clamp } from './core/util.js?v=1.40';
+import { Input } from './core/input.js?v=1.40';
+import { Audio } from './core/audio.js?v=1.40';
+import { Save } from './core/save.js?v=1.40';
+import { Run } from './game/run.js?v=1.40';
+import { Renderer } from './ui/render.js?v=1.40';
+import { Hud } from './ui/hud.js?v=1.40';
+import { Forge } from './ui/forge.js?v=1.40';
+import { Menus } from './ui/menus.js?v=1.40';
 
-import { STAGES } from './data/stages.js?v=1.39';
+import { STAGES } from './data/stages.js?v=1.40';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態
@@ -227,7 +227,7 @@ function onRunEnd(cleared) {
   app.acc = 0;
   // 書庫の通貨「言玉」。文を崩した敵の数で入り、クリアするとまとまって入る。
   const broken = app.run.brokenCount || 0;
-  // プレイヤーの強さ (恒久強化と部位強化) で報酬が上乗せされる。
+  // プレイヤーの強さ (部位強化) で報酬が上乗せされる。
   const buff = 1 + (app.run.player.stats.atkMul - 1) * 0.5;
   const ink = cleared
     ? Math.round((100 + app.run.stage.id * 100) * buff)

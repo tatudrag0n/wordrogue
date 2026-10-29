@@ -5,8 +5,8 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.39';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.39';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.40';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.40';
 import { evaluatePart, partConnChoices, partWordForms } from '../game/parts.js';
 import {
   partEffectRows, partTotalRows, wordEffectRows, wordDirectEffectRows,
@@ -14,7 +14,7 @@ import {
 import { ROLE_LABEL } from '../data/words.connect.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
-  META_UPGRADES, PARTS, PART_SLOTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
+  PARTS, PART_SLOTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
 } from '../core/save.js';
 
 /** 接続詞の役割の見出し。 */
@@ -65,10 +65,6 @@ export class Menus {
     this.howto = $('#howto');
     this.settings = $('#settings');
     this.dict = $('#dict');
-    // 書庫は「強化」タブに統合した。言玉の表示は growInk を使う。
-    this.archiveInk = $('#archiveInk');
-    this.archiveUpgrades = $('#archiveUpgrades');
-    this.archiveWords = $('#archiveWords');
     this.grow = $('#grow');
     this.growInk = $('#growInk');
     this.words = $('#words');
@@ -540,7 +536,7 @@ export class Menus {
       return el('div', { class: 'grow-part-note empty' });
     }
     const p = evaluatePart(words);
-    const effects = partEffectRows(this.save.partEntries(), part.id, this.save.d.meta);
+    const effects = partEffectRows(this.save.partEntries(), part.id);
     const box = el('div', { class: 'grow-part-note ' + (p.valid ? p.ev.grade : 'bad') });
 
     if (!p.valid) {
@@ -579,13 +575,10 @@ export class Menus {
   renderGrow() {
     const save = this.save;
     this.growInk.textContent = String(save.ink);
-    // 書庫 (恒久強化・語彙) はこの画面にまとめた。所持語の枠も同じ画面にある。
-    this.renderArchive();
 
     // 全部位の合計。ここだけ見れば「今どう強くなっているか」が分かる。
     if (this.growTotal) {
-      const meta = save.d.meta || {};
-      const rows = partTotalRows(save.partEntries(), meta);
+      const rows = partTotalRows(save.partEntries());
       clear(this.growTotal);
       this.growTotal.append(el('span', { class: 'grow-total-label' }, '部位の合計'));
       if (!rows.length) {
@@ -642,8 +635,8 @@ export class Menus {
       // この語を単体で部位に入れると何が変わるか。
       //   direct … 語そのものが体に効くか (体力 +25 など)
       //   eff    … 文の力ぶんも含めた効き (文が成ればどの語でも少し乗る)
-      const direct = wordDirectEffectRows(t, save.d.meta || {});
-      const eff = wordEffectRows(t, save.d.meta || {});
+      const direct = wordDirectEffectRows(t);
+      const eff = wordEffectRows(t);
       const b = el('button', {
         class: 'btn grow-word' + (this.growSel === t ? ' sel' : '') + (used ? ' used' : '')
           + (direct.length ? ' has-eff' : ' no-eff') + ' rk' + save.rankIndex(t),
@@ -1011,42 +1004,6 @@ export class Menus {
     } catch {
       return false;
     }
-  }
-
-  // ── 書庫 (恒久進行) ──────────────────────────────────────────────────────
-  renderArchive() {
-    const save = this.save;
-    if (this.archiveInk) this.archiveInk.textContent = String(save.ink);
-
-    clear(this.archiveUpgrades);
-    for (const [key, u] of Object.entries(META_UPGRADES)) {
-      const lv = save.metaLevel(key);
-      const cost = save.metaCost(key);
-      const maxed = cost === null;
-      const can = !maxed && save.ink >= cost;
-      const row = el('div', { class: 'up-row' + (can ? ' can' : '') },
-        el('span', { class: 'up-name' }, u.name),
-        el('span', { class: 'up-lv' }, `${lv} / ${u.max}`),
-        el('span', { class: 'up-desc' }, u.desc),
-        el('button', {
-          class: 'btn up-buy' + (can ? '' : ' off'),
-        }, maxed ? '最大' : `${cost} 言玉`),
-      );
-      if (!maxed) {
-        row.querySelector('.up-buy').addEventListener('click', () => {
-          const r = this.save.buyMeta(key);
-          if (r.ok) this.audio?.phrase?.();
-          else this.audio?.broken?.();
-          this.renderArchive();
-        });
-      }
-      this.archiveUpgrades.append(row);
-    }
-
-    clear(this.archiveWords);
-    this.archiveWords.append(el('p', { class: 'muted' },
-      '言玉は恒久強化と「語彙」の枠 (最大 30 個) のほか、'
-      + 'タイトルの「部位強化」の言葉くじでも使う。'));
   }
 
   // ── タイトル ────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord } from '../data/words.js?v=1.42';
+import { WORDS, drawWord, DRAWABLE_ALL } from '../data/words.js?v=1.42';
 import { CONNECTORS, canConnect } from '../data/words.connect.js';
 import {
   RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
@@ -509,6 +509,27 @@ export class Save {
 
   /** 部位の枠を空にする (互換 API)。 */
   clearPart(partId, slot) { return this.setPart(partId, slot, null); }
+
+  // ── 開発者用: 全語彙の解除 ─────────────────────────────────────────────
+  /** すべての入手可能な語を所持語に加える (開発者モード用)。 */
+  unlockAllWords() {
+    const d = this.data;
+    if (!Array.isArray(d.collection)) d.collection = [];
+    if (!d.ranks || typeof d.ranks !== 'object' || Array.isArray(d.ranks)) d.ranks = {};
+    let added = 0;
+    for (const t of DRAWABLE_ALL) {
+      if (!WORDS[t]) continue;
+      if (!d.collection.includes(t)) { d.collection.push(t); added++; }
+      if (!Number.isInteger(d.ranks[t])) d.ranks[t] = 0;
+    }
+    setRanks(d.ranks);
+    this.save();
+    return { ok: true, count: d.collection.length, added };
+  }
+
+  // 開発者用の別名 (呼び出し元によって名前が違う場合にも使える)。
+  unlockAllVocabulary() { return this.unlockAllWords(); }
+  unlockAllCollection() { return this.unlockAllWords(); }
 
   // ── 設定 ─────────────────────────────────────────────────────────────────
   setSetting(k, v) {

@@ -2078,6 +2078,8 @@ body.touch .hud-choice-title { font-size: 1rem; }
 
 .dev-panel { width: min(420px, 100%); }
 .dev-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dev-word-row { display: flex; gap: 8px; margin-top: 8px; }
+.dev-word-row input { flex: 1 1 auto; min-width: 0; }
 .dev-screen { z-index: 70; }
 
 /* ══ 設定 ════════════════════════════════════════════════════════════ */

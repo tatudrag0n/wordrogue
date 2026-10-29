@@ -22,7 +22,7 @@
   .fb-textarea { min-height: 120px; resize: vertical; font-family: inherit; }
   .fb-row { display:flex; gap:10px; }
   .fb-row > * { flex:1; }
-  .fb-actions { display:flex; gap:10px; align-items:center; margin-top: 16px; flex-wrap: wrap; }
+  .fb-actions { display:flex; gap:10px; align-items:center; margin-top: 16px; flex-wrap: wrap; position: sticky; bottom: 8px; background: var(--panel); padding: 8px 0; z-index: 2; }
   .fb-btn { padding: 10px 20px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--panel); cursor:pointer; font-size: 14px; }
   .fb-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .fb-btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -31,7 +31,11 @@
   .fb-status.err { color: var(--ng); }
   .fb-hint { font-size: 12px; color: var(--fg-mute); margin-top: 8px; }
   .fb-back { font-size: 13px; color: var(--fg-dim); text-decoration: none; }
-  .turnstile-widget { margin: 12px 0; }
+  .turnstile-widget { margin: 12px 0; position: relative; z-index: 1; min-height: 64px; display: flex; justify-content: center; }
+  /* ゲーム本体用の css で html/body のスクロールが止められているため、
+     フィードバックページでは通常どおり縦スクロールできるようにする。 */
+  html, body { height: auto; min-height: 100%; overflow-y: auto; overscroll-behavior: auto; touch-action: auto; }
+  body { user-select: auto; }
 </style>
 </head>
 <body>
@@ -80,11 +84,11 @@
       <label class="fb-label">お名前 (任意)</label>
       <input class="fb-input" id="wName" type="text" maxlength="40" placeholder="匿名でも可">
     </div>
-    <div class="turnstile-widget" id="tsWord"></div>
     <div class="fb-actions">
       <button class="fb-btn primary" id="btnSubmitWord">送信する</button>
       <span class="fb-status" id="statusWord"></span>
     </div>
+    <div class="turnstile-widget" id="tsWord"></div>
   </div>
 
   <!-- バグ報告 -->
@@ -105,11 +109,11 @@
       <label class="fb-label">お名前 (任意)</label>
       <input class="fb-input" id="bName" type="text" maxlength="40" placeholder="匿名でも可">
     </div>
-    <div class="turnstile-widget" id="tsBug"></div>
     <div class="fb-actions">
       <button class="fb-btn primary" id="btnSubmitBug">送信する</button>
       <span class="fb-status" id="statusBug"></span>
     </div>
+    <div class="turnstile-widget" id="tsBug"></div>
   </div>
 
   <p class="fb-hint">送信には Cloudflare Turnstile によるボット対策の確認が必要です。送信内容は D1 データベースに保存されます。</p>

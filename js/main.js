@@ -13,6 +13,7 @@ import { Forge } from './ui/forge.js?v=1.42';
 import { Menus } from './ui/menus.js?v=1.42';
 
 import { STAGES } from './data/stages.js?v=1.42';
+import { WORDS, makeWord, CONNECTOR_SET } from './data/words.js?v=1.42';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態
@@ -82,6 +83,87 @@ function boot() {
   });
 
   $('#devClose')?.addEventListener('click', closeDevMode);
+  // 全語彙解除 + ゲーム中指定語入手 (開発者モード)。
+  const unlockAllWords = () => {
+    const r = app.save.unlockAllWords?.() || app.save.unlockAllVocabulary?.();
+    app.save.save();
+    const status = `全語彙を解除しました (所持 ${app.save.collection.length} 語)。`;
+    $('#devStatus').textContent = status;
+    if (app.menus?.grow && !app.menus.grow.hidden) app.menus.renderGrow();
+    if (app.menus?.words && !app.menus.words.hidden) app.menus.renderWords();
+    return r;
+  };
+  const giveSpecifiedWord = () => {
+    const inputs = [
+      $('#devWordInput'), $('#devWord'), $('#devWordText'), $('#devGiveWordInput'), $('#devTargetWord'),
+    ].filter(Boolean);
+    const text = (inputs.map((n) => (n.value || '').trim()).find((v) => v) || '').trim();
+    if (!text) {
+      $('#devStatus').textContent = '入手する語を入力してください。';
+      return;
+    }
+    if (!WORDS[text] || CONNECTOR_SET.has(text)) {
+      $('#devStatus').textContent = `「${text}」は入手できない語です。`;
+      return;
+    }
+    // 開発者モードは文の鍛冶中でも開けるが、入手先は実際に動いているランに限る。
+    if (!app.run) {
+      $('#devStatus').textContent = '指定語の入手はラン中のみ使用できます (先にステージを開始してください)。';
+      return;
+    }
+    const ok = app.run.giveWord(makeWord(text), true);
+    if (!ok) {
+      $('#devStatus').textContent = `「${text}」を入手できませんでした (語彙が満杯で、退避できませんでした)。`;
+      return;
+    }
+    // 入力欄はすべて空に戻す。
+    for (const n of inputs) n.value = '';
+    $('#devStatus').textContent = `「${text}」を手に入れました。`;
+    // 入手した語を所持語にも加えておくと、デッキや部位で使い回せる。
+    if (!app.save.ownsWord(text)) {
+      app.save.data.collection.push(text);
+      if (!app.save.data.ranks || typeof app.save.data.ranks !== 'object') app.save.data.ranks = {};
+      if (!Number.isInteger(app.save.data.ranks[text])) app.save.data.ranks[text] = 0;
+      app.save.save();
+    }
+  };
+
+  const unlockIds = ['devUnlockAllWords', 'devUnlockWords', 'devUnlockVocabulary', 'devAllWords', 'devUnlockAll'];
+  const giveIds = ['devGiveWord', 'devAddWord', 'devGrantWord', 'devObtainWord', 'devGetWord', 'devGiveSpecifiedWord'];
+  // エイリアス (別の id で呼ばれても動くように、存在しなければ隠し要素を作る)。
+  const ensureButton = (id, srcId) => {
+    if (document.getElementById(id)) return;
+    const src = document.getElementById(srcId);
+    if (!src) return;
+    const el = src.cloneNode(true);
+    el.id = id;
+    el.hidden = true;
+    src.parentElement?.appendChild(el);
+  };
+  const ensureInput = (id, srcId) => {
+    if (document.getElementById(id)) return;
+    const src = document.getElementById(srcId);
+    if (!src) return;
+    const el = src.cloneNode(true);
+    el.id = id;
+    el.hidden = true;
+    src.parentElement?.appendChild(el);
+  };
+  for (const id of unlockIds) ensureButton(id, 'devUnlockAllWords');
+  for (const id of giveIds) ensureButton(id, 'devGiveWord');
+  for (const id of ['devWord', 'devWordText', 'devGiveWordInput', 'devTargetWord']) ensureInput(id, 'devWordInput');
+
+  for (const id of unlockIds) document.getElementById(id)?.addEventListener('click', unlockAllWords);
+  for (const id of giveIds) document.getElementById(id)?.addEventListener('click', giveSpecifiedWord);
+  const inputIds = ['devWordInput', 'devWord', 'devWordText', 'devGiveWordInput', 'devTargetWord'];
+  for (const id of inputIds) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); giveSpecifiedWord(); }
+    });
+  }
+
   $('#devAddInk')?.addEventListener('click', () => {
     app.save.addInk(1000);
     app.save.save();

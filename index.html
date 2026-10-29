@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.44">
+<link rel="stylesheet" href="css/style.css?v=1.45">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -274,6 +274,7 @@
         <button class="btn" id="btnDict">辞書</button>
         <button class="btn" id="btnSettings">設定</button>
         <a class="btn" href="feedback.html" style="text-decoration:none;display:inline-block">フィードバック</a>
+        <a class="btn btn-donate" href="donate.html" style="text-decoration:none;display:inline-block">支援する</a>
       </div>
 
       <div class="title-record">
@@ -284,7 +285,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.44</div>
+      <div class="title-version">Ver. 1.45</div>
     </div>
   </div>
 
@@ -896,6 +897,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.44"></script>
+<script type="module" src="js/main.js?v=1.45"></script>
 </body>
 </html>

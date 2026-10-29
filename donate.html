@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3eee1">
+<title>支援する — ワードローグ</title>
+<link rel="stylesheet" href="css/style.css?v=1.45">
+<style>
+  .dn-wrap { max-width: 680px; margin: 0 auto; padding: 28px 18px 70px; }
+  .dn-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 8px; }
+  .dn-title { font-size: 24px; font-weight: 800; color: var(--fg); letter-spacing: .02em; }
+  .dn-back { font-size: 13px; color: var(--fg-dim); text-decoration: none; }
+  .dn-lead { color: var(--fg-dim); font-size: 14px; line-height: 1.8; margin: 0 0 22px; }
+  .dn-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+  .dn-label { display:block; font-size: 13px; color: var(--fg-dim); margin-bottom: 8px; }
+  .dn-amounts { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .dn-amt { padding: 14px 8px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel-2); cursor:pointer; font-size: 15px; font-weight: 700; color: var(--fg); }
+  .dn-amt.active { border-color: var(--accent); background: rgba(224,72,45,.08); color: var(--accent-ink); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .dn-custom-row { display:flex; gap:8px; align-items:center; }
+  .dn-input { width:100%; padding: 11px 12px; border: 1px solid var(--line-2); border-radius: 9px; font-size: 15px; background: var(--panel-2); color: var(--fg); box-sizing: border-box; }
+  .dn-field { margin-bottom: 14px; }
+  .dn-textarea { min-height: 90px; resize: vertical; font-family: inherit; }
+  .dn-row { display:flex; gap:10px; }
+  .dn-row > * { flex:1; }
+  .dn-submit { width:100%; padding: 15px; border-radius: 10px; border: none; background: var(--accent); color:#fff; font-size: 16px; font-weight: 800; cursor:pointer; margin-top: 6px; }
+  .dn-submit:disabled { opacity:.55; cursor:not-allowed; }
+  .dn-status { font-size: 13px; margin-top: 12px; min-height: 18px; }
+  .dn-status.err { color: var(--ng); }
+  .dn-status.ok { color: var(--ok); }
+  .dn-note { font-size: 12px; color: var(--fg-mute); line-height: 1.7; margin-top: 16px; }
+  .dn-thanks { text-align:center; padding: 30px 10px; }
+  .dn-thanks .big { font-size: 46px; margin-bottom: 10px; }
+  .dn-thanks h2 { font-size: 22px; margin: 0 0 10px; color: var(--fg); }
+  .dn-thanks p { color: var(--fg-dim); font-size: 14px; line-height: 1.8; margin: 0 auto 18px; max-width: 460px; }
+  .dn-btn { display:inline-block; padding: 12px 22px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--panel); color: var(--fg); text-decoration:none; font-size: 14px; }
+  .dn-badge { display:inline-block; font-size: 11px; letter-spacing:.08em; color: var(--fg-mute); border:1px solid var(--line); border-radius:999px; padding: 3px 10px; margin-bottom: 14px; }
+  @media (max-width: 480px) { .dn-amounts { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="dn-wrap">
+  <div class="dn-head">
+    <div class="dn-title">ワードローグを支援</div>
+    <a class="dn-back" href="index.html">← ゲームに戻る</a>
+  </div>
+
+  <!-- お礼 -->
+  <div class="dn-card dn-thanks" id="thanksPanel" hidden>
+    <div class="big">🌸</div>
+    <h2>ありがとうございます！</h2>
+    <p>支援を受け取りました。いただいたお気持ちは、語彙の追加やバグ修正、あたらしいステージの制作に使わせていただきます。</p>
+    <a class="dn-btn" href="index.html">ゲームに戻る</a>
+  </div>
+
+  <!-- キャンセル -->
+  <div class="dn-card dn-thanks" id="cancelPanel" hidden>
+    <div class="big">🍃</div>
+    <h2>キャンセルしました</h2>
+    <p>お支払いは行われていません。気が向いたときにまたどうぞ。</p>
+    <a class="dn-btn" href="index.html">ゲームに戻る</a>
+  </div>
+
+  <!-- 寄付フォーム -->
+  <div id="formPanel">
+    <p class="dn-lead">
+      ワードローグは個人で作っている無料ゲームです。<br>
+      もし楽しんでもらえたら、開発の支援をいただけるとうれしいです。
+    </p>
+
+    <div class="dn-card">
+      <div class="dn-badge">STRIPE で安全にお支払い</div>
+
+      <div class="dn-field">
+        <label class="dn-label">支援する金額</label>
+        <div class="dn-amounts" id="amounts">
+          <button class="dn-amt" data-amount="100">¥100</button>
+          <button class="dn-amt active" data-amount="300">¥300</button>
+          <button class="dn-amt" data-amount="500">¥500</button>
+          <button class="dn-amt" data-amount="1000">¥1,000</button>
+          <button class="dn-amt" data-amount="3000">¥3,000</button>
+          <button class="dn-amt" data-amount="5000">¥5,000</button>
+        </div>
+        <div class="dn-custom-row">
+          <input class="dn-input" id="customAmount" type="number" inputmode="numeric" min="100" max="10000" step="100" placeholder="自由入力 (100〜10000 円)">
+        </div>
+      </div>
+
+      <div class="dn-row">
+        <div class="dn-field">
+          <label class="dn-label">お名前 (任意・表示されません)</label>
+          <input class="dn-input" id="donorName" type="text" maxlength="40" placeholder="匿名でも可">
+        </div>
+      </div>
+
+      <div class="dn-field">
+        <label class="dn-label">メッセージ (任意)</label>
+        <textarea class="dn-input dn-textarea" id="donorMessage" maxlength="300" placeholder="応援メッセージなど"></textarea>
+      </div>
+
+      <button class="dn-submit" id="btnDonate">支援する</button>
+      <div class="dn-status" id="status"></div>
+
+      <p class="dn-note">
+        決済は Stripe の安全なページで行われます。カード情報がこのサイトに保存されることはありません。<br>
+        金額は 100 円から 10,000 円まで選べます。
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = "https://wordrogue-api.tatudragon0327.workers.dev";
+  let amount = 300;
+
+  const params = new URLSearchParams(location.search);
+  if (params.get("thanks")) {
+    document.getElementById("formPanel").hidden = true;
+    document.getElementById("thanksPanel").hidden = false;
+  } else if (params.get("cancel")) {
+    document.getElementById("formPanel").hidden = true;
+    document.getElementById("cancelPanel").hidden = false;
+  }
+
+  const amountsEl = document.getElementById("amounts");
+  const customEl = document.getElementById("customAmount");
+  const statusEl = document.getElementById("status");
+  const btn = document.getElementById("btnDonate");
+
+  amountsEl.querySelectorAll(".dn-amt").forEach((b) => {
+    b.addEventListener("click", () => {
+      amount = Number(b.dataset.amount);
+      amountsEl.querySelectorAll(".dn-amt").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      customEl.value = "";
+      statusEl.textContent = "";
+    });
+  });
+
+  customEl.addEventListener("input", () => {
+    const v = Number(customEl.value);
+    if (v >= 100) {
+      amount = Math.round(v);
+      amountsEl.querySelectorAll(".dn-amt").forEach((x) => x.classList.remove("active"));
+    }
+  });
+
+  function setStatus(msg, cls) {
+    statusEl.textContent = msg;
+    statusEl.className = "dn-status" + (cls ? " " + cls : "");
+  }
+
+  btn.addEventListener("click", async () => {
+    const v = customEl.value.trim() ? Math.round(Number(customEl.value)) : amount;
+    if (!Number.isFinite(v) || v < 100 || v > 10000) {
+      setStatus("金額は 100 円から 10,000 円のあいだで選んでください", "err");
+      return;
+    }
+    btn.disabled = true;
+    setStatus("決済ページを準備しています…");
+    try {
+      const res = await fetch(API + "/api/donate/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: v,
+          name: document.getElementById("donorName").value.trim(),
+          message: document.getElementById("donorMessage").value.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (data && data.ok && data.url) {
+        location.href = data.url;
+        return;
+      }
+      if (data && data.error === "stripe_inactive") {
+        setStatus("現在、決済の受付を準備中です。もうしばらくお待ちください。", "err");
+      } else if (data && data.error === "invalid_amount") {
+        setStatus("金額は 100 円から 10,000 円のあいだで選んでください", "err");
+      } else if (data && data.error === "rate_limited") {
+        setStatus("リクエストが多すぎます。少し待ってからお試しください", "err");
+      } else {
+        setStatus("決済ページを開けませんでした (コード: " + ((data && data.error) || res.status) + ")", "err");
+      }
+    } catch (e) {
+      setStatus("通信エラー: " + e.message, "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

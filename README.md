@@ -815,6 +815,32 @@ npm run shot -- title title.png 800
 - Worker コード: `worker/` (wrangler.toml, src/index.js, schema.sql)
 - admin token は `worker/.admin-token.txt` (gitignore 済み) に保存
 
+## 支援 (Stripe)
+
+プレイヤーからの寄付は Stripe Checkout で受け付ける。
+
+- フロント: `donate.html`（タイトル画面の「支援する」から遷移）
+- API:
+  - `POST /api/donate/checkout` — `{ amount: 100..10000, name?, message? }` → `{ ok, id, url }`
+  - `POST /api/stripe/webhook` — `checkout.session.completed` / `expired` を署名検証して D1 に記録
+  - `GET /api/donations` — 管理用（`X-Admin-Token` 必須）
+- 保存先: D1 `donations` テーブル（`session_id`, `amount`, `status=pending|paid`, ...）
+- Worker secrets:
+  - `STRIPE_SECRET_KEY` — Stripe の制限付き API キー (live)
+  - `STRIPE_WEBHOOK_SECRET` — webhook endpoint の署名シークレット（`worker/.whsec.txt`、gitignore 済み）
+- Stripe 側の設定（作成済み）:
+  - Product「ワードローグを支援」/ Price `price_1UVu8QFAqbq9azdkr9d4Ulp6`（自由金額 100〜10,000 円, 既定 500 円）
+  - webhook endpoint `we_1UVuFRFAqbq9azdkBzbMGg6Y` → `https://wordrogue-api.tatudragon0327.workers.dev/api/stripe/webhook`
+
+> **注意: ライブ決済には Stripe アカウントの有効化が必要。**
+> 現在 `charges_enabled=false` / card_payments が inactive のため、Checkout 作成時に
+> `stripe_inactive` を返す。ダッシュボードの「支払いを有効化」を完了すると、
+> コード変更なしでそのまま決済できる。
+
+---
+
+## 公開
+
 ---
 
 ## 公開

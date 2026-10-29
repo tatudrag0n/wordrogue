@@ -3145,6 +3145,10 @@ html, body {
 .panel-grow { display: flex; flex-direction: column; max-height: none !important; height: auto; }
 .panel-grow > .grow-body { overflow: visible; flex: none; min-height: 0; }
 
+/* 支援ボタン (タイトル) */
+.btn.btn-donate { border-color: var(--accent); color: var(--accent-ink); background: rgba(224,72,45,.07); }
+.btn.btn-donate:hover { background: rgba(224,72,45,.14); }
+
 /* 言葉デッキの一括操作ボタン */
 .grow-deck-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .grow-deck-actions .btn { flex: 1 1 auto; min-width: 80px; }

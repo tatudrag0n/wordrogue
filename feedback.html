@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f3eee1">
 <title>フィードバック — ワードローグ</title>
-<link rel="stylesheet" href="css/style.css?v=1.43">
+<link rel="stylesheet" href="css/style.css?v=1.45">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
   .fb-wrap { max-width: 760px; margin: 0 auto; padding: 24px 18px 60px; }
@@ -31,11 +31,10 @@
   .fb-status.err { color: var(--ng); }
   .fb-hint { font-size: 12px; color: var(--fg-mute); margin-top: 8px; }
   .fb-back { font-size: 13px; color: var(--fg-dim); text-decoration: none; }
-  .turnstile-widget { margin: 12px 0; min-height: 64px; display: flex; justify-content: center; position: relative; z-index: 1; }
-  /* ゲーム本体用の css で html/body のスクロールが止められているため、
-     フィードバックページでは通常どおり縦スクロールできるようにする。 */
-  html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; overscroll-behavior: auto !important; touch-action: auto !important; }
-  body { user-select: auto; }
+  .turnstile-widget { margin: 12px 0; }
+  .fb-ts-note { font-size: 12px; color: var(--fg-mute); min-height: 16px; }
+  /* ハニーポット。人には見えないが bot には見える。 */
+  .fb-hp { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
 </style>
 </head>
 <body>
@@ -84,7 +83,13 @@
       <label class="fb-label">お名前 (任意)</label>
       <input class="fb-input" id="wName" type="text" maxlength="40" placeholder="匿名でも可">
     </div>
+    <!-- ハニーポット (bot 対策) -->
+    <div class="fb-hp" aria-hidden="true">
+      <label>Website</label>
+      <input type="text" id="wHp" tabindex="-1" autocomplete="off">
+    </div>
     <div class="turnstile-widget" id="tsWord"></div>
+    <div class="fb-ts-note" id="tsNoteWord"></div>
     <div class="fb-actions">
       <button class="fb-btn primary" id="btnSubmitWord">送信する</button>
       <span class="fb-status" id="statusWord"></span>
@@ -109,19 +114,31 @@
       <label class="fb-label">お名前 (任意)</label>
       <input class="fb-input" id="bName" type="text" maxlength="40" placeholder="匿名でも可">
     </div>
+    <!-- ハニーポット (bot 対策) -->
+    <div class="fb-hp" aria-hidden="true">
+      <label>Website</label>
+      <input type="text" id="bHp" tabindex="-1" autocomplete="off">
+    </div>
     <div class="turnstile-widget" id="tsBug"></div>
+    <div class="fb-ts-note" id="tsNoteBug"></div>
     <div class="fb-actions">
       <button class="fb-btn primary" id="btnSubmitBug">送信する</button>
       <span class="fb-status" id="statusBug"></span>
     </div>
   </div>
 
-  <p class="fb-hint">送信には Cloudflare Turnstile によるボット対策の確認が必要です。送信内容は D1 データベースに保存されます。</p>
+  <p class="fb-hint">送信には Cloudflare Turnstile によるボット対策を利用します (取得できない環境では省略されます)。送信内容は D1 データベースに保存されます。</p>
 </div>
 
 <script>
   const API = "https://wordrogue-api.tatudragon0327.workers.dev";
   const SITEKEY = "0x4AAAAAAFoIrBZA8W28_M_k";
+
+  /** Turnstile の状態: { widgetId, token, failed } */
+  const ts = {
+    word: { widgetId: null, token: null, failed: false },
+    bug: { widgetId: null, token: null, failed: false },
+  };
 
   // タブ切替
   const tabs = document.querySelectorAll(".fb-tab");
@@ -139,48 +156,118 @@
     el.className = "fb-status " + (ok ? "ok" : "err");
   }
 
-  function renderTurnstile(containerId, widgetId) {
-    if (!window.turnstile) { setTimeout(() => renderTurnstile(containerId, widgetId), 300); return; }
-    window.turnstile.render("#" + containerId, {
-      sitekey: SITEKEY,
-      theme: "light",
-      callback: (token) => { window["__ts_" + widgetId] = token; },
-    });
+  function tsNote(el, msg) {
+    if (el) el.textContent = msg;
+  }
+
+  /**
+   * Turnstile を描画する。失敗しても送信は可能 (トークンなしで送る)。
+   */
+  function renderTurnstile(containerId, key) {
+    const state = ts[key];
+    const note = document.getElementById("tsNote" + key.charAt(0).toUpperCase() + key.slice(1));
+    if (!window.turnstile) {
+      setTimeout(() => renderTurnstile(containerId, key), 300);
+      return;
+    }
+    try {
+      state.widgetId = window.turnstile.render("#" + containerId, {
+        sitekey: SITEKEY,
+        theme: "light",
+        callback: (token) => {
+          state.token = token;
+          state.failed = false;
+          tsNote(note, "確認できました");
+        },
+        "error-callback": () => {
+          state.token = null;
+          state.failed = true;
+          tsNote(note, "確認に失敗しました (このまま送信できます)");
+        },
+        "expired-callback": () => {
+          state.token = null;
+          tsNote(note, "確認の有効期限が切れました。もう一度お試しください");
+        },
+      });
+      tsNote(note, "ボット対策を確認しています…");
+    } catch (e) {
+      state.failed = true;
+      tsNote(note, "確認を開始できませんでした (このまま送信できます)");
+    }
   }
   renderTurnstile("tsWord", "word");
   renderTurnstile("tsBug", "bug");
 
-  async function submit(type, payload, statusEl, btn) {
-    const containerId = type === "word" ? "tsWord" : "tsBug";
-    const key = type === "word" ? "__ts_word" : "__ts_bug";
-    const token = window[key];
-    if (!token) { setStatus(statusEl, "Turnstile の確認が完了していません (完了後に再度送信してください)", false); return; }
+  /** トークンを最大 ms ミリ秒待つ。取れなければ null。 */
+  function waitForToken(key, ms) {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const tick = () => {
+        if (ts[key].token) return resolve(ts[key].token);
+        if (Date.now() - start >= ms) return resolve(null);
+        setTimeout(tick, 250);
+      };
+      tick();
+    });
+  }
+
+  function resetTurnstile(key) {
+    const state = ts[key];
+    state.token = null;
+    state.failed = false;
+    if (window.turnstile && state.widgetId !== null) {
+      try { window.turnstile.reset(state.widgetId); } catch (e) {}
+    }
+    const note = document.getElementById("tsNote" + key.charAt(0).toUpperCase() + key.slice(1));
+    tsNote(note, "");
+  }
+
+  async function submit(type, payload, statusEl, btn, hpValue) {
     btn.disabled = true;
     setStatus(statusEl, "送信中...", true);
     try {
+      // Turnstile がまだ確認中なら最大 8 秒待つ。無ければトークンなしで送る。
+      let token = ts[type].token;
+      if (!token) token = await waitForToken(type, 8000);
+
       const res = await fetch(API + "/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, payload, turnstileToken: token }),
+        body: JSON.stringify({ type, payload, turnstileToken: token || null, hp: hpValue || "" }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (data && data.ok) {
         setStatus(statusEl, "送信しました (ID: " + data.id + ")", true);
-        if (window.turnstile) window.turnstile.reset("#" + containerId);
-        window[key] = null;
+        // 送信後は入力欄を空にする。
+        if (type === "word") {
+          document.getElementById("wWord").value = "";
+        } else {
+          document.getElementById("bTitle").value = "";
+          document.getElementById("bDesc").value = "";
+        }
       } else {
-        setStatus(statusEl, "失敗: " + (data && data.error ? data.error : res.status), false);
+        const map = {
+          turnstile_failed: "ボット確認に失敗しました。もう一度お試しください",
+          rate_limited: "送信が多すぎます。しばらく待ってからお試しください",
+          payload_too_large: "内容が長すぎます",
+          invalid_word: "語を入力してください",
+          invalid_title: "タイトルを入力してください",
+        };
+        const code = (data && data.error) || String(res.status);
+        setStatus(statusEl, "失敗: " + (map[code] || code), false);
       }
     } catch (e) {
       setStatus(statusEl, "通信エラー: " + e.message, false);
     } finally {
       btn.disabled = false;
+      resetTurnstile(type);
     }
   }
 
   document.getElementById("btnSubmitWord").addEventListener("click", () => {
     const word = document.getElementById("wWord").value.trim();
-    if (!word) { setStatus(document.getElementById("statusWord"), "語を入力してください", false); return; }
+    const statusEl = document.getElementById("statusWord");
+    if (!word) { setStatus(statusEl, "語を入力してください", false); return; }
     const payload = {
       word,
       category: document.getElementById("wCat").value,
@@ -188,13 +275,14 @@
       note: document.getElementById("wNote").value.trim(),
       name: document.getElementById("wName").value.trim(),
     };
-    submit("word", payload, document.getElementById("statusWord"), document.getElementById("btnSubmitWord"));
+    submit("word", payload, statusEl, document.getElementById("btnSubmitWord"), document.getElementById("wHp").value);
   });
 
   document.getElementById("btnSubmitBug").addEventListener("click", () => {
     const title = document.getElementById("bTitle").value.trim();
     const desc = document.getElementById("bDesc").value.trim();
-    if (!title || !desc) { setStatus(document.getElementById("statusBug"), "タイトルと詳細を入力してください", false); return; }
+    const statusEl = document.getElementById("statusBug");
+    if (!title || !desc) { setStatus(statusEl, "タイトルと詳細を入力してください", false); return; }
     const payload = {
       title,
       description: desc,
@@ -202,7 +290,7 @@
       name: document.getElementById("bName").value.trim(),
       userAgent: navigator.userAgent,
     };
-    submit("bug", payload, document.getElementById("statusBug"), document.getElementById("btnSubmitBug"));
+    submit("bug", payload, statusEl, document.getElementById("btnSubmitBug"), document.getElementById("bHp").value);
   });
 </script>
 </body>

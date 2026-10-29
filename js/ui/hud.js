@@ -3,8 +3,8 @@
 // ============================================================================
 
 import { $, el, clear, clamp, fmtNum, fmtTime } from '../core/util.js';
-import { KIND_LABEL } from '../data/weapons.js?v=1.44';
-import { WORDS, CATEGORIES } from '../data/words.js?v=1.44';
+import { KIND_LABEL } from '../data/weapons.js?v=1.45';
+import { WORDS, CATEGORIES } from '../data/words.js?v=1.45';
 import { statRows } from '../game/stats.js';
 import { FX_LABEL, fxLine as makeFxLine } from './labels.js';
 

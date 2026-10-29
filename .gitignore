@@ -9,6 +9,7 @@ shot-*.png
 # Cloudflare Worker secrets (ローカル用)
 worker/.admin-token.txt
 worker/.dev.vars
+worker/.whsec.txt
 .wrangler/
 
 # OS / エディタ

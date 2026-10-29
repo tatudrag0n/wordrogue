@@ -25,10 +25,12 @@
 // 戦闘中の語彙 (言葉デッキから来る) はステータスに影響しない。
 // ============================================================================
 
-import { WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS } from '../data/words.js?v=1.40';
+import {
+  WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS,
+} from '../data/words.js?v=1.41';
 import { clamp } from '../core/util.js';
 import { evaluatePart, normPartEntries } from './parts.js';
-import { rankMul } from '../data/ranks.js?v=1.40';
+import { rankMul } from '../data/ranks.js?v=1.41';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {
@@ -134,6 +136,26 @@ const PART_TRAITS = {
   chest: [['life', { maxHp: 4, regen: 0.08 }], ['guard', { armor: 0.015 }], ['power', { atkMul: 0.02 }]],
   trunk: [['guard', { armor: 0.02, shield: 2 }], ['life', { maxHp: 2 }], ['power', { atkMul: 0.015 }]],
 };
+
+/** 部位の種類の表示名。語の意味がどの部位で効くかを画面に出すのに使う。 */
+export const PART_KIND_LABELS = {
+  head: '頭', chest: '胸', trunk: '胴', hand: '手', arm: '腕', leg: '足',
+};
+
+/**
+ * この語の意味が効く部位の種類 (PART_TRAITS に載っているもの)。
+ * 「賢」なら ['head']、「硬」なら ['trunk', 'leg', 'head', 'chest'] のような並び。
+ * 部位強化の一覧で「どこに入れると何が起きるか」を出すために使う。
+ * @returns {string[]} PART_TRAITS のキー (head / chest / trunk / hand / arm / leg)
+ */
+export function wordMeaningParts(text) {
+  if (!text) return [];
+  const out = [];
+  for (const [kind, rules] of Object.entries(PART_TRAITS)) {
+    if (rules.some(([trait]) => TRAIT_WORDS[trait].has(text))) out.push(kind);
+  }
+  return out;
+}
 
 /** 部位 ID と名前から、意味対応の種類を決める。 */
 function partKindOf(id, name) {
@@ -424,6 +446,40 @@ export function wordDirectEffectRows(text) {
   const withPart = resolvePlayerStats([part], { powerBonus: false });
   const without = resolvePlayerStats([], { powerBonus: false });
   return diffRows(withPart, without);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 部位に使える語
+//
+// 部位に入れても何も起きない語 (武器の文でしか意味を持たない語) は一覧に出さない。
+//   使える ... 癒・強・硬・賢・速・妙 — 体に効くか、部位の意味に合う語
+//   使えない ... 剣・銃・弾・炎 — 武器の文で使う語
+// 武器側の効果しか持たない語でも、体に効くキー (甲・鍔 など) を持つなら残す。
+// ─────────────────────────────────────────────────────────────────────────────
+const PART_USABLE = new Map();
+
+/** この語を部位に入れて意味があるか。 */
+export function isPartUsable(text) {
+  if (!text) return false;
+  const hit = PART_USABLE.get(text);
+  if (hit !== undefined) return hit;
+  const info = WORDS[text];
+  let ok = false;
+  if (info) {
+    const has = (src, keys) => Object.entries(src || {})
+      .some(([k, v]) => keys.has(k) && typeof v === 'number' && Math.abs(v) > 0.0001);
+    // 体側の効果 (p. で書いたもの)、武器側のうち体にも効くもの、語の意味、
+    // そして体に効く熟語を組めるか。
+    ok = has(info.player, SELF_KEYS) || has(info.fx, PART_KEYS)
+      || wordMeaningParts(text).length > 0;
+  }
+  PART_USABLE.set(text, ok);
+  return ok;
+}
+
+/** 所持語・語彙のうち、部位に使える語だけを返す。 */
+export function partUsableWords(list) {
+  return (list || []).filter((t) => isPartUsable(t));
 }
 
 /** 語彙の中で重複している語をまとめる (表示用)。 */export function lexiconSummary(lexicon) {

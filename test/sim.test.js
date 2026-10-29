@@ -1769,9 +1769,8 @@ sec('部位強化は 1 文。接続詞が使える');
   ok(two.armor > 0, `2 語目の効果が乗らない: ${two.armor}`);
   ok(two.partCount === 2, `2 語が数えていない: ${two.partCount}`);
 
-  // 接続詞を付けられる。部位は **どの接続詞でも選べる** (武器の鍛冶と違う)。
-  // その語の形 (プールの送り仮名) は source='word' として先に出て、
-  // 文を壊す形も選べるが valid=false で示される。
+  // 接続詞は **その語の送り仮名だけ** (戦闘中の言葉鍛冶と同じルール)。
+  // ほかの語の送り仮名や、どの語にも付く自由な接続詞は選べない。
   save.setPart('head', 0, '妙');   // 妙な骨 — 連体形が成る並び
   const opts = partConnOptions(save.partRaw('head').filter(Boolean), 0);
   ok(Array.isArray(opts), 'partConnOptions が配列を返さない');
@@ -1780,17 +1779,21 @@ sec('部位強化は 1 文。接続詞が使える');
 
   const headWords = save.partRaw('head').filter(Boolean);
   const choices = partConnChoices(headWords, 0);
-  ok(choices.length > opts.length, '接続詞の候補が自由になっていない');
+  ok(choices.length > 0 && choices.every((c) => c.source === 'word'),
+    `候補が語の送り仮名に限られていない: ${choices.map((c) => c.text)}`);
   ok(choices.some((c) => c.text === 'な' && c.source === 'word' && c.valid),
     `その語の形 (妙な) が出ない: ${JSON.stringify(choices.slice(0, 4))}`);
-  ok(choices.some((c) => c.text === 'された' && !c.valid),
-    '文を壊す形が valid=false で出ない');
-  // 自由に選べる。選んだ形がそのまま保存される。
-  ok(save.setPartConn('head', 0, 'された').ok, '接続詞を選べない');
-  ok(save.partRaw('head')[0].c === 'された' || save.partRaw('head')[0].conn === 'された',
-    '選んだ接続詞が保存されない');
-  ok(evaluatePart(save.partRaw('head').filter(Boolean)).valid === false,
-    '不成文になる形なのに文が成っている');
+  // その語に付かない形は、候補にも出ないしセーブにも入らない (構造として弾く)。
+  ok(!choices.some((c) => c.text === 'された'), 'その語に付かない形が候補に出ている');
+  ok(save.setPartConn('head', 0, 'された').ok === false, '付けられない形を選べてしまう');
+  ok(save.partRaw('head')[0].conn !== 'された', '付けられない形が保存された');
+  // 付く形でも、並びによっては不成文。✓ / ✕ の印で分かる。
+  save.setPart('head', 1, '骨');
+  const list = partConnChoices(save.partRaw('head').filter(Boolean), 0);
+  ok(list.some((c) => c.valid) && list.some((c) => !c.valid),
+    `成る形 / 成らない形の印が出ていない: ${list.map((c) => c.text + (c.valid ? 'ok' : 'no'))}`);
+  save.setPart('head', 1, null);
+  save.setPartConn('head', 0, null);
   save.setPartConn('head', 0, null);
 
   // 接続詞で文の力が乗る。文末は語で閉じる (接続詞で終わる文は不成文)。

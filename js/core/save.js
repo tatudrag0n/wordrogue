@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord } from '../data/words.js?v=1.40';
-import { CONNECTORS } from '../data/words.connect.js';
+import { WORDS, drawWord } from '../data/words.js?v=1.41';
+import { CONNECTORS, canConnect } from '../data/words.connect.js';
 import {
   RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
-} from '../data/ranks.js?v=1.40';
+} from '../data/ranks.js?v=1.41';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -448,6 +448,10 @@ export class Save {
     if (!e || !e.t) return { ok: false, reason: 'empty' };
     if (!conn) { e.c = null; this.save(); return { ok: true, reason: 'cleared' }; }
     if (!CONNECTORS[conn]) return { ok: false, reason: 'unknown' };
+    // 付くのは **その語 (または熟語) の送り仮名** だけ — 鍛冶と同じルール。
+    if (!partCanConnect(this.partRaw(partId), slot, conn)) {
+      return { ok: false, reason: 'nomatch' };
+    }
     e.c = conn;
     this.save();
     return { ok: true, reason: 'placed' };
@@ -465,3 +469,16 @@ export class Save {
 }
 
 export { KEY, DEFAULTS };
+
+/**
+ * その語の直後にこの接続詞を置けるか。直前の語列 (接続詞を挟まずに続く語) が
+ * 熟語を作っていれば、熟語の送り仮名も許す。戦闘中の文と同じルール。
+ */
+function partCanConnect(words, slot, conn) {
+  const list = (words || []).filter(Boolean);
+  const e = list[slot];
+  if (!e) return false;
+  const before = [];
+  for (let i = slot - 1; i >= 0 && list[i] && !list[i].conn; i--) before.unshift(list[i].text);
+  return canConnect({ text: e.text }, conn, before);
+}

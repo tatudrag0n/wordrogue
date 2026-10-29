@@ -1634,11 +1634,11 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   })()`);
   ok(menu.shown, '部位強化の画面が開かない');
   ok(menu.parts === 7, `部位の数: ${menu.parts}`);
-  ok(menu.words >= 10, `所持語の表示が少ない: ${menu.words}`);
+  ok(menu.words >= 5, `所持語の表示が少ない: ${menu.words}`);
   ok(menu.gachaOk, '言葉くじが引けない');
   ok(menu.coll >= menu.gachaBefore, `くじで所持語が減った: ${menu.gachaBefore} -> ${menu.coll}`);
   ok(menu.part.includes('癒'), `部位に語が入らない: ${menu.part}`);
-  console.log(`    部位 9 / 所持 ${menu.words} 語 / くじ後の言玉 ${menu.ink}`);
+  console.log(`    部位 7 / 所持 ${menu.words} 語 (体に効く語だけ) / くじ後の言玉 ${menu.ink}`);
 
   // ランに渡すと、部位の語が能力に乗り、デッキが開始時の語彙に入る。
   const applied = await evalJs(`(async () => {
@@ -1664,8 +1664,8 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   ok(applied.filled === 0, `開始時の語彙が空でない: ${applied.filled}`);
   console.log(`    部位 ${applied.partCount} 語 / 体力 ${applied.maxHp} / 語彙 ${applied.filled} 語`);
 
-  // 接続詞を実際に押して選ぶ。部位はどの接続詞でも選べて、
-  // 文が成る形には ✓、成らない形には ✕ が付く。
+  // 接続詞を実際に押して選ぶ。候補は **その語の送り仮名だけ** (鍛冶と同じルール)。
+  // 頭には 癒 + 骨 が入っている。癒 の送り仮名は す / える / して / えて。
   const conn = await evalJs(`(() => {
     const app = window.__wordrogue;
     app.menus.show('grow');
@@ -1678,44 +1678,48 @@ sec('部位強化はメニューで設定し、戦闘に効く');
       if (!live().querySelector('.grow-conn-pick')) live().querySelector('.gs-conn').click();
       return chips();
     };
-    const lab = live().querySelector('.gs-conn').textContent.trim();
     const first = open();
-    const okOwn = first.find(n => n.classList.contains('ok'));
-    const more = live().querySelector('.grow-conn-more');
-    const moreLabel = more ? more.textContent.trim() : '';
-    more.click();
-    const all = chips();
-    const noPick = all.find(n => n.classList.contains('no'));
-    const noText = noPick.textContent.trim();
-    // ✕ の形でも選べる。選ぶと不成文と直し方が出る。
-    noPick.click();
-    const bad = live().querySelector('.grow-part-note.bad');
-    const broken = (bad ? bad.textContent : '') + (live().querySelector('.grow-part-fix') ? ' / 直し方あり' : '');
+    const labels = first.map(n => n.textContent.replace(/[✓✕]/g, '').trim());
+    // 不成文になる形も、その語の送り仮名なら選べる (理由と直し方が出る)。
+    const noPick = first.find(n => n.classList.contains('no'));
+    let broken = '';
+    if (noPick) {
+      noPick.click();
+      const bad = live().querySelector('.grow-part-note.bad');
+      broken = (bad ? bad.textContent : '') + (live().querySelector('.grow-part-fix') ? ' / 直し方あり' : '');
+      open();
+    }
     // 成る形へ戻す。
     open().find(n => n.classList.contains('ok')).click();
     const note = live().querySelector('.grow-part-note');
     return {
-      lab, first: first.length, okOwn: okOwn ? okOwn.textContent.trim() : '', moreLabel,
-      all: all.length, no: all.filter(n => n.classList.contains('no')).length, noText,
-      broken, note: note ? note.textContent.trim() : '',
+      first: first.length, labels, no: first.filter(n => n.classList.contains('no')).length,
+      broken, more: !!live().querySelector('.grow-conn-more'),
+      note: note ? note.textContent.trim() : '',
       conn: (app.save.partRaw('head') || []).filter(Boolean)[0].conn,
+      words: document.querySelectorAll('#growWords .grow-word').length,
+      noteEl: document.getElementById('growWordsNote').textContent,
       totalRows: document.querySelectorAll('#growTotal .eff').length,
       wordEff: document.querySelectorAll('#growWords .grow-word-eff').length,
-      noEffMark: document.querySelectorAll('#growWords .grow-word.no-eff').length,
     };
   })()`);
-  ok(conn.first >= 3, `接続詞の候補が少ない: ${conn.first}`);
-  ok(conn.okOwn.length > 0, `「この語の形」に成る形が無い: ${JSON.stringify(conn.first)}`);
-  ok(/ほかの接続詞/.test(conn.moreLabel), `「ほかの接続詞」が無い: ${conn.moreLabel}`);
-  ok(conn.all > 20, `ほかの接続詞が開かない: ${conn.all}`);
-  ok(conn.no > 0, `不成文になる形 (✕) が出ていない: ${conn.all} 件`);
+  ok(conn.labels[0] === '無し', `接続詞の一覧の先頭が無しでない: ${JSON.stringify(conn.labels)}`);
+  ok(conn.first >= 2 && conn.first <= 5,
+    `候補が語の送り仮名に限られていない: ${JSON.stringify(conn.labels)}`);
+  ok(conn.labels.slice(1).every(t => ['す', 'える', 'して', 'えて'].includes(t)),
+    `癒 に付かない形が出ている: ${JSON.stringify(conn.labels)}`);
+  ok(conn.no > 0, `不成文になる形 (✕) が出ていない: ${conn.first} 件`);
   ok(/不成文/.test(conn.broken) && /直し方/.test(conn.broken),
     `✕ を選んでも不成文と直し方が出ない: ${conn.broken}`);
+  ok(!conn.more, '自由な接続詞の一覧 (ほかの接続詞) が残っている');
   ok(conn.note.length > 0 && !/不成文/.test(conn.note), `成る形に戻っていない: ${conn.note}`);
   ok(conn.totalRows > 0, '部位の合計に効果が出ていない');
-  ok(conn.wordEff > 0 && conn.noEffMark > 0, '所持語に効きの表示が無い');
-  console.log(`    接続詞 ${conn.first} 件 (${conn.okOwn}) → ほか ${conn.all} 件 (✕ ${conn.no}) → ${conn.conn === null ? '無し' : conn.conn}`);
+  ok(conn.wordEff > 0, '所持語に効きの表示が無い');
+  ok(conn.words > 0 && conn.words < 40, `所持語が絞られていない: ${conn.words}`);
+  ok(/体に効く/.test(conn.noteEl), `絞り込みの説明が出ない: ${conn.noteEl}`);
+  console.log(`    接続詞 ${conn.labels.join(' ')} (✕ ${conn.no}) → ${conn.conn === null ? '無し' : conn.conn} / 所持語 ${conn.words}`);
 }
+
 
 sec('言葉くじはリールを回してからカードを開く');
 {

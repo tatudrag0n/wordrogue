@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.40">
+<link rel="stylesheet" href="css/style.css?v=1.41">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -284,7 +284,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.40</div>
+      <div class="title-version">Ver. 1.41</div>
     </div>
   </div>
 
@@ -439,13 +439,14 @@
 <h3>5. プレイヤーの強化はメニューで</h3>
       <p>
       タイトルの<strong>部位強化</strong>で、頭・右手・左手・胸・胴・左足・右足の
-      7 部位に語を入れると、その語の効果が能力に効く。部位は人型に並び、
-      空いた枠の<strong>＋</strong>を押すと選んだ語が入る。
+      7 部位に語を入れると、その語の効果が能力に効く。部位は<strong>縦に並び</strong>、
+      空いた枠の<strong>+</strong>を押すと選んだ語が入る。
       <strong>1 部位 = 1 文</strong>。語は 2 つまで入れられて、
       語の右の<strong>「接続詞」</strong>を押すと付けられる形の一覧が開く。
-      部位は<strong>どの接続詞でも選べる</strong> — <strong>✓ は文が成る形</strong>（効きが伸びる）、
-      ✕ は不成文（何も効かない）。文の力は<strong>体そのもの</strong>（攻撃と体力）にも乗る。
-      <strong>体に効く語だけの分類は無い</strong> — 武器の文で使う語ならどれも置けて、
+      <strong>戦闘中の言葉鍛冶と同じルール</strong>で、付くのはその語の送り仮名(と熟語の形)だけ —
+      <strong>✓ は文が成る形</strong>(効きが伸びる)、✕ は不成文(何も効かない)。
+      文の力は<strong>体そのもの</strong>(攻撃と体力)にも乗る。
+      <strong>所持語は体に効く語だけ</strong>を並べる(剣・弾・炎のように武器の文で使う語は隠す)。
       その語の効果のうち<strong>装甲・回復・吸血・会心・幸運・吸引・盾</strong>などの分だけ体が受け取る。
       （語彙で <b style="color:#6a4bd0">紫</b> の語が、体にも効く効果を持つ語）
       <strong>何がどれだけ変わるか</strong>は、各部の下と「部位の合計」に数字で出る。
@@ -746,9 +747,10 @@
 
         <section>
           <h3>部位</h3>
-          <p class="grow-note">下の「所持語」から語を選んで、各部位の枠を押すと入る。入っている枠を押すと外れる（語を 2 つまで）。
-          語の右の<strong>「接続詞」</strong>を押すと、その語に付けられる形の一覧が開く。どの接続詞でも選べて、
-          <strong>✓ は文が成る形</strong>（文の力が体に乗る）、✕ は不成文（効果なし）。
+          <p class="grow-note">下の「所持語」から語を選んで、各部位の枠を押すと入る。入っている枠を押すと外れる(語を 2 つまで)。
+          語の右の<strong>「接続詞」</strong>を押すと、その語に付く送り仮名の一覧が開く。
+          <strong>戦闘中の言葉鍛冶と同じルール</strong>で、付くのはその語の送り仮名(と熟語の形)だけ。
+          <strong>✓ は文が成る形</strong>(文の力が体に乗る)、✕ は不成文(効果なし)。
           各部位の下に<strong>何がどれだけ変わるか</strong>が出る。
           <br><strong>語の意味も体に効く。</strong>速い足は移動、硬い胴は装甲、賢い頭は経験値と語彙、
           炎の右手は武器の属性と炎上になる。
@@ -759,7 +761,8 @@
         </section>
 
         <section>
-          <h3>所持語 <span class="grow-deck-count">部位に入れると効く語には効果が出る</span></h3>
+          <h3>所持語 <span class="grow-deck-count">体に効く語だけを並べる</span></h3>
+          <p class="grow-note" id="growWordsNote"></p>
           <div class="grow-words" id="growWords"></div>
         </section>
 
@@ -881,6 +884,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.40"></script>
+<script type="module" src="js/main.js?v=1.41"></script>
 </body>
 </html>

@@ -1706,17 +1706,20 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .eff i { font-style: normal; font-size: .66rem; opacity: .8; }
 .eff.big { font-size: .78rem; padding: 2px 9px; }
 
-/* 部位は 1 文。枠は「語 + 接続詞 + ✕」で、武器の文と同じ作り */
+/* 部位は 1 文。枠は「語 + 接続詞 + ✕」で、戦闘中の文と同じ作り。
+   並びは人型にせず、部位を普通に縦に並べる (1 部位 = 1 行)。 */
 .grow-parts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin-bottom: 8px;
 }
+.grow-part-row { display: flex; align-items: center; gap: 7px; }
+.grow-part-row .grow-part-name { flex: 0 0 auto; min-width: 3.4em; }
 .grow-part {
   display: flex;
   flex-direction: column;
-  align-self: start;
+  align-self: stretch;
   gap: 5px;
   padding: 8px 9px 7px;
   background: linear-gradient(180deg, #ffffff, var(--panel-2));
@@ -1750,7 +1753,7 @@ body.touch .hud-choice-title { font-size: 1rem; }
   text-align: left;
 }
 .grow-slot.filled {
-  flex: 1 1 100%;
+  flex: 0 1 auto;
   /* 接続詞の一覧を枠の下の行へ落とす。wrap が無いと横に潰れて
      一覧が 1 列になり、iPad では読めない縦長の帯になる。 */
   flex-wrap: wrap;
@@ -1843,15 +1846,6 @@ body.touch .hud-choice-title { font-size: 1rem; }
   box-shadow: var(--shadow-s);
   animation: rise .12s ease-out;
 }
-/* 見出し (「この語の形」「連体の形」…) */
-.grow-conn-head {
-  flex: 1 1 100%;
-  font-size: .68rem;
-  font-weight: 800;
-  letter-spacing: .1em;
-  color: var(--fg-mute);
-  margin-top: 2px;
-}
 .grow-conn-pick {
   padding: 3px 9px;
   font-size: .82rem;
@@ -1874,29 +1868,11 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .grow-conn-pick.no { color: var(--fg-mute); border-style: dashed; }
 .grow-conn-pick.no::before { content: '✕'; font-size: .66rem; opacity: .7; margin-right: 3px; }
 .grow-conn-pick.own { font-weight: 800; }
+/* 候補の並び。開いた枠の中で横に回り込む。 */
+.grow-conn-list { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+/* 熟語の形 (発電 の する) は色を変えて、語の形と区別する。 */
+.grow-conn-pick.idiom { border-color: var(--idiom); color: var(--idiom); }
 .grow-conn-none { font-size: .7rem; color: var(--fg-mute); }
-.grow-conn-more {
-  padding: 3px 10px;
-  font-size: .74rem;
-  font-weight: 700;
-  border-radius: 999px;
-  border: 1px dashed var(--line-2);
-  background: #f3f7fd;
-  color: var(--fg-dim);
-}
-.grow-conn-all {
-  flex: 1 1 100%;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  max-height: 168px;
-  overflow-y: auto;
-  padding: 6px;
-  background: #f7fafe;
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-}
 .grow-conn-legend { flex: 1 1 100%; font-size: .68rem; color: var(--fg-mute); }
 .grow-conn-legend i { font-style: normal; font-weight: 800; }
 .grow-conn-legend i.ok { color: var(--ok); }
@@ -1957,6 +1933,8 @@ body.touch .hud-choice-title { font-size: 1rem; }
 /* 部位に入れると効く語は緑の下線。効かない語 (武器で使う語) は淡く出す。 */
 .grow-word.has-eff { border-bottom: 2px solid rgba(22, 145, 90, .5); }
 .grow-word.no-eff { color: var(--fg-dim); }
+/* 語の意味が効く部位 (「賢」→ 頭)。どこに入れると効くかの目印。 */
+.grow-word-eff.where { color: var(--conn); background: rgba(36, 87, 214, .10); margin-left: 4px; padding: 0 3px; border-radius: 3px; }
 .grow-word-eff {
   display: block;
   font-family: var(--mono);
@@ -2121,7 +2099,6 @@ body.touch .hud-choice-title { font-size: 1rem; }
   .hud-timer { font-size: 1.6rem; }
   .hud-stage { max-width: 34vw; margin: 0 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hud-stats { display: none; }
-  .grow-parts { grid-template-columns: repeat(2, 1fr); }
   .hud-weapons { padding: 6px 10px calc(10px + var(--safe-b)); }
 }
 
@@ -2133,7 +2110,6 @@ body.touch .hud-choice-title { font-size: 1rem; }
   .hud-num span { display: none; }
   .hud-btns { gap: 4px; }
   .hud-btns .btn-icon { width: 40px; height: 40px; }
-  .grow-parts { grid-template-columns: 1fr; }
   .title-record { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(100%, 320px); }
   .title-version { margin-top: 12px; }
   .panel-dict { width: 100%; }
@@ -3103,32 +3079,7 @@ html, body {
 
 
 /* ══ 部位の人型レイアウト ══════════════════════════════════════════════ */
-/* 7 部位を体の位置に置く。頭 → 手 → 胸 → 胴 → 足。 */
-.grow-parts {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-areas:
-    ".    head ."
-    "rhnd chst lhnd"
-    ".    trnk ."
-    "lfot .    rfot";
-  align-items: stretch;
-}
-.grow-part[data-part="head"] { grid-area: head; }
-.grow-part[data-part="rhnd"] { grid-area: rhnd; }
-.grow-part[data-part="lhnd"] { grid-area: lhnd; }
-.grow-part[data-part="chst"] { grid-area: chst; }
-.grow-part[data-part="trnk"] { grid-area: trnk; }
-.grow-part[data-part="lfot"] { grid-area: lfot; }
-.grow-part[data-part="rfot"] { grid-area: rfot; }
-@media (max-width: 620px) {
-  .grow-parts {
-    grid-template-areas:
-      "head head head"
-      "rhnd chst lhnd"
-      "trnk trnk trnk"
-      "lfot lfot rfot";
-  }
-}
+/* 部位は人型に置かず、普通に縦へ並べる (.grow-parts を参照)。 */
 
 /* 空き枠は ＋ を大きく。押すと選んだ語が入る。 */
 .grow-slot.empty { border: 2px dashed rgba(120, 90, 60, .45); min-height: 34px; }

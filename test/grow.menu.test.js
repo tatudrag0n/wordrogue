@@ -10,8 +10,8 @@ const dom = installMiniDom();
 
 const { Menus } = await import('../js/ui/menus.js');
 const { Save, PARTS, PART_SLOTS } = await import('../js/core/save.js');
-const { evaluatePart, partConnChoices } = await import('../js/game/parts.js');
-const { resolvePlayerStats, partEffectRows, partTotalRows } = await import('../js/game/stats.js');
+const { evaluatePart, partConnChoices, partCanSetConn, partWordForms } = await import('../js/game/parts.js');
+const { resolvePlayerStats, partEffectRows, partTotalRows, isPartUsable } = await import('../js/game/stats.js');
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL:', m); } };
@@ -25,6 +25,7 @@ const IDS = [
   'dict', 'dictSearch', 'dictTabs', 'dictList', 'dictCount',
   'words', 'wordsInk',
   'grow', 'growInk', 'gachaBtn', 'gachaTenBtn', 'gachaResult', 'growParts', 'growSelNote', 'growWords',
+  'growWordsNote',
   'deckWords', 'deckCount',
   'btnStart', 'btnStages', 'btnHowto', 'btnGrow', 'btnWords', 'btnDict', 'btnSettings',
   'recBest', 'recClear', 'recKills', 'recRuns', 'recBroken',
@@ -38,7 +39,7 @@ for (const id of [...IDS, 'growTotal']) {
 const save = new Save();
 save.reset();
 // テストを決定的にする。語は抽選に頼まず入れる。
-save.data.collection = ['妙', '骨', '癒', '発', '電', '強', '弾', '斬', '炎'];
+save.data.collection = ['妙', '骨', '癒', '磁', '力', '強', '斬', '炎', '弾'];
 save.data.parts = {};
 for (const p of PARTS) save.data.parts[p.id] = [];
 // 十連用の幕を置いてから Menus を生成し、実画面と同じ要素を取得させる。
@@ -104,8 +105,16 @@ sec('部位が 7 コマ出て、各コマに枠が PART_SLOTS 個ある');
     ok(cells.length === PART_SLOTS, `枠の数が ${cells.length}`);
     ok(q('.grow-part-note.empty', b).length === 1, '空の部位の説明が出ていない');
   }
-  ok(wordsBox().length === save.collection.length, '所持語の一覧が出ない');
-  console.log(`  部位 ${parts.length} / 枠 ${PART_SLOTS} / 所持語 ${wordsBox().length}`);
+  // 所持語は「体に効く語」だけを出す。武器の文で使う語 (炎・弾) は隠す。
+  const usable = save.collection.filter((t) => isPartUsable(t));
+  ok(wordsBox().length === usable.length,
+    `所持語が体に効く語だけになっていない: ${wordsBox().length} / ${usable.length}`);
+  ok(wordsBox().length < save.collection.length, '武器の文で使う語まで出ている');
+  ok(!wordsBox().some((b) => /^(炎|弾)$/.test(b.textContent.trim())), '武器の文で使う語が出ている');
+  const noteEl = dom.doc.getElementById('growWordsNote');
+  ok(noteEl && /隠している/.test(noteEl.textContent),
+    `隠した語の説明が出ない: ${noteEl && noteEl.textContent}`);
+  console.log(`  部位 ${parts.length} / 枠 ${PART_SLOTS} / 所持語 ${wordsBox().length} / 隠した ${save.collection.length - usable.length}`);
 }
 
 sec('語を選んで枠を押し → 入る。もう一度押すと外れる');
@@ -148,11 +157,11 @@ sec('部位の 2 語は 1 文。接続詞の一覧が枠の下に出る');
     click(wordsBox().find((x) => x.textContent.trim().startsWith(text)));
     click(q('.grow-slot.empty', boxOf(partId))[0]);
   };
-  set('chst', '発');
-  set('chst', '電');
-  ok(save.partSlotText('chst', 0) === '発' && save.partSlotText('chst', 1) === '電',
+  set('chst', '磁');
+  set('chst', '力');
+  ok(save.partSlotText('chst', 0) === '磁' && save.partSlotText('chst', 1) === '力',
     `2 語が入らない: ${JSON.stringify(save.partRaw('chst'))}`);
-  ok(/発電/.test(q('.grow-part-note', boxOf('chst'))[0].textContent),
+  ok(/磁力/.test(q('.grow-part-note', boxOf('chst'))[0].textContent),
     '熟語で文になったことが説明に出ない');
 
   // 熟語 + 接続詞 は文末が接続詞になる。部位は 2 語までなので、
@@ -215,54 +224,47 @@ sec('部位の文は能力に乗り、不成文は何も乗せない');
   console.log(`  胸「${chst.text}」 ×${chst.gain.toFixed(2)} / 頭「${one.text}」 ×${one.gain.toFixed(2)}`);
 }
 
-sec('部位はどの接続詞でも選べる。成る / 成らない が一覧に出る');
+sec('部位の接続詞は、その語の送り仮名だけ (戦闘中の文と同じ)');
 {
-  // 癒 + 斬 は、連用形 (して) だけが文になる。連体形 (す・える) は
-  // 裸の動詞の前に置けないので ✕ のまま出す。
-  // プールを絞ると「1 つも選べない」状態になるので、部位は自由に選べる。
-  const words = [{ text: '癒', conn: null }, { text: '斬', conn: null }];
-  const ownC = partConnChoices(words, 0).filter((c) => c.source === 'word');
-  const own = ownC.map((c) => `${c.text}${c.valid ? '✓' : '✕'}`);
-  ok(ownC.length >= 2, `癒 の形が出ない: ${own}`);
-  ok(ownC.some((c) => c.valid), `癒 の形が 1 つも文にならない: ${own}`);
-  ok(ownC.some((c) => !c.valid), `不成文の形が ✕ で出ない: ${own}`);
-  ok(partConnChoices(words, 0).length > 100, '自由に選べる候補が出ていない');
+  // 癒 (プール: す / える / して / えて) に、ほかの語の送り仮名は付かない。
+  const words = [{ text: '癒', conn: null }, { text: '骨', conn: null }];
+  const all = partConnChoices(words, 0);
+  ok(all.length === partWordForms('癒').length,
+    `候補が語の送り仮名に限られていない: ${all.map((c) => c.text)}`);
+  ok(all.every((c) => c.source === 'word'), '語の形でない候補が混ざっている');
+  ok(all.some((c) => c.valid) && all.some((c) => !c.valid),
+    `成る形 / 成らない形が出ていない: ${all.map((c) => c.text + (c.valid ? 'ok' : 'no')).join(' ')}`);
+  ok(!all.some((c) => c.text === 'の'), '癒 に の が出ている');
+  ok(partCanSetConn(words, 0, 'の') === false, '癒 に の を付けられてしまう');
+  ok(partCanSetConn(words, 0, 'す') === true, '癒 に す を付けられない');
 
-  // UI: 癒 + 斬 を入れて接続詞の一覧を開くと、その語の形が ✕ 付きで出る。
-  const pick = (t) => wordsBox().find((b) => b.textContent.trim().startsWith(t));
-  click(pick('癒'));
-  click(q('.grow-slot.empty', boxOf('head'))[0]);
-  click(pick('斬'));
-  click(q('.grow-slot.empty', boxOf('head'))[0]);
-  ok(save.partSlotText('head', 0) === '癒' && save.partSlotText('head', 1) === '斬',
-    `2 語が入らない: ${JSON.stringify(save.partRaw('head'))}`);
-  ok(q('.grow-part-note.bad', boxOf('head')).length === 0, 'まだ不成文になっている');
+  // 付けられない形はセーブにも入らない (構造として弾く)。
+  save.setPart('head', 0, '癒');
+  save.setPartConn('head', 0, 'の');
+  ok(save.partRaw('head')[0].conn !== 'の', '付けられない形がセーブに入った');
 
+  // UI: 一覧に出るのは 無し + その語の送り仮名だけ。✓ / ✕ は結果の印。
+  menu.renderGrow();
   click(q('.gs-conn', boxOf('head'))[0]);
   const menuEl = q('.grow-conn-menu', boxOf('head'))[0];
   ok(!!menuEl, '接続詞の一覧が開かない');
-  const noChips = q('.grow-conn-pick.no', menuEl);
-  ok(noChips.length >= 2, `不成文になる形 (✕) が出ていない: ${noChips.length}`);
-  // ✕ の形でも選べる。選んだあとに不成文と理由、直し方が出る。
-  click(noChips[0]);
-  const placed = save.partRaw('head').filter(Boolean)[0];
-  ok(placed && placed.conn, `✕ の形が選べない: ${JSON.stringify(save.partRaw('head'))}`);
-  const note0 = q('.grow-part-note.bad', boxOf('head'))[0];
-  ok(!!note0, '不成文の理由が出ない');
-  ok(/不成文/.test(note0.textContent), `不成文の表示が違う: ${note0.textContent}`);
-  ok(!!q('.grow-part-fix', boxOf('head'))[0], '直し方が出ない');
-  // 「ほかの接続詞」を開くと全部選べる。
-  click(q('.gs-conn', boxOf('head'))[0]);
-  const more = q('.grow-conn-more', boxOf('head'))[0];
-  ok(!!more, '「ほかの接続詞」が無い');
-  click(more);
-  ok(q('.grow-conn-all .grow-conn-pick', boxOf('head')).length > 20,
-    `ほかの接続詞が開かない: ${q('.grow-conn-all .grow-conn-pick', boxOf('head')).length}`);
-  // 片方を直すと文が成る (癒 の枠を外して 斬 だけにする)。
+  const picks = q('.grow-conn-pick', menuEl);
+  const labels = picks.map((x) => x.textContent.replace(/[✓✕]/g, '').trim());
+  ok(labels[0] === '無し', `先頭が無しでない: ${labels}`);
+  ok(labels.slice(1).every((t) => partWordForms('癒').includes(t)),
+    `語の送り仮名でない候補が出ている: ${labels}`);
+  ok(!q('.grow-conn-more', menuEl).length, '「ほかの接続詞」がまだ残っている');
+  ok(!q('.grow-conn-all', menuEl).length, '自由な接続詞の一覧が残っている');
+  ok(q('.grow-conn-pick.ok', menuEl).length >= 1 && q('.grow-conn-pick.no', menuEl).length >= 1,
+    '成る形 / 成らない形の印が出ていない');
+
+  // 成る形を選ぶと文が成る。先頭の ok は す (癒す)。
+  click(q('.grow-conn-pick.ok', menuEl)[0]);
+  const p = evaluatePart(save.partRaw('head').filter(Boolean));
+  ok(p.valid, `選んだ形で文が成らない: ${p.text} / ${p.reasonText}`);
+  ok(q('.gs-conn.filled', boxOf('head')).length === 1, '接続詞のマスが filled にならない');
   click(q('.gs-out', boxOf('head'))[0]);
-  ok(evaluatePart(save.partRaw('head').filter(Boolean)).valid, '語を外しても不成文のまま');
-  click(q('.gs-out', boxOf('head'))[0]);
-  console.log(`  「癒」の形 ${own.join(' ')} / ほかを開いて全件表示 / 外して回復`);
+  console.log(`  癒 の候補 ${labels.join(' ')} / 成る形 ${all.filter((c) => c.valid).map((c) => c.text).join(' ')}`);
 }
 
 sec('部位の効きが数字で出る (何がどれだけ変わるか)');
@@ -283,25 +285,28 @@ sec('部位の効きが数字で出る (何がどれだけ変わるか)');
   console.log(`  合計 ${q('.eff', totalEl).map((x) => x.textContent).join(' ')}`);
 }
 
-sec('体に効かない語は、そう表示する');
+sec('武器の文で使う語は一覧に出さず、意味の効く部位は語を示す');
 {
-  // 炎 は武器向けの語 (dmg/burn)。体に直接は効かない。
-  // ただし文が成れば「文の力」ぶんだけは強くなる (どの語でも同じ)。
-  const w = wordsBox().find((b) => b.textContent.trim().startsWith('炎'));
-  ok(!!w, '所持語に「炎」が無い');
-  ok(w.classList.contains('no-eff'), '直接効かない語に印が付かない');
+  // 炎 (dmg/burn) と 弾 は武器の文で使う語。部位では何も起きないので出さない。
+  ok(!wordsBox().some((x) => x.textContent.trim().startsWith('炎')), '武器の文で使う語が一覧に出ている');
+  ok(!wordsBox().some((x) => x.textContent.trim().startsWith('弾')), '武器の文で使う語が一覧に出ている');
+
+  // 速 は体に直接は効かないが、足・腕・手で意味が効く。一覧に出て、効く部位が出る。
+  if (!save.ownsWord('速')) save.data.collection.push('速');
+  menu.renderGrow();
+  const w = wordsBox().find((x) => x.textContent.trim().startsWith('速'));
+  ok(!!w, '所持語に「速」が無い');
+  ok(/足/.test(w.textContent), `効く部位が語に出ていない: ${w.textContent}`);
   click(w);
-  ok(/体に直接は効かない/.test(dom.doc.getElementById('growSelNote').textContent),
-    `効かない説明が出ない: ${dom.doc.getElementById('growSelNote').textContent}`);
-  click(q('.grow-slot.empty', boxOf('lhnd'))[0]);
-  const note = q('.grow-part-note', boxOf('lhnd'))[0];
-  // 文の力ぶんの効果は出る (体力/攻撃の数字が付く)。
-  ok(q('.grow-part-eff .eff', boxOf('lhnd')).length > 0,
-    `文の力ぶんの効果が出ない: ${note.textContent}`);
-  // 部位の効きは、直接効く語でも文の力ぶんでも数字のチップで出る。
-  click(q('.gs-out', boxOf('lhnd'))[0]);
+  ok(/足/.test(dom.doc.getElementById('growSelNote').textContent),
+    `効く部位の説明が出ない: ${dom.doc.getElementById('growSelNote').textContent}`);
+  click(q('.grow-slot.empty', boxOf('lfot'))[0]);
+  const note = q('.grow-part-note', boxOf('lfot'))[0];
+  ok(q('.grow-part-eff .eff', boxOf('lfot')).length > 0,
+    `速い足の効果が出ない: ${note.textContent}`);
+  click(q('.gs-out', boxOf('lfot'))[0]);
   click(w);   // 選択解除
-  console.log(`  炎 → 「体に直接は効かない」+ 文の力ぶん ${note.textContent.replace(/\s+/g, ' ').slice(0, 60)}`);
+  console.log(`  速 → 効く部位つきで表示 / 足に入れて ${note.textContent.replace(/\s+/g, ' ').slice(0, 50)}`);
 }
 
 sec('恒久強化は無い。語彙の枠は頭の賢い語から');

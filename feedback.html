@@ -31,7 +31,7 @@
   .fb-status.err { color: var(--ng); }
   .fb-hint { font-size: 12px; color: var(--fg-mute); margin-top: 8px; }
   .fb-back { font-size: 13px; color: var(--fg-dim); text-decoration: none; }
-  .turnstile-widget { margin: 0; min-height: 0; height: 0; overflow: hidden; position: absolute; left: -9999px; }
+  .turnstile-widget { margin: 12px 0; min-height: 64px; display: flex; justify-content: center; position: relative; z-index: 1; }
   /* ゲーム本体用の css で html/body のスクロールが止められているため、
      フィードバックページでは通常どおり縦スクロールできるようにする。 */
   html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; overscroll-behavior: auto !important; touch-action: auto !important; }
@@ -84,11 +84,11 @@
       <label class="fb-label">お名前 (任意)</label>
       <input class="fb-input" id="wName" type="text" maxlength="40" placeholder="匿名でも可">
     </div>
+    <div class="turnstile-widget" id="tsWord"></div>
     <div class="fb-actions">
       <button class="fb-btn primary" id="btnSubmitWord">送信する</button>
       <span class="fb-status" id="statusWord"></span>
     </div>
-    <div class="turnstile-widget" id="tsWord"></div>
   </div>
 
   <!-- バグ報告 -->
@@ -109,11 +109,11 @@
       <label class="fb-label">お名前 (任意)</label>
       <input class="fb-input" id="bName" type="text" maxlength="40" placeholder="匿名でも可">
     </div>
+    <div class="turnstile-widget" id="tsBug"></div>
     <div class="fb-actions">
       <button class="fb-btn primary" id="btnSubmitBug">送信する</button>
       <span class="fb-status" id="statusBug"></span>
     </div>
-    <div class="turnstile-widget" id="tsBug"></div>
   </div>
 
   <p class="fb-hint">送信には Cloudflare Turnstile によるボット対策の確認が必要です。送信内容は D1 データベースに保存されます。</p>
@@ -144,42 +144,18 @@
     window.turnstile.render("#" + containerId, {
       sitekey: SITEKEY,
       theme: "light",
-      size: "invisible",
       callback: (token) => { window["__ts_" + widgetId] = token; },
     });
   }
   renderTurnstile("tsWord", "word");
   renderTurnstile("tsBug", "bug");
 
-  async function ensureToken(type, statusEl) {
-    const key = type === "word" ? "__ts_word" : "__ts_bug";
-    const containerId = type === "word" ? "tsWord" : "tsBug";
-    if (window[key]) return window[key];
-    if (!window.turnstile) {
-      setStatus(statusEl, "認証ライブラリを読み込み中...", true);
-      for (let i = 0; i < 50 && !window.turnstile; i++) await new Promise((r) => setTimeout(r, 100));
-      if (!window.turnstile) { setStatus(statusEl, "認証ライブラリを読み込めませんでした", false); return null; }
-    }
-    setStatus(statusEl, "ボット対策を確認中...", true);
-    window.turnstile.execute("#" + containerId);
-    return await new Promise((resolve) => {
-      const deadline = Date.now() + 30000;
-      const iv = setInterval(() => {
-        if (window[key]) { clearInterval(iv); resolve(window[key]); }
-        else if (Date.now() > deadline) { clearInterval(iv); resolve(null); }
-      }, 100);
-    });
-  }
-
   async function submit(type, payload, statusEl, btn) {
     const containerId = type === "word" ? "tsWord" : "tsBug";
     const key = type === "word" ? "__ts_word" : "__ts_bug";
+    const token = window[key];
+    if (!token) { setStatus(statusEl, "Turnstile の確認が完了していません (完了後に再度送信してください)", false); return; }
     btn.disabled = true;
-    let token = window[key];
-    if (!token) {
-      token = await ensureToken(type, statusEl);
-    }
-    if (!token) { setStatus(statusEl, "Turnstile の確認が完了しませんでした", false); btn.disabled = false; return; }
     setStatus(statusEl, "送信中...", true);
     try {
       const res = await fetch(API + "/api/submit", {

@@ -13,8 +13,8 @@
 // level を上げるほど基礎値が伸びる。文の長さは武器レベルとは無関係で 10 文字まで。
 // ============================================================================
 
-import { WEAPON_WORD_SET } from './words.core.js?v=1.43';
-import { WORDS, weaponHeadKind } from './words.js?v=1.43';
+import { WEAPON_WORD_SET } from './words.core.js?v=1.44';
+import { WORDS, weaponHeadKind } from './words.js?v=1.44';
 
 /**
  * kind の種類と挙動:
@@ -56,7 +56,7 @@ export const WEAPONS = {
     desc: '投げて爆発させる。範囲と炎上。',
     base: { dmg: 14, rate: 0.55, speed: 210, explode: 30, area: 26, size: 1.1, count: 1, knock: 50 },
     grow: { dmg: 4.6, rate: 0.06, explode: 8, area: 5 },
-    startWord: '炎', startWord2: '焔', maxLevel: 8, unlock: { stage: 1 },
+    startWord: '炎', startWord2: '焔', maxLevel: 8, unlock: { stage: 10 },
   },
   orbit: {
     id: 'orbit', name: '環', kind: 'orbit', glyph: '環', tail: '環',
@@ -70,7 +70,7 @@ export const WEAPONS = {
     desc: '敵から敵へ連鎖する稲光。',
     base: { dmg: 11, rate: 1.1, chain: 3, shock: 0.10, size: 1, crit: 0.05 },
     grow: { dmg: 3.6, chain: 0.34, rate: 0.1 },
-    startWord: '電', startWord2: '連', maxLevel: 8, unlock: { stage: 2 },
+    startWord: '電', startWord2: '連', maxLevel: 8, unlock: { stage: 11 },
   },
   whip: {
     id: 'whip', name: '鞭', kind: 'whip', glyph: '鞭', tail: '鞭',
@@ -84,7 +84,7 @@ export const WEAPONS = {
     desc: '纏った毒の城壁。触れると傷つく。',
     base: { dmg: 4, rate: 1.0, range: 92, size: 1, slowImmune: 0, regen: 0 },
     grow: { dmg: 1.6, range: 7, rate: 0.1 },
-    startWord: '毒', startWord2: '固', maxLevel: 8, unlock: { stage: 3 },
+    startWord: '毒', startWord2: '固', maxLevel: 8, unlock: { stage: 13 },
   },
   boomerang: {
     id: 'boomerang', name: '還', kind: 'boomerang', glyph: '還', tail: '還',
@@ -98,7 +98,7 @@ export const WEAPONS = {
     desc: '一直線を貫く光。装甲も切り裂く。',
     base: { dmg: 16, rate: 0.7, range: 460, pierce: 99, size: 1, crit: 0.1, speed: 900 },
     grow: { dmg: 5.2, rate: 0.08, range: 20 },
-    startWord: '聖', startWord2: '輝', maxLevel: 8, unlock: { stage: 5 },
+    startWord: '聖', startWord2: '輝', maxLevel: 8, unlock: { stage: 15 },
   },
   // ── 追加分。末尾語が違えば攻撃も形も違になる。──
   tachi: {
@@ -106,14 +106,14 @@ export const WEAPONS = {
     desc: '大きく振る。扇が広く、一振りで複数を薙ぐ。',
     base: { dmg: 15, rate: 0.75, range: 112, arc: 2.9, size: 1.15, crit: 0.06 },
     grow: { dmg: 4.6, rate: 0.06, range: 5, arc: 0.08 },
-    startWord: '炎', startWord2: '焔', maxLevel: 8, unlock: { stage: 3 },
+    startWord: '炎', startWord2: '焔', maxLevel: 8, unlock: { stage: 14 },
   },
   needle: {
     id: 'needle', name: '針', kind: 'shot', glyph: '針', tail: '針',
     desc: '細くて速い。連射で削り、貫通する。',
     base: { dmg: 3, rate: 3.0, speed: 480, count: 1, pierce: 0, size: 0.7, crit: 0.05, spread: 0.08 },
     grow: { dmg: 1.0, rate: 0.2, count: 0.15, pierce: 0.15 },
-    startWord: '毒', startWord2: '蝕', maxLevel: 8, unlock: { stage: 3 },
+    startWord: '毒', startWord2: '蝕', maxLevel: 8, unlock: { stage: 16 },
   },
   claw: {
     id: 'claw', name: '爪', kind: 'slash', glyph: '爪', tail: '爪',
@@ -134,7 +134,7 @@ export const WEAPONS = {
     desc: '命中した弾が分裂する。',
     base: { dmg: 8, rate: 1.0, speed: 300, count: 2, split: 2, size: 1, crit: 0.05, spread: 0.2 },
     grow: { dmg: 2.7, rate: 0.1, split: 0.3, count: 0.25 },
-    startWord: '漆', startWord2: '裂', maxLevel: 8, unlock: { stage: 6 },
+    startWord: '漆', startWord2: '裂', maxLevel: 8, unlock: { stage: 17 },
   },
   greatblade: {
     id: 'greatblade', name: '斧', kind: 'slash', glyph: '斧', tail: '斧',
@@ -170,7 +170,7 @@ export const WEAPONS = {
     desc: '素早い連打で近くの敵を打つ。',
     base: { dmg: 6, rate: 2.8, range: 74, arc: 2.4, area: 7, size: 0.9, knock: 28, crit: 0.1 },
     grow: { dmg: 2.0, rate: 0.16, range: 3, arc: 0.04 },
-    startWord: '血', startWord2: '速', maxLevel: 8, unlock: { stage: 1 },
+    startWord: '血', startWord2: '速', maxLevel: 8, unlock: { stage: 12 },
   },
   flank: {
     id: 'flank', name: '槍', kind: 'shot', glyph: '槍', tail: '槍',
@@ -185,6 +185,21 @@ export const WEAPONS = {
     base: { dmg: 6, rate: 2.4, speed: 380, count: 3, spread: 0.7, size: 0.9, crit: 0.04 },
     grow: { dmg: 2.0, rate: 0.2, count: 0.28 },
     startWord: '風', startWord2: '多', maxLevel: 8, unlock: { stage: 9 },
+  },
+  // ── 第二の庭で解放される武器 (第 18 戦・第 19 戦)。──
+  fang: {
+    id: 'fang', name: '牙', kind: 'slash', glyph: '牙', tail: '牙',
+    desc: '噛み裂く。間合いは狭いが、肉を深く切る。',
+    base: { dmg: 13, rate: 1.7, range: 94, arc: 2.4, size: 1, crit: 0.1, knock: 34 },
+    grow: { dmg: 4.2, rate: 0.12, range: 5, arc: 0.05 },
+    startWord: '炎', startWord2: '焔', maxLevel: 8, unlock: { stage: 18 },
+  },
+  chain: {
+    id: 'chain', name: '鎖', kind: 'whip', glyph: '鎖', tail: '鎖',
+    desc: '鎖を回す。届く範囲が広く、庭の端まで薙ぐ。',
+    base: { dmg: 11, rate: 1.0, range: 156, area: 14, size: 1, knock: 74, crit: 0.05 },
+    grow: { dmg: 3.6, rate: 0.08, range: 8, area: 2.4 },
+    startWord: '嵐', startWord2: '豪', maxLevel: 8, unlock: { stage: 19 },
   },
 };
 

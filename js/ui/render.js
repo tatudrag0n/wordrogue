@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.43';
+import { ELEMENTS } from '../data/words.js?v=1.44';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -61,17 +61,26 @@ export class Renderer {
       sx = (Math.random() - 0.5) * s;
       sy = (Math.random() - 0.5) * s;
     }
+    // 庭の外へはカメラが出さない。庭が画面より小さければ、庭を丸ごと
+    // 中央に見せる (箱庭としての外形が最初から見える)。
+    const a = stageArena(run);
     const tx = p.x - this.w / 2;
     const ty = p.y - this.h / 2;
     if (this._camBX == null) { this._camBX = tx; this._camBY = ty; }
     this._camBX += (tx - this._camBX) * 0.28;
     this._camBY += (ty - this._camBY) * 0.28;
+    this._camBX = clampCam(this._camBX, a.w, this.w);
+    this._camBY = clampCam(this._camBY, a.h, this.h);
     this.camX = this._camBX + sx;
     this.camY = this._camBY + sy;
 
     this.begin();
     g.save();
     g.translate(-this.camX, -this.camY);
+    // 壁より外側は描かない。外は闇なので、壁の帯までが世界の限界。
+    g.beginPath();
+    g.rect(-a.w / 2 - WALL, -a.h / 2 - WALL, a.w + WALL * 2, a.h + WALL * 2);
+    g.clip();
 
     this.step('ground', () => this.drawGround(run));
     this.step('decals', () => this.drawDecals(run));
@@ -159,38 +168,48 @@ export class Renderer {
   drawGround(run) {
     const g = this.ctx;
     const st = run.stage;
+    const a = stageArena(run);
+    const x0 = -a.w / 2, y0 = -a.h / 2, x1 = a.w / 2, y1 = a.h / 2;
 
-    g.fillStyle = st.ground;
+    // 庭の外は闇。箱庭が「囲われている」ことをまず見せる。
+    g.fillStyle = mixHex(st.accent || '#3f6b3a', '#0f0c09', 0.74);
     g.fillRect(this.camX, this.camY, this.w, this.h);
 
-    // グリッド (視点を基準に等間隔で描いてスクロール感を出す)。
+    g.save();
+    g.beginPath();
+    g.rect(x0, y0, a.w, a.h);
+    g.clip();
+
+    g.fillStyle = st.ground;
+    g.fillRect(x0, y0, a.w, a.h);
+
+    // グリッド。庭の座標に固定して引くので、壁までずっと続いている。
     const size = 96;
-    const ox = ((this.camX % size) + size) % size;
-    const oy = ((this.camY % size) + size) % size;
     g.strokeStyle = 'rgba(70, 55, 30, .055)';
     g.lineWidth = 1;
     g.beginPath();
-    for (let x = ox; x < this.w; x += size) { g.moveTo(x, 0); g.lineTo(x, this.h); }
-    for (let y = oy; y < this.h; y += size) { g.moveTo(0, y); g.lineTo(this.w, y); }
+    for (let x = Math.ceil(x0 / size) * size; x < x1; x += size) { g.moveTo(x, y0); g.lineTo(x, y1); }
+    for (let y = Math.ceil(y0 / size) * size; y < y1; y += size) { g.moveTo(x0, y); g.lineTo(x1, y); }
     g.stroke();
+
 
     // 和紙の染み。視点に合わせたタイルから選ぶので、スクロールしても
     // 同じ場所に留まる。地面の色を少しだけ濁らせる。
     const tile = 620;
-    const x0 = Math.floor(this.camX / tile) * tile;
-    const y0 = Math.floor(this.camY / tile) * tile;
+    const tx0 = Math.floor(this.camX / tile) * tile;
+    const ty0 = Math.floor(this.camY / tile) * tile;
     const nx = Math.ceil(this.w / tile) + 1;
     const ny = Math.ceil(this.h / tile) + 1;
     for (let ix = 0; ix <= nx; ix++) {
       for (let iy = 0; iy <= ny; iy++) {
-        const cellX = x0 / tile + ix;
-        const cellY = y0 / tile + iy;
+        const cellX = tx0 / tile + ix;
+        const cellY = ty0 / tile + iy;
         const seed = st.id * 19.7 + cellX * 7.13 + cellY * 3.71;
         for (let k = 0; k < 2; k++) {
           const pick = hash01(seed + k * 5.3);
           if (pick > 0.7) continue;
-          const x = x0 + ix * tile + hash01(seed + k * 9.1) * tile;
-          const y = y0 + iy * tile + hash01(seed + k * 13.7) * tile;
+          const x = tx0 + ix * tile + hash01(seed + k * 9.1) * tile;
+          const y = ty0 + iy * tile + hash01(seed + k * 13.7) * tile;
           const r = 24 + hash01(seed + k * 17.3) * 58;
           g.save();
           g.translate(x, y);
@@ -209,6 +228,29 @@ export class Renderer {
       }
     }
 
+    // 庭の意匠。畝・花・木・池・石・垣・砂・灯籠・骨・石畳を床に描く。
+    // 当たり判定は持たない景色 (壁だけが当たり判定を持つ)。
+    this.drawGarden(run, a);
+
+    // 壁の内側に落ちる影。床が壁に埋まっているように見せる。
+    const shadeW = 74;
+    const gTop = g.createLinearGradient(0, y0, 0, y0 + shadeW);
+    gTop.addColorStop(0, 'rgba(24, 18, 12, .34)');
+    gTop.addColorStop(1, 'rgba(24, 18, 12, 0)');
+    g.fillStyle = gTop; g.fillRect(x0, y0, a.w, shadeW);
+    const gBot = g.createLinearGradient(0, y1, 0, y1 - shadeW);
+    gBot.addColorStop(0, 'rgba(24, 18, 12, .34)');
+    gBot.addColorStop(1, 'rgba(24, 18, 12, 0)');
+    g.fillStyle = gBot; g.fillRect(x0, y1 - shadeW, a.w, shadeW);
+    const gL = g.createLinearGradient(x0, 0, x0 + shadeW, 0);
+    gL.addColorStop(0, 'rgba(24, 18, 12, .34)');
+    gL.addColorStop(1, 'rgba(24, 18, 12, 0)');
+    g.fillStyle = gL; g.fillRect(x0, y0, shadeW, a.h);
+    const gR = g.createLinearGradient(x1, 0, x1 - shadeW, 0);
+    gR.addColorStop(0, 'rgba(24, 18, 12, .34)');
+    gR.addColorStop(1, 'rgba(24, 18, 12, 0)');
+    g.fillStyle = gR; g.fillRect(x1 - shadeW, y0, shadeW, a.h);
+
     // 紙の端がわずかに焼ける。暗闇ではなく「遠くが少し沈む」程度に。
     const rg = g.createRadialGradient(
       this.camX + this.w / 2, this.camY + this.h / 2, 0,
@@ -218,7 +260,233 @@ export class Renderer {
     rg.addColorStop(0.55, 'rgba(255, 253, 246, 0)');
     rg.addColorStop(1, 'rgba(88, 68, 38, .16)');
     g.fillStyle = rg;
-    g.fillRect(this.camX, this.camY, this.w, this.h);
+    g.fillRect(x0, y0, a.w, a.h);
+
+    g.restore();
+
+    this.drawWall(run, a);
+  }
+
+  /**
+   * 箱庭の壁。床の外側半分と内側半分にまたがる帯を描く。
+   * 四隅には柱。壁の内側は床の影で沈んでいる (drawGround)。
+   */
+  drawWall(run, a) {
+    const g = this.ctx;
+    const st = run.stage;
+    const x0 = -a.w / 2, y0 = -a.h / 2;
+    const dark = mixHex(st.accent || '#3f6b3a', '#0d0a07', 0.5);
+    const body = mixHex(st.accent || '#3f6b3a', '#231c13', 0.28);
+    const cap = mixHex(st.accent || '#3f6b3a', '#fff4e2', 0.42);
+
+    // 外側へ落ちる影。
+    g.save();
+    g.globalAlpha = 0.5;
+    g.strokeStyle = 'rgba(0, 0, 0, .55)';
+    g.lineWidth = WALL * 2 + 14;
+    g.strokeRect(x0, y0, a.w, a.h);
+    g.restore();
+
+    // 帯 (壁そのもの)。
+    g.strokeStyle = dark;
+    g.lineWidth = WALL * 2;
+    g.strokeRect(x0, y0, a.w, a.h);
+    g.strokeStyle = body;
+    g.lineWidth = WALL * 1.2;
+    g.strokeRect(x0, y0, a.w, a.h);
+
+    // 内側と外側の縁を明るく走らせる。帯に厚みが出る。
+    g.strokeStyle = cap;
+    g.globalAlpha = 0.5;
+    g.lineWidth = 2;
+    g.strokeRect(x0 + WALL / 2, y0 + WALL / 2, a.w - WALL, a.h - WALL);
+    g.globalAlpha = 1;
+    g.strokeStyle = 'rgba(0, 0, 0, .45)';
+    g.lineWidth = 2;
+    g.strokeRect(x0 - WALL / 2, y0 - WALL / 2, a.w + WALL, a.h + WALL);
+
+    // 四隅の柱。
+    const r = WALL * 1.15;
+    for (const [cx, cy] of [[x0, y0], [x0 + a.w, y0], [x0, y0 + a.h], [x0 + a.w, y0 + a.h]]) {
+      g.beginPath();
+      g.arc(cx, cy, r, 0, TAU);
+      g.fillStyle = dark;
+      g.fill();
+      g.beginPath();
+      g.arc(cx - r * 0.2, cy - r * 0.2, r * 0.58, 0, TAU);
+      g.fillStyle = cap;
+      g.globalAlpha = 0.55;
+      g.fill();
+      g.globalAlpha = 1;
+    }
+
+    // 壁の内側に沿って一本、明るい縁。床と壁の境をはっきりさせる。
+    g.strokeStyle = 'rgba(255, 250, 236, .3)';
+    g.lineWidth = 2;
+    g.strokeRect(x0 + WALL + 1, y0 + WALL + 1, a.w - (WALL + 1) * 2, a.h - (WALL + 1) * 2);
+  }
+
+  /**
+   * 庭の意匠。ステージごとに 1 度だけ配置を決め、以後は同じ庭を描く。
+   * 乱数はステージ ID から引くので、起動するたびに庭が変わりません。
+   */
+  gardenItems(run) {
+    const st = run.stage;
+    if (this._garden && this._garden.id === st.id) return this._garden.items;
+    const a = stageArena(run);
+    const items = [];
+    const area = (a.w * a.h) / (1600 * 1100);
+    let k = 0;
+    for (const kind of st.garden || []) {
+      const n = Math.max(4, Math.round((GARDEN_COUNT[kind] || 14) * area));
+      for (let i = 0; i < n; i++) {
+        const s = st.id * 13.7 + k * 91.3 + i * 7.77 + 3.1;
+        const pad = 90;
+        const x = (hash01(s + 1.1) - 0.5) * (a.w - pad * 2);
+        const y = (hash01(s + 2.3) - 0.5) * (a.h - pad * 2);
+        items.push({ kind, x, y, s });
+      }
+      k++;
+    }
+    this._garden = { id: st.id, items };
+    return items;
+  }
+
+  /** 床に描く景色。どれも足場ではなく、床の模様として置く。 */
+  drawGarden(run, a) {
+    const g = this.ctx;
+    const st = run.stage;
+    const accent = st.accent || '#3f6b3a';
+    const deep = mixHex(accent, '#14110c', 0.4);
+    const pale = mixHex(st.ground || '#e8e2d2', '#ffffff', 0.55);
+    for (const it of this.gardenItems(run)) {
+      const r0 = hash01(it.s + 4.7);
+      const r1 = hash01(it.s + 8.9);
+      const r2 = hash01(it.s + 12.3);
+      g.save();
+      g.translate(it.x, it.y);
+      g.rotate(r0 * TAU);
+      switch (it.kind) {
+        case 'rows': { // 畝。短い線を並べる。
+          g.strokeStyle = deep; g.globalAlpha = 0.2; g.lineWidth = 4;
+          g.beginPath();
+          for (let i = -2; i <= 2; i++) { g.moveTo(-46, i * 15); g.lineTo(46, i * 15); }
+          g.stroke();
+          break;
+        }
+        case 'flower': { // 花。小さな点の群れ。
+          const col = mixHex(st.color || '#c9971f', '#fff3f6', 0.35);
+          g.fillStyle = col; g.globalAlpha = 0.55;
+          for (let i = 0; i < 9; i++) {
+            const a1 = hash01(it.s + i * 3.7) * TAU;
+            const d = 8 + hash01(it.s + i * 5.1) * 52;
+            g.beginPath();
+            g.arc(Math.cos(a1) * d, Math.sin(a1) * d, 2.6 + hash01(it.s + i) * 2.4, 0, TAU);
+            g.fill();
+          }
+          break;
+        }
+        case 'grove': { // 木。濃い円と、その下に出る影。
+          g.globalAlpha = 0.26;
+          g.fillStyle = '#1e2a18';
+          g.beginPath(); g.ellipse(14, 16, 44, 30, 0, 0, TAU); g.fill();
+          g.globalAlpha = 0.5;
+          g.fillStyle = deep;
+          g.beginPath(); g.arc(0, 0, 34 + r1 * 14, 0, TAU); g.fill();
+          g.globalAlpha = 0.3;
+          g.fillStyle = pale;
+          g.beginPath(); g.arc(-9, -9, 14, 0, TAU); g.fill();
+          break;
+        }
+        case 'bamboo': { // 竹。縦の筋と節。
+          g.globalAlpha = 0.4; g.strokeStyle = deep; g.lineWidth = 6;
+          g.beginPath();
+          for (let i = -2; i <= 2; i++) { g.moveTo(i * 22, -54); g.lineTo(i * 22, 54); }
+          g.stroke();
+          g.globalAlpha = 0.55; g.lineWidth = 2;
+          g.beginPath();
+          for (let i = -2; i <= 2; i++) for (const yy of [-26, 14]) { g.moveTo(i * 22 - 5, yy); g.lineTo(i * 22 + 5, yy); }
+          g.stroke();
+          break;
+        }
+        case 'rock': { // 石。角のある塊と影。
+          g.globalAlpha = 0.24; g.fillStyle = '#241d15';
+          g.beginPath(); g.ellipse(8, 9, 30, 21, 0, 0, TAU); g.fill();
+          g.globalAlpha = 0.62; g.fillStyle = mixHex(accent, '#8d8577', 0.55);
+          g.beginPath();
+          const rr = 22 + r2 * 14;
+          polyPath(g, 5 + Math.floor(r1 * 3), rr, rr * 0.78);
+          g.fill();
+          g.globalAlpha = 0.3; g.fillStyle = pale;
+          g.beginPath(); g.ellipse(-6, -7, 9, 6, 0, 0, TAU); g.fill();
+          break;
+        }
+        case 'hedge': { // 垣。太い帯で囲う。
+          g.globalAlpha = 0.5; g.strokeStyle = deep; g.lineWidth = 26;
+          g.lineCap = 'round';
+          g.beginPath();
+          g.moveTo(-70, -26); g.lineTo(70, -26);
+          g.moveTo(-70, 26); g.lineTo(70, 26);
+          g.stroke();
+          g.globalAlpha = 0.3; g.strokeStyle = pale; g.lineWidth = 7;
+          g.beginPath(); g.moveTo(-66, -32); g.lineTo(66, -32); g.stroke();
+          g.lineCap = 'butt';
+          break;
+        }
+        case 'gravel': { // 砂。白い面に耙の跡。
+          g.globalAlpha = 0.5; g.fillStyle = pale;
+          g.beginPath(); g.ellipse(0, 0, 66, 48, 0, 0, TAU); g.fill();
+          g.globalAlpha = 0.3; g.strokeStyle = deep; g.lineWidth = 1.6;
+          g.beginPath();
+          for (let i = -3; i <= 3; i++) { g.moveTo(-58, i * 12); g.lineTo(58, i * 12); }
+          g.stroke();
+          break;
+        }
+        case 'pond': { // 池。水の色と、二重の波紋。
+          g.globalAlpha = 0.75;
+          g.fillStyle = mixHex(st.color || '#4a7f97', '#0d2b3a', 0.45);
+          g.beginPath(); g.ellipse(0, 0, 78 + r1 * 30, 54 + r2 * 20, 0, 0, TAU); g.fill();
+          g.globalAlpha = 0.35; g.strokeStyle = '#eaf6ff'; g.lineWidth = 2;
+          g.beginPath(); g.ellipse(0, 0, 44, 30, 0, 0, TAU); g.stroke();
+          g.beginPath(); g.ellipse(0, 0, 22, 15, 0, 0, TAU); g.stroke();
+          break;
+        }
+        case 'tiles': { // 石畳。四角い石を敷く。
+          g.globalAlpha = 0.4; g.fillStyle = deep;
+          for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+              g.fillRect(i * 40 - 17, j * 40 - 17, 34, 34);
+            }
+          }
+          g.globalAlpha = 0.2; g.fillStyle = pale;
+          g.fillRect(-17 - 40, -17, 34, 34); g.fillRect(-17 + 40, -17, 34, 34);
+          break;
+        }
+        case 'bones': { // 骨。白い棒と小さな環。
+          g.globalAlpha = 0.5; g.strokeStyle = '#efe7d6'; g.lineWidth = 5; g.lineCap = 'round';
+          g.beginPath();
+          g.moveTo(-30, -8); g.lineTo(26, 10);
+          g.moveTo(-18, 16); g.lineTo(14, -18);
+          g.stroke();
+          g.beginPath(); g.arc(30, 14, 9, 0, TAU); g.lineWidth = 3; g.stroke();
+          g.lineCap = 'butt';
+          break;
+        }
+        case 'lantern': { // 灯籠。円の基壇と、灯の点。
+          g.globalAlpha = 0.24; g.fillStyle = '#241d15';
+          g.beginPath(); g.ellipse(6, 8, 26, 18, 0, 0, TAU); g.fill();
+          g.globalAlpha = 0.7; g.fillStyle = mixHex(accent, '#cfc6b4', 0.6);
+          g.beginPath(); g.arc(0, 0, 20, 0, TAU); g.fill();
+          g.globalAlpha = 0.8; g.fillStyle = '#3a3128';
+          g.beginPath(); g.arc(0, 0, 11, 0, TAU); g.fill();
+          g.globalAlpha = 0.9; g.fillStyle = '#f4c04f';
+          g.beginPath(); g.arc(0, 0, 5, 0, TAU); g.fill();
+          break;
+        }
+        default: break;
+      }
+      g.restore();
+    }
   }
 
   // 画面手前を漂う魔力の粒子。固定シードで配置し、時間だけで動かすため
@@ -2121,6 +2389,40 @@ function hash01(n) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453123;
   return x - Math.floor(x);
 }
+
+/** 箱庭の壁の厚み (境界から外へ)。床の帯はこれの半分だけ内側に伸びる。 */
+const WALL = 26;
+
+/** 描画側が見る庭の大きさ。中心が原点で、x = ±w/2 が壁。 */
+function stageArena(run) {
+  const a = run && run.stage && run.stage.arena;
+  if (a && a.w > 0 && a.h > 0) return { w: a.w, h: a.h };
+  return { w: 4800, h: 3600 };
+}
+
+/** カメラを庭の内側に留める。庭が画面より小さければ庭を中央に見せる。 */
+function clampCam(v, span, view) {
+  if (span <= view) return (span - view) / 2;
+  return clamp(v, -span / 2, span / 2 - view);
+}
+
+/** 2 色を混ぜる (#rrggbb)。庭の外の闇も壁の色も、その場でここからつくる。 */
+function mixHex(a, b, t) {
+  const px = (h) => {
+    const s = h.replace('#', '');
+    const n = parseInt(s.length === 3 ? s.split('').map((c) => c + c).join('') : s, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  };
+  const A = px(a), B = px(b);
+  const c = A.map((v, i) => Math.round(v + (B[i] - v) * clamp(t, 0, 1)));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+
+/** 意匠 1 種あたりの基本個数。庭の面積に比例して増える。 */
+const GARDEN_COUNT = {
+  rows: 9, flower: 14, grove: 11, bamboo: 10, rock: 13,
+  hedge: 9, gravel: 11, pond: 5, tiles: 10, bones: 11, lantern: 9,
+};
 
 function polyPath(g, n, r, ri) {
   g.beginPath();

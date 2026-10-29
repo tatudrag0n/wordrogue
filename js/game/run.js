@@ -12,13 +12,13 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.43';
+} from '../data/words.js?v=1.44';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.43';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.44';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.43';
-import { fireWeapon, damage as damageEnemy } from './combat.js?v=1.43';
+import { WeaponInst } from './weapon.js?v=1.44';
+import { fireWeapon, damage as damageEnemy } from './combat.js?v=1.44';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -925,31 +925,81 @@ export class Run {
   // ───────────────────────────────────────────────────────────────────────────
   // スポーン
   // ───────────────────────────────────────────────────────────────────────────
+  // ── 箱庭の壁 ────────────────────────────────────────────────────────────
   /**
-   * 画面の外から出現させる座標を返す。
-   * 円ではなく「画面の外接矩形」上から位置を選ぶ。
-   * 半径 viewR の円だと横・縦の端でちょうど画面端に着地して見えてしまうため。
+   * いま戦っている庭の大きさ。中心が原点で、x = ±w/2, y = ±h/2 が壁。
+   * (ステージに arena が無い場合に備えて、庭の外側に十分な既定値を持つ)
+   */
+  get arenaRect() {
+    const a = this.stage.arena;
+    if (a && a.w > 0 && a.h > 0) return { w: a.w, h: a.h };
+    return { w: 4800, h: 3600 };
+  }
+
+  /** 庭の内側 (壁から margin はなした領域) に座標を押し戻す。 */
+  clampToArena(obj, margin = 0) {
+    const a = this.arenaRect;
+    const hw = Math.max(1, a.w / 2 - margin);
+    const hh = Math.max(1, a.h / 2 - margin);
+    obj.x = clamp(obj.x, -hw, hw);
+    obj.y = clamp(obj.y, -hh, hh);
+    return obj;
+  }
+
+  /** 庭の外に出ているか。弾が壁に当たって消えるのに使う。 */
+  outsideArena(x, y, r = 0) {
+    const a = this.arenaRect;
+    return Math.abs(x) > a.w / 2 - r || Math.abs(y) > a.h / 2 - r;
+  }
+
+  /** 庭の内壁に沿った 1 点 (中心原点)。 */
+  arenaEdgePoint(hw, hh) {
+    switch (this.rand.int(4)) {
+      case 0: return { x: -hw, y: this.rand.range(-hh, hh) };
+      case 1: return { x: hw, y: this.rand.range(-hh, hh) };
+      case 2: return { x: this.rand.range(-hw, hw), y: -hh };
+      default: return { x: this.rand.range(-hw, hw), y: hh };
+    }
+  }
+
+  /**
+   * 箱庭の縁から湧く座標を返す。
+   *
+   * 開いたフィールドのように庭の外へ出すことはできない (外は闇だから)。
+   * だから壁の内側から、プレイヤーの画面外 (庭が画面より広ければ) に湧く。
+   * 円ではなく「庭の外接矩形」上から位置を選ぶ — 円だと横・縁の端で
+   * ちょうど壁に接して見えてしまうため。
    */
   edgeSpawn(pad = 0) {
-    const hw = (this.viewW || 960) / 2 + 48 + pad;
-    const hh = (this.viewH || 600) / 2 + 48 + pad;
     const p = this.player;
-    let x, y;
-    switch (this.rand.int(4)) {
-      case 0: x = -hw; y = this.rand.range(-hh, hh); break;
-      case 1: x = hw; y = this.rand.range(-hh, hh); break;
-      case 2: x = this.rand.range(-hw, hw); y = -hh; break;
-      default: x = this.rand.range(-hw, hw); y = hh; break;
-    }
-    // 万一プレイヤーに近すぎたら外側へ押しやる。
-    const dx = p.x + x - p.x, dy = p.y + y - p.y;
-    const d = Math.hypot(dx, dy);
+    const a = this.arenaRect;
+    const inset = 40 + pad;                 // 壁の厚み (26) と体の分を空ける
+    const hw = Math.max(40, a.w / 2 - inset);
+    const hh = Math.max(40, a.h / 2 - inset);
     const min = 300;
-    if (d < min && d > 0) {
-      const k = min / d;
-      x *= k; y *= k;
+    let best = null, bestD = -1;
+    for (let i = 0; i < 12; i++) {
+      const pt = this.arenaEdgePoint(hw, hh);
+      const d = Math.hypot(pt.x - p.x, pt.y - p.y);
+      if (d >= min) return pt;
+      if (d > bestD) { bestD = d; best = pt; }
     }
-    return { x: p.x + x, y: p.y + y };
+    // 全部近すぎた (狭い庭でプレイヤーが壁際)。いちばん遠い縁から湧く。
+    return best || { x: 0, y: -hh };
+  }
+
+  /** ボス・中ボスの出現位置。プレイヤーからいちばん遠い縁に置く。 */
+  farSpawnPoint(margin = 120) {
+    const a = this.arenaRect;
+    const hw = Math.max(60, a.w / 2 - margin);
+    const hh = Math.max(60, a.h / 2 - margin);
+    let best = { x: 0, y: -hh }, bd = -1;
+    for (let i = 0; i < 10; i++) {
+      const pt = this.arenaEdgePoint(hw, hh);
+      const d = dist2(pt.x, pt.y, this.player.x, this.player.y);
+      if (d > bd) { bd = d; best = pt; }
+    }
+    return best;
   }
 
   spawnEnemy(id, at) {
@@ -960,7 +1010,10 @@ export class Run {
     const hpScale = (1 + (st - 1) * 0.30) * (1 + prog * 0.75);
     const dmgScale = 1 + (st - 1) * 0.20;
 
-    const pos = at || this.edgeSpawn(d.r + 24);
+    // 指定座標でも庭の外には出さない (壁の向こうに置かれないように)。
+    const pos = at
+      ? this.clampToArena({ x: at.x, y: at.y }, d.r + 30)
+      : this.edgeSpawn(d.r + 24);
     // 乱数はランのシード付き乱数から引く。再現性のため Math.random は使わない。
     const e = makeEnemy(id, pos.x, pos.y, hpScale, dmgScale, this.rand);
     e.spawned = 0;
@@ -975,10 +1028,7 @@ export class Run {
   spawnMidBoss() {
     if (this.midBossSpawned || !this.stage.midBoss) return null;
     this.midBossSpawned = true;
-    const e = this.spawnEnemy(this.stage.midBoss, {
-      x: this.player.x + this.rand.range(-120, 120),
-      y: this.player.y - (this.viewH || 600) / 2 - 100,
-    });
+    const e = this.spawnEnemy(this.stage.midBoss, this.farSpawnPoint(120));
     if (!e) return null;
     this.midBoss = e;
     this.audio.bossWarn?.();
@@ -991,11 +1041,7 @@ export class Run {
   spawnBoss() {
     if (this.bossSpawned || !this.stage.boss) return;
     this.bossSpawned = true;
-    // ボスも画面外の上端から来る。
-    const e = this.spawnEnemy(this.stage.boss, {
-      x: this.player.x + this.rand.range(-160, 160),
-      y: this.player.y - (this.viewH || 600) / 2 - 120,
-    });
+    const e = this.spawnEnemy(this.stage.boss, this.farSpawnPoint(140));
     if (!e) return;
     this.boss = e;
     this.audio.boss();
@@ -1253,6 +1299,9 @@ export class Run {
     this.pickupTick(d);
     this.choiceTick(d);
     this.contactTick();
+    // 弾の吹き飛ばしや爆風で、壁の外へ出た敵がこのフレームのうちに戻る。
+    // (enemyTick のあとに吹き飛ばしが入るので、ここでもう一度だけ押さえ直す)
+    for (const e of this.enemies) this.clampToArena(e, e.r);
     this.sweep();
     this.fxTick(dt);
 
@@ -1341,6 +1390,8 @@ export class Run {
     }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
+    // 庭の壁。外には出られない (箱庭)。
+    this.clampToArena(p, p.r);
 
     // 歩いた跡の墨。速く動くほど薄く小さく散る。
     const speed = Math.hypot(p.vx, p.vy);
@@ -1471,6 +1522,8 @@ export class Run {
         if (e.spawned < 1) continue;
       }
       updateEnemy(e, ctx, dt);
+      // 庭の壁。突進や爆風で外へ吹き飛んでも、次のフレームで内側へ戻す。
+      this.clampToArena(e, e.r);
       // 状態異常 (燃焼・毒) のダメージで倒れた場合も、直接攻撃と同じ
       // 報酬・墨・連斬を通す。以前はここで dead にしてしまい、
       // killEnemy が早期 return して経験値が落ちなかった。
@@ -1487,6 +1540,15 @@ export class Run {
 
       updateBullet(b, ctx, dt);
       if (b.dead) { this.bullets.splice(i, 1); continue; }
+
+      // 壁に当たった弾は消える。爆弾はその場で炸裂する。
+      // 軌道を回る刃 (orbit) はプレイヤーの周囲に毎フレーム作り直すので、
+      // 壁際で欠けないように除く。
+      if (!b.orbit && !b.continuous && this.outsideArena(b.x, b.y, b.r)) {
+        if (b.kindName === 'bomb') this.explode(b, b.st);
+        this.bullets.splice(i, 1);
+        continue;
+      }
 
       // 爆弾は敵に触れたら炸る。
       if (b.kindName === 'bomb') {

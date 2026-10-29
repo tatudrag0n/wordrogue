@@ -1355,7 +1355,9 @@ sec('敵の文字数は強さの段階で増え、ボスは 5 文字');
     ok(normalRanks.has(rank), `rank ${rank} の通常敵がいない`);
   }
   ok(ENEMY_IDS.length === 14, `通常敵の数 ${ENEMY_IDS.length}`);
-  ok(MID_BOSS_IDS.length === 9, `中ボスの数 ${MID_BOSS_IDS.length}`);
+  // 各章に固有の中ボスが 1 体ずつ必要 (中ボスはステージ数ぶん)。
+  ok(MID_BOSS_IDS.length === STAGES.length,
+    `中ボスの数 ${MID_BOSS_IDS.length} がステージ数 ${STAGES.length} と違う`);
   ok(BOSS_IDS.length === 6, `ボスの数 ${BOSS_IDS.length}`);
   const mids = STAGES.map((s) => s.midBoss);
   ok(new Set(mids).size === STAGES.length, '章ごとの中ボスが重複している');

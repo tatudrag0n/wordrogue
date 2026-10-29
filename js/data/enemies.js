@@ -20,7 +20,7 @@
 // 雑魚 (rank 1) は 1 文字なので、文としては成立しない — 斬ればすぐ崩れる。
 // ============================================================================
 
-import { evaluate, WORDS } from './words.js?v=1.43';
+import { evaluate, WORDS } from './words.js?v=1.44';
 
 
 export const ENEMIES = {
@@ -165,6 +165,68 @@ export const ENEMIES = {
     id: 'mid_origin', name: '原初', ai: 'boss',
     hp: 6400, speed: 66, dmg: 56, r: 38, xp: 430, color: '#c9971f', heavy: 3, armor: 4,
     patterns: ['ring', 'breath', 'summon', 'slam'], atkGap: 2.6, arena: 360,
+  },
+  // ── 第二の庭の中ボス (第 10 戦〜第 19 戦) ────────────────────────────
+  // 箱庭ごとの守り手。庭の色と同じで、倒すと宝箱を落とすのは今まで通り。
+  mid_moss: {
+    words: ['苔', '緑', '静', '潤'], rank: 4, midBoss: 1,
+    id: 'mid_moss', name: '苔守', ai: 'boss',
+    hp: 8600, speed: 64, dmg: 60, r: 38, xp: 560, color: '#5d7f4e', heavy: 3, armor: 4,
+    patterns: ['charge', 'slam', 'ring'], atkGap: 2.6, arena: 340,
+  },
+  mid_bamboo: {
+    words: ['木', '緑', '風', '影'], rank: 4, midBoss: 1,
+    id: 'mid_bamboo', name: '木霊', ai: 'boss',
+    hp: 11600, speed: 66, dmg: 63, r: 39, xp: 700, color: '#6d8f5a', heavy: 3, armor: 4,
+    patterns: ['ring', 'summon', 'slam'], atkGap: 2.55, arena: 350,
+  },
+  mid_mirror: {
+    words: ['水', '鏡', '波', '静'], rank: 4, midBoss: 1,
+    id: 'mid_mirror', name: '水鏡', ai: 'boss',
+    hp: 15700, speed: 68, dmg: 66, r: 40, xp: 890, color: '#4a7f97', heavy: 3, armor: 4,
+    patterns: ['breath', 'charge', 'ring'], atkGap: 2.5, arena: 360,
+  },
+  mid_dry: {
+    words: ['砂', '石', '枯', '白'], rank: 4, midBoss: 1,
+    id: 'mid_dry', name: '枯山', ai: 'boss',
+    hp: 21200, speed: 70, dmg: 70, r: 41, xp: 1110, color: '#9a9384', heavy: 3, armor: 4,
+    patterns: ['slam', 'ring', 'summon'], atkGap: 2.5, arena: 370,
+  },
+  mid_lantern: {
+    words: ['火', '石', '道', '夜'], rank: 4, midBoss: 1,
+    id: 'mid_lantern', name: '石火', ai: 'boss',
+    hp: 28600, speed: 70, dmg: 74, r: 42, xp: 1390, color: '#c08a3e', heavy: 3, armor: 4,
+    patterns: ['charge', 'ring', 'breath'], atkGap: 2.45, arena: 380,
+  },
+  mid_mist: {
+    words: ['霧', '霞', '白', '青'], rank: 4, midBoss: 1,
+    id: 'mid_mist', name: '白霞', ai: 'boss',
+    hp: 38600, speed: 72, dmg: 78, r: 43, xp: 1730, color: '#8b9bb0', heavy: 3, armor: 4,
+    patterns: ['ring', 'summon', 'breath', 'slam'], atkGap: 2.4, arena: 390,
+  },
+  mid_bloom: {
+    words: ['花', '紅', '華', '麗'], rank: 4, midBoss: 1,
+    id: 'mid_bloom', name: '紅華', ai: 'boss',
+    hp: 52100, speed: 74, dmg: 83, r: 44, xp: 2160, color: '#c46b8f', heavy: 3, armor: 5,
+    patterns: ['breath', 'charge', 'slam', 'ring'], atkGap: 2.4, arena: 400,
+  },
+  mid_moon: {
+    words: ['月', '影', '清', '静'], rank: 4, midBoss: 1,
+    id: 'mid_moon', name: '清月', ai: 'boss',
+    hp: 70300, speed: 76, dmg: 87, r: 45, xp: 2710, color: '#6f7bb5', heavy: 3, armor: 5,
+    patterns: ['summon', 'ring', 'breath', 'charge'], atkGap: 2.35, arena: 410,
+  },
+  mid_quiet: {
+    words: ['静', '寂', '無', '黒'], rank: 4, midBoss: 1,
+    id: 'mid_quiet', name: '静寂', ai: 'boss',
+    hp: 95000, speed: 78, dmg: 92, r: 46, xp: 3410, color: '#7b7f86', heavy: 3, armor: 5,
+    patterns: ['ring', 'breath', 'summon', 'slam'], atkGap: 2.3, arena: 420,
+  },
+  mid_garden: {
+    words: ['庭', '緑', '水', '静'], rank: 4, midBoss: 1,
+    id: 'mid_garden', name: '緑庭', ai: 'boss',
+    hp: 128000, speed: 80, dmg: 98, r: 48, xp: 4260, color: '#d8b23c', heavy: 3, armor: 5,
+    patterns: ['ring', 'breath', 'summon', 'slam', 'charge'], atkGap: 2.25, arena: 440,
   },
 
   // ── ボス (5 文字) ────────────────────────────────────────────────────

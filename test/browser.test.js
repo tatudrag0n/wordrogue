@@ -9,6 +9,7 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { STAGES } from '../js/data/stages.js';
 
 const CHROME = process.env.CHROME_PATH
   || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
@@ -273,7 +274,7 @@ await evalJs('document.getElementById("btnStart").click()');
 await sleep(300);
 ok(await evalJs('!document.getElementById("stages").hidden'), 'ステージ選択が開いた');
 const stageCards = await evalJs('document.querySelectorAll("#stageList .stage-card").length');
-ok(stageCards === 9, `ステージカード数: ${stageCards}`);
+ok(stageCards === STAGES.length, `ステージカード数: ${stageCards} (定義 ${STAGES.length})`);
 
 sec('武器選択へ');
 await evalJs('document.querySelectorAll("#stageList .stage-card")[0].click()');

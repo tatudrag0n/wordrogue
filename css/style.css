@@ -1438,7 +1438,9 @@ body.touch .hud-choice-title { font-size: 1rem; }
 /* ══ ステージ選択 ════════════════════════════════════════════════════ */
 
 .panel-stages { width: min(760px, 100%); }
-.stage-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+/* ステージは 19 面以上ある。パネルの高さに畳んで、
+   一覧だけをスクロールで見せる (flex の子は既定で縮まない)。 */
+.stage-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 
 .stage-card {
   display: flex;

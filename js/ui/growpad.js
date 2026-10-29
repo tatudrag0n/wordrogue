@@ -12,7 +12,7 @@
 // ============================================================================
 
 import { el, clear } from '../core/util.js';
-import { WORDS, CATEGORIES } from '../data/words.js?v=1.42';
+import { WORDS, CATEGORIES } from '../data/words.js?v=1.43';
 import { PART_MAX_LEN, PARTS } from '../core/save.js';
 import { makePartSentence } from '../game/parts.js';
 import {

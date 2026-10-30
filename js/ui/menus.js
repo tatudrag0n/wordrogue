@@ -5,11 +5,12 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.47';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.47';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.48';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.48';
 import { evaluatePart, partConnChoices } from '../game/parts.js';
 import { partEffectRows, partTotalRows } from '../game/stats.js';
 import { GrowPad } from './growpad.js';
+import { Tips } from './tips.js?v=1.48';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
   PARTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
@@ -94,6 +95,11 @@ export class Menus {
     /** 部位を組む土台。言葉鍛冶と同じ操作 (senpad.js) を使う。 */
     this.growUndo = $('#btnGrowUndo');
     this.growPad = new GrowPad(this);
+    /**
+     * タブを初めて開いたときの短い説明。
+     * 長い説明はチュートリアルと遊び方に置き、タブには要点だけを残す。
+     */
+    this.tips = new Tips({ save: this.save, audio: this.audio });
     // チュートリアル。初回の 1 回だけ自動で出す (save.d.seenIntro)。
     // #tutorial が無い環境 (テストの最小 DOM) でも死なないように取っておく。
     this.tutorial = $('#tutorial');
@@ -130,6 +136,10 @@ export class Menus {
     this.deckDeselectAll?.addEventListener('click', () => { tap(); this.deselectAllDeck(); });
     this.deckBack?.addEventListener('click', () => { tap(); this.hideDeckBack(); this.closeTab('words'); });
     this.growUndo?.addEventListener('click', () => { tap(); this.growPad.undo(); });
+    // 所持語の一覧は右の列の中でスクロールする。語はドラッグの起点なので
+    // 指ではなぞれない。上下ボタンでも送れるようにしておく。
+    $('#growWordsUp')?.addEventListener('click', () => { tap(); this.scrollWords(-1); });
+    $('#growWordsDown')?.addEventListener('click', () => { tap(); this.scrollWords(1); });
     this.gachaBtn?.addEventListener('click', () => { tap(); this.startGacha(1); });
     this.gachaTenBtn?.addEventListener('click', () => { tap(); this.startGacha(10); });
     // 幕の中の操作。幕が無い最小 DOM ではすべて素通りする。
@@ -142,6 +152,11 @@ export class Menus {
     });
     $('#btnDict').addEventListener('click', () => { tap(); this.show('dict'); });
     $('#btnSettings').addEventListener('click', () => { tap(); this.show('settings'); });
+
+    // 各タブ右上の「?」。初回の説明をいつでも開き直せる。
+    for (const b of document.querySelectorAll('[data-help]')) {
+      b.addEventListener('click', () => { tap(); this.tips.open(b.dataset.help); });
+    }
 
     this.dictSearch = $('#dictSearch');
     this.dictTabs = $('#dictTabs');
@@ -205,6 +220,7 @@ export class Menus {
 
   hideAll() {
     this.closeGacha();
+    this.tips?.close();
     for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'grow', 'words']) {
       if (this[k]) this[k].hidden = true;
     }
@@ -215,6 +231,8 @@ export class Menus {
   /** 辞書を閉じる。ゲーム中は main.js 側で時間を戻す。 */
   hide(name) {
     if (name === 'grow') this.closeGacha();
+    // そのタブの説明を重ねているなら、タブを閉じるときに一緒に閉じる。
+    if (this.tips?.isOpen() && this.tips.key === name) this.tips.close();
     const wasOpen = this[name] && !this[name].hidden;
     this[name].hidden = true;
     if (wasOpen) this.audio?.uiClose?.();
@@ -246,13 +264,19 @@ export class Menus {
     if (name === 'grow') { this.growPad.reset(); this.renderGrow(); }
     if (name === 'words') this.renderWords();
     if (name === 'tutorial') this.renderTutorial();
+    // 初めて開いたタブだけ、短い説明を重ねる。
+    this.tips.maybe(name);
   }
+
+  /** Menus の外 (言葉鍛冶) から、初回の説明を出す。 */
+  showTip(key) { return this.tips.maybe(key); }
 
   isVisible(name) {
     return !!this[name] && !this[name].hidden;
   }
 
   back() {
+    if (this.tips?.isOpen()) { this.tips.close(); return true; }
     if (this.gachaVeil && !this.gachaVeil.hidden) { this.closeGacha(); return true; }
     if (this.tutorial && !this.tutorial.hidden) { this.closeTutorial(); return true; }
     for (const name of ['howto', 'settings', 'grow', 'words']) {
@@ -280,6 +304,7 @@ export class Menus {
     this[name].hidden = false;
     this.audio?.uiOpen?.();
     if (name === 'settings') this.renderSettings();
+    this.tips.maybe(name);
   }
 
   // ── チュートリアル ─────────────────────────────────────────────────────────
@@ -384,6 +409,14 @@ export class Menus {
         `文は成っているが、この語は${part.name}では働かない — 意味の合う部位か、別の語に入れ替える`));
     }
     return box;
+  }
+
+  /** 所持語の一覧を 1 画面ぶん送る (指でも下の語まで届くように)。 */
+  scrollWords(dir) {
+    const box = this.growWords;
+    if (!box) return;
+    const step = Math.max(72, Math.round((box.clientHeight || 0) * 0.8));
+    box.scrollTop = Math.max(0, (box.scrollTop || 0) + dir * step);
   }
 
   renderGrow() {

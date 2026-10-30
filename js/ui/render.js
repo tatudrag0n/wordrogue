@@ -2131,10 +2131,15 @@ export class Renderer {
   /**
    * 武器 1 つの絵。原点が握り、+X が切っ先。
    * 画像ファイルを使わず、墨の線と紙色の面だけで描く。
+   *   紙色 (pale) … 刃や柄の面。墨 (ink) … 輪郭と陰。色 (color) … 金具・巻き。
+   * 刃の厚みは薄い影 (ink3) を片側だけに置いて出し、鋼の面をつくる。
+   * 真上から見た形で描く (銃・鋏は軸を挟んで対称、鋸は歯が片側だけ)。
    */
   drawWeaponGlyph(g, glyph, scale = 1, color = '#d4a94e', alpha = 1) {
     const s = Math.max(0.4, scale);
     const ink = 'rgba(28, 35, 49, .92)';
+    const ink2 = 'rgba(28, 35, 49, .42)';
+    const ink3 = 'rgba(28, 35, 49, .13)';
     const pale = 'rgba(255, 253, 247, .96)';
     g.save();
     g.scale(s, s);
@@ -2145,441 +2150,1241 @@ export class Renderer {
     g.lineWidth = 1.2;
     g.fillStyle = pale;
 
-    const blade = (len, width = 2.4, curve = 0.08) => {
+    // ── 部品 ──────────────────────────────────────────────
+    /** 細い柄。墨の芯に色の巻き。 */
+    const grip = (x0, x1, w = 1.2, wraps = 3) => {
+      g.strokeStyle = ink;
+      g.lineWidth = w * 2;
+      g.beginPath(); g.moveTo(x0, 0); g.lineTo(x1, 0); g.stroke();
+      g.strokeStyle = color;
+      g.lineWidth = w;
+      for (let i = 0; i < wraps; i++) {
+        const x = x0 + ((i + 0.7) / (wraps + 0.4)) * (x1 - x0);
+        g.beginPath(); g.moveTo(x - 1.1, -w * 1.5); g.lineTo(x + 0.5, w * 1.5); g.stroke();
+      }
+      g.strokeStyle = ink;
+      g.lineWidth = 1.2;
+    };
+
+    /** 太い柄。紙色の帯に色の巻き締め。 */
+    const wrapGrip = (x0, x1, h) => {
+      g.fillStyle = pale;
       g.beginPath();
-      g.moveTo(2, -width);
-      g.quadraticCurveTo(len * 0.72, -width + curve, len, 0);
-      g.quadraticCurveTo(len * 0.72, width + curve, 2, width);
-      g.closePath();
-      g.fill();
-      g.stroke();
+      g.moveTo(x0, -h); g.lineTo(x1, -h * 0.92); g.lineTo(x1, h * 0.92); g.lineTo(x0, h);
+      g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = ink3;
       g.beginPath();
-      g.moveTo(1.5, -width * 1.35);
-      g.lineTo(1.5, width * 1.35);
-      g.stroke();
-      g.beginPath();
-      g.moveTo(-7, 0);
-      g.lineTo(1.5, 0);
-      g.stroke();
-      // 柄巻き。
-      g.globalAlpha *= 0.6;
-      for (let i = 0; i < 3; i++) {
+      g.moveTo(x0, 0); g.lineTo(x1, 0); g.lineTo(x1, h * 0.92); g.lineTo(x0, h);
+      g.closePath(); g.fill();
+      g.strokeStyle = color;
+      g.lineWidth = 1;
+      const n = Math.max(2, Math.round((x1 - x0) / 3.6));
+      for (let i = 0; i < n; i++) {
+        const x = x0 + ((i + 0.5) / n) * (x1 - x0);
         g.beginPath();
-        g.moveTo(-6 + i * 2, -1.1);
-        g.lineTo(-4.8 + i * 2, 1.1);
+        g.moveTo(x - 1.15, -h * 0.82); g.lineTo(x + 1.15, h * 0.82);
         g.stroke();
       }
+      g.strokeStyle = ink;
+      g.lineWidth = 1.2;
+    };
+
+    /** 金具の帯。 */
+    const band = (x, halfH, w = 2) => {
+      g.fillStyle = color;
+      g.fillRect(x, -halfH, w, halfH * 2);
+      g.strokeRect(x, -halfH, w, halfH * 2);
+      g.fillStyle = pale;
+    };
+
+    /** 二重刃の剣身。稜線と片側の影で鋼の面を見せる。 */
+    const swordBlade = (len, halfW) => {
+      g.fillStyle = pale;
+      g.beginPath();
+      g.moveTo(2, -halfW);
+      g.quadraticCurveTo(len * 0.72, -halfW, len, 0);
+      g.quadraticCurveTo(len * 0.72, halfW, 2, halfW);
+      g.closePath();
+      g.fill(); g.stroke();
+      g.fillStyle = ink3;
+      g.beginPath();
+      g.moveTo(2.4, 0.1);
+      g.quadraticCurveTo(len * 0.72, halfW * 0.25, len - 0.4, 0);
+      g.quadraticCurveTo(len * 0.72, halfW, 2.4, halfW - 0.2);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = ink2;
+      g.lineWidth = 0.8;
+      g.beginPath(); g.moveTo(3.4, 0); g.lineTo(len - 2.6, 0); g.stroke();
+      g.lineWidth = 1.2;
+      g.strokeStyle = ink;
     };
 
     switch (glyph) {
-      case '刀':
-        // 反りの強い日本刀。剣 (諸刃) と見分けがつくよう、片刃の曲線で描く。
-        g.beginPath();
-        g.moveTo(2, -2.1);
-        g.quadraticCurveTo(17, -5.4, 29, -0.4);
-        g.quadraticCurveTo(20, 3.2, 2, 2.1);
-        g.closePath();
-        g.fill(); g.stroke();
-        g.beginPath(); g.moveTo(1.5, -3.1); g.lineTo(1.5, 3.1); g.stroke();
-        g.beginPath(); g.moveTo(-8, 0.4); g.lineTo(1.5, 0.4); g.stroke();
-        g.globalAlpha *= 0.6;
-        for (let i = 0; i < 3; i++) {
-          g.beginPath(); g.moveTo(-7 + i * 2, -1); g.lineTo(-5.8 + i * 2, 1.6); g.stroke();
-        }
-        break;
-      case '剣':
-        g.fillStyle = color;
-        blade(25, 2.3, 0.04);
-        break;
-      case '斧': {
-        // 柄の先に、背の平らな大斧。刃こぼれは墨の線で刻む。
-        g.beginPath(); g.moveTo(-11, 4); g.lineTo(11, -2); g.stroke();
+      case '刃': {
+        // 片刃の厚い刃。刀 (細く反る) と剣 (諸刃) と見分けがつく、
+        // 背が直線で刃だけが膨らむ山刀の形。
         g.fillStyle = pale;
         g.beginPath();
-        g.moveTo(6, -6);
-        g.quadraticCurveTo(17, -15, 24, -3);
-        g.quadraticCurveTo(17, 4, 7, 3);
+        g.moveTo(2, -2.8);
+        g.lineTo(25.5, -2.3);
+        g.lineTo(30, 0.9);
+        g.quadraticCurveTo(19, 4.4, 2, 3);
         g.closePath();
         g.fill(); g.stroke();
-        g.strokeStyle = color;
-        g.lineWidth = 1.4;
+        g.fillStyle = ink3;
         g.beginPath();
-        g.moveTo(14, -9);
-        g.quadraticCurveTo(19, -5, 16.5, -0.5);
+        g.moveTo(2.6, 0.8);
+        g.quadraticCurveTo(19, 3.5, 29.2, 0.85);
+        g.quadraticCurveTo(19, 2.5, 2.6, 1.6);
+        g.closePath();
+        g.fill();
+        // 刃文。刃のすぐ内側に細い一線。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.85;
+        g.beginPath();
+        g.moveTo(3.4, 1.2);
+        g.quadraticCurveTo(16, 2.9, 28, 0.6);
         g.stroke();
+        // 背の面取り。
+        g.beginPath();
+        g.moveTo(3, -1.9); g.lineTo(24.8, -1.5);
+        g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        band(0, 3.3, 1.7);
+        wrapGrip(-9.4, -0.2, 2.3);
+        // 髷を留める穴 (目釘)。
+        g.fillStyle = ink;
+        g.beginPath(); g.arc(-6.2, 0, 0.85, 0, TAU); g.fill();
+        g.fillStyle = pale;
+        break;
+      }
+      case '刀': {
+        // 反りの強い日本刀。剣 (諸刃) と見分けがつくよう、
+        // 片刃の曲線と刃文・丸鍔で描く。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(2, -1.9);
+        g.quadraticCurveTo(17, -6.2, 29.5, -0.5);
+        g.quadraticCurveTo(20, 2.8, 2, 1.9);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 影は刃側 (下) だけ。
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(2.6, 0.6);
+        g.quadraticCurveTo(19, 2.5, 28.6, -0.5);
+        g.quadraticCurveTo(19.5, 1.6, 2.6, 1.2);
+        g.closePath();
+        g.fill();
+        // 刃文 (波)。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.85;
+        g.beginPath();
+        g.moveTo(3, 0.7);
+        g.quadraticCurveTo(9, 2.1, 14.5, 0.75);
+        g.quadraticCurveTo(20, -0.55, 27.2, -0.65);
+        g.stroke();
+        // 鎬と切っ先 (かさぶた)。
+        g.beginPath();
+        g.moveTo(3, -1.15);
+        g.quadraticCurveTo(17, -4.2, 27.6, -0.7);
+        g.stroke();
+        // 鍔 (丸) と柄。
+        g.fillStyle = color;
+        g.beginPath(); g.ellipse(1.1, 0, 1.35, 3.6, 0, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = pale;
+        band(-1.1, 2.5, 1.4);
+        wrapGrip(-9.8, -1.4, 2.15);
+        break;
+      }
+      case '剣': {
+        swordBlade(29, 2.6);
+        // 横の鍔 (クロスガード)。先端だけふくらませる。
+        g.beginPath(); g.moveTo(1.1, -5.4); g.lineTo(1.1, 5.4); g.stroke();
+        g.fillStyle = color;
+        for (const side of [-1, 1]) {
+          g.beginPath(); g.arc(1.1, side * 5.4, 1.25, 0, TAU); g.fill();
+        }
+        g.beginPath(); g.arc(1.1, 0, 1.7, 0, TAU); g.fill();
+        g.fillStyle = pale;
+        wrapGrip(-9.2, -0.2, 2.2);
+        // 鎬頭 (ポンメル)。
+        g.fillStyle = color;
+        g.beginPath(); g.arc(-10.2, 0, 2.15, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = pale;
+        break;
+      }
+      case '斧': {
+        // 柄の先に、鎌形に開く大斧。刃の峰で影をつけ、
+        // 柄頭 (カラー) で頭と柄をつなぐ。
+        // 柄。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-13.5, -1.9); g.lineTo(11, -2.1); g.lineTo(11, 2.1); g.lineTo(-13.5, 1.9);
+        g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(-13.5, 0.1); g.lineTo(11, 0.1); g.lineTo(11, 2.1); g.lineTo(-13.5, 1.9);
+        g.closePath(); g.fill();
+        wrapGrip(-12, 5.5, 2.15);
+        band(6.4, 2.7, 2.6);
+        // 頭。細い喉から角が立ち、+X へわずかに膨らむ刃になる。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(9.2, -2.6);
+        g.lineTo(14.2, -3.4);
+        g.quadraticCurveTo(19, -8.8, 23.6, -12.8);
+        g.lineTo(26.6, -8.2);
+        g.quadraticCurveTo(29.6, -3.4, 29.6, 0);
+        g.quadraticCurveTo(29.6, 3.4, 26.6, 8.2);
+        g.lineTo(23.6, 12.8);
+        g.quadraticCurveTo(19, 8.8, 14.2, 3.4);
+        g.lineTo(9.2, 2.6);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 刃の峰 (刃先に沿った面取りだけ)。
+        g.strokeStyle = ink2;
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(25.4, -7);
+        g.quadraticCurveTo(27.6, -3.2, 27.6, 0);
+        g.quadraticCurveTo(27.6, 3.2, 25.4, 7);
+        g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
         break;
       }
       case '槌': {
-        // 柄の先に四角い頭。柄と頭をつなげて描き、宙に浮いて見せない。
-        g.save();
-        g.rotate(-0.22);
-        g.beginPath(); g.moveTo(-13, 3); g.lineTo(13, 0); g.stroke();
+        // 柄の先に角のない八角の頭。面取りの稜で重さを出す。
         g.fillStyle = pale;
-        g.fillRect(6, -9, 11, 18);
-        g.strokeRect(6, -9, 11, 18);
-        g.fillStyle = color;
-        g.fillRect(9, -6.5, 3.2, 13);
+        g.beginPath();
+        g.moveTo(-13, -2); g.lineTo(8.6, -2.2); g.lineTo(8.6, 2.2); g.lineTo(-13, 2);
+        g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(-13, 0.1); g.lineTo(8.6, 0.1); g.lineTo(8.6, 2.2); g.lineTo(-13, 2);
+        g.closePath(); g.fill();
+        wrapGrip(-11.6, 3.5, 2.2);
+        band(4.4, 2.8, 2.4);
+        // 頭 (八角柱を真上から)。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(8, -7.2);
+        g.lineTo(20.4, -7.2);
+        g.lineTo(23.8, -3.6);
+        g.lineTo(23.8, 3.6);
+        g.lineTo(20.4, 7.2);
+        g.lineTo(8, 7.2);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 打ち面の縁と中央。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.95;
+        g.beginPath();
+        g.moveTo(19.6, -5.6); g.lineTo(19.6, 5.6);
+        g.moveTo(10.2, -5.2); g.lineTo(10.2, 5.2);
+        g.stroke();
         g.strokeStyle = ink;
-        g.lineWidth = 1;
-        g.beginPath(); g.moveTo(-13, 3); g.lineTo(-16, 4); g.stroke();
-        g.restore();
+        g.lineWidth = 1.2;
+        band(12.4, 7.2, 2);
         break;
       }
       case '槍': {
-        // 直線の穂先。柄の長い突き武器。
-        g.beginPath(); g.moveTo(-12, 0); g.lineTo(21, 0); g.stroke();
+        // 長い柄の先に、細い直線の穂先。房で「槍」を見せる。
         g.fillStyle = pale;
         g.beginPath();
-        g.moveTo(20, -3.2); g.lineTo(31, 0); g.lineTo(20, 3.2); g.closePath();
+        g.moveTo(-15, -1.2); g.lineTo(15.6, -1.35); g.lineTo(15.6, 1.35); g.lineTo(-15, 1.2);
+        g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(-15, 0.1); g.lineTo(15.6, 0.1); g.lineTo(15.6, 1.35); g.lineTo(-15, 1.2);
+        g.closePath(); g.fill();
+        grip(-13.5, 9.5, 1.15, 5);
+        band(13.2, 2.1, 2.2);
+        // 穂先 (柳葉)。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(15.4, -1.4);
+        g.quadraticCurveTo(23, -4.8, 32, 0);
+        g.quadraticCurveTo(23, 4.8, 15.4, 1.4);
+        g.closePath();
         g.fill(); g.stroke();
-        g.strokeStyle = color;
-        for (let i = 0; i < 3; i++) {
-          g.beginPath(); g.moveTo(12 + i * 2.5, -3); g.lineTo(12 + i * 2.5, 3); g.stroke();
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.85;
+        g.beginPath(); g.moveTo(16.4, 0); g.lineTo(30.4, 0); g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        // 房。
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < 2; i++) {
+            g.beginPath();
+            g.moveTo(14.2 + i * 1.1, side * 1.8);
+            g.lineTo(11.6 + i * 1.4, side * 5.4);
+            g.stroke();
+          }
         }
         break;
       }
       case '矛': {
-        // 矛は穂先が葉型で、柄が短く、石突が付く。
-        g.beginPath(); g.moveTo(-4, 0); g.lineTo(14, 0); g.stroke();
+        // 短い太い柄の先に、葉より幅広い穂。石突と反りの鈎が付く。
         g.fillStyle = pale;
         g.beginPath();
-        g.moveTo(13, -4.4);
-        g.quadraticCurveTo(22, -4.2, 28, 0);
-        g.quadraticCurveTo(22, 4.2, 13, 4.4);
-        g.quadraticCurveTo(15, 0, 13, -4.4);
+        g.moveTo(-8.4, -1.7); g.lineTo(11.4, -1.9); g.lineTo(11.4, 1.9); g.lineTo(-8.4, 1.7);
+        g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(-8.4, 0.1); g.lineTo(11.4, 0.1); g.lineTo(11.4, 1.9); g.lineTo(-8.4, 1.7);
+        g.closePath(); g.fill();
+        wrapGrip(-7, 5.4, 1.95);
+        band(6.2, 2.6, 2.3);
+        // 穂先 (幅広の葉)。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(10.8, -2.1);
+        g.quadraticCurveTo(17.6, -7.8, 24, -6.2);
+        g.quadraticCurveTo(28.6, -3.4, 30.4, 0);
+        g.quadraticCurveTo(28.6, 3.4, 24, 6.2);
+        g.quadraticCurveTo(17.6, 7.8, 10.8, 2.1);
         g.closePath();
         g.fill(); g.stroke();
-        g.fillStyle = color;
-        g.beginPath(); g.arc(15, 0, 1.5, 0, TAU); g.fill();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(11.2, 0.15);
+        g.quadraticCurveTo(18, 2.4, 30, 0);
+        g.quadraticCurveTo(24, 5.4, 11.2, 2);
+        g.closePath();
+        g.fill();
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.85;
+        g.beginPath(); g.moveTo(11.8, 0); g.lineTo(29, 0); g.stroke();
         g.strokeStyle = ink;
-        g.beginPath(); g.moveTo(-4, 0); g.lineTo(-7, 2.6); g.stroke();
+        g.lineWidth = 1.2;
+        // 反りの鈎 (上側だけ、塗りで太く) と石突。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(9.8, -2.4);
+        g.quadraticCurveTo(3.6, -7.2, -1.6, -9.6);
+        g.quadraticCurveTo(3, -4.8, 6.4, -1.2);
+        g.closePath();
+        g.fill(); g.stroke();
+        g.beginPath();
+        g.moveTo(-8.4, 0); g.lineTo(-12.2, 0); g.stroke();
+        g.fillStyle = color;
+        g.beginPath(); g.arc(-12.6, 0, 1.5, 0, TAU); g.fill();
+        g.fillStyle = pale;
         break;
       }
       case '弓': {
+        // 反りの強い弓。弦を張り、矢を番えた形で描く。
+        // 弓把 (中央の握り) は色の巻き。
         g.strokeStyle = ink;
-        g.lineWidth = 1.5;
-        g.beginPath(); g.arc(2, 0, 12, -1.15, 1.15); g.stroke();
-        g.strokeStyle = color;
+        g.lineWidth = 1.9;
+        g.beginPath();
+        g.moveTo(0.4, -15.2);
+        g.quadraticCurveTo(-7.2, -8.6, -6.2, -2.2);
+        g.quadraticCurveTo(-6, 2.4, -6.2, 2.2);
+        g.quadraticCurveTo(-7.2, 8.6, 0.4, 15.2);
+        g.stroke();
+        // 弦。
         g.lineWidth = 1;
-        g.beginPath(); g.moveTo(6.5, -11); g.lineTo(-3, 0); g.lineTo(6.5, 11); g.stroke();
+        g.beginPath();
+        g.moveTo(0.4, -15.2); g.lineTo(0.4, 15.2);
+        g.stroke();
+        // 弓弭 (先端の彎り)。
+        g.lineWidth = 1.6;
+        g.beginPath();
+        g.moveTo(0.4, -15.2); g.quadraticCurveTo(2.6, -16.4, 3.4, -14.6);
+        g.moveTo(0.4, 15.2); g.quadraticCurveTo(2.6, 16.4, 3.4, 14.6);
+        g.stroke();
+        // 握りの巻き。
+        g.fillStyle = color;
+        g.beginPath();
+        g.moveTo(-6.4, -2.6); g.lineTo(-4.6, -2.8); g.lineTo(-4.6, 2.8); g.lineTo(-6.4, 2.6);
+        g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = pale;
+        // 番えた矢 (+X へ向かう)。
+        g.beginPath();
+        g.moveTo(-1.6, -0.85); g.lineTo(18.2, -0.85); g.lineTo(18.2, 0.85); g.lineTo(-1.6, 0.85);
+        g.closePath(); g.fill(); g.stroke();
+        // 矢尻。
+        g.beginPath();
+        g.moveTo(17.6, -2.5); g.lineTo(24.4, 0); g.lineTo(17.6, 2.5); g.closePath();
+        g.fill(); g.stroke();
+        // 矢羽 (二枚)。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.95;
+        g.beginPath();
+        g.moveTo(-1.2, -0.6); g.lineTo(-5.2, -3.6);
+        g.moveTo(-1.2, 0.6); g.lineTo(-5.2, 3.6);
+        g.moveTo(-3.4, -0.6); g.lineTo(-6.6, -2.4);
+        g.moveTo(-3.4, 0.6); g.lineTo(-6.6, 2.4);
+        g.stroke();
         g.strokeStyle = ink;
-        g.beginPath(); g.moveTo(-2, -2); g.lineTo(12, 0); g.lineTo(-2, 2); g.stroke();
+        g.lineWidth = 1.2;
         break;
       }
       case '銃': {
         // 真上から見た拳銃。銃身 (スライド) が +X、握りは後ろ (-X) へ伸びる。
-        // 横から見た絵にしないよう、銃身の軸を挟んで上下対称に描く。
-        // 照星・照門と、スライド後部の刻みで「上から見ている」ことを示す。
+        // 銃身の軸 (y = 0) を挟んで上下対称に描く。照星・照門・スライドの刻みも対称。
         g.fillStyle = pale;
         g.beginPath();
-        g.moveTo(-9.0, -3.4);
-        g.lineTo(-2.4, -3.0);
-        g.lineTo(15.4, -2.5);
-        g.lineTo(18.0, -1.5);
-        g.lineTo(18.0, 1.5);
-        g.lineTo(15.4, 2.5);
-        g.lineTo(-2.4, 3.0);
-        g.lineTo(-9.0, 3.4);
-        g.quadraticCurveTo(-11.6, 0, -9.0, -3.4);
+        g.moveTo(-2.8, -3.3);
+        g.lineTo(14.6, -2.8);
+        g.lineTo(17.8, -1.7);
+        g.lineTo(18.6, 0);
+        g.lineTo(17.8, 1.7);
+        g.lineTo(14.6, 2.8);
+        g.lineTo(-2.8, 3.3);
+        g.quadraticCurveTo(-5.4, 0, -2.8, -3.3);
         g.closePath();
         g.fill(); g.stroke();
-        // スライド後部の刻み。
-        g.lineWidth = 0.8;
-        for (let i = 0; i < 3; i++) {
-          const x = -4.2 + i * 1.9;
-          g.beginPath(); g.moveTo(x, -2.7); g.lineTo(x, 2.7); g.stroke();
+        // スライドの面取り。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.9;
+        for (const side of [-1, 1]) {
+          g.beginPath();
+          g.moveTo(-1.6, side * 2.15);
+          g.lineTo(14, side * 1.85);
+          g.stroke();
         }
+        // スライド後部の刻み。
+        for (const x of [-1.4, 0.3, 2.0]) {
+          g.beginPath(); g.moveTo(x, -2.65); g.lineTo(x, 2.65); g.stroke();
+        }
+        g.strokeStyle = ink;
         g.lineWidth = 1.2;
-        // 銃身の色の帯。
-        g.fillStyle = color;
-        g.fillRect(2.0, -1.3, 12.0, 2.6);
-        // 銃口。
+        // 銃身の色の帯と銃口。
+        band(3.4, 1.35, 9.4);
         g.fillStyle = ink;
-        g.beginPath(); g.ellipse(17.3, 0, 0.9, 1.2, 0, 0, TAU); g.fill();
+        g.beginPath(); g.ellipse(17.2, 0, 0.95, 1.25, 0, 0, TAU); g.fill();
         // 照星 (前) と照門 (後ろ、左右 2 つ)。
         g.fillStyle = color;
-        g.beginPath(); g.arc(13.4, 0, 0.8, 0, TAU); g.fill();
-        g.beginPath(); g.arc(-5.6, -1.7, 0.6, 0, TAU); g.fill();
-        g.beginPath(); g.arc(-5.6, 1.7, 0.6, 0, TAU); g.fill();
+        g.beginPath(); g.arc(12.6, 0, 0.85, 0, TAU); g.fill();
+        for (const side of [-1, 1]) {
+          g.beginPath(); g.arc(-3.6, side * 1.85, 0.7, 0, TAU); g.fill();
+        }
+        // 引き金の護環 (上下対称の閉じた輪)。
+        g.strokeStyle = ink;
+        g.lineWidth = 1.15;
+        g.beginPath();
+        g.moveTo(-6.6, -3.5);
+        g.quadraticCurveTo(-10.2, -3.2, -10.2, 0);
+        g.quadraticCurveTo(-10.2, 3.2, -6.6, 3.5);
+        g.stroke();
+        g.lineWidth = 0.85;
+        g.strokeStyle = ink2;
+        g.beginPath();
+        g.moveTo(-6.2, -2.2);
+        g.quadraticCurveTo(-8.6, -2, -8.6, 0);
+        g.quadraticCurveTo(-8.6, 2, -6.2, 2.2);
+        g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        // 撃鉄。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-8.2, -1.7); g.lineTo(-10.8, 0); g.lineTo(-8.2, 1.7);
+        g.closePath(); g.fill(); g.stroke();
+        // 握り (真上から短く見える)。
+        g.beginPath();
+        g.moveTo(-7.6, -3.5);
+        g.lineTo(-11.2, -3.1);
+        g.lineTo(-12.9, -1.3);
+        g.lineTo(-12.9, 1.3);
+        g.lineTo(-11.2, 3.1);
+        g.lineTo(-7.6, 3.5);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 握りの面 (左右に金の鋲)。
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(-8, -2.6);
+        g.lineTo(-11.4, -2.3);
+        g.lineTo(-11.4, 2.3);
+        g.lineTo(-8, 2.6);
+        g.closePath();
+        g.fill();
+        g.fillStyle = color;
+        for (const side of [-1, 1]) {
+          g.beginPath(); g.arc(-10.3, side * 1.7, 0.72, 0, TAU); g.fill();
+        }
+        g.fillStyle = pale;
         break;
       }
       case '鋏': {
         // 真上から見た鋏。要 (軸) を中心に、二枚の刃が前へ少し開き、
-        // 握りの輪が後ろへ開く。上下 (左右) を対称に描く。
+        // 握りの輪が後ろへ開く。軸を挟んで左右対称。
         for (const side of [-1, 1]) {
           // 刃。要から前へ、外へ開きながら細くなる楔。
           g.fillStyle = pale;
           g.beginPath();
           g.moveTo(1.0, side * 0.2);
-          g.lineTo(12.0, side * 2.2);
-          g.lineTo(20.6, side * 3.6);
-          g.lineTo(19.6, side * 1.9);
+          g.lineTo(12.2, side * 2.1);
+          g.lineTo(21.4, side * 3.7);
+          g.lineTo(20.2, side * 1.8);
           g.lineTo(11.4, side * 0.5);
           g.closePath();
           g.fill(); g.stroke();
           // 刃の峰 (片刃に見せる)。
-          g.strokeStyle = color;
+          g.strokeStyle = ink2;
           g.lineWidth = 0.9;
           g.beginPath();
-          g.moveTo(2.4, side * 1.2);
-          g.lineTo(18.2, side * 2.9);
+          g.moveTo(2.6, side * 1.15);
+          g.lineTo(18.8, side * 2.8);
+          g.stroke();
+          // 刃の白 (鋭利さ)。
+          g.strokeStyle = color;
+          g.lineWidth = 1;
+          g.beginPath();
+          g.moveTo(3.4, side * 1.85);
+          g.lineTo(19.6, side * 3.35);
           g.stroke();
           g.strokeStyle = ink;
           g.lineWidth = 1.2;
           // 柄と握りの輪。刃とは逆向きに開く。
           g.beginPath();
-          g.moveTo(-0.4, side * 0.3);
-          g.lineTo(-6.4, side * 2.6);
+          g.moveTo(-0.6, side * 0.35);
+          g.lineTo(-6.6, side * 2.7);
           g.stroke();
           g.beginPath();
-          g.ellipse(-9.8, side * 4.0, 3.4, 2.3, 0, 0, TAU);
+          g.ellipse(-10, side * 4.1, 3.5, 2.4, 0, 0, TAU);
           g.stroke();
-        }
-        // 要 (軸) の鋲。
-        g.fillStyle = color;
-        g.beginPath(); g.arc(0, 0, 1.9, 0, TAU); g.fill(); g.stroke();
-        break;
-      }
-      case '鋸': {
-        // 真上から見た鋸。細長い刃の片側に歯を並べ、後ろに柄が付く。
-        // 歯を片側だけに出すことで、剣や鉈と見分けがつく。
-        g.fillStyle = pale;
-        g.beginPath();
-        g.moveTo(-2.0, -3.0);
-        g.lineTo(20.0, -2.2);
-        g.lineTo(20.0, 0.2);
-        g.lineTo(-2.0, 1.0);
-        g.closePath();
-        g.fill(); g.stroke();
-        // 歯。
-        for (let i = 0; i < 7; i++) {
-          const x = 3.4 + i * 2.4;
+          // 輪の内側の厚み。
+          g.strokeStyle = ink2;
+          g.lineWidth = 0.8;
           g.beginPath();
-          g.moveTo(x, 0.9);
-          g.lineTo(x + 1.1, 3.0);
-          g.lineTo(x + 2.2, 0.9);
-          g.closePath();
-          g.fill(); g.stroke();
-        }
-        // 柄。
-        g.beginPath();
-        g.moveTo(-2.2, -3.2);
-        g.lineTo(-11.4, -2.6);
-        g.quadraticCurveTo(-12.6, 0, -11.4, 2.2);
-        g.lineTo(-2.2, 1.2);
-        g.closePath();
-        g.fill(); g.stroke();
-        g.fillStyle = color;
-        g.beginPath(); g.arc(-3.0, -1.2, 1.1, 0, TAU); g.fill();
-        break;
-      }
-      case '針': {
-        g.fillStyle = pale;
-        g.beginPath(); g.moveTo(-7, 0); g.lineTo(19, -0.8); g.lineTo(24, 0);
-        g.lineTo(19, 0.8); g.closePath(); g.fill(); g.stroke();
-        g.fillStyle = color;
-        g.beginPath(); g.arc(-6, 0, 2, 0, TAU); g.fill();
-        break;
-      }
-      case '爪': {
-        // 3 本の鉤爪。先を尖らせ、墨で縁を締める。
-        for (const [lw, col] of [[3.8, ink], [2.1, pale]]) {
-          g.strokeStyle = col;
-          g.lineWidth = lw;
-          g.lineCap = 'round';
-          for (let i = 0; i < 3; i++) {
-            const y0 = -6 + i * 6;
-            g.beginPath();
-            g.moveTo(-1, y0);
-            g.quadraticCurveTo(10, y0 - 3.5, 15 - i, y0 + 3.2 + i * 1.1);
-            g.lineTo(22 - i * 2.4, y0 - 1.5 + i * 1.6);
-            g.stroke();
-          }
-        }
-        g.fillStyle = color;
-        g.beginPath(); g.arc(-3, 0, 1.7, 0, TAU); g.fill();
-        break;
-      }
-      case '牙': {
-        // 上下の牙。付け根は太く、先へ細く尖らせる。
-        g.fillStyle = pale;
-        for (const side of [-1, 1]) {
-          g.beginPath();
-          g.moveTo(-6, side * 1.4);
-          g.quadraticCurveTo(4, side * 6.4, 20, side * 0.6);
-          g.quadraticCurveTo(5, side * 2.4, -6, side * 3.4);
-          g.closePath();
-          g.fill(); g.stroke();
-          g.strokeStyle = color;
-          g.lineWidth = 0.9;
-          g.beginPath();
-          g.moveTo(-4, side * 2.2);
-          g.quadraticCurveTo(6, side * 4.2, 17, side * 1.1);
+          g.ellipse(-10, side * 4.1, 2.3, 1.35, 0, 0, TAU);
           g.stroke();
           g.strokeStyle = ink;
           g.lineWidth = 1.2;
         }
+        // 要 (軸) の鋲。刃の根元の色もここで締める。
         g.fillStyle = color;
-        g.beginPath(); g.arc(-8, 0, 1.7, 0, TAU); g.fill();
+        g.beginPath(); g.arc(0, 0, 2, 0, TAU); g.fill(); g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1;
+        g.beginPath(); g.moveTo(-1.15, 0); g.lineTo(1.15, 0); g.stroke();
+        g.lineWidth = 1.2;
+        break;
+      }
+      case '鋸': {
+        // 真上から見た鋸。細長い刃の片側にだけ歯を並べる
+        // (両側に出すと剣に見える)。後ろに柄が付く。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-2.2, -3.1);
+        g.lineTo(20.4, -2.3);
+        g.lineTo(20.4, 0.4);
+        g.lineTo(-2.2, 1.1);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 背の厚み。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.9;
+        g.beginPath();
+        g.moveTo(-1.6, -1.6); g.lineTo(19.8, -1.1);
+        g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        // 歯 (下側だけ)。
+        for (let i = 0; i < 8; i++) {
+          const x = 1.2 + i * 2.35;
+          g.beginPath();
+          g.moveTo(x, 0.85);
+          g.lineTo(x + 1.15, 3.2);
+          g.lineTo(x + 2.3, 0.85);
+          g.closePath();
+          g.fill(); g.stroke();
+        }
+        // 柄。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-2.4, -3.3);
+        g.lineTo(-11.6, -2.8);
+        g.quadraticCurveTo(-13.2, 0, -11.6, 2.5);
+        g.lineTo(-2.4, 1.3);
+        g.closePath();
+        g.fill(); g.stroke();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(-2.4, 0.1);
+        g.lineTo(-11.6, 0.2);
+        g.quadraticCurveTo(-13, 0, -11.6, 2.5);
+        g.lineTo(-2.4, 1.3);
+        g.closePath();
+        g.fill();
+        g.fillStyle = color;
+        g.beginPath(); g.arc(-3.2, -1.15, 1.15, 0, TAU); g.fill();
+        g.fillStyle = pale;
+        break;
+      }
+      case '針': {
+        // 細い刺し針。穂先だけを残して極限まで絞り、
+        // 後ろの環に糸を通す。かすかな光で鋼を見せる。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-8.6, -1.6);
+        g.lineTo(19.5, -0.6);
+        g.lineTo(26.2, 0);
+        g.lineTo(19.5, 0.6);
+        g.lineTo(-8.6, 1.6);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 鎬の光。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.8;
+        g.beginPath(); g.moveTo(-6, 0); g.lineTo(21.5, 0); g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        // 糸通しの環。
+        g.beginPath();
+        g.ellipse(-6.2, 0, 1.5, 2.6, 0, 0, TAU);
+        g.stroke();
+        // 柄尻の巻き。
+        band(-9.2, 1.9, 1.7);
+        // 糸。環から一筋が垂れて、先でゆるく戻る。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.95;
+        g.beginPath();
+        g.moveTo(-6.2, 1.2);
+        g.quadraticCurveTo(-13.4, 6.2, -18.8, 3.4);
+        g.quadraticCurveTo(-21.4, 1.6, -19.4, -0.4);
+        g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        break;
+      }
+      case '爪': {
+        // 3 本の鉤爪。湾曲した面を紙色で塗り、根元を金具で束ねる。
+        for (let i = 0; i < 3; i++) {
+          const y = (i - 1) * 5.4;
+          const len = 20 - Math.abs(i - 1) * 3.2;
+          const tipY = y + (i - 1) * 3.2;
+          g.fillStyle = pale;
+          g.beginPath();
+          g.moveTo(-2, y - 2.1);
+          g.quadraticCurveTo(len * 0.52, y - 5 - Math.abs(i - 1), len, tipY);
+          g.quadraticCurveTo(len * 0.5, y - 0.6, -2, y + 2.3);
+          g.closePath();
+          g.fill(); g.stroke();
+          // 面の稜。
+          g.strokeStyle = ink2;
+          g.lineWidth = 0.85;
+          g.beginPath();
+          g.moveTo(-0.5, y - 0.1);
+          g.quadraticCurveTo(len * 0.5, y - 2.6, len - 2.2, tipY * 0.8);
+          g.stroke();
+          g.strokeStyle = ink;
+          g.lineWidth = 1.2;
+        }
+        // 根元の金具と巻き。
+        g.fillStyle = color;
+        g.beginPath();
+        g.moveTo(-6.4, -8.2); g.lineTo(-2.6, -8.8); g.lineTo(-2.6, 8.8); g.lineTo(-6.4, 8.2);
+        g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = pale;
+        wrapGrip(-12.2, -6.8, 3);
+        break;
+      }
+      case '牙': {
+        // 上下の牙。付け根を太く持ち、内側へ反って先を尖らせる。
+        // 2 本の間に隙間を残し、噛みつく形として読ませる。
+        for (const side of [-1, 1]) {
+          g.fillStyle = pale;
+          g.beginPath();
+          g.moveTo(-4.6, side * 1.5);
+          g.quadraticCurveTo(5.4, side * 9.4, 18.2, side * 2.2);
+          g.quadraticCurveTo(3.6, side * 3.1, -4.6, side * 5.8);
+          g.closePath();
+          g.fill(); g.stroke();
+          // 内側の筋。
+          g.strokeStyle = ink2;
+          g.lineWidth = 0.9;
+          g.beginPath();
+          g.moveTo(-3, side * 3.8);
+          g.quadraticCurveTo(5, side * 5.6, 14.6, side * 2.6);
+          g.stroke();
+          g.strokeStyle = ink;
+          g.lineWidth = 1.2;
+        }
+        // 牙床 (金具)。
+        g.fillStyle = color;
+        g.beginPath(); g.arc(-6.2, 0, 2.4, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = pale;
         break;
       }
       case '拳': {
-        // 握った拳。こぶしの山を 3 つ並べる。
+        // 握った拳を真上から。指のこぶしを輪郭に 4 つ並べ、手首を巻く。
         g.fillStyle = pale;
         g.beginPath();
-        g.moveTo(-2, -6.5);
-        g.quadraticCurveTo(7, -8.5, 10.5, -4);
-        g.quadraticCurveTo(12.5, 0, 9.5, 4.5);
-        g.quadraticCurveTo(5, 8, -2, 6.5);
-        g.quadraticCurveTo(-5, 0, -2, -6.5);
+        g.moveTo(2.4, -7.6);
+        g.quadraticCurveTo(7.6, -10.2, 9.8, -8.2);
+        g.arc(9.8, -6, 2.2, -Math.PI / 2, Math.PI / 2);
+        g.arc(9.8, -2, 2.2, -Math.PI / 2, Math.PI / 2);
+        g.arc(9.8, 2, 2.2, -Math.PI / 2, Math.PI / 2);
+        g.arc(9.8, 6, 2.2, -Math.PI / 2, Math.PI / 2);
+        g.quadraticCurveTo(7.6, 10.2, 2.4, 7.8);
+        g.quadraticCurveTo(-3.2, 8.4, -4.6, 3.6);
+        g.lineTo(-4.6, -3.6);
+        g.quadraticCurveTo(-3.2, -8.4, 2.4, -7.6);
         g.closePath();
         g.fill(); g.stroke();
-        g.strokeStyle = ink;
-        g.lineWidth = 1.1;
+        // 手首。拳から離れないよう、巻きの下まで面を伸ばす。
+        g.beginPath();
+        g.moveTo(-4.8, -3.6); g.lineTo(-10.8, -3.9);
+        g.lineTo(-10.8, 3.9); g.lineTo(-4.8, 3.6);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 指の境目。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.95;
         for (let i = 0; i < 3; i++) {
+          const y = -4 + i * 4;
           g.beginPath();
-          g.arc(4.5, -4 + i * 4, 3.4, -1.2, 1.2);
+          g.moveTo(8.2, y);
+          g.quadraticCurveTo(3.2, y + 0.7, -0.8, y + 1.2);
           g.stroke();
         }
+        // 親指 (手前側に畳む)。
+        g.beginPath();
+        g.moveTo(2, -7.2);
+        g.quadraticCurveTo(6.2, -10, 9.8, -8.4);
+        g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        // 手首の巻き。
         g.fillStyle = color;
-        g.beginPath(); g.arc(-1, -4, 1.5, 0, TAU); g.fill();
+        g.fillRect(-12.8, -4.2, 2.8, 8.4);
+        g.strokeRect(-12.8, -4.2, 2.8, 8.4);
+        g.fillStyle = pale;
         break;
       }
       case '杖': {
-        g.beginPath(); g.moveTo(-12, 3); g.lineTo(17, -3); g.stroke();
+        // 長い柄の先に宝玉。房と巻きで「杖」と見せる。
         g.fillStyle = pale;
-        g.beginPath(); g.arc(19, -4, 4.5, 0, TAU); g.fill(); g.stroke();
+        g.beginPath();
+        g.moveTo(-15, -1.5); g.lineTo(13.6, -1.65); g.lineTo(13.6, 1.65); g.lineTo(-15, 1.5);
+        g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(-15, 0.1); g.lineTo(13.6, 0.1); g.lineTo(13.6, 1.65); g.lineTo(-15, 1.5);
+        g.closePath(); g.fill();
+        grip(-13.5, 8.5, 1.3, 5);
+        band(9.4, 2.3, 2.3);
+        // 台座 (三つ又)。
+        g.strokeStyle = ink;
+        g.lineWidth = 1.5;
+        for (const side of [-1, 1]) {
+          g.beginPath();
+          g.moveTo(13, side * 1.4);
+          g.quadraticCurveTo(15.4, side * 5.6, 19.4, side * 5.2);
+          g.stroke();
+        }
+        g.lineWidth = 1.2;
+        // 玉。
+        g.fillStyle = pale;
+        g.beginPath(); g.arc(19.2, 0, 5, 0, TAU); g.fill(); g.stroke();
         g.fillStyle = color;
-        g.globalAlpha *= 0.8;
-        g.beginPath(); g.arc(19, -4, 2.2, 0, TAU); g.fill();
+        g.globalAlpha *= 0.85;
+        g.beginPath(); g.arc(19.2, 0, 2.5, 0, TAU); g.fill();
+        g.globalAlpha /= 0.85;
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.9;
+        g.beginPath(); g.arc(17.8, -1.6, 1.1, 0, TAU); g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        // 房。
+        g.beginPath();
+        g.moveTo(12.8, 1.8); g.lineTo(11.6, 6.4);
+        g.moveTo(14, 1.9); g.lineTo(13.8, 6.6);
+        g.stroke();
+        g.fillStyle = color;
+        g.beginPath(); g.arc(12.6, 7, 1.15, 0, TAU); g.fill();
+        g.fillStyle = pale;
         break;
       }
       case '鎖': {
-        // 鎖は墨の輪を連ねる。紙色だけでは紙に溶けるので墨で描く。
+        // 鎖は墨の輪を連ねる。終端に分銅、手元に輪。
         g.strokeStyle = ink;
-        g.lineWidth = 1.5;
-        g.beginPath(); g.moveTo(-8, 0); g.lineTo(2, 0); g.stroke();
+        g.lineWidth = 1.55;
+        g.beginPath(); g.moveTo(-7.6, 0); g.lineTo(-3.2, 0); g.stroke();
         for (let i = 0; i < 5; i++) {
+          const x = -0.4 + i * 4.5;
+          const y = i % 2 ? -1.9 : 1.9;
           g.beginPath();
-          g.ellipse(4 + i * 4.4, (i % 2 ? -2 : 2), 2.6, 1.5, i % 2 ? 0.5 : -0.5, 0, TAU);
+          g.ellipse(x, y, 2.8, 1.65, i % 2 ? 0.55 : -0.55, 0, TAU);
+          g.stroke();
+          // 環の厚み。
+          g.lineWidth = 0.85;
+          g.beginPath();
+          g.ellipse(x, y, 1.75, 0.85, i % 2 ? 0.55 : -0.55, 0, TAU);
+          g.stroke();
+          g.lineWidth = 1.55;
+        }
+        // 分銅 (とげ付きの錘)。
+        g.fillStyle = pale;
+        g.beginPath(); g.arc(21.4, 0, 3.3, 0, TAU); g.fill(); g.stroke();
+        for (let i = 0; i < 5; i++) {
+          const aa = (i / 5) * TAU + 0.35;
+          g.beginPath();
+          g.moveTo(21.4 + Math.cos(aa) * 2.6, Math.sin(aa) * 2.6);
+          g.lineTo(21.4 + Math.cos(aa) * 5.2, Math.sin(aa) * 5.2);
           g.stroke();
         }
         g.fillStyle = color;
-        g.beginPath(); g.arc(-2, 0, 1.5, 0, TAU); g.fill();
+        g.beginPath(); g.arc(21.4, 0, 1.4, 0, TAU); g.fill();
+        // 手元の輪。
+        g.beginPath(); g.arc(-9.4, 0, 2.1, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = pale;
         break;
       }
       case '鞭': {
-        // 鞭は皮の帯。墨の縁で紙から起こす。
+        // 鞭は皮の帯。柄からしなる一筋で、先が細くほどける。
+        wrapGrip(-11, -1.2, 2.25);
+        // 先革 (色の締め)。
+        g.fillStyle = color;
+        g.fillRect(-1.9, -2.6, 1.7, 5.2);
+        g.strokeRect(-1.9, -2.6, 1.7, 5.2);
+        g.fillStyle = pale;
+        // 本革。外側へ膨らみ、+X 上でわずかに波打つ。
+        g.beginPath();
+        g.moveTo(-0.4, -1.75);
+        g.quadraticCurveTo(11, -6.8, 23.6, 2.9);
+        g.lineTo(23.6, 4.4);
+        g.quadraticCurveTo(11, -2.4, -0.4, 1.75);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 編み。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.85;
+        for (let i = 1; i <= 4; i++) {
+          const f = i / 5;
+          const x = f * 23.6;
+          const y = -1.75 + f * f * 10.4 - f * 2.2;
+          g.beginPath();
+          g.moveTo(x, y - 1.15);
+          g.lineTo(x + 0.7, y + 1.15);
+          g.stroke();
+        }
         g.strokeStyle = ink;
-        g.lineWidth = 3.6;
-        g.beginPath(); g.moveTo(-8, 0); g.lineTo(2, 0); g.stroke();
-        g.strokeStyle = pale;
-        g.lineWidth = 2;
+        g.lineWidth = 1.2;
+        // 先革 (細い一筋) と先端の結び。
         g.beginPath();
-        g.moveTo(2, 0);
-        for (let i = 1; i <= 4; i++) g.lineTo(2 + i * 4, (i % 2 ? -3 : 3));
+        g.moveTo(23.8, 3.4);
+        g.quadraticCurveTo(27.4, 6.2, 30.2, 9.2);
         g.stroke();
-        g.strokeStyle = color;
-        g.lineWidth = 1;
-        g.beginPath();
-        g.moveTo(2, 0);
-        for (let i = 1; i <= 4; i++) g.lineTo(2 + i * 4, (i % 2 ? -3 : 3));
-        g.stroke();
+        g.fillStyle = color;
+        g.beginPath(); g.arc(23.8, 3.6, 1.25, 0, TAU); g.fill();
+        g.fillStyle = pale;
         break;
       }
       case '環': {
-        // 環は太い輪に宝玉。
-        g.strokeStyle = pale; g.lineWidth = 3.4;
+        // 環は太い輪に宝玉。輪の内側に光を置く。
+        g.strokeStyle = pale;
+        g.lineWidth = 3.6;
         g.beginPath(); g.arc(5, 0, 8, 0, TAU); g.stroke();
-        g.strokeStyle = ink; g.lineWidth = 1;
-        g.beginPath(); g.arc(5, 0, 8, 0, TAU); g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1;
+        g.beginPath(); g.arc(5, 0, 9.85, 0, TAU); g.stroke();
+        g.beginPath(); g.arc(5, 0, 6.15, 0, TAU); g.stroke();
+        // 輪に 4 つの留め。
         g.fillStyle = color;
-        g.beginPath(); g.arc(5, 0, 1.8, 0, TAU); g.fill();
+        for (let i = 0; i < 4; i++) {
+          const aa = (i / 4) * TAU + Math.PI / 4;
+          g.beginPath();
+          g.arc(5 + Math.cos(aa) * 8, Math.sin(aa) * 8, 1.15, 0, TAU);
+          g.fill();
+        }
+        // 中央の宝玉。
+        g.beginPath(); g.arc(5, 0, 2.1, 0, TAU); g.fill();
+        g.lineWidth = 1.2;
+        g.beginPath(); g.arc(5, 0, 2.1, 0, TAU); g.stroke();
+        g.fillStyle = pale;
         break;
       }
       case '輪': {
         // 輪は車輪。輻 (スポーク) を入れて環と分ける。
-        g.strokeStyle = pale; g.lineWidth = 2.4;
+        g.strokeStyle = pale;
+        g.lineWidth = 2.4;
         g.beginPath(); g.arc(5, 0, 8, 0, TAU); g.stroke();
-        g.strokeStyle = ink; g.lineWidth = 1;
-        g.beginPath(); g.arc(5, 0, 8, 0, TAU); g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1;
+        g.beginPath(); g.arc(5, 0, 9.35, 0, TAU); g.stroke();
+        g.beginPath(); g.arc(5, 0, 6.75, 0, TAU); g.stroke();
         for (let i = 0; i < 6; i++) {
           const aa = (i / 6) * TAU;
           g.beginPath();
-          g.moveTo(5, 0);
-          g.lineTo(5 + Math.cos(aa) * 8, Math.sin(aa) * 8);
+          g.moveTo(5 + Math.cos(aa) * 2.4, Math.sin(aa) * 2.4);
+          g.lineTo(5 + Math.cos(aa) * 6.9, Math.sin(aa) * 6.9);
           g.stroke();
         }
+        // 軸。
+        g.fillStyle = pale;
+        g.beginPath(); g.arc(5, 0, 2.4, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = color;
+        g.beginPath(); g.arc(5, 0, 1.15, 0, TAU); g.fill();
+        g.fillStyle = pale;
         break;
       }
-      case '還':
-      case '玉':
+      case '還': {
+        // 還り刃。腕木型のブーメラン。外縁だけを鋼にして、
+        // 戻ってくる刃だと分かるように肘 (内側) を厚く残す。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-13.4, -11.2);
+        g.quadraticCurveTo(1.2, -8.2, 12.8, -0.2);
+        g.quadraticCurveTo(1.2, 7.8, -13.4, 11.2);
+        g.lineTo(-11.8, 8.9);
+        g.quadraticCurveTo(0.2, 4.6, 6.2, 0);
+        g.quadraticCurveTo(0.2, -4.6, -11.8, -8.9);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 外縁の鋼。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.95;
+        g.beginPath();
+        g.moveTo(-12, -10.1);
+        g.quadraticCurveTo(1, -7, 10.8, -0.4);
+        g.quadraticCurveTo(1, 6.6, -12, 10.1);
+        g.stroke();
+        // 肘の金具。
+        g.strokeStyle = color;
+        g.lineWidth = 1.35;
+        g.beginPath();
+        g.moveTo(-1.4, -3.1);
+        g.quadraticCurveTo(3.4, 0, -1.4, 3.1);
+        g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        break;
+      }
+      case '玉': {
+        // 玉は球。影と光で丸みを出す。
+        g.beginPath(); g.arc(6, 0, 7.4, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.arc(6, 0, 7.2, 0.55, 2.6);
+        g.arc(6, 0, 4.7, 2.6, 0.55, true);
+        g.closePath();
+        g.fill();
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.85;
+        g.beginPath(); g.ellipse(6, 0, 7.1, 2.6, 0, 0, TAU); g.stroke();
+        g.fillStyle = pale;
+        g.beginPath(); g.arc(3.4, -2.7, 1.5, 0, TAU); g.fill();
+        g.strokeStyle = color;
+        g.lineWidth = 1.35;
+        g.beginPath(); g.arc(6, 0, 7.3, 0.75, 2.35); g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        break;
+      }
       case '球': {
-        g.fillStyle = pale;
-        g.beginPath(); g.arc(7, 0, 6, 0, TAU); g.fill(); g.stroke();
+        // 球は面取りの玉。刻面の線を入れて玉と珠と分ける。
+        g.beginPath(); g.arc(6, 0, 7.5, 0, TAU); g.fill(); g.stroke();
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.9;
+        for (let i = 0; i < 3; i++) {
+          const aa = (i / 3) * Math.PI + 0.35;
+          g.beginPath();
+          g.ellipse(6, 0, 7.3, 2.7, aa, 0, TAU);
+          g.stroke();
+        }
+        // 中心の刻面。
+        g.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const aa = (i / 6) * TAU + 0.52;
+          const x = 6 + Math.cos(aa) * 3.1, y = Math.sin(aa) * 3.1;
+          if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+        }
+        g.closePath();
+        g.stroke();
         g.fillStyle = color;
-        g.globalAlpha *= 0.75;
-        g.beginPath(); g.arc(7, 0, 3, 0, TAU); g.fill();
+        g.globalAlpha *= 0.7;
+        g.fill();
+        g.globalAlpha /= 0.7;
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
         break;
       }
-      case '弾':
-      case '爆': {
-        g.fillStyle = pale;
-        g.beginPath(); g.ellipse(4, 0, 7, 4.5, 0, 0, TAU); g.fill(); g.stroke();
+      case '珠': {
+        // 珠は真珠。光の弧を二重に回し、玉より柔らかく見せる。
+        g.beginPath(); g.arc(6, 0, 7, 0, TAU); g.fill(); g.stroke();
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.95;
+        g.beginPath(); g.arc(6, 0, 5.2, -2.5, -1.1); g.stroke();
+        g.beginPath(); g.arc(6, 0, 6.2, -2.35, -1.25); g.stroke();
+        g.strokeStyle = color;
+        g.lineWidth = 1.15;
+        g.globalAlpha *= 0.8;
+        g.beginPath(); g.arc(6, 0, 8.4, -2.2, -1.4); g.stroke();
+        g.globalAlpha /= 0.8;
         g.fillStyle = color;
-        g.beginPath(); g.arc(-1, -1, 1.8, 0, TAU); g.fill();
+        g.beginPath(); g.arc(11.4, -5.2, 1.15, 0, TAU); g.fill();
+        g.fillStyle = pale;
+        g.beginPath(); g.arc(3.7, -2.3, 1.35, 0, TAU); g.fill();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        break;
+      }
+      case '弾': {
+        // 弾は実包。筒 (莢) と弾頭に分けて描く。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-11.6, -3.2); g.lineTo(-1.2, -3.2); g.lineTo(-1.2, -2.5);
+        g.lineTo(-11.6, -2.5);
+        g.closePath(); g.fill();
+        g.beginPath();
+        g.moveTo(-12.2, -3.6); g.lineTo(-10.6, -3.6); g.lineTo(-10.6, 3.6); g.lineTo(-12.2, 3.6);
+        g.closePath(); g.fill(); g.stroke();
+        g.beginPath();
+        g.moveTo(-11.6, -3.2); g.lineTo(-1.2, -3.2); g.lineTo(-1.2, 3.2); g.lineTo(-11.6, 3.2);
+        g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.moveTo(-11.6, 0.1); g.lineTo(-1.2, 0.1); g.lineTo(-1.2, 3.2); g.lineTo(-11.6, 3.2);
+        g.closePath(); g.fill();
+        // 弾頭。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-1, -2.7);
+        g.quadraticCurveTo(6.4, -2.45, 12.8, 0);
+        g.quadraticCurveTo(6.4, 2.45, -1, 2.7);
+        g.closePath();
+        g.fill(); g.stroke();
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.85;
+        g.beginPath(); g.moveTo(-10.6, -2.5); g.lineTo(-10.6, 2.5); g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        band(-8.8, 3.2, 1.8);
+        break;
+      }
+      case '爆': {
+        // 爆は焼玉弾。導火線と火花で「弾」と分ける。
+        g.beginPath(); g.arc(3, 0, 7.6, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = ink3;
+        g.beginPath();
+        g.arc(3, 0, 7.4, 0.55, 2.6);
+        g.arc(3, 0, 4.9, 2.6, 0.55, true);
+        g.closePath();
+        g.fill();
+        band(-0.6, 7.2, 1.9);
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.95;
+        g.beginPath(); g.arc(1.4, -1.8, 2, -2.4, -1.1); g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        // 導火線。
+        g.beginPath();
+        g.moveTo(3, -7.6);
+        g.quadraticCurveTo(5.8, -12.6, 10.6, -12.9);
+        g.stroke();
+        // 火花。
+        g.strokeStyle = color;
+        g.lineWidth = 1.5;
+        for (let i = 0; i < 4; i++) {
+          const aa = (i / 4) * TAU + 0.45;
+          g.beginPath();
+          g.moveTo(10.6 + Math.cos(aa) * 1.3, -12.9 + Math.sin(aa) * 1.3);
+          g.lineTo(10.6 + Math.cos(aa) * 3.4, -12.9 + Math.sin(aa) * 3.4);
+          g.stroke();
+        }
+        g.fillStyle = pale;
+        g.beginPath(); g.arc(10.6, -12.9, 1.5, 0, TAU); g.fill();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
         break;
       }
       case '光': {
-        // 光は十字の光条。
-        g.strokeStyle = color;
-        g.lineWidth = 1.6;
+        // 光は十字の光条。4 本の長光と 4 本の短光を細く出し、芯に玉を置く。
+        for (let i = 0; i < 8; i++) {
+          const aa = (i / 8) * TAU;
+          const r0 = 3.4, r1 = i % 2 ? 7.4 : 14.4;
+          // 芯 (色) と外側 (墨) を重ねる。
+          for (const [lw, col] of [[i % 2 ? 1.6 : 2.4, color], [0.95, ink]]) {
+            g.strokeStyle = col;
+            g.lineWidth = lw;
+            g.beginPath();
+            g.moveTo(Math.cos(aa) * r0, Math.sin(aa) * r0);
+            g.lineTo(Math.cos(aa) * r1, Math.sin(aa) * r1);
+            g.stroke();
+          }
+        }
+        // 光条の合間の小さな輝き。
+        g.fillStyle = color;
         for (let i = 0; i < 4; i++) {
           const aa = (i / 4) * TAU + Math.PI / 4;
-          const len = i % 2 ? 9 : 15;
           g.beginPath();
-          g.moveTo(Math.cos(aa) * 3, Math.sin(aa) * 3);
-          g.lineTo(Math.cos(aa) * len, Math.sin(aa) * len);
-          g.stroke();
+          g.arc(Math.cos(aa) * 10.4, Math.sin(aa) * 10.4, 0.95, 0, TAU);
+          g.fill();
         }
         g.fillStyle = pale;
-        g.beginPath(); g.arc(0, 0, 4.6, 0, TAU); g.fill(); g.stroke();
+        g.beginPath(); g.arc(0, 0, 4.6, 0, TAU); g.fill();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        g.stroke();
+        g.fillStyle = color;
+        g.globalAlpha *= 0.85;
+        g.beginPath(); g.arc(0, 0, 2.2, 0, TAU); g.fill();
+        g.globalAlpha /= 0.85;
+        g.fillStyle = pale;
         break;
       }
       case '雷': {
-        // 雷は稲妻の折れ線。
+        // 雷は稲妻の折れ線。面で抜き、芯に色を残す。
         g.fillStyle = pale;
         g.beginPath();
-        g.moveTo(2, -8); g.lineTo(-5, 1); g.lineTo(-0.5, 1);
-        g.lineTo(-2, 9); g.lineTo(7, -1); g.lineTo(2, -1);
+        g.moveTo(2.8, -11);
+        g.lineTo(-7.6, 1.4);
+        g.lineTo(-1.8, 1.4);
+        g.lineTo(-3.8, 11.4);
+        g.lineTo(8.4, -1.8);
+        g.lineTo(2.4, -1.8);
         g.closePath();
         g.fill(); g.stroke();
         g.fillStyle = color;
-        g.globalAlpha *= 0.7;
+        g.globalAlpha *= 0.75;
         g.beginPath();
-        g.moveTo(1, -5); g.lineTo(-2, 0); g.lineTo(1, 0); g.lineTo(0, 5);
-        g.lineTo(3.6, 0); g.lineTo(1, 0);
-        g.closePath(); g.fill();
+        g.moveTo(1.5, -6.4);
+        g.lineTo(-2.6, 0.6);
+        g.lineTo(0.5, 0.6);
+        g.lineTo(-0.9, 6.4);
+        g.lineTo(3.8, -0.6);
+        g.lineTo(0.7, -0.6);
+        g.closePath();
+        g.fill();
+        g.globalAlpha /= 0.75;
+        // 脇に小さな枝。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.95;
+        g.beginPath();
+        g.moveTo(1.1, -8.8); g.lineTo(5.6, -9.8);
+        g.moveTo(-3, 8.6); g.lineTo(-6.8, 9.8);
+        g.stroke();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
         break;
       }
       case '渦': {
-        // 渦は螺旋。
-        g.strokeStyle = color;
-        g.lineWidth = 1.4;
-        g.beginPath();
-        for (let i = 0; i <= 40; i++) {
-          const f = i / 40;
-          const aa = f * TAU * 1.8;
-          const rr = 1.5 + f * 10;
-          const x = Math.cos(aa) * rr, y = Math.sin(aa) * rr;
-          if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+        // 渦は螺旋。二重の螺旋と外側の飛沫で回転を見せる。
+        for (const [lw, col, rMax, turns, off] of [
+          [1.55, color, 11, 1.85, 0],
+          [0.95, ink2, 7.4, 1.35, Math.PI],
+        ]) {
+          g.strokeStyle = col;
+          g.lineWidth = lw;
+          g.beginPath();
+          for (let i = 0; i <= 44; i++) {
+            const f = i / 44;
+            const aa = off + f * TAU * turns;
+            const rr = 1.4 + f * rMax;
+            const x = Math.cos(aa) * rr, y = Math.sin(aa) * rr;
+            if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+          }
+          g.stroke();
         }
-        g.stroke();
+        // 飛沫。
+        g.strokeStyle = color;
+        g.lineWidth = 1.05;
+        g.globalAlpha *= 0.8;
+        for (let i = 0; i < 3; i++) {
+          const aa = i * 2.2 + 0.6;
+          g.beginPath();
+          g.arc(Math.cos(aa) * 12.2, Math.sin(aa) * 12.2, 1.5 + i * 0.4, aa - 1, aa + 1);
+          g.stroke();
+        }
+        g.globalAlpha /= 0.8;
+        g.fillStyle = ink;
+        g.beginPath(); g.arc(0, 0, 1.15, 0, TAU); g.fill();
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
         break;
       }
-      default:
-        blade(23, 2.2, 0.06);
+      case '壁': {
+        // 壁は城壁の札。石積みの目地と金の帯で「護り」を示す。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-8, -10);
+        g.lineTo(9, -10);
+        g.quadraticCurveTo(14, -10, 14, -5);
+        g.lineTo(14, 5);
+        g.quadraticCurveTo(14, 10, 9, 10);
+        g.lineTo(-8, 10);
+        g.quadraticCurveTo(-11, 10, -11, 5);
+        g.lineTo(-11, -5);
+        g.quadraticCurveTo(-11, -10, -8, -10);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 石積みの目地。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.95;
+        g.beginPath();
+        g.moveTo(-11, -3.6); g.lineTo(14, -3.6);
+        g.moveTo(-11, 3.6); g.lineTo(14, 3.6);
+        g.moveTo(-3.2, -10); g.lineTo(-3.2, -3.6);
+        g.moveTo(5.4, -10); g.lineTo(5.4, -3.6);
+        g.moveTo(-7.4, -3.6); g.lineTo(-7.4, 3.6);
+        g.moveTo(1.2, -3.6); g.lineTo(1.2, 3.6);
+        g.moveTo(9.6, -3.6); g.lineTo(9.6, 3.6);
+        g.moveTo(-3.2, 3.6); g.lineTo(-3.2, 10);
+        g.moveTo(5.4, 3.6); g.lineTo(5.4, 10);
+        g.stroke();
+        // 金の帯と鋲。
+        band(0.4, 10, 2.4);
+        g.fillStyle = color;
+        for (const [bx, by] of [[-8.4, -7.4], [11.2, -7.4], [-8.4, 7.4], [11.2, 7.4]]) {
+          g.beginPath(); g.arc(bx, by, 1.05, 0, TAU); g.fill();
+        }
+        g.fillStyle = pale;
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
         break;
+      }
+      default: {
+        // 属性語・現象語などの特殊武器。紙の御札にその字を書く。
+        const text = typeof glyph === 'string' && glyph ? glyph : '技';
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-6.6, -11.8);
+        g.lineTo(10.6, -11.8);
+        g.quadraticCurveTo(13, -11.8, 13, -9.4);
+        g.lineTo(13, 9.4);
+        g.quadraticCurveTo(13, 11.8, 10.6, 11.8);
+        g.lineTo(-6.6, 11.8);
+        g.quadraticCurveTo(-9, 11.8, -9, 9.4);
+        g.lineTo(-9, -9.4);
+        g.quadraticCurveTo(-9, -11.8, -6.6, -11.8);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 内枠と上下の金。
+        g.strokeStyle = ink2;
+        g.lineWidth = 0.85;
+        g.strokeRect(-7, -9.6, 18, 19.2);
+        g.strokeStyle = ink;
+        g.lineWidth = 1.2;
+        g.fillStyle = color;
+        g.fillRect(-9, -11.8, 22, 2.5);
+        g.strokeRect(-9, -11.8, 22, 2.5);
+        g.fillRect(-9, 9.3, 22, 2.5);
+        g.strokeRect(-9, 9.3, 22, 2.5);
+        g.fillStyle = pale;
+        // 中央に一字。書体は明朝で墨に。
+        g.fillStyle = ink;
+        g.font = 'bold 13.5px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(text, 2, 0.6);
+        // 四隅の留め。
+        g.fillStyle = color;
+        for (const [bx, by] of [[-7.2, -7.6], [11.2, -7.6], [-7.2, 7.6], [11.2, 7.6]]) {
+          g.beginPath(); g.arc(bx, by, 0.95, 0, TAU); g.fill();
+        }
+        g.fillStyle = pale;
+        break;
+      }
     }
     g.restore();
   }

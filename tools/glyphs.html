@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- 武器グリフの一覧プレビュー。  npm start でサーバを立てて /tools/glyphs.html を開く。
+     drawWeaponGlyph の絵柄を、手に持つ大きさと戦闘中の色で並べて確認するための道具。 -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>武器グリフの一覧 — ワードローグ</title>
+<style>
+  body { margin: 0; padding: 24px; background: #efe7d4; color: #1c2331;
+         font: 14px/1.6 "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { margin: 0 0 18px; opacity: .72; }
+  canvas { max-width: 100%; height: auto; display: block;
+           border: 1px solid rgba(28,35,49,.14); border-radius: 6px; }
+</style>
+</head>
+<body>
+<h1>武器グリフの一覧</h1>
+<p>原点が握り、+X が切っ先。銃・鋏は銃身の軸で上下対称、鋸は歯が片側だけ (真上から見た形)。</p>
+<canvas id="cv" width="1120" height="980"></canvas>
+<script type="module">
+import { Renderer } from '../js/ui/render.js';
+
+const GLYPHS = ['刃', '刀', '剣', '斧', '槌', '槍', '矛', '弓', '銃', '鋏', '鋸', '針',
+  '爪', '牙', '拳', '杖', '鎖', '鞭', '環', '輪', '還', '玉', '球', '珠',
+  '弾', '爆', '光', '雷', '渦', '壁', '炎', '氷', '聖', '嵐'];
+// 属性色。戦闘中は武器の属性がそのまま金具の色になる。
+const COLORS = ['#d4a94e', '#d9480f', '#1971c2', '#c2870a', '#4f9b13',
+  '#5f3dc4', '#c92a46', '#2f9e8f'];
+
+const cv = document.getElementById('cv');
+const g = cv.getContext('2d');
+const renderer = new Renderer(cv);
+
+g.fillStyle = '#efe7d4';
+g.fillRect(0, 0, cv.width, cv.height);
+
+const COLS = 7, CELL = 158;
+for (let i = 0; i < GLYPHS.length; i++) {
+  const cx = (i % COLS) * CELL + CELL / 2;
+  const cy = Math.floor(i / COLS) * CELL + CELL / 2 + 6;
+  g.strokeStyle = 'rgba(28, 35, 49, .12)';
+  g.strokeRect((i % COLS) * CELL + 6, Math.floor(i / COLS) * CELL + 6, CELL - 12, CELL - 12);
+  g.save();
+  g.translate(cx - 18, cy);
+  g.shadowColor = 'rgba(28, 35, 49, .22)';
+  g.shadowBlur = 5;
+  g.shadowOffsetY = 2;
+  renderer.drawWeaponGlyph(g, GLYPHS[i], 2.1, COLORS[i % COLORS.length], 1);
+  g.restore();
+  g.fillStyle = 'rgba(28, 35, 49, .85)';
+  g.font = 'bold 17px "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'bottom';
+  g.fillText(GLYPHS[i], cx, (Math.floor(i / COLS) + 1) * CELL - 10);
+}
+
+// 下段: 同じ武器を属性色と実際の持ち方の大きさで並べる。
+const rowY = Math.ceil(GLYPHS.length / COLS) * CELL + 26;
+g.fillStyle = 'rgba(28, 35, 49, .85)';
+g.font = 'bold 15px "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+g.textAlign = 'left';
+g.fillText('属性色と、戦闘中の大きさ (刃・銃・杖・牙)', 18, rowY + 8);
+const row = ['刃', '刀', '銃', '槍', '杖', '牙', '鞭', '還'];
+for (let i = 0; i < row.length; i++) {
+  g.save();
+  g.translate(60 + i * 130, rowY + 70);
+  g.rotate(-0.35);
+  renderer.drawWeaponGlyph(g, row[i], 1.65, COLORS[i % COLORS.length], 1);
+  g.restore();
+}
+</script>
+</body>
+</html>

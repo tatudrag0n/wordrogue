@@ -13,7 +13,7 @@ import { Forge } from './ui/forge.js?v=1.47';
 import { Menus } from './ui/menus.js?v=1.47';
 
 import { STAGES } from './data/stages.js?v=1.47';
-import { WORDS, makeWord, CONNECTOR_SET } from './data/words.js?v=1.47';
+import { WORDS, makeWord, CONNECTOR_SET, segment } from './data/words.js?v=1.47';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態
@@ -102,7 +102,20 @@ function boot() {
       $('#devStatus').textContent = '入手する語を入力してください。';
       return;
     }
-    if (!WORDS[text] || CONNECTOR_SET.has(text)) {
+    // 入手する語を決める。
+    // 1 語そのものが辞書にあれば (接続詞以外) それを 1 語入手し、
+    // 無い場合は「残火太刀」のように連結して書かれた語として分割し、
+    // 構成される各語 (残・火・太・刀) をそれぞれ入手する。
+    let targets = null;
+    if (WORDS[text] && !CONNECTOR_SET.has(text)) {
+      targets = [text];
+    } else {
+      const segs = segment(text);
+      if (segs && segs.length && segs.every((s) => WORDS[s] && !CONNECTOR_SET.has(s))) {
+        targets = segs;
+      }
+    }
+    if (!targets) {
       $('#devStatus').textContent = `「${text}」は入手できない語です。`;
       return;
     }
@@ -111,20 +124,25 @@ function boot() {
       $('#devStatus').textContent = '指定語の入手はラン中のみ使用できます (先にステージを開始してください)。';
       return;
     }
-    const ok = app.run.giveWord(makeWord(text), true);
-    if (!ok) {
-      $('#devStatus').textContent = `「${text}」を入手できませんでした (語彙が満杯で、退避できませんでした)。`;
-      return;
+    const got = [];
+    for (const t of targets) {
+      const ok = app.run.giveWord(makeWord(t), true);
+      if (!ok) break;
+      got.push(t);
+      // 入手した語を所持語にも加えておくと、デッキや部位で使い回せる。
+      if (!app.save.ownsWord(t)) {
+        app.save.data.collection.push(t);
+        if (!app.save.data.ranks || typeof app.save.data.ranks !== 'object') app.save.data.ranks = {};
+        if (!Number.isInteger(app.save.data.ranks[t])) app.save.data.ranks[t] = 0;
+      }
     }
+    app.save.save();
     // 入力欄はすべて空に戻す。
     for (const n of inputs) n.value = '';
-    $('#devStatus').textContent = `「${text}」を手に入れました。`;
-    // 入手した語を所持語にも加えておくと、デッキや部位で使い回せる。
-    if (!app.save.ownsWord(text)) {
-      app.save.data.collection.push(text);
-      if (!app.save.data.ranks || typeof app.save.data.ranks !== 'object') app.save.data.ranks = {};
-      if (!Number.isInteger(app.save.data.ranks[text])) app.save.data.ranks[text] = 0;
-      app.save.save();
+    if (targets.length === 1) {
+      $('#devStatus').textContent = `「${text}」を手に入れました。`;
+    } else {
+      $('#devStatus').textContent = `「${text}」を「${got.join('」「')}」に分けて手に入れました。`;
     }
   };
 

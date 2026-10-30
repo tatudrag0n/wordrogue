@@ -231,6 +231,8 @@ export class Menus {
   /** 辞書を閉じる。ゲーム中は main.js 側で時間を戻す。 */
   hide(name) {
     if (name === 'grow') this.closeGacha();
+    // そのタブの説明を重ねているなら、タブを閉じるときに一緒に閉じる。
+    if (this.tips?.isOpen() && this.tips.key === name) this.tips.close();
     const wasOpen = this[name] && !this[name].hidden;
     this[name].hidden = true;
     if (wasOpen) this.audio?.uiClose?.();

@@ -5,8 +5,8 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.45';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.45';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.46';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.46';
 import { evaluatePart, partConnChoices } from '../game/parts.js';
 import { partEffectRows, partTotalRows } from '../game/stats.js';
 import { GrowPad } from './growpad.js';

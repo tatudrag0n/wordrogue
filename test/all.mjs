@@ -503,7 +503,8 @@ if (syntaxBad) {
       // 形の語・語彙から引けない語の規則は手書きの熟語だけのもの。
       // 辞書に実在する熟語 (雷光・剣豪) は形の語や武器語を含んでよい。
       if (p.src !== 'dict') {
-        if (segs.some((w) => WORDS[w]?.cat === 'form')) broken.push(`${k} (二字熟語に形の語)`);
+        // 約束は実在の名詞で、束は形ではなく「たば」の意味。例外的に認める。
+        if (k !== '約束' && segs.some((w) => WORDS[w]?.cat === 'form')) broken.push(`${k} (二字熟語に形の語)`);
         if (segs.some((w) => !drawable.has(w))) broken.push(`${k} (語彙から引けない語)`);
       }
     }
@@ -571,6 +572,7 @@ let failed = 0;
 failed += await run('test/words.test.js');
 failed += await run('test/grammar.test.mjs');
 failed += await run('test/sim.test.js');
+failed += await run('test/motion.test.js');
 failed += await run('test/meaning.test.js');
 failed += await run('test/forge.drag.test.js');
 failed += await run('test/grow.menu.test.js');

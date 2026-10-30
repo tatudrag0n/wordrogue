@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.45">
+<link rel="stylesheet" href="css/style.css?v=1.46">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -285,7 +285,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.45</div>
+      <div class="title-version">Ver. 1.46</div>
     </div>
   </div>
 
@@ -383,7 +383,7 @@
       <h3>3. 語の種類</h3>
       <ul class="howto-list">
       <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
-      <li><b>形態</b> … 剣・銃・弓と、弾・矢・球・環・壁・甲・鍔・鞘など。<strong>うち基本武器の 15 語だけが武器語</strong>で、語彙からは引けない。残りは語彙から引けるただの語（攻撃の型は決めない）</li>
+      <li><b>形態</b> … 剣・銃・弓と、弾・矢・球・環・壁・甲・鍔・鞘など。<strong>うち基本武器の 16 語だけが武器語</strong>で、語彙からは引けない。残りは語彙から引けるただの語（攻撃の型は決めない）</li>
       <li><b>効果</b> … 貫・裂・散、強・速・硬など。数値を上げる。</li>
       <li><b>動詞</b> … <code>燃</code> <code>貫</code> <code>凍</code> など。1 枚で 1 つの動作になる。</li>
       <li><b>接続</b> … <code>る</code> <code>の</code> <code>られた</code> など。語ごとに付く送り仮名が決まっている。
@@ -434,6 +434,13 @@
       <li><b class="ok">熟語にも送り仮名が付く</b> … 「発」「電」と並べると「電」に
       <code>する</code> が付けられて <code>発電する</code> になる（「電する」は不成立）。
       熟語は 1 つの名詞なので、文は <code>発電する剣</code> のように語で閉じる</li>
+      <li><b class="ok">熟語の送り仮名は、その熟語だけのもの</b> … 熟語は末尾の 1 字の
+      活用を借りない。 <code>約束</code> は <code>約束する</code> <code>約束した</code>
+      <code>約束される</code> <code>約束された</code> のように、熟語自身が持つ形だけが付く。
+      だから <code>約束された剣</code> は作れるが、<code>反射る</code> <code>爆発る</code>
+      <code>約束す</code> のような形は候補に出ない。熟語は名詞でもあるので、
+      <code>の</code> <code>を</code> <code>に</code> などの格はどの熟語にも付く。
+      熟語の形の一覧は <code>js/data/words.compound-forms.js</code></li>
       </ul>
       </section>
       <section>
@@ -620,6 +627,27 @@
       </ul>
       </section>
 
+      <section>
+<h3>16. 武器のモーション</h3>
+      <p>
+      武器は撃つだけではなく、<strong>持ち方と振り方</strong>が武器ごとに決まっている。
+      攻撃 1 回は<strong>予備動作 → 打撃 → 振り抜け → 戻り</strong>の 4 局面で、
+      予備動作のあいだはまだ切っていない（当たらない）。威力と攻撃間隔は今までどおりで、
+      見た目だけが武器の重さと速さを表す。
+      </p>
+      <ul class="howto-list">
+      <li><b>斬</b> … 剣は袈裟斬り・逆袈裟・横一文字、太刀は大薙ぎ・返し薙ぎ、大剣と斧は振りかぶって叩きつける</li>
+      <li><b>突</b> … 槍と矛は直突き・連突き・上段突きで、間合いのぶん腕ごと伸びる</li>
+      <li><b>打</b> … 槌は鉄槌・岩砕き・大打ち。落とす瞬間に体が沈み、地面に輪が出る</li>
+      <li><b>爪・牙・拳</b> … 爪は 3 本の鉤爪で引っ掻き、牙は噛みつき、拳は正拳・横拳・連打</li>
+      <li><b>射</b> … 銃は腰溜め・照準・速射で反動が跳ね、弓は引き絞ってから放つ</li>
+      <li><b>操</b> … 杖と光は陣を描いてから放ち、鞭と鎖はしなる線で薙ぎ、環と輪は回り続ける</li>
+      </ul>
+      <p>
+      文に武器語を置くと、<strong>その武器語の持ち方</strong>に変わる。
+      「貫通する剣」なら剣の振りで貫通し、「約束された槌」なら槌の振りで約束の力が乗る。
+      </p>
+      </section>
         <section>
           <h3>操作</h3>
           <ul class="howto-list">
@@ -631,6 +659,8 @@
             <li>タッチ … 画面の右にある<strong>ダッシュ</strong>を押してダッシュ（タップでも効く）</li>
             <li>言葉鍛冶 … 語を<strong>文の行へドラッグ</strong>、または<strong>タップで選んでから余白をタップ</strong>。文の語を<strong>タップ</strong>で接続詞切替、<strong>長押し</strong>で一覧 (スクロール選択)</li>
             <li>武器は<strong>自動で攻撃する</strong>。攻撃の向きは自動で選ぶ</li>
+            <li>武器は<strong>武器ごとに動く</strong>。刀は袈裟斬りと横一文字、槌は振りかぶって叩きつけ、
+            槍は突き、鞭はしなり、銃は反動で跳ねる。同じ武器でも<strong>一振りごとに振り方が変わる</strong></li>
           </ul>
         </section>
       </div>
@@ -670,6 +700,8 @@
           <strong>スクロールして選び、タップで決定</strong>。
           ほかに、語をふつうに<strong>タップ</strong>すれば接続詞が一つずつ切り替わる。
           例 「斬」なら <code>る</code> → <code>られた</code> → <code>り</code> → なし、と周る。
+          熟語になっているとき (約 + 束) は、熟語自身の形 (<code>約束する</code> <code>約束された</code>) も
+          一覧に並ぶ。末尾の 1 字の活用 (<code>約束す</code> <code>反射る</code>) は出ない。
           </p>
         </section>
         <section class="tut-step" data-step="3">
@@ -897,6 +929,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.45"></script>
+<script type="module" src="js/main.js?v=1.46"></script>
 </body>
 </html>

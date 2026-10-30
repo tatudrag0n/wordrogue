@@ -47,6 +47,9 @@ import {
 import { PHRASE_BONUS } from './words.phrase.js';
 export { NOUN_POOL, WORD_POOLS, COMPOUND_POOLS };
 
+/** 登録済み熟語の最長文字数。文の判定と同じ上限。 */
+const MAX_COMPOUND = Object.keys(PHRASE_BONUS).reduce((m, k) => Math.max(m, k.length), 2);
+
 /** 品詞。自然さの採点 (形容の連体・裸の形容) と末尾語の判定に使う。 */
 export const POS = {
   noun: '体言',
@@ -228,6 +231,25 @@ export function compoundsEndingIn(run) {
 }
 
 /**
+ * run の末尾にできている **登録済みの熟語すべて** (プールの有無を問わない)。
+ * プールを持たない熟語でも、末尾 1 字の活用を借りてはいけない。
+ *   「反射」は登録済みなので、末尾の「射」の る を借りた「反射る」は作らない。
+ * @param {string[]} run
+ * @returns {Array<{text:string, n:number, pool:ReadonlyArray<object>|null}>}
+ */
+export function registeredCompoundsEndingIn(run) {
+  const out = [];
+  if (!run || run.length < 2) return out;
+  for (let n = run.length; n >= 2; n--) {
+    const text = run.slice(run.length - n).join('');
+    if (text.length > MAX_COMPOUND) continue;
+    if (!PHRASE_BONUS[text]) continue;
+    out.push({ text, n, pool: compoundPoolOf(text) });
+  }
+  return out;
+}
+
+/**
  * run の直後に接続詞 k を付けたときの形。熟語の形を先に見て、無ければ最後の語の形。
  * @param {string[]} run
  * @param {string} k
@@ -235,9 +257,22 @@ export function compoundsEndingIn(run) {
  */
 export function formAfter(run, k) {
   if (!run || !run.length || !isConnector(k)) return null;
-  for (const c of compoundsEndingIn(run)) {
-    const form = c.pool.find((e) => e.k === k);
-    if (form) return { source: c.text, n: c.n, form, compound: true };
+  const compounds = registeredCompoundsEndingIn(run);
+  if (compounds.length) {
+    // 熟語自身の活用を先に探す (長い熟語から)。
+    for (const c of compounds) {
+      const form = c.pool && c.pool.find((e) => e.k === k);
+      if (form) return { source: c.text, n: c.n, form, compound: true };
+    }
+    // 名詞としての格助詞は、どの熟語にも付く。係り先は熟語全体。
+    const noun = NOUN_POOL.find((e) => e.k === k);
+    if (noun) {
+      const c = compounds[0];
+      return { source: c.text, n: c.n, form: noun, compound: true };
+    }
+    // 熟語として登録されている以上、末尾 1 字の活用には戻らない。
+    //   反射 + る / 約束 + す は熟語の形ではないので結べない。
+    return null;
   }
   const last = run[run.length - 1];
   const form = formOf({ text: last }, k);
@@ -252,8 +287,17 @@ export function formAfter(run, k) {
 export function connectorsAfter(run) {
   if (!run || !run.length) return [];
   const out = [];
-  for (const c of compoundsEndingIn(run)) for (const e of c.pool) out.push(e.k);
-  out.push(...connectorFor({ text: run[run.length - 1] }));
+  const compounds = registeredCompoundsEndingIn(run);
+  for (const c of compounds) {
+    if (c.pool) for (const e of c.pool) out.push(e.k);
+  }
+  if (compounds.length) {
+    // 熟語は名詞でもあるので、格助詞は必ず使える。ここで末尾 1 字の
+    // 活用を足すと「反射る」のような候補が出てしまう。
+    for (const e of NOUN_POOL) out.push(e.k);
+  } else {
+    out.push(...connectorFor({ text: run[run.length - 1] }));
+  }
   return [...new Set(out)];
 }
 
@@ -266,7 +310,9 @@ export function connectorsAfter(run) {
  */
 export function canConnect(source, connector, before = []) {
   if (!source || !isConnector(connector)) return false;
-  if (formOf(source, connector)) return true;
+  // 直前の語列が熟語を作るなら、熟語のプールだけを見る。
+  //   canConnect(約束, 'された')       -> true
+  //   canConnect(射, 'る', ['反'])     -> false (反射る は熟語の形ではない)
   return !!formAfter([...before, source.text], connector);
 }
 

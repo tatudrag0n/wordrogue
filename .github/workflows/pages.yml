@@ -35,6 +35,9 @@ jobs:
       - name: シミュレーションのテスト
         run: node test/sim.test.js
 
+      - name: 武器モーションのテスト
+        run: node test/motion.test.js
+
   deploy:
     name: デプロイ
     needs: test

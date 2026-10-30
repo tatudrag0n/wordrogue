@@ -12,13 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.45';
+} from '../data/words.js?v=1.46';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.45';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.46';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.45';
-import { fireWeapon, damage as damageEnemy } from './combat.js?v=1.45';
+import { WeaponInst } from './weapon.js?v=1.46';
+import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.46';
+import { fireWeapon, damage as damageEnemy } from './combat.js?v=1.46';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -1293,6 +1294,7 @@ export class Run {
     this.playerTick(d, input);
     this.waveTick();
     this.weaponTick(d);
+    this.motionTick(d);
     this.enemyTick(d);
     this.bulletTick(d);
     this.fieldTick(d);
@@ -1461,20 +1463,58 @@ export class Run {
       if (wi.flash > 0) wi.flash = Math.max(0, wi.flash - dt * 4);
 
       if (!res.active) {
-        // 不成文。出力ゼロ。軌道だけが 回す。
+        // 不成文。出力ゼロ。軌道だけが回る。
+        wi.motion = null;
         wi.orbitAngle += dt * 0.8;
         continue;
       }
       const st = res.stats;
 
-      if (st.kind === 'orbit') { this.orbitTick(wi, st, dt); continue; }
-      if (st.kind === 'aura')  { this.auraTick(wi, st, dt); continue; }
+      if (st.kind === 'orbit') {
+        // 軌道刃は攻撃モーションではなく、周回そのものが動き。
+        wi.motion = null;
+        this.orbitTick(wi, st, dt);
+        continue;
+      }
+      if (st.kind === 'aura') {
+        // 常時展開する城壁は、攻撃ではなく息づかいで見せる。
+        wi.motion = null;
+        this.auraTick(wi, st, dt);
+        continue;
+      }
+
+      const interval = 1 / Math.max(0.05, st.rate);
+      // 攻撃の直前、予備動作だけを先に始める。打撃の瞬間が攻撃の瞬間に
+      // 重なるよう、打撃までの時間だけ早く振り始める。当たり判定は cd が
+      // 0 になった瞬間 (fireWeapon) なので、威力と間隔は従来どおり。
+      if (!wi.motion && wi.cd > 0) {
+        const lead = motionLead(wi, res, interval);
+        if (wi.cd <= lead) {
+          const tgt = this.nearestEnemy(this.player.x, this.player.y);
+          const aim = tgt
+            ? Math.atan2(tgt.y - this.player.y, tgt.x - this.player.x)
+            : this.player.face;
+          startWeaponMotion(wi, res, aim, { interval, elapsed: 0 });
+        }
+      }
 
       wi.cd -= dt;
       if (wi.cd <= 0) {
-        wi.cd = 1 / Math.max(0.05, st.rate);
+        wi.cd = interval;
         fireWeapon(this, wi, res);
       }
+    }
+  }
+
+  /**
+   * 武器の見た目のモーションだけを進める。攻撃の当たり判定とは無関係。
+   * 寿命が切れたら構えに戻る (lastMotion は残すので、直前の振りは読める)。
+   */
+  motionTick(dt) {
+    for (const wi of this.weapons) {
+      if (!wi.motion) continue;
+      const alive = advanceWeaponMotion(wi.motion, dt);
+      if (!alive) wi.motion = null;
     }
   }
 

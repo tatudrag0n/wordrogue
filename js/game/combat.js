@@ -7,7 +7,8 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.45';
+import { ELEMENTS } from '../data/words.js?v=1.46';
+import { startWeaponMotion } from './motions.js?v=1.46';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -90,6 +91,21 @@ export function fireWeapon(run, wi, res) {
   p.castKind = kind;
   run.audio.cast?.(el, kind, wi.def.id);
 
+  // 攻撃の見た目。weaponTick が予備動作を先に始めていれば、それを
+  // 打撃の瞬間へ進める。直接 fireWeapon を呼ぶテストでは、その場で
+  // 振り始める。どちらも当たり判定・威力・間隔は変えない。
+  const interval = 1 / Math.max(0.05, st.rate || 1);
+  if (!wi.motion || wi.motion.seq < (wi.motionSeq || 0)) {
+    const m = startWeaponMotion(wi, res, aim, { interval, elapsed: 0 });
+    // 予備動作を先に始めていない直接攻撃は、打撃の瞬間から見せる。
+    m.elapsed = m.impactAt;
+  } else {
+    wi.aim = aim;
+    wi.motion.aim = aim;
+    wi.motion.baseAim = aim;
+    wi.motion.elapsed = Math.max(wi.motion.elapsed, wi.motion.impactAt);
+  }
+
   switch (kind) {
     case 'slash': doSlash(run, wi, st, aim, el, elInfo); break;
     case 'shot':  doShot(run, wi, st, aim, false, el, elInfo); break;
@@ -152,13 +168,19 @@ function doSlash(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = st.range * (p.stats.size || 1) * st.size;
   const arc = st.arc;
+  // 刃の軌跡は、モーションの打撃〜振り抜けのあいだだけ描く。
+  const motion = wi.motion || null;
+  const life = motion
+    ? Math.max(0.28, motion.duration - motion.windup + 0.08)
+    : 0.32;
   run.slashes.push({
     x: p.x, y: p.y, a: aim,
     r: reach,
     arc,
-    life: 0.32, maxLife: 0.32,
+    life, maxLife: life,
     color: elInfo.color,
     el,
+    motion,
     hit: new Set(),
   });
   run.audio.slash();
@@ -187,9 +209,13 @@ function doSlash(run, wi, st, aim, el, elInfo) {
 function doWhip(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = (st.range + (st.area || 0)) * (p.stats.size || 1);
+  const motion = wi.motion || null;
+  const life = motion
+    ? Math.max(0.34, motion.duration - motion.windup + 0.08)
+    : 0.36;
   run.rings.push({
-    x: p.x, y: p.y, r: reach, life: 0.36, maxLife: 0.36,
-    color: elInfo.color, el, hit: new Set(),
+    x: p.x, y: p.y, r: reach, life, maxLife: life,
+    color: elInfo.color, el, motion, hit: new Set(),
   });
   run.audio.slash();
   const fx = ELEM_FX[el] || ELEM_FX.none;

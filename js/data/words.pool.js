@@ -35,6 +35,7 @@
 // ============================================================================
 
 import { PHRASE_BONUS } from './words.phrase.js';
+import { compoundFormSpec } from './words.compound-forms.js?v=1.46';
 
 /**
  * 名詞が共通で持つ格の接続詞。
@@ -427,7 +428,10 @@ export function posOfText(text) {
  */
 export const COMPOUND_POOLS = Object.create(null);
 for (const key of Object.keys(PHRASE_BONUS)) {
-  const spec = (PHRASE_BONUS[key].pool || '').trim();
+  // 手書きの熟語 (words.phrase.js) の pool が最優先。無ければ、熟語ごとに
+  // 決めた固定の活用 (words.compound-forms.js) を使う。末尾の 1 字から
+  // 活用を作ることはしない —「反射る」のような日本語に無い形を防ぐ。
+  const spec = (PHRASE_BONUS[key].pool || compoundFormSpec(key) || '').trim();
   if (!spec) continue;
   COMPOUND_POOLS[key] = Object.freeze({ pos: POS_CODE.n, pool: Object.freeze(parseForms(spec.split(/\s+/))) });
 }

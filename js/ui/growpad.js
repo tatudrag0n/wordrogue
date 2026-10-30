@@ -11,15 +11,15 @@
 // 文は 1 部位 10 文字まで (武器と同じ)。語の数に上限はない。
 // ============================================================================
 
-import { el, clear } from '../core/util.js';
-import { WORDS, CATEGORIES } from '../data/words.js?v=1.49';
-import { PART_MAX_LEN, PARTS } from '../core/save.js';
-import { makePartSentence } from '../game/parts.js';
+import { el, clear } from '../core/util.js?v=1.50';
+import { WORDS, CATEGORIES } from '../data/words.js?v=1.50';
+import { PART_MAX_LEN, PARTS } from '../core/save.js?v=1.50';
+import { makePartSentence } from '../game/parts.js?v=1.50';
 import {
   wordEffectRows, wordDirectEffectRows, isPartUsable, wordMeaningParts, PART_KIND_LABELS,
-} from '../game/stats.js';
-import { FX_LABEL, PS_LABEL } from './labels.js';
-import { SenPad } from './senpad.js';
+} from '../game/stats.js?v=1.50';
+import { FX_LABEL, PS_LABEL } from './labels.js?v=1.50';
+import { SenPad } from './senpad.js?v=1.50';
 
 /** 語の効果を 1 行にまとめる (ツールチップ用)。 */
 function fxText(src, label) {

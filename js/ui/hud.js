@@ -2,11 +2,11 @@
 // ワードローグ — HUD
 // ============================================================================
 
-import { $, el, clear, clamp, fmtNum, fmtTime } from '../core/util.js';
-import { KIND_LABEL } from '../data/weapons.js?v=1.49';
-import { WORDS, CATEGORIES } from '../data/words.js?v=1.49';
-import { statRows } from '../game/stats.js';
-import { FX_LABEL, fxLine as makeFxLine } from './labels.js';
+import { $, el, clear, clamp, fmtNum, fmtTime } from '../core/util.js?v=1.50';
+import { KIND_LABEL } from '../data/weapons.js?v=1.50';
+import { WORDS, CATEGORIES } from '../data/words.js?v=1.50';
+import { statRows } from '../game/stats.js?v=1.50';
+import { FX_LABEL, fxLine as makeFxLine } from './labels.js?v=1.50';
 
 export class Hud {
   constructor() {

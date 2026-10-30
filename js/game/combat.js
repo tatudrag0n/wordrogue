@@ -5,10 +5,10 @@
 // resolve() が active=false を返した武器は、ここには届かない。
 // ============================================================================
 
-import { TAU, clamp, dist2, rng } from '../core/util.js';
-import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.49';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.49';
+import { TAU, clamp, dist2, rng } from '../core/util.js?v=1.50';
+import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js?v=1.50';
+import { ELEMENTS } from '../data/words.js?v=1.50';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.50';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);

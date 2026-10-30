@@ -4,9 +4,9 @@
 // すべて平坦なオブジェクト。配列から swap-remove で取り除く。
 // ============================================================================
 
-import { TAU, clamp, dist2, angleDiff } from '../core/util.js';
-import { ENEMIES, enemyWords, enemySentence } from '../data/enemies.js';
-import { ELEMENTS } from '../data/words.js?v=1.49';
+import { TAU, clamp, dist2, angleDiff } from '../core/util.js?v=1.50';
+import { ENEMIES, enemyWords, enemySentence } from '../data/enemies.js?v=1.50';
+import { ELEMENTS } from '../data/words.js?v=1.50';
 
 let eUid = 0;
 

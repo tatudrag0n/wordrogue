@@ -34,8 +34,8 @@
 //   (COMPOUND_POOLS / compoundPoolOf)。「電する」は作れない。
 // ============================================================================
 
-import { PHRASE_BONUS } from './words.phrase.js';
-import { compoundFormSpec } from './words.compound-forms.js?v=1.49';
+import { PHRASE_BONUS } from './words.phrase.js?v=1.50';
+import { compoundFormSpec } from './words.compound-forms.js?v=1.50';
 
 /**
  * 名詞が共通で持つ格の接続詞。

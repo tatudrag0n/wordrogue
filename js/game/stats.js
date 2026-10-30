@@ -27,10 +27,10 @@
 
 import {
   WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS,
-} from '../data/words.js?v=1.49';
-import { clamp } from '../core/util.js';
-import { evaluatePart, normPartEntries } from './parts.js';
-import { rankMul } from '../data/ranks.js?v=1.49';
+} from '../data/words.js?v=1.50';
+import { clamp } from '../core/util.js?v=1.50';
+import { evaluatePart, normPartEntries } from './parts.js?v=1.50';
+import { rankMul } from '../data/ranks.js?v=1.50';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {

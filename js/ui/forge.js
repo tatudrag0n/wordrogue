@@ -15,15 +15,15 @@
 // 文は 10 文字まで。
 // ============================================================================
 
-import { $, el, clear } from '../core/util.js';
+import { $, el, clear } from '../core/util.js?v=1.50';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
-} from '../data/words.js?v=1.49';
-import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js';
-import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.49';
-import { FX_LABEL, PS_LABEL } from './labels.js';
-import { keyStats } from '../game/weapon.js?v=1.49';
-import { SenPad } from './senpad.js';
+} from '../data/words.js?v=1.50';
+import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js?v=1.50';
+import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.50';
+import { FX_LABEL, PS_LABEL } from './labels.js?v=1.50';
+import { keyStats } from '../game/weapon.js?v=1.50';
+import { SenPad } from './senpad.js?v=1.50';
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
 

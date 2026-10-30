@@ -12,8 +12,8 @@
 // ジェスチャ・当たり判定・接続詞の一覧・取り消しは、ここ 1 か所にある。
 // ============================================================================
 
-import { el } from '../core/util.js';
-import { CONNECTORS, ROLE_LABEL, formOf } from '../data/words.connect.js';
+import { el } from '../core/util.js?v=1.50';
+import { CONNECTORS, ROLE_LABEL, formOf } from '../data/words.connect.js?v=1.50';
 
 /**
  * 文を組む画面の土台。

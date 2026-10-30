@@ -1145,9 +1145,7 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .pword-craft.special { color: var(--idiom); border-color: rgba(194, 106, 13, .55); }
 .pword-craft.special:hover { background: var(--idiom); color: #ffffff; }
 .pword-craft.disabled { opacity: .3; pointer-events: none; }
-/* 形態語 (弾・環・玉…) はただの語。武器語と区別して淡く出す */
-.pword.is-form { border-style: dashed; }
-.pword.is-form .pword-n { opacity: .7; }
+/* 武器語は語彙から引かないので、語彙の札に武器の印は付けない */
 
 /* 語彙 */
 .forge-side {

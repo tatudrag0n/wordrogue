@@ -241,36 +241,42 @@ if (syntaxBad) {
 }
 
 // 武器語 -> 攻撃タイプの表 (FORM_SHAPE) と辞書のつきあい。
-// 武器語は基本武器 15 語だけ。ここが古くなると武器が攻撃しなくなるし、
-// 「環・弾・玉」のような形態語が武器語に化けると、編成が全部それ決めになってしまう。
+// 武器語は基本武器 18 語だけ。ここが古くなると武器が攻撃しなくなるし、
+// 「環・弾・玉」のようなただの語が武器語に化けると、編成が全部それ決めになってしまう。
+// 辞書のカテゴリに「形態」は無い (form カテゴリが復活したらここで落ちる)。
 {
-  const { WORDS, WORDS_BY_CAT, WEAPON_WORDS, isWeaponWord, DRAWABLE_ALL } =
+  const { WORDS, WORDS_BY_CAT, WEAPON_WORDS, isWeaponWord, isShapeWord, DRAWABLE_ALL } =
     await import(new URL('../js/data/words.js', import.meta.url));
   const { FORM_SHAPE, KIND_LABEL, BASIC_WEAPONS, WEAPONS } =
     await import(new URL('../js/data/weapons.js', import.meta.url));
   const entries = Object.entries(FORM_SHAPE).map(([text, v]) => ({ text, shape: v[0], kind: v[1] }));
 
   const dead = entries.filter((e) => !WORDS[e.text]);
-  // 武器語は基本武器 (14 語) とぴったり一致すること。
+  // 武器語は基本武器 (18 語) とぴったり一致すること。
   const notBasic = entries.filter((e) => !BASIC_WEAPONS.has(e.text));
   const noLabel = [...new Set(entries.map((e) => e.kind))].filter((k) => !KIND_LABEL[k]);
   const known = new Set(entries.map((e) => e.text));
   const noShape = [...BASIC_WEAPONS].filter((t) => !known.has(t));
   const tails = new Set(Object.values(WEAPONS).map((d) => d.tail));
   const strayTail = [...tails].filter((t) => BASIC_WEAPONS.has(t) && !known.has(t));
-  // 形態語のうち武器語でないものは「ただの語」なので、語彙から引けること。
-  const plain = WORDS_BY_CAT.form.filter((t) => !isWeaponWord(t));
+  // 物の語 (弾・環・玉…) はただの語 (効果) なので、語彙から引けること。
+  const plain = (WORDS_BY_CAT.modifier || []).filter((t) => isShapeWord(t));
   const stuck = plain.filter((t) => !DRAWABLE_ALL.includes(t));
+  // 辞書のカテゴリに「形態」は無い。
+  const formLeft = Object.values(WORDS).filter((w) => w.cat === 'form');
+  const weaponCat = WORDS_BY_CAT.weapon || [];
 
-  console.log(`== 武器語表 ==\n  武器語 ${entries.length} 語 / 形態語 ${WORDS_BY_CAT.form.length}`
-    + ` (武器語でない ${plain.length}) / 辞書に無い ${dead.length} / 攻撃名なし ${noLabel.length}`
-    + ` / 型が無い基本武器 ${noShape.length} / 語彙から引けない形態語 ${stuck.length}`);
+  console.log(`== 武器語表 ==\n  武器語 ${entries.length} 語 / 武器カテゴリ ${weaponCat.length}`
+    + ` / 物の語 ${plain.length} / 辞書に無い ${dead.length} / 攻撃名なし ${noLabel.length}`
+    + ` / 型が無い基本武器 ${noShape.length} / 語彙から引けない物の語 ${stuck.length}`
+    + ` / 残った形態カテゴリ ${formLeft.length}`);
   if (dead.length) console.log('  辞書に無い: ' + dead.map((e) => e.text).join(' '));
   if (notBasic.length) console.log('  基本武器でない武器語: ' + notBasic.map((e) => e.text).join(' '));
   if (noLabel.length) console.log('  攻撃名なし: ' + noLabel.join(' '));
   if (noShape.length) console.log('  型が無い基本武器: ' + noShape.join(' '));
-  if (stuck.length) console.log('  語彙から引けない形態語: ' + stuck.join(' '));
-  if (dead.length || notBasic.length || noLabel.length || noShape.length || strayTail.length || stuck.length) {
+  if (stuck.length) console.log('  語彙から引けない物の語: ' + stuck.join(' '));
+  if (dead.length || notBasic.length || noLabel.length || noShape.length || strayTail.length || stuck.length
+    || formLeft.length) {
     console.log('\n=== 失敗したテストがあります ===');
     process.exit(1);
   }
@@ -392,6 +398,101 @@ if (syntaxBad) {
   }
 }
 
+// どの語も、辞書にある自然な形 (送り仮名) を作れる。
+//   以前は「激」に しい/しく が無く、**激しい刃** が作れなかった。
+//   全語を一通り見直して、形容・動詞として使える語に形を足したので、
+//   ここに挙げた組が結べることを固定する。
+{
+  const { WORDS, segment, evaluate, makeWord } = await import(new URL('../js/data/words.js', import.meta.url));
+  const { canConnect } = await import(new URL('../js/data/words.connect.js', import.meta.url));
+  const { WEAPON_WORDS } = await import(new URL('../js/data/words.js', import.meta.url));
+
+  // [できあがる語, 語, 送り仮名]
+  const CASES = [
+    ['激しい', '激', 'しい'], ['激しく', '激', 'しく'],
+    ['晴れた', '晴', 'れた'], ['凪いで', '凪', 'いで'],
+    ['紅い', '紅', 'い'], ['碧い', '碧', 'い'], ['汚い', '汚', 'い'],
+    ['怪しい', '怪', 'しい'], ['楽しい', '楽', 'しい'],
+    ['痛い', '痛', 'い'], ['丸い', '丸', 'い'], ['憂い', '憂', 'い'],
+    ['純な', '純', 'な'], ['和やかな', '和', 'やかな'], ['邪な', '邪', 'な'],
+    ['怒る', '怒', 'る'], ['愛する', '愛', 'する'], ['望む', '望', 'む'],
+    ['狂う', '狂', 'う'], ['満ちる', '満', 'ちる'], ['異なる', '異', 'なる'],
+    ['空いた', '空', 'いた'], ['超えた', '超', 'えた'], ['勝った', '勝', 'った'],
+    ['助けた', '助', 'けた'], ['伏せた', '伏', 'せた'], ['倣う', '倣', 'う'],
+    ['憤る', '憤', 'る'], ['戒める', '戒', 'める'], ['極めた', '極', 'めた'],
+    ['模した', '模', 'した'], ['想う', '想', 'う'], ['証した', '証', 'した'],
+    ['約した', '約', 'した'], ['服した', '服', 'した'], ['離れた', '離', 'れた'],
+    ['限る', '限', 'る'], ['量った', '量', 'った'], ['上った', '上', 'った'],
+    ['下げた', '下', 'げた'], ['代わる', '代', 'わる'], ['処した', '処', 'した'],
+    ['侘びた', '侘', 'びた'], ['灼いて', '灼', 'いて'], ['濁って', '濁', 'って'],
+  ];
+  const broken = [];
+  for (const [form, stem, conn] of CASES) {
+    const w = WORDS[stem];
+    if (!w) { broken.push(`${form} (語「${stem}」が無い)`); continue; }
+    if (!canConnect(w, conn)) { broken.push(`${form} (「${stem}」に ${conn} が結べない)`); continue; }
+    const segs = segment(form);
+    if (!segs || segs[0] !== stem || segs[1] !== conn) {
+      broken.push(`${form} (分割が ${segs ? segs.join('/') : 'null'})`);
+    }
+  }
+
+  // 文にして成立すること (「激しい刃」「激しく斬る刃」)。
+  const SENTENCES = [
+    ['激しい刃'], ['激しく斬る刃'], ['怪しい刃'], ['楽しい刃'],
+    ['痛い刃'], ['紅い刃'], ['凪いだ刃'], ['純な刃'],
+  ];
+  for (const [text] of SENTENCES) {
+    const segs = segment(text);
+    if (!segs) { broken.push(`${text} (分割できない)`); continue; }
+    const r = evaluate(segs.map(makeWord), { minContent: 2 });
+    if (!r.valid) broken.push(`${text} (不成文: ${r.reasonText})`);
+  }
+
+  // 全語チェック: どの語も、その語を使った文が 1 つは作れる。
+  //   使えない語があると、語彙や 3 択に出ても置き場所が無く、行き止まりになる。
+  {
+    const { WORDS: W2, CONNECTOR_SET: CS } = await import(new URL('../js/data/words.js', import.meta.url));
+    const { poolOfText } = await import(new URL('../js/data/words.pool.js', import.meta.url));
+    const content = Object.keys(W2).filter((t) => !CS.has(t));
+    const stuck = [];
+    for (const t of content) {
+      const w = makeWord(t);
+      const pool = poolOfText(t).map((e) => e.k);
+      let usable = false;
+      for (const k of pool) {
+        // X + 送り仮名 + 斬る + 刃
+        if (evaluate([w, makeWord(k), makeWord('斬'), makeWord('る'), makeWord('刃')],
+          { minContent: 2, tail: '刃' }).valid) { usable = true; break; }
+        // 刃 + 送り仮名 + X (後ろに置く形)
+        if (evaluate([makeWord('刃'), makeWord(k), w], { minContent: 2 }).valid) { usable = true; break; }
+        // X + 送り仮名 + 刃 (末尾語に係る形)
+        if (evaluate([w, makeWord(k), makeWord('刃')], { minContent: 2, tail: '刃' }).valid) {
+          usable = true; break;
+        }
+      }
+      if (!usable) stuck.push(t);
+    }
+    console.log(`  全語チェック: ${content.length} 語 / 文を作れない語 ${stuck.length}`);
+    if (stuck.length) {
+      console.log(`\x1b[31m  文に使えない語: ${stuck.join(' ')}\x1b[0m`);
+      broken.push(...stuck.map((t) => `${t} (どの接続詞でも文にならない)`));
+    }
+  }
+
+  // 基本武器の語 (18 語) は、どの武器の末尾語にもなれる。
+  for (const w of WEAPON_WORDS) {
+    if (!WORDS[w]) broken.push(`武器語「${w}」が辞書に無い`);
+  }
+
+  console.log(`== 送り仮名 ==\n  ${CASES.length} 組の自然な形 / 文 ${SENTENCES.length} 本 / 作れない ${broken.length}`);
+  for (const b of broken.slice(0, 20)) console.log(`\x1b[31m  ${b}\x1b[0m`);
+  if (broken.length) {
+    console.log('\n=== 失敗したテストがあります ===');
+    process.exit(1);
+  }
+}
+
 // 語彙は 1 文字の漢字だけ。かなも 2 字以上の語も入れない。
 //
 // 2 漢字のな形容詞 (滑らか 適切 確実…) も入れない。
@@ -468,8 +569,10 @@ if (syntaxBad) {
     '静', '穏', '無', '厳', '敵', '己', '皆', '奇', '豪', '雅', '華', '麗', '燦', '精', '密',
     '真', '素', '正', '賢', '酷', '確', '活', '端', '滑', '準', '霊', '適',
     '剛', '壮', '清', '骨', '魂',
-    // 鍛冶と具足の形態語 (盾・壁と同じ「物」の語)
+    // 鍛冶と具足の物の語 (盾・壁と同じ「物」の語)
     '甲', '鞘', '鍔', '釘', '槌', '鈴', '晶', '柄',
+    // 道具の基本武器 (第 1 戦から選べる)
+    '鋏', '鋸',
     // 核語
     '志', '力', '巧', '守', '感', '智', '気',
     // 追加語彙。1 文字で意味の通る語だけを選んである (数・体・獣・道具・自然)。
@@ -479,7 +582,7 @@ if (syntaxBad) {
 
   // 動詞 (「斬」「貫」) と接続詞は 1 文字が普通なので対象外。
   // -fragment な体言・効果語だけを調べた。
-  const NOUNISH = new Set(['element', 'phenom', 'form', 'modifier']);
+  const NOUNISH = new Set(['element', 'phenom', 'weapon', 'modifier']);
   const stray = Object.keys(WORDS).filter((w) => w.length === 1
     && NOUNISH.has(WORDS[w].cat)
     && !ADJ_STEMS.has(w) && !NA_ADJ_STEMS.has(w) && !OK_ONE.has(w));
@@ -490,7 +593,7 @@ if (syntaxBad) {
   //   - 二字熟語は形を表す語 (刃・弾・球・光・雷…) を使わない。
   //     「火球」のように形の熟語を戻すと、名前と効果がずれる (以前の失敗)。
   //   - 二字熟語は語彙から引ける語だけ (動詞も可。接続詞・末尾語・「人」は不可)。
-  const { DRAWABLE_ALL } = await import(new URL('../js/data/words.js', import.meta.url));
+  const { DRAWABLE_ALL, isShapeWord } = await import(new URL('../js/data/words.js', import.meta.url));
   const drawable = new Set(DRAWABLE_ALL);
   const broken = [];
   for (const k of Object.keys(PHRASE_BONUS)) {
@@ -504,7 +607,7 @@ if (syntaxBad) {
       // 辞書に実在する熟語 (雷光・剣豪) は形の語や武器語を含んでよい。
       if (p.src !== 'dict') {
         // 約束は実在の名詞で、束は形ではなく「たば」の意味。例外的に認める。
-        if (k !== '約束' && segs.some((w) => WORDS[w]?.cat === 'form')) broken.push(`${k} (二字熟語に形の語)`);
+        if (k !== '約束' && segs.some((w) => isShapeWord(w))) broken.push(`${k} (二字熟語に形の語)`);
         if (segs.some((w) => !drawable.has(w))) broken.push(`${k} (語彙から引けない語)`);
       }
     }

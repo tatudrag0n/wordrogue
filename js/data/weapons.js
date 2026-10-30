@@ -13,8 +13,8 @@
 // level を上げるほど基礎値が伸びる。文の長さは武器レベルとは無関係で 10 文字まで。
 // ============================================================================
 
-import { WEAPON_WORD_SET } from './words.core.js?v=1.47';
-import { WORDS, weaponHeadKind } from './words.js?v=1.47';
+import { WEAPON_WORD_SET } from './words.core.js?v=1.48';
+import { WORDS, weaponHeadKind } from './words.js?v=1.48';
 
 /**
  * kind の種類と挙動:
@@ -201,6 +201,21 @@ export const WEAPONS = {
     grow: { dmg: 3.6, rate: 0.08, range: 8, area: 2.4 },
     startWord: '嵐', startWord2: '豪', maxLevel: 8, unlock: { stage: 19 },
   },
+  // ── 道具の基本武器。鋏は挟み切る短い二枚刃、鋸は挽き切る wide な刃。──
+  scissors: {
+    id: 'scissors', name: '鋏', kind: 'slash', glyph: '鋏', tail: '鋏',
+    desc: '二枚の刃で挟み切る。間合いは短いが、急所を狙う。',
+    base: { dmg: 8, rate: 2.2, range: 78, arc: 1.5, size: 0.9, crit: 0.16 },
+    grow: { dmg: 2.6, rate: 0.16, range: 3, arc: 0.04 },
+    startWord: '鋭', startWord2: '斬', maxLevel: 8, unlock: { stage: 1 },
+  },
+  saw: {
+    id: 'saw', name: '鋸', kind: 'slash', glyph: '鋸', tail: '鋸',
+    desc: '歯を立てて挽き切る。ゆっくりだが、広く深く裂く。',
+    base: { dmg: 13, rate: 1.15, range: 122, arc: 2.5, area: 10, size: 1.1, knock: 40, crit: 0.05 },
+    grow: { dmg: 4.1, rate: 0.08, range: 6, arc: 0.05, area: 2 },
+    startWord: '鋼', startWord2: '裂', maxLevel: 8, unlock: { stage: 2 },
+  },
 };
 
 export const WEAPON_IDS = Object.keys(WEAPONS);
@@ -212,15 +227,17 @@ export const WEAPON_MAX = 3;
  * 武器語 (基本武器) と、描画の形・攻撃の型の対応。
  *
  * ここに載っている語だけが武器語。文の中に置くと攻撃の型を決める。
- * 環・弾・玉・球・壁 のような形態語は載せない — ただの語なので、
+ * 環・弾・玉・球・壁 のような語は載せない — ただの語 (効果) なので、
  * 攻撃の型は変えない (その武器の既定の型がそのまま残る)。
  * 武器語が文に無ければ、その武器の既定の型になる。
+ * **「形態語」という分類は無い。** 形を決めるのは基本武器の 18 語だけ。
  */
 export const FORM_SHAPE = {
   // 斬撃
   刃: ['blade', 'slash'], 剣: ['blade', 'slash'], 刀: ['blade', 'slash'],
   斧: ['blade', 'slash'], 槌: ['blade', 'slash'], 牙: ['blade', 'slash'], 爪: ['blade', 'slash'],
   拳: ['blade', 'slash'],
+  鋏: ['blade', 'slash'], 鋸: ['blade', 'slash'],
   // 射撃
   銃: ['shot', 'shot'], 杖: ['orb', 'shot'],
   弓: ['arrow', 'shot'], 槍: ['arrow', 'shot'], 矛: ['arrow', 'shot'],
@@ -236,10 +253,8 @@ export const FORM_SHAPE = {
  */
 export const BASIC_WEAPONS = WEAPON_WORD_SET;
 
-/** 形態語のうち、武器語ではないもの (弾・環・玉…)。ただの語。 */
-export const FORM_WORDS = new Set(
-  Object.keys(WORDS).filter((w) => WORDS[w].cat === 'form' && !BASIC_WEAPONS.has(w)),
-);
+/** @deprecated 形態語という分類は無くなった。常に空。 */
+export const FORM_WORDS = new Set();
 
 /** 現象語が特殊武器になったときの形と攻撃の型。 */
 export const SPECIAL_SHAPE = {
@@ -267,7 +282,7 @@ export const VERB_SHAPE = {
  * 特殊武器: **属性語と現象語だけ**。炎・水・岩・雷・光・闇のような属性語は、
  * 攻撃できる動詞が付いている場合のみ武器として成立する。
  *   例 「天焦がす滅亡の光」… 焦がす (動詞の述語形) があるので「光」が武器になる。
- * 形態語 (玉・環・弾 …) は属性語ではないので武器の頭にならない (ただの語)。
+ * 弾・環・玉 のような物の語は属性語ではないので武器の頭にならない (ただの語)。
  */
 
 
@@ -341,15 +356,13 @@ export function defForForm(text) {
  * この語から新しい文 (武器) を作れるか。
  *   基本武器の語 … 置いてすぐ攻撃の型が決まる。
  *   属性語・現象語 … 特殊武器。攻撃できる動詞を述語に足すまで無効。
- * 形態語 (弾・環・玉…) は武器語ではないので作れない。
+ * 弾・環・玉 のような物の語は武器語ではないので作れない。
+ * (「形態語」という分類は無い。武器の頭になれるのは基本武器だけ)
  * @returns {{ok:boolean, kind:string|null, reason:string}}
  */
 export function canCraftFrom(text) {
   const head = weaponHeadKind(text);
   if (head) return { ok: true, kind: head, reason: '' };
-  if (WORDS[text]?.cat === 'form') {
-    return { ok: false, kind: null, reason: 'form' };
-  }
   return { ok: false, kind: null, reason: 'notweapon' };
 }
 

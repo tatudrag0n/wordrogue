@@ -14,17 +14,17 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js?v=1.47';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan } from '../data/words.js?v=1.47';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js?v=1.48';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.48';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
 /**
- * 形態語かどうか。武器語 (攻撃の型を決める語) はこのうち基本武器の 14 語だけ。
- * 弾・環・玉 のような形態語はただの語だが、「形を重ねない」並びの規則は
- * 同じものを使うので、判定は形態語まとめて見る。
+ * 形を表す語か。**分類ではない** — 「刃弾」「弾環」のような並びを落とす
+ * 文法の規則にだけ使う (words.core.js の SHAPE_WORDS)。
+ * 語のカテゴリに「形態」は無く、弾・環・玉 はただの語 (効果)。
  */
-const isForm = (text) => WORDS[text]?.cat === 'form';
+const isForm = (text) => isShapeWord(text);
 
 /** 手の属性が武器に与える、状態異常以外の小さな特徴。 */
 const HAND_TRAITS = {
@@ -135,8 +135,8 @@ export class WeaponInst {
 
   /**
    * 文の中の特殊武器 (末尾から見て最初に見つかったもの)。
-   * 属性語と、基本武器でない形態語。武器になるのは攻撃できる動詞が
-   * 付いているときだけ (hasAttackVerb)。
+   * 属性語と現象語。武器になるのは攻撃できる動詞が付いているときだけ
+   * (hasAttackVerb)。
    */
   get specialTail() {
     const ws = this.sentence.words;
@@ -191,8 +191,8 @@ export class WeaponInst {
   get fullText() { return this.sentence.text; }
 
   /**
-   * 文の中に 2 つ以上の形態語が並んでいないか。
-   * 「刃剣」「弾矢」は日本語に無い並びなので落とす。
+   * 文の中に 2 つ以上の形の語が並んでいないか。
+   * 「刃剣」「刃弾」は日本語に無い並びなので落とす。分類ではなく文法の規則。
    * @returns {string[]|null}  並んでいた 2 語
    */
   adjacentForms() {
@@ -248,7 +248,7 @@ export class WeaponInst {
         gradeInfo: GRADES.broken,
       };
     }
-    // 形態語 (弾・環・玉…) はただの語なので、置く場所は自由。
+    // 弾・環・玉 のような物の語はただの語なので、置く場所は自由。
     // 「文は武器語で締める」という制約はやめた — 文末にこられると
     // 攻撃の型を失って不利益になるので、そこは型だけで判断する。
     return e;

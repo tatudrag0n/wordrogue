@@ -126,5 +126,52 @@ sec('武器を持たない・敵がいない画面でも落ちない');
   console.log('  60 フレーム / 例外なし');
 }
 
+sec('武器の絵は真上から見た形 (銃は銃身の軸で上下対称)');
+{
+  // 記録用の 2D コンテキスト。drawWeaponGlyph が描いた点だけを集める。
+  const rec = () => {
+    const calls = [];
+    const g = new Proxy({}, {
+      get(t, k) {
+        if (k in t) return t[k];
+        if (typeof k === 'symbol') return undefined;
+        const fn = (...args) => { calls.push([k, args]); };
+        t[k] = fn;
+        return fn;
+      },
+      set(t, k, v) { t[k] = v; return true; },
+    });
+    return { g, calls };
+  };
+  // 銃身の軸 (y = 0) を挟んで上下が対称か。横から見た拳銃の絵は対称にならない。
+  const symmetric = (calls) => {
+    const pts = [];
+    for (const [name, a] of calls) {
+      if (name === 'moveTo' || name === 'lineTo') pts.push([a[0], a[1]]);
+      else if (name === 'quadraticCurveTo') { pts.push([a[0], a[1]]); pts.push([a[2], a[3]]); }
+      else if (name === 'arc' || name === 'ellipse') pts.push([a[0], a[1]]);
+      else if (name === 'fillRect' || name === 'strokeRect') {
+        pts.push([a[0], a[1]]); pts.push([a[0], a[1] + a[3]]);
+      }
+    }
+    const off = pts.filter(([, y]) => Math.abs(y) > 1e-6);
+    if (off.length < 8) return { ok: false, why: `描いた点が少なすぎる: ${off.length}`, off };
+    const asym = off.filter(([, y]) => !off.some(([, y2]) => Math.abs(y2 + y) < 1e-6));
+    return { ok: asym.length === 0, why: `軸で対称でない点: ${JSON.stringify(asym)}`, off };
+  };
+
+  const renderer = new Renderer(canvas);
+  for (const [glyph, want] of [['銃', true], ['鋏', true], ['鋸', false]]) {
+    const { g, calls } = rec();
+    let threw = null;
+    try { renderer.drawWeaponGlyph(g, glyph, 1, '#d4a94e', 1); } catch (e) { threw = e; }
+    ok(!threw, `「${glyph}」の絵で例外: ${threw && threw.message}`);
+    const sym = symmetric(calls);
+    ok(sym.ok === want,
+      `「${glyph}」の絵が真上から見た形になっていない (${sym.why})`);
+  }
+  console.log('  銃・鋏は銃身/軸を挟んで対称 / 鋸は歯が片側 (真上から見た形)');
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

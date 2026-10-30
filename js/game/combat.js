@@ -7,8 +7,8 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.47';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.47';
+import { ELEMENTS } from '../data/words.js?v=1.48';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.48';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -92,7 +92,7 @@ export function fireWeapon(run, wi, res) {
   const st = res.stats;
   if (res.heal) st.heal = true;
   const p = run.player;
-  // 攻撃の種類は文中の形態語が決めている (無ければ武器の既定)。
+  // 攻撃の種類は文中の武器語 (基本武器) が決めている (無ければ武器の既定)。
   const kind = res.kind || wi.def.kind;
 
   wi.flash = 1;

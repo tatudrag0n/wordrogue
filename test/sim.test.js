@@ -261,7 +261,7 @@ sec('すべての武器が文の中の武器語で攻撃を決める');
 }
 
 
-sec('形態語 (弾・環・玉…) は武器語ではなくただの語');
+sec('物の語 (弾・環・玉…) は武器語ではなくただの語 / 分類に「形態」は無い');
 {
   const PS = { atk: 1, atkMul: 1, crit: 0, lifesteal: 0, magnet: 0, xpMul: 0, armor: 0, slowImmune: 0, hp: 100 };
   const sword = new WeaponInst('sword', 1);
@@ -270,21 +270,21 @@ sec('形態語 (弾・環・玉…) は武器語ではなくただの語');
   for (const w of ['弾', '環', '玉', '球', '壁', '輪', '石', '矢', '珠', '還', '戈', '盾', '網']) {
     ok(!BASIC_WEAPONS.has(w), `「${w}」がまだ基本武器として登録されている`);
     ok(!FORM_SHAPE[w], `「${w}」が FORM_SHAPE (武器語 -> 形) に残っている`);
-    ok(WORDS[w] && WORDS[w].cat === 'form', `「${w}」が形態語として辞書に無い`);
+    ok(WORDS[w] && WORDS[w].cat === 'modifier', `「${w}」がただの語 (効果) として辞書に無い`);
   }
   for (const w of WEAPON_WORDS) {
     ok(BASIC_WEAPONS.has(w) && !!FORM_SHAPE[w], `武器語「${w}」が FORM_SHAPE に無い`);
   }
 
-  // 形態語は文のどこにでも置ける (文末も)。ただし攻撃の型は変えない。
+  // 物の語は文のどこにでも置ける (文末も)。ただし攻撃の型は変えない。
   setFlat(sword, ['焔', '弾']);
   const tail = sword.resolve(PS);
   ok(tail.valid, `「焔弾」が成立しない: ${tail.reasonText}`);
   ok(tail.kind === 'slash' && tail.tail === null,
-    `形態語「弾」が攻撃の型を決めてしまう: ${tail.kind} / ${tail.tail}`);
+    `「弾」が攻撃の型を決めてしまう: ${tail.kind} / ${tail.tail}`);
 
-  // 語彙から引けるのは形態語のほう。武器語 (基本武器) は 3 択でだけ得る。
-  ok(DRAWABLE_ALL.includes('弾') && DRAWABLE_ALL.includes('環'), '形態語が語彙から引けない');
+  // 語彙から引けるのは物の語のほう。武器語 (基本武器) は 3 択でだけ得る。
+  ok(DRAWABLE_ALL.includes('弾') && DRAWABLE_ALL.includes('環'), '物の語が語彙から引けない');
   for (const w of WEAPON_WORDS) ok(!DRAWABLE_ALL.includes(w), `武器語「${w}」が語彙から引ける`);
   // 3 択に出る武器語は基本武器 14 語だけ。
   const drawn = new Set();
@@ -300,7 +300,7 @@ sec('形態語 (弾・環・玉…) は武器語ではなくただの語');
   const pair = sword.resolve(PS);
   ok(!pair.valid && pair.reason === 'tailform', `「刃弾」が成立してしまった: ${pair.reason}`);
 
-  console.log(`  武器語 ${WEAPON_WORDS.length} 語のみ / 形態語は語彙から引ける / 3 択の武器語 ${drawn.size} 種`);
+  console.log(`  武器語 ${WEAPON_WORDS.length} 語のみ / 物の語は語彙から引ける / 3 択の武器語 ${drawn.size} 種`);
 }
 
 sec('不成文の武器は無効化される');
@@ -1293,11 +1293,11 @@ sec('武器 1 つにつき複数語を並べられる');
   console.log(`  上限 → ${wi.sentence.count} 語 ${wi.sentence.len} 文字「${wi.sentence.text}」`);
 
   // 熟語は 1 文字 3 語。毒 + 蝕 + 弾 のように乗る。
-  // 「弾」は武器語ではないただの形態語なので、文末に置いても成立してよい。
+  // 「弾」は武器語ではないただの語なので、文末に置いても成立してよい。
   // (攻撃の型は文の中の武器語が決める — 弾があっても変わらない)
   const idiomTail = setFlat(wi, ['毒', '蝕', '弾']).resolve(r.player.stats);
   ok(idiomTail.valid, `「毒蝕弾」が成立しない: ${idiomTail.reasonText}`);
-  ok(idiomTail.kind === 'slash', `形態語「弾」で攻撃が変わった: ${idiomTail.kind}`);
+  ok(idiomTail.kind === 'slash', `「弾」で攻撃が変わった: ${idiomTail.kind}`);
   const idiom = setFlat(wi, ['毒', '蝕', '弾', 'の', '硬', '刃']).resolve(r.player.stats);
   ok(idiom.valid, `「毒蝕弾の硬刃」が成立しない: ${idiom.reasonText}`);
   ok(idiom.evalResult.idiom?.phrase === '毒蝕弾', `熟語が乗らない: ${idiom.evalResult.idiom}`);
@@ -1885,11 +1885,11 @@ sec('属性語から特殊武器を戦闘中に作れる');
   ok(lit.active && lit.special && lit.tail === '光' && lit.kind === 'beam',
     `動詞を付けても発動しない: active=${lit.active} special=${lit.special} tail=${lit.tail} kind=${lit.kind}`);
 
-  // 形態語 (弾・環・玉…) からは作れない。武器語は基本武器だけ。
+  // 物の語 (弾・環・玉…) からは作れない。武器語は基本武器だけ。
   const tama = makeWord('弾');
   r.lexicon[1] = tama;
   const bad = r.craftWeaponFrom(tama);
-  ok(!bad.ok && bad.reason === 'form', `形態語から文が作れてしまった: ${JSON.stringify(bad)}`);
+  ok(!bad.ok && bad.reason === 'notweapon', `物の語から文が作れてしまった: ${JSON.stringify(bad)}`);
 
   // 基本武器の語は作れる (従来の 3 択のほかに、手動でも)。
   const ken = makeWord('剣');
@@ -1925,7 +1925,7 @@ sec('属性語から特殊武器を戦闘中に作れる');
   ok(full.chooseWord(991, 0, 0), '満杯の 3 択が選べない');
   ok(full.weapons.length === before + 1,
     `語彙が満杯のとき武器語から新しい文ができない: ${before} -> ${full.weapons.length}`);
-  console.log(`  光の文 → 動詞待ち → 焦がすで ${lit.kind} / 形態語は不可 / 満杯でも文が増える`);
+  console.log(`  光の文 → 動詞待ち → 焦がすで ${lit.kind} / 物の語では作れない / 満杯でも文が増える`);
 }
 
 sec('頭の賢い語で語彙の枠が広がる');

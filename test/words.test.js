@@ -1,5 +1,5 @@
 // 語辞書と文判定の単体テスト。  node test/words.test.js
-import { WORDS, DRAWABLE, DRAWABLE_ALL, SIMPLE_POOL, CONNECTOR_SET, CONNECTOR_LIST, segment, evaluate, makeWord, drawWord, drawWeaponWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS, CONNECTORS, findCompound, WEAPON_WORDS, isWeaponWord } from '../js/data/words.js';
+import { WORDS, DRAWABLE, DRAWABLE_ALL, SIMPLE_POOL, CONNECTOR_SET, CONNECTOR_LIST, segment, evaluate, makeWord, drawWord, drawWeaponWord, WORDS_BY_CAT, DUPLICATES, PHRASE_BONUS, CONNECTORS, findCompound, WEAPON_WORDS, isWeaponWord, SHAPE_WORDS, isShapeWord } from '../js/data/words.js';
 import { canConnect, connectorFor, formOf, POS, connectorsAfter, formAfter, COMPOUND_POOLS } from '../js/data/words.connect.js';
 import { NOUN_POOL } from '../js/data/words.pool.js';
 import { CATEGORIES as CATALOG } from '../js/data/words.core.js';
@@ -16,19 +16,27 @@ sec('辞書の健全性');
 ok(Object.keys(WORDS).length > 200, `語数太少: ${Object.keys(WORDS).length}`);
 ok(DRAWABLE.length > 150, `引ける語が少ない: ${DRAWABLE.length}`);
 // **武器語 (基本武器) は語彙から引けない** — レベルアップの 3 択でだけ得る。
-// 形態語の残り (弾・環・玉・壁…) はただの語なので語彙に出る。
+// 弾・環・玉・壁 のような物の語はただの語 (効果) なので語彙に出る。
+// **「形態語」という分類は無い** — 辞書にも一覧にも出さない。
 for (const w of WEAPON_WORDS) {
   ok(!DRAWABLE.includes(w), `武器語「${w}」が語彙から引ける`);
   ok(!DRAWABLE_ALL.includes(w), `武器語「${w}」が語彙 (動詞込み) から引ける`);
   ok(!SIMPLE_POOL.includes(w), `武器語「${w}」が開始語彙の補充に出る`);
 }
 for (const w of ['弾', '環', '玉', '壁', '球', '石', '輪', '盾', '網', '矢', '珠', '還', '戈']) {
-  ok(WORDS[w] && WORDS[w].cat === 'form', `形態語「${w}」が形態として無い`);
-  ok(!isWeaponWord(w), `形態語「${w}」が武器語として登録されている`);
-  ok(DRAWABLE_ALL.includes(w), `形態語「${w}」が語彙から引けない (ただの語のはず)`);
+  // 武器語ではない物の語は、ただの語 (効果) として扱う。
+  ok(WORDS[w] && WORDS[w].cat === 'modifier', `物の語「${w}」が効果として無い`);
+  ok(!isWeaponWord(w), `物の語「${w}」が武器語として登録されている`);
+  ok(DRAWABLE_ALL.includes(w), `物の語「${w}」が語彙から引けない (ただの語のはず)`);
+  // 形の語として並びの判定にだけ掛かる (分類ではない)。
+  ok(isShapeWord(w) === SHAPE_WORDS.has(w), `形の語の判定が揃っていない: ${w}`);
 }
-ok(!SIMPLE_POOL.some((w) => WORDS[w].cat === 'form'), 'SIMPLE_POOL に形態語が混じっている');
-ok(WORDS['剣'] && WORDS['銃'] && WORDS['環'], '武器語・形態語が辞書から消えている');
+// 分類に「形態」は無い。辞書のタブにも出さない。
+ok(CATALOG.form === undefined, 'カテゴリに「形態」が残っている');
+ok(WORDS_BY_CAT.form === undefined, 'WORDS_BY_CAT に「形態」が残っている');
+ok(Object.values(WORDS).every((w) => w.cat !== 'form'), 'カテゴリ form の語が残っている');
+ok(Object.values(WORDS).every((w) => (w.cats || []).indexOf('form') < 0), 'cats に form が残っている');
+ok(WORDS['剣'] && WORDS['銃'] && WORDS['環'], '武器語・物の語が辞書から消えている');
 for (const w of Object.keys(WORDS)) {
   ok(typeof w === 'string' && w.length > 0, `不正な語: ${JSON.stringify(w)}`);
   ok(!/[\s]/.test(w), `語に空白を含む: ${JSON.stringify(w)}`);
@@ -45,7 +53,7 @@ ok(DUPLICATES.length === 0, `語の重複定義: ${JSON.stringify(DUPLICATES)}`)
 sec('自身語という分類は無い');
 {
   // 「体に効く語」を別カテゴリにすると、武器の文で使えない語が増える。
-  // なので 体をきたえる語も 効果語・形態語・動詞のまま、持つキーだけで区別する。
+  // なので 体をきたえる語も 効果語・物の語・動詞のまま、持つキーだけで区別する。
   ok(CATALOG.buff === undefined, 'buff カテゴリが CATEGORIES に残っている');
   ok(WORDS_BY_CAT.buff === undefined, 'WORDS_BY_CAT に buff が残っている');
   const body = Object.keys(WORDS).filter((w) => WORDS[w].player);
@@ -175,14 +183,14 @@ for (const w of Object.keys(WORDS)) {
 
 sec('熟語はすべて到達可能であること');
 {
-  // 形態語 (末尾語) は語彙から引けない。末尾語を含む熟語は対象外。
+  // 武器語 (末尾語) は語彙から引けない。武器語を含む熟語は対象外。
   // 動詞は語彙から引ける (DRAWABLE_ALL)。爆発 = 爆 + 発 のような二字熟語に要る。
   const avail = new Set([...DRAWABLE_ALL, ...CONNECTOR_SET]);
   const unreachable = [];
   for (const key of Object.keys(PHRASE_BONUS)) {
     const segs = segment(key);
     if (!segs) { unreachable.push(`${key} (分割不能)`); continue; }
-    if (segs.some((w) => WORDS[w]?.cat === 'form')) continue;
+    if (segs.some((w) => WORDS[w]?.cat === 'weapon')) continue;
     const missing = segs.filter((w) => !avail.has(w));
     if (missing.length) unreachable.push(`${key} (語が無い: ${missing.join('/')})`);
   }
@@ -261,7 +269,7 @@ sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
     // 約束は実在の名詞で、束は形ではなく「たば」の意味。例外的に認める。
     const formOk = k === '約束';
     if (p.src !== 'dict' && !formOk) {
-      ok([...k].every((c) => WORDS[c].cat !== 'form'), `二字熟語「${k}」に形の語`);
+      ok([...k].every((c) => !isShapeWord(c)), `二字熟語「${k}」に形の語`);
     }
     // 効果は三字熟語より小さい。
     ok(p.power < PHRASE_BONUS['毒蝕弾'].power && p.natural < PHRASE_BONUS['毒蝕弾'].natural,

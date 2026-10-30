@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.47">
+<link rel="stylesheet" href="css/style.css?v=1.48">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -285,7 +285,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.47</div>
+      <div class="title-version">Ver. 1.48</div>
     </div>
   </div>
 
@@ -363,12 +363,13 @@
       <p>
       攻撃を決める<strong>武器語</strong>は <code>刃</code> <code>剣</code> <code>刀</code> <code>斧</code>
       <code>槍</code> <code>矛</code> <code>牙</code> <code>爪</code> <code>弓</code> <code>鞭</code>
-      <code>鎖</code> <code>杖</code> <code>拳</code> <code>銃</code> <code>針</code> の <strong>15 語だけ</strong>。
+      <code>鎖</code> <code>杖</code> <code>拳</code> <code>銃</code> <code>針</code>
+      <code>鋏</code> <code>鋸</code> の <strong>18 語だけ</strong>。
       <strong>自動で付かない</strong>ので、<strong>レベルアップの 3 択</strong>で
       <strong>他の語より低い確率</strong>で引く。
       </p>
       <ul class="howto-list">
-      <li>刃・剣・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃・針は、それだけで武器になる（基本武器）</li>
+      <li>刃・剣・刀・斧・槌・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃・針・鋏・鋸は、それだけで武器になる（基本武器）</li>
       <li>炎・雷・光・渦のような属性・現象の語は、攻撃できる動詞が付いたときだけ武器になる（特殊武器）</li>
       <li>弾・環・玉・壁・球のような語は<strong>武器語ではない</strong>。ただの語なので語彙から引けるし、文のどこに置いてもよい（文末でなくてもよい）</li>
       <li>武器語を文に置くと、その武器語が攻撃を決める。武器語どうしは隣り合えない。同じ<strong>形</strong>を表す語どうしも隣り合えない</li>
@@ -383,8 +384,8 @@
       <h3>3. 語の種類</h3>
       <ul class="howto-list">
       <li><b>属性</b> … 火・氷・雷・毒など。色と状態異常が決まる。</li>
-      <li><b>形態</b> … 剣・銃・弓と、弾・矢・球・環・壁・甲・鍔・鞘など。<strong>うち基本武器の 16 語だけが武器語</strong>で、語彙からは引けない。残りは語彙から引けるただの語（攻撃の型は決めない）</li>
-      <li><b>効果</b> … 貫・裂・散、強・速・硬など。数値を上げる。</li>
+      <li><b>武器</b> … 刃・剣・刀・斧・槌・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃・針・鋏・鋸の <strong>18 語だけ</strong>。語彙からは引けず、<strong>3 択</strong>で得る。文に置くと攻撃の型が決まる</li>
+      <li><b>効果</b> … 貫・裂・散、強・速・硬など。数値を上げる。弾・矢・球・環・壁・甲・鍔・鞘のような物の語もここ。<strong>「形態」という分類は無い</strong></li>
       <li><b>動詞</b> … <code>燃</code> <code>貫</code> <code>凍</code> など。1 枚で 1 つの動作になる。</li>
       <li><b>接続</b> … <code>る</code> <code>の</code> <code>られた</code> など。語ごとに付く送り仮名が決まっている。
       <strong>直前の語に結合する</strong>（下項）。</li>
@@ -561,7 +562,7 @@
       <strong>辞書</strong>を開くと、使えるすべてのことばを一覧できる。
       カテゴリで絞り込んだり、名前で検索したりできる。
       開いている間は時間が止まる。
-      基本武器（剣・銃・弓 …）は<strong>武器語</strong>なので語彙から引けず、環・弾・玉のような語はただの語なので引ける。
+      基本武器（剣・銃・弓・鋏・鋸 …）は<strong>武器語</strong>なので語彙から引けず、環・弾・玉のような語はただの語なので引ける。辞書に「形態」の分類は無い。
       </p>
       <ul class="howto-list">
       <li>戦闘中 … HUD の <strong>「辞」</strong> ボタン</li>
@@ -640,10 +641,12 @@
       <li><b>突</b> … 槍と矛は直突き・連突き・上段突きで、間合いのぶん腕ごと伸びる</li>
       <li><b>打</b> … 槌は鉄槌・岩砕き・大打ち。落とす瞬間に体が沈み、地面に輪が出る</li>
       <li><b>爪・牙・拳</b> … 爪は 3 本の鉤爪で引っ掻き、牙は噛みつき、拳は正拳・横拳・連打</li>
+      <li><b>鋏・鋸</b> … 鋏は要を中心に二枚の刃を閉じて挟み切り、鋸は押し引きで挽く</li>
       <li><b>射</b> … 銃は腰溜め・照準・速射で反動が跳ね、弓は引き絞ってから放つ</li>
       <li><b>操</b> … 杖と光は陣を描いてから放ち、鞭と鎖はしなる線で薙ぎ、環と輪は回り続ける</li>
       </ul>
       <p>
+      武器の絵は<strong>真上から見た形</strong>で描く（銃も横からではなく上から。銃身の軸を挟んで対称）。
       文に武器語を置くと、<strong>その武器語の持ち方</strong>に変わる。
       「貫通する剣」なら剣の振りで貫通し、「約束された槌」なら槌の振りで約束の力が乗る。
       </p>
@@ -929,6 +932,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.47"></script>
+<script type="module" src="js/main.js?v=1.48"></script>
 </body>
 </html>

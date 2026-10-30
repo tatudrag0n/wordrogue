@@ -202,6 +202,26 @@ export const WEAPON_MOTIONS = {
       { id: 'han', from: 0.15, to: -0.15, curve: -0.04, label: '放気' },
     ],
   },
+  // ── 鋏: 二枚の刃で挟む。短い予備動作から、まっすぐ閉じる。──
+  shears: {
+    style: 'arc', family: 'slash', duration: 0.34, windup: 0.30, impact: 0.52, follow: 0.78,
+    rest: -0.32, lunge: 6, weight: 0.45,
+    variants: [
+      { id: 'hasami', from: -1.00, to: 1.00, curve: 0.04, label: '挟み切り' },
+      { id: 'kaeshi', from: 1.00, to: -1.00, curve: -0.04, label: '返し挟み' },
+      { id: 'tachikiri', from: -1.00, to: 1.00, curve: 0.02, label: '断ち切り' },
+    ],
+  },
+  // ── 鋸: 押し引きで挽く。ゆっくり大きく薙ぐ。──
+  saw: {
+    style: 'sweep', family: 'slash', duration: 0.72, windup: 0.42, impact: 0.58, follow: 0.86,
+    rest: -0.95, lunge: 11, weight: 1.35,
+    variants: [
+      { id: 'hikikiri', from: -1.00, to: 1.00, curve: 0.09, label: '引き切り' },
+      { id: 'oshikiri', from: 1.00, to: -1.00, curve: -0.09, label: '押し切り' },
+      { id: 'kaeshibiki', from: -0.85, to: 0.85, curve: 0.05, label: '返し挽き' },
+    ],
+  },
   blade: {
     style: 'arc', family: 'slash', duration: 0.52, windup: 0.36, impact: 0.55, follow: 0.82,
     rest: -0.6, lunge: 7, weight: 0.8,
@@ -218,6 +238,7 @@ export const WEAPON_MOTIONS = {
 export const GLYPH_MOTION = {
   刃: 'sword', 剣: 'longsword', 刀: 'tachi', 斧: 'greatblade', 槌: 'hammer',
   牙: 'fang', 爪: 'claw', 拳: 'fist', 銃: 'gun', 杖: 'staff',
+  鋏: 'shears', 鋸: 'saw',
   弓: 'bow', 槍: 'spear', 矛: 'spear', 針: 'needle', 鞭: 'whip', 鎖: 'chain',
   環: 'blade', 輪: 'blade', 光: 'staff', 雷: 'staff', 渦: 'orb', 弾: 'orb',
   玉: 'orb', 球: 'orb', 矢: 'bow', 爆: 'orb', 還: 'throw',

@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.47';
+} from '../data/words.js?v=1.48';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.47';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.48';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.47';
-import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.47';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.47';
+import { WeaponInst } from './weapon.js?v=1.48';
+import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.48';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.48';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -295,7 +295,7 @@ export class Run {
    * 3 つの候補を作って、選んでもらう。
    * 接続詞は出ない (語の横にあるので、文を作るとき、切り替えるだけ)。
    * 武器語 (基本武器 14 語) は他の語より低い確率で入る。
-   *   環・弾・玉 のような形態語は武器語ではないので、ここでは出ない (語側で引ける)。
+   *   環・弾・玉 のような物の語は武器語ではないので、ここでは出ない (語側で引ける)。
    * 選んでいる間はゲーム (敵・弾・ステージ時間) が止まる。
    * 選択 UI の制限時間が切れたら 1 番目を自動で取る。
    */
@@ -404,7 +404,7 @@ export class Run {
    * 武器語 (基本武器) を得ると、新しい文を作れる。
    * 武器は最大 3 つまで。3 つ埋まっていれば語彙に置いたままになる
    * (鍛冶で文を 1 つ外せば、そこから作れる)。
-   *   形態語 (弾・環・玉…) は武器語ではないので、文を作らない。
+   *   弾・環・玉 のような物の語は武器語ではないので、文を作らない。
    * @returns {{ok:boolean, reason:string, wi?:object}}
    */
   absorbWeaponWord(word) {
@@ -425,7 +425,7 @@ export class Run {
    *   基本武器 (剣・銃・刃…) … 置いてすぐ攻撃の型が決まる。
    *   属性語・現象語 (光・雷・渦…) … **特殊武器**。攻撃できる動詞を述語に
    *     付けた瞬間から撃てる (文だけで成立していても動詞が無ければ撃たない)。
-   *   形態語 (弾・環・玉…) … 武器語ではないので作れない。
+   *   弾・環・玉 のような物の語 … 武器語ではないので作れない。
    *
    * 語彙から語を 1 つ取り出して新しい文の頭にする。語は消えない (文へ移る)。
    * @param {object} word 語彙にある語
@@ -435,9 +435,9 @@ export class Run {
     if (!word) return { ok: false, reason: 'noword' };
     const can = canCraftFrom(word.text);
     if (!can.ok) {
-      const why = can.reason === 'form'
-        ? `「${word.text}」は武器語ではない (形態語はただの語)。武器語は刃・剣・銃…だけ`
-        : `「${word.text}」からは文を作れない。属性語・現象語・基本武器の語だけ`;
+      const why = `「${word.text}」からは文を作れない。文の頭になれるのは`
+        + '基本武器の語 (刃・剣・刀・斧・槌・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃・針・鋏・鋸) と'
+        + '属性語・現象語だけ';
       this.pushHint(why);
       return { ok: false, reason: can.reason, reasonText: why };
     }

@@ -32,7 +32,7 @@ import { WORDS, weaponHeadKind } from './words.js?v=1.47';
 export const WEAPONS = {
   sword: {
     id: 'sword', name: '刃', kind: 'slash', glyph: '刃', tail: '刃',
-    desc: '扇形を薙ぎ払う。近接の基本。',
+    desc: '斬撃を飛ばす。刃を離れた波が、扇ごと薙ぎ払う。',
     base: { dmg: 9, rate: 1.9, range: 92, arc: 1.9, size: 1, crit: 0.05 },
     grow: { dmg: 3.2, rate: 0.1, range: 4, arc: 0.05 },
     startWord: '炎', startWord2: '必', maxLevel: 8, unlock: null,
@@ -103,7 +103,7 @@ export const WEAPONS = {
   // ── 追加分。末尾語が違えば攻撃も形も違になる。──
   tachi: {
     id: 'tachi', name: '刀', kind: 'slash', glyph: '刀', tail: '刀',
-    desc: '大きく振る。扇が広く、一振りで複数を薙ぐ。',
+    desc: '左右に大きく斬る。扇が広く、一振りで複数を薙ぐ。',
     base: { dmg: 15, rate: 0.75, range: 112, arc: 2.9, size: 1.15, crit: 0.06 },
     grow: { dmg: 4.6, rate: 0.06, range: 5, arc: 0.08 },
     startWord: '炎', startWord2: '焔', maxLevel: 8, unlock: { stage: 14 },

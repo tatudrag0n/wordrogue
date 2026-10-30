@@ -31,173 +31,188 @@ const wrapAngle = (a) => {
  * 武器の描画形。攻撃の型 (slash / shot / whip …) が同じでも、
  * 武器語が違えば持ち方と振り方を変える。
  *   family … slash / thrust / smash / punch / ranged / cast / whip / throw
+ *   style  … 軌跡の作り方。同じ斬撃でも武器種で見え方を変える。
+ *     wave    … 刃そのものが刃から離れて飛ぶ斬撃波 (刃)
+ *     sweep   … 体の左右へ大きく薙ぐ (刀)
+ *     forward … 正面へ短く斬り込む (剣)
+ *     arc     … 標準の弧 (汎用の刃)
+ *     smash / punch / bite / claw / thrust / ranged / cast / whip / throw
+ *               … family ごとの描き方
+ *
+ * **variant の from / to / curve は「当たり判定の扇の半分の角度」に対する比**。
+ * 実際の角度は、攻撃の瞬間に扇 (st.arc) から決まる。扇の外へはみ出さないので、
+ * 見た目の刃の軌跡と当たる範囲が必ず一致する。
  */
 export const WEAPON_MOTIONS = {
+  // ── 刃: 斬撃が飛ぶ。刃から離れた三日月が、扇の外周 (間合い) まで走る。──
   sword: {
-    family: 'slash', duration: 0.50, windup: 0.34, impact: 0.54, follow: 0.80,
-    rest: -0.55, reach: 1, lunge: 5, weight: 0.7,
+    style: 'wave', family: 'slash', duration: 0.50, windup: 0.34, impact: 0.54, follow: 0.80,
+    rest: -0.55, lunge: 5, weight: 0.7,
     variants: [
-      { id: 'kesa', from: -1.85, to: 1.10, curve: 0.16, label: '袈裟斬り' },
-      { id: 'gyaku', from: 1.35, to: -1.00, curve: -0.12, label: '逆袈裟' },
-      { id: 'yoko', from: -2.05, to: 1.55, curve: 0.05, label: '横一文字' },
+      { id: 'kesa', from: -1.00, to: 1.00, curve: 0.07, label: '袈裟の斬撃波' },
+      { id: 'gyaku', from: 1.00, to: -1.00, curve: -0.06, label: '逆袈裟の斬撃波' },
+      { id: 'yoko', from: -1.00, to: 1.00, curve: 0.02, label: '横一文字の斬撃波' },
     ],
   },
+  // ── 刀: 左右に斬る。扇の端から端まで振り抜く。──
   tachi: {
-    family: 'slash', duration: 0.74, windup: 0.40, impact: 0.58, follow: 0.84,
-    rest: -0.9, reach: 1.08, lunge: 10, weight: 1.25,
+    style: 'sweep', family: 'slash', duration: 0.74, windup: 0.40, impact: 0.58, follow: 0.84,
+    rest: -1.00, lunge: 10, weight: 1.25,
     variants: [
-      { id: 'kata', from: -2.25, to: 1.80, curve: 0.22, label: '大薙ぎ' },
-      { id: 'kaeshi', from: 1.75, to: -1.95, curve: -0.2, label: '返し薙ぎ' },
-      { id: 'zanshin', from: -0.4, to: 2.5, curve: 0.12, label: '残心の太刀' },
+      { id: 'migi', from: -1.00, to: 1.00, curve: 0.10, label: '右薙ぎ' },
+      { id: 'hidari', from: 1.00, to: -1.00, curve: -0.10, label: '左薙ぎ' },
+      { id: 'kaeshi', from: -1.00, to: 1.00, curve: 0.05, label: '返し薙ぎ' },
+    ],
+  },
+  // ── 剣: 前方に斬る。正面から大きく外れない、短い斬り込み。──
+  longsword: {
+    style: 'forward', family: 'slash', duration: 0.58, windup: 0.36, impact: 0.57, follow: 0.82,
+    rest: -0.40, lunge: 8, weight: 0.9,
+    variants: [
+      { id: 'shomen', from: -1.00, to: 1.00, curve: 0.04, label: '正面斬り' },
+      { id: 'kiriage', from: 1.00, to: -1.00, curve: -0.04, label: '斬り上げ' },
+      { id: 'sashi', from: -1.00, to: 1.00, curve: 0.02, label: '突き込み' },
     ],
   },
   greatblade: {
-    family: 'smash', duration: 0.92, windup: 0.54, impact: 0.68, follow: 0.88,
-    rest: -1.1, reach: 1.16, lunge: 17, weight: 1.8,
+    style: 'smash', family: 'smash', duration: 0.92, windup: 0.54, impact: 0.68, follow: 0.88,
+    rest: -1.1, lunge: 17, weight: 1.8,
     variants: [
-      { id: 'onigiri', from: -2.4, to: 0.9, curve: 0.25, label: '鬼斬り' },
-      { id: 'kabuto', from: -0.25, to: 1.75, curve: -0.3, label: '兜割り' },
-      { id: 'tsubame', from: 2.2, to: -2.0, curve: 0.18, label: '燕返し' },
+      { id: 'onigiri', from: -1.00, to: 1.00, curve: 0.12, label: '鬼斬り' },
+      { id: 'kabuto', from: 1.00, to: -1.00, curve: -0.14, label: '兜割り' },
+      { id: 'tsubame', from: -1.00, to: 1.00, curve: 0.09, label: '燕返し' },
     ],
   },
   hammer: {
-    family: 'smash', duration: 1.00, windup: 0.62, impact: 0.72, follow: 0.90,
-    rest: -1.4, reach: 1.08, lunge: 13, weight: 2.2, ground: true,
+    style: 'smash', family: 'smash', duration: 1.00, windup: 0.62, impact: 0.72, follow: 0.90,
+    rest: -1.4, lunge: 13, weight: 2.2, ground: true,
     variants: [
-      { id: 'tettsui', from: -0.55, to: 0.18, curve: 0.32, label: '鉄槌' },
-      { id: 'gaten', from: -2.9, to: 1.2, curve: 0.26, label: '岩砕き' },
-      { id: 'daiuchi', from: 0.8, to: -0.9, curve: -0.34, label: '大打ち' },
+      { id: 'tettsui', from: -1.00, to: 1.00, curve: 0.10, label: '鉄槌' },
+      { id: 'gaten', from: 1.00, to: -1.00, curve: 0.12, label: '岩砕き' },
+      { id: 'daiuchi', from: -1.00, to: 1.00, curve: -0.14, label: '大打ち' },
     ],
   },
   axe: {
-    family: 'smash', duration: 0.82, windup: 0.47, impact: 0.64, follow: 0.86,
-    rest: -1.0, reach: 1.12, lunge: 12, weight: 1.5,
+    style: 'smash', family: 'smash', duration: 0.82, windup: 0.47, impact: 0.64, follow: 0.86,
+    rest: -1.0, lunge: 12, weight: 1.5,
     variants: [
-      { id: 'hagane', from: -2.2, to: 1.25, curve: 0.2, label: '鋼断ち' },
-      { id: 'maki', from: -1.1, to: 2.25, curve: -0.14, label: '巻き割り' },
-    ],
-  },
-  longsword: {
-    family: 'slash', duration: 0.58, windup: 0.36, impact: 0.57, follow: 0.82,
-    rest: -0.5, reach: 1.02, lunge: 8, weight: 0.9,
-    variants: [
-      { id: 'nagare', from: -1.55, to: 1.35, curve: 0.1, label: '流し斬り' },
-      { id: 'kiriage', from: 1.1, to: -1.45, curve: -0.1, label: '斬り上げ' },
-      { id: 'suiji', from: -2.0, to: 0.9, curve: 0.14, label: '水平斬り' },
+      { id: 'hagane', from: -1.00, to: 1.00, curve: 0.10, label: '鋼断ち' },
+      { id: 'maki', from: 1.00, to: -1.00, curve: -0.07, label: '巻き割り' },
     ],
   },
   claw: {
-    family: 'claw', duration: 0.38, windup: 0.22, impact: 0.48, follow: 0.76,
-    rest: -0.8, reach: 0.9, lunge: 9, weight: 0.5, passes: 3,
+    style: 'claw', family: 'claw', duration: 0.38, windup: 0.22, impact: 0.48, follow: 0.76,
+    rest: -0.8, lunge: 9, weight: 0.5, passes: 3,
     variants: [
-      { id: 'hikisaki', from: -1.25, to: 0.85, curve: 0.2, label: '引っ掻き' },
-      { id: 'juuji', from: 1.0, to: -1.15, curve: -0.16, label: '十字爪' },
-      { id: 'kama', from: -1.9, to: 1.45, curve: 0.12, label: '鎌爪' },
+      { id: 'hikisaki', from: -1.00, to: 1.00, curve: 0.10, label: '引っ掻き' },
+      { id: 'juuji', from: 1.00, to: -1.00, curve: -0.08, label: '十字爪' },
+      { id: 'kama', from: -1.00, to: 1.00, curve: 0.06, label: '鎌爪' },
     ],
   },
   fang: {
-    family: 'bite', duration: 0.42, windup: 0.48, impact: 0.56, follow: 0.76,
-    rest: -0.35, reach: 0.82, lunge: 15, weight: 0.8,
+    style: 'bite', family: 'bite', duration: 0.42, windup: 0.48, impact: 0.56, follow: 0.76,
+    rest: -0.35, lunge: 15, weight: 0.8,
     variants: [
-      { id: 'kamitsuki', from: -0.7, to: 0.62, curve: 0.09, label: '噛みつき' },
-      { id: 'hiki', from: 0.7, to: -0.55, curve: -0.08, label: '引き裂き' },
+      { id: 'kamitsuki', from: -1.00, to: 1.00, curve: 0.05, label: '噛みつき' },
+      { id: 'hiki', from: 1.00, to: -1.00, curve: -0.05, label: '引き裂き' },
     ],
   },
   fist: {
-    family: 'punch', duration: 0.30, windup: 0.42, impact: 0.48, follow: 0.72,
-    rest: -0.35, reach: 0.8, lunge: 14, weight: 0.55,
+    style: 'punch', family: 'punch', duration: 0.30, windup: 0.42, impact: 0.48, follow: 0.72,
+    rest: -0.35, lunge: 14, weight: 0.55,
     variants: [
-      { id: 'zuki', from: -0.25, to: 0.22, curve: 0.05, label: '正拳' },
-      { id: 'yokoge', from: 0.65, to: -0.45, curve: -0.08, label: '横拳' },
-      { id: 'ren', from: -0.7, to: 0.55, curve: 0.1, label: '連打' },
+      { id: 'zuki', from: -1.00, to: 1.00, curve: 0.04, label: '正拳' },
+      { id: 'yokoge', from: 1.00, to: -1.00, curve: -0.04, label: '横拳' },
+      { id: 'ren', from: -1.00, to: 1.00, curve: 0.02, label: '連打' },
     ],
   },
   spear: {
-    family: 'thrust', duration: 0.44, windup: 0.46, impact: 0.48, follow: 0.72,
-    rest: -0.15, reach: 1.35, lunge: 18, weight: 0.8,
+    style: 'thrust', family: 'thrust', duration: 0.44, windup: 0.46, impact: 0.48, follow: 0.72,
+    rest: -0.15, lunge: 18, weight: 0.8,
     variants: [
-      { id: 'tsuki', from: 0.04, to: -0.04, curve: 0, label: '直突き' },
-      { id: 'renzuki', from: 0.11, to: -0.08, curve: 0.04, label: '連突き' },
-      { id: 'nage', from: -0.16, to: 0.1, curve: -0.05, label: '上段突き' },
+      { id: 'tsuki', from: 0.02, to: -0.02, curve: 0, label: '直突き' },
+      { id: 'renzuki', from: 0.06, to: -0.04, curve: 0.02, label: '連突き' },
+      { id: 'nage', from: -0.08, to: 0.05, curve: -0.02, label: '上段突き' },
     ],
   },
   gun: {
-    family: 'ranged', duration: 0.28, windup: 0.26, impact: 0.32, follow: 0.62,
-    rest: -0.08, reach: 1.18, lunge: -5, weight: 0.25, recoil: 9,
+    style: 'ranged', family: 'ranged', duration: 0.28, windup: 0.26, impact: 0.32, follow: 0.62,
+    rest: -0.08, lunge: -5, weight: 0.25, recoil: 9,
     variants: [
       { id: 'hip', from: -0.03, to: 0.03, curve: 0, label: '腰溜め射撃' },
       { id: 'aim', from: 0.02, to: -0.02, curve: 0, label: '照準射撃' },
-      { id: 'rapid', from: -0.08, to: 0.1, curve: 0.02, label: '速射' },
+      { id: 'rapid', from: -0.08, to: 0.10, curve: 0.02, label: '速射' },
     ],
   },
   needle: {
-    family: 'ranged', duration: 0.22, windup: 0.18, impact: 0.26, follow: 0.58,
-    rest: -0.04, reach: 1.1, lunge: -3, weight: 0.15, recoil: 4,
+    style: 'ranged', family: 'ranged', duration: 0.22, windup: 0.18, impact: 0.26, follow: 0.58,
+    rest: -0.04, lunge: -3, weight: 0.15, recoil: 4,
     variants: [
       { id: 'flick', from: -0.08, to: 0.07, curve: 0, label: '指弾' },
       { id: 'senbon', from: 0.06, to: -0.06, curve: 0, label: '千本' },
     ],
   },
   bow: {
-    family: 'ranged', duration: 0.40, windup: 0.54, impact: 0.58, follow: 0.78,
-    rest: -0.18, reach: 1.3, lunge: -4, weight: 0.3, draw: true,
+    style: 'ranged', family: 'ranged', duration: 0.40, windup: 0.54, impact: 0.58, follow: 0.78,
+    rest: -0.18, lunge: -4, weight: 0.3, draw: true,
     variants: [
       { id: 'hyakubu', from: -0.04, to: 0.04, curve: 0, label: '百歩穿ち' },
       { id: 'tsurune', from: 0.08, to: -0.06, curve: 0, label: '弦鳴り' },
     ],
   },
   staff: {
-    family: 'cast', duration: 0.56, windup: 0.52, impact: 0.57, follow: 0.8,
-    rest: -0.5, reach: 1.0, lunge: 0, weight: 0.35, glow: true,
+    style: 'cast', family: 'cast', duration: 0.56, windup: 0.52, impact: 0.57, follow: 0.8,
+    rest: -0.5, lunge: 0, weight: 0.35, glow: true,
     variants: [
-      { id: 'jin', from: -0.55, to: 0.15, curve: 0.1, label: '陣を描く' },
-      { id: 'kou', from: 0.4, to: -0.2, curve: -0.08, label: '光を纏う' },
+      { id: 'jin', from: -0.30, to: 0.10, curve: 0.06, label: '陣を描く' },
+      { id: 'kou', from: 0.20, to: -0.12, curve: -0.05, label: '光を纏う' },
     ],
   },
   chain: {
-    family: 'whip', duration: 0.62, windup: 0.40, impact: 0.58, follow: 0.84,
-    rest: -1.1, reach: 1.22, lunge: 0, weight: 1.0, coil: 2,
+    style: 'whip', family: 'whip', duration: 0.62, windup: 0.40, impact: 0.58, follow: 0.84,
+    rest: -1.1, lunge: 0, weight: 1.0, coil: 2,
     variants: [
-      { id: 'uchi', from: -2.4, to: 1.9, curve: 0.42, label: '鎖打ち' },
-      { id: 'maki', from: 1.7, to: -2.2, curve: -0.36, label: '巻き薙ぎ' },
-      { id: 'tatsumaki', from: -0.6, to: 2.7, curve: 0.55, label: '竜巻' },
+      { id: 'uchi', from: -1.00, to: 1.00, curve: 0.20, label: '鎖打ち' },
+      { id: 'maki', from: 1.00, to: -1.00, curve: -0.18, label: '巻き薙ぎ' },
+      { id: 'tatsumaki', from: -0.30, to: 1.00, curve: 0.28, label: '竜巻' },
     ],
   },
   whip: {
-    family: 'whip', duration: 0.54, windup: 0.34, impact: 0.53, follow: 0.82,
-    rest: -1.0, reach: 1.25, lunge: 0, weight: 0.7, coil: 1,
+    style: 'whip', family: 'whip', duration: 0.54, windup: 0.34, impact: 0.53, follow: 0.82,
+    rest: -1.0, lunge: 0, weight: 0.7, coil: 1,
     variants: [
-      { id: 'shippu', from: -2.1, to: 1.8, curve: 0.38, label: '疾風打ち' },
-      { id: 'figure8', from: 1.5, to: -2.0, curve: -0.32, label: '八の字' },
-      { id: 'crack', from: 0.4, to: -0.9, curve: 0.5, label: '鞭先返し' },
+      { id: 'shippu', from: -1.00, to: 1.00, curve: 0.18, label: '疾風打ち' },
+      { id: 'figure8', from: 1.00, to: -1.00, curve: -0.16, label: '八の字' },
+      { id: 'crack', from: 0.20, to: -0.50, curve: 0.24, label: '鞭先返し' },
     ],
   },
   throw: {
-    family: 'throw', duration: 0.58, windup: 0.38, impact: 0.53, follow: 0.86,
-    rest: -0.8, reach: 1.0, lunge: 0, weight: 0.6, spin: true,
+    style: 'throw', family: 'throw', duration: 0.58, windup: 0.38, impact: 0.53, follow: 0.86,
+    rest: -0.8, lunge: 0, weight: 0.6, spin: true,
     variants: [
-      { id: 'souten', from: -1.5, to: 1.2, curve: 0.2, label: '双転' },
-      { id: 'kaiten', from: 1.0, to: -1.6, curve: -0.18, label: '回転投げ' },
+      { id: 'souten', from: -0.80, to: 0.65, curve: 0.10, label: '双転' },
+      { id: 'kaiten', from: 0.55, to: -0.85, curve: -0.09, label: '回転投げ' },
     ],
   },
   orb: {
-    family: 'cast', duration: 0.54, windup: 0.52, impact: 0.57, follow: 0.82,
-    rest: -0.35, reach: 0.95, lunge: 0, weight: 0.2, glow: true,
+    style: 'cast', family: 'cast', duration: 0.54, windup: 0.52, impact: 0.57, follow: 0.82,
+    rest: -0.35, lunge: 0, weight: 0.2, glow: true,
     variants: [
-      { id: 'shu', from: -0.3, to: 0.3, curve: 0.08, label: '集気' },
-      { id: 'han', from: 0.3, to: -0.3, curve: -0.08, label: '放気' },
+      { id: 'shu', from: -0.15, to: 0.15, curve: 0.04, label: '集気' },
+      { id: 'han', from: 0.15, to: -0.15, curve: -0.04, label: '放気' },
     ],
   },
   blade: {
-    family: 'slash', duration: 0.52, windup: 0.36, impact: 0.55, follow: 0.82,
-    rest: -0.6, reach: 1.02, lunge: 7, weight: 0.8,
+    style: 'arc', family: 'slash', duration: 0.52, windup: 0.36, impact: 0.55, follow: 0.82,
+    rest: -0.6, lunge: 7, weight: 0.8,
     variants: [
-      { id: 'basic', from: -1.6, to: 1.2, curve: 0.12, label: '斬り下ろし' },
-      { id: 'basic2', from: 1.2, to: -1.4, curve: -0.12, label: '斬り上げ' },
-      { id: 'basic3', from: -2.0, to: 1.6, curve: 0.08, label: '薙ぎ' },
+      { id: 'basic', from: -1.00, to: 1.00, curve: 0.06, label: '斬り下ろし' },
+      { id: 'basic2', from: 1.00, to: -1.00, curve: -0.06, label: '斬り上げ' },
+      { id: 'basic3', from: -1.00, to: 1.00, curve: 0.04, label: '薙ぎ' },
     ],
   },
 };
+
 
 /** 武器語 -> 持ち方。未知の武器語は形 (res.shape) から寄せる。 */
 export const GLYPH_MOTION = {
@@ -222,56 +237,115 @@ const SHAPE_MOTION = {
  * @returns {object}
  */
 export function startWeaponMotion(wi, res, aim, opt = {}) {
-  ws: {
-    const key = motionKey(wi, res);
-    const base = WEAPON_MOTIONS[key] || WEAPON_MOTIONS.blade;
-    const seq = (wi.motionSeq || 0) + 1;
-    const variant = base.variants[(seq - 1) % base.variants.length];
-    const interval = Math.max(0.04, opt.interval || (1 / Math.max(0.05, res?.stats?.rate || 1)));
-    // 攻撃間隔より長いモーションは重なる。予備動作を削って、次の攻撃までに
-    // 振り抜けまで収める (威力・間隔には触らない)。
-    const duration = Math.max(0.12, Math.min(base.duration, interval * 0.92));
-    const st = res?.stats || {};
-    const family = familyOf(base, res);
-    const m = {
-      key, family, variant: variant.id, label: variant.label, seq,
-      duration,
-      windup: duration * base.windup,
-      impactAt: duration * base.impact,
-      followAt: duration * base.follow,
-      elapsed: Math.max(0, Number(opt.elapsed) || 0),
-      aim,
-      baseAim: aim,
-      from: variant.from,
-      to: variant.to,
-      curve: variant.curve,
-      rest: base.rest,
-      reach: (st.range || 90) * (base.reach || 1) * (st.size || 1),
-      arc: st.arc || 1.8,
-      lunge: base.lunge || 0,
-      weight: base.weight || 1,
-      passes: base.passes || 1,
-      coil: base.coil || 0,
-      recoil: base.recoil || 0,
-      glow: !!base.glow,
-      ground: !!base.ground,
-      spin: !!base.spin,
-      draw: !!base.draw,
-      color: res?.elementInfo?.color || '#d4a94e',
-      el: res?.element || 'none',
-      shape: res?.shape || 'blade',
-      glyph: res?.tail || wi?.def?.glyph || wi?.def?.name || '刃',
-    };
-    wi.motionSeq = seq;
-    wi.motion = m;
-    wi.aim = aim;
-    wi.lastMotion = m;
-    if (wi.motionLog) {
-      wi.motionLog.push(m);
-      if (wi.motionLog.length > 24) wi.motionLog.shift();
-    }
-    return m;
+  const key = motionKey(wi, res);
+  const base = WEAPON_MOTIONS[key] || WEAPON_MOTIONS.blade;
+  const seq = (wi.motionSeq || 0) + 1;
+  const variant = base.variants[(seq - 1) % base.variants.length];
+  const interval = Math.max(0.04, opt.interval || (1 / Math.max(0.05, res?.stats?.rate || 1)));
+  // 攻撃間隔より長いモーションは重なる。予備動作を削って、次の攻撃までに
+  // 振り抜けまで収める (威力・間隔には触らない)。
+  const duration = Math.max(0.12, Math.min(base.duration, interval * 0.92));
+  const st = res?.stats || {};
+  const family = familyOf(base, res);
+  // 刃の角度と間合いは、**当たり判定の扇と半径をそのまま使う**。
+  // variant は扇の半分の角度に対する比なので、軌跡が扇からはみ出さない。
+  const arc = sectorArc(st, opt);
+  const reach = sectorReach(st, opt);
+  const m = {
+    key, family, style: base.style || styleOfFamily(family),
+    variant: variant.id, label: variant.label, seq,
+    duration,
+    windup: duration * base.windup,
+    impactAt: duration * base.impact,
+    followAt: duration * base.follow,
+    elapsed: Math.max(0, Number(opt.elapsed) || 0),
+    aim,
+    baseAim: aim,
+    // 扇の半分の角度に対する比。実際の角度は扇 (arc) から決まる。
+    fromF: variant.from,
+    toF: variant.to,
+    curveF: variant.curve || 0,
+    from: 0,
+    to: 0,
+    curve: 0,
+    rest: base.rest,
+    reach,
+    arc,
+    lunge: base.lunge || 0,
+    weight: base.weight || 1,
+    passes: base.passes || 1,
+    coil: base.coil || 0,
+    recoil: base.recoil || 0,
+    glow: !!base.glow,
+    ground: !!base.ground,
+    spin: !!base.spin,
+    draw: !!base.draw,
+    color: res?.elementInfo?.color || '#d4a94e',
+    el: res?.element || 'none',
+    shape: res?.shape || 'blade',
+    glyph: res?.tail || wi?.def?.glyph || wi?.def?.name || '刃',
+  };
+  syncMotionShape(m, reach, arc);
+  wi.motionSeq = seq;
+  wi.motion = m;
+  wi.aim = aim;
+  wi.lastMotion = m;
+  if (wi.motionLog) {
+    wi.motionLog.push(m);
+    if (wi.motionLog.length > 24) wi.motionLog.shift();
   }
+  return m;
+}
+
+/** 武器の攻撃の型ごとの既定の style。 */
+function styleOfFamily(family) {
+  if (family === 'thrust') return 'thrust';
+  if (family === 'ranged') return 'ranged';
+  if (family === 'cast') return 'cast';
+  if (family === 'whip') return 'whip';
+  if (family === 'throw') return 'throw';
+  if (family === 'smash') return 'smash';
+  if (family === 'punch') return 'punch';
+  if (family === 'bite') return 'bite';
+  if (family === 'claw') return 'claw';
+  return 'arc';
+}
+
+/** 扇の角度。斬撃の武器は st.arc、それ以外は細い扇にしておく。 */
+function sectorArc(st, opt) {
+  const hit = Number(opt.arc);
+  if (Number.isFinite(hit) && hit > 0.02) return hit;
+  const own = Number(st.arc);
+  if (Number.isFinite(own) && own > 0.02) return own;
+  return 0.9;
+}
+
+/** 刃の届く距離。当たり判定と同じ式 (combat.js の attackShape) を使う。 */
+function sectorReach(st, opt) {
+  const hit = Number(opt.reach);
+  if (Number.isFinite(hit) && hit > 0) return hit;
+  return (Number(st.range) || 100) * (Number(st.size) || 1);
+}
+
+/**
+ * モーションの扇と間合いを、当たり判定の値へ合わせ直す。
+ * 予備動作のあいだに文が変わっても、打撃の瞬間には必ず一致する。
+ * @param {object} m startWeaponMotion の戻り値
+ * @param {number} reach 当たる距離
+ * @param {number} arc 当たる扇の角度
+ */
+export function syncMotionShape(m, reach, arc) {
+  if (!m) return m;
+  if (Number.isFinite(reach) && reach > 0) m.reach = reach;
+  const a = Number(arc);
+  if (Number.isFinite(a) && a > 0.02) m.arc = a;
+  // 扇の半分を基準に、variant の比を実際の角度へ直す。
+  const half = (m.arc > 0.02 ? m.arc : 0.9) / 2;
+  m.from = (m.fromF || 0) * half;
+  m.to = (m.toF || 0) * half;
+  m.curve = (m.curveF || 0) * half;
+  m.halfArc = half;
+  return m;
 }
 
 /** 攻撃の型と武器の形から、描画の family を決める。 */
@@ -366,7 +440,12 @@ export function motionPose(m, dt = 0) {
       : phase === 'follow'
         ? lerp(m.to, m.to + (m.to - m.from) * 0.12, follow)
         : lerp(m.to + (m.to - m.from) * 0.12, m.rest, phaseT);
-  const angle = m.baseAim + angleRel + m.curve * Math.sin(clamp(t, 0, 1) * Math.PI);
+  // 刃が扇の外へ出ないようにする。振り抜けの余韻も、当たる範囲の内側で止める。
+  const half = m.halfArc || (m.arc > 0.02 ? m.arc / 2 : 0);
+  const bow = m.curve * Math.sin(clamp(t, 0, 1) * Math.PI);
+  let rel = angleRel + bow;
+  if (half > 0 && phase !== 'windup') rel = clamp(rel, -half, half);
+  const angle = m.baseAim + rel;
 
   // 突きは角度ではなく「伸び」で見せる。
   let extension = 1;
@@ -399,15 +478,22 @@ export function motionPose(m, dt = 0) {
   const spin = m.spin
     ? (phase === 'windup' ? -0.2 * wu : lerp(-0.2, TAU * 1.15, clamp(t, 0, 1)))
     : 0;
+  // 斬撃波 (style: wave) が刃から離れて飛ぶ量。打撃から振り抜けの終わりまで、
+  // 0 (手元) → 1 (間合いの外周) へ進む。描画だけが使う。
+  const windT = m.windup / m.duration;
+  const followT = m.followAt / m.duration;
+  const flight = clamp((t - windT) / Math.max(1e-3, followT - windT), 0, 1);
+  const fly = phase === 'windup' ? 0 : 0.15 + 0.85 * easeOut(flight);
 
   return {
     t, u, phase, phaseT, swing, follow,
-    angle, angleRel, extension, lunge,
+    angle, angleRel: rel, extension, lunge, half,
     x: Math.cos(m.aim) * lunge,
     y: Math.sin(m.aim) * lunge,
     alpha, impact, flash, spin,
     reach: m.reach * extension,
     arc: m.arc,
+    flight, fly,
     tipX: Math.cos(angle) * m.reach * extension,
     tipY: Math.sin(angle) * m.reach * extension,
   };
@@ -432,7 +518,13 @@ export function isImpactFrame(m, prev, now) {
  */
 export function weaponStyle(glyph, shape) {
   const key = GLYPH_MOTION[glyph] || SHAPE_MOTION[shape] || 'blade';
-  return { key, family: WEAPON_MOTIONS[key]?.family || 'slash', variants: WEAPON_MOTIONS[key]?.variants.length || 0 };
+  const base = WEAPON_MOTIONS[key];
+  return {
+    key,
+    family: base?.family || 'slash',
+    style: base?.style || 'arc',
+    variants: base?.variants.length || 0,
+  };
 }
 
 export { wrapAngle };

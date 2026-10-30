@@ -2488,7 +2488,13 @@ export class Renderer {
   }
 
   /**
-   * 刀・斧・爪・拳などの打撃軌跡。攻撃モーションの現在角度までを削って描く。
+   * 打撃の軌跡。**当たり判定の扇 (m.arc) と間合い (m.reach) の内側だけ**を描く。
+   * 武器種 (style) ごとに軌跡の作り方を変える。
+   *   wave    … 刃を離れた三日月が、扇の外周まで飛ぶ (刃)
+   *   sweep   … 扇の端から端へ、左右に振り抜く (刀)
+   *   forward … 正面へ短く斬り込み、前へ線が走る (剣)
+   *   arc / claw / smash / punch / bite     … それぞれの弧
+   *   thrust  … 突きは弧ではなく、前へ伸びる線 (槍・矛)
    * 予備動作では軌跡を出さず、打撃の瞬間から墨と色が走る。
    */
   drawMotionSlash(s, run) {
@@ -2497,102 +2503,130 @@ export class Renderer {
     const pose = motionPose(m);
     if (!pose) return;
     const family = m.family || 'slash';
-    const solid = pose.phase === 'strike' || pose.phase === 'follow' || pose.phase === 'recover';
-    const fade = pose.phase === 'recover' ? (1 - pose.phaseT) : 1;
-    if (!solid || fade <= 0.01) {
-      // 構えの光。刃先がきらめくだけで、まだ切ってはいない。
-      if (pose.phase === 'windup') {
-        const a = m.baseAim + m.from;
-        g.save();
-        g.globalAlpha = 0.35 * pose.phaseT;
-        g.fillStyle = '#fffdf7';
-        g.beginPath();
-        g.arc(s.x + Math.cos(a) * m.reach * 0.72,
-          s.y + Math.sin(a) * m.reach * 0.72, 1.3 + pose.phaseT * 1.8, 0, TAU);
-        g.fill();
-        g.restore();
-      }
-      return;
-    }
-
-    const start = m.baseAim + m.from;
-    const current = pose.angle;
-    const dir = Math.sign(current - start) || 1;
-    const span = Math.min(Math.PI * 1.35, Math.abs(current - start));
-    const passes = family === 'claw' ? Math.max(1, m.passes) : 1;
-    const rOut = Math.max(18, m.reach * (family === 'punch' ? 0.76 : 1));
-    const rIn = rOut * (family === 'smash' ? 0.22 : 0.38);
+    const style = m.style || 'arc';
     const color = s.color || m.color || '#d4a94e';
+    // 描画に使う半径と扇は、当たり判定とまったく同じ値。
+    const reach = Math.max(18, m.reach || s.r || 40);
+    const arc = Number(m.arc) > 0.02 ? m.arc : (Number(s.arc) > 0.02 ? s.arc : Math.PI / 1.5);
+    const aFrom = m.baseAim + m.from;
+    const aTo = m.baseAim + m.to;
+    const dir = Math.sign(aTo - aFrom) || 1;
+    const head = pose.angle;
+    const fade = pose.phase === 'recover' ? 1 - pose.phaseT : 1;
 
     g.save();
     g.globalCompositeOperation = 'source-over';
     g.lineCap = 'round';
     g.lineJoin = 'round';
 
-    for (let p = 0; p < passes; p++) {
-      const lag = p * 0.16;
-      const head = current - dir * lag;
-      const tail = head - dir * Math.min(span, 0.75 + (family === 'claw' ? 0.3 : 0.15));
-      const lowA = Math.min(tail, head);
-      const highA = Math.max(tail, head);
-      const arcR = rOut * (1 - p * 0.055);
-      const a = family === 'punch' || family === 'bite' ? 0.42 : 0.72;
-      // 刃の太さは武器で変える。爪・拳は細い筋、槌・大剣は太い帯。
-      const wK = family === 'claw' ? 0.34
-        : family === 'punch' || family === 'bite' ? 0.55
-          : family === 'smash' ? 1.35 : 0.95;
-      const layer = (rr, lw, col, alpha) => {
-        g.globalAlpha = alpha * fade;
-        g.strokeStyle = col;
-        g.lineWidth = Math.max(0.6, lw);
-        g.beginPath();
-        g.arc(s.x, s.y, rr, lowA, highA, tail > head);
-        g.stroke();
-      };
-      // 墨の縁、紙を抜く白、武器色の芯。三層で紙の上に立体を作る。
-      layer(arcR, 10.5 * wK * (1 - p * 0.1), 'rgba(28, 35, 49, .5)', 0.5 * a);
-      layer(arcR * 0.985, 7.2 * wK * (1 - p * 0.1), 'rgba(255, 253, 247, .92)', 0.75 * a);
-      layer(arcR * 0.99, 3.4 * wK * (1 - p * 0.08), color, 0.78 * a);
-      // 中心側の薄い残響。振り抜けの余韻を扇形ではなく線で見せる。
-      layer(rIn + (arcR - rIn) * 0.45, 1.1 * wK, color, 0.25 * a);
-    }
-
-    // 刃先の光。打撃中だけ強くなる。
-    if (pose.phase === 'strike' || pose.impact > 0.03) {
-      const tipA = current;
-      const tipR = rOut * 0.98;
-      g.globalAlpha = (0.55 + pose.impact * 0.4) * fade;
+    // 構え。まだ切っていないので、刃先がきらめくだけ。
+    if (pose.phase === 'windup') {
+      const a = aFrom;
+      g.globalAlpha = 0.38 * pose.phaseT;
       g.fillStyle = '#fffdf7';
       g.beginPath();
-      g.arc(s.x + Math.cos(tipA) * tipR, s.y + Math.sin(tipA) * tipR, 2.2 + pose.impact * 2.6, 0, TAU);
+      g.arc(s.x + Math.cos(a) * reach * 0.66, s.y + Math.sin(a) * reach * 0.66,
+        1.2 + pose.phaseT * 1.8, 0, TAU);
       g.fill();
-      g.globalAlpha *= 0.55;
+      g.restore();
+      return;
+    }
+    if (fade <= 0.01) {
+      g.restore();
+      return;
+    }
+
+    if (family === 'thrust') {
+      // 突き。角度を振らず、前へ伸びる線で見せる。
+      const ext = clamp(pose.extension, 0.4, 1.1);
+      const r0 = reach * 0.3 * ext;
+      const r1 = reach * ext;
+      const a = head;
+      for (const [lw, col, al] of [
+        [6.5, 'rgba(28, 35, 49, .38)', 0.5],
+        [4.0, 'rgba(255, 253, 247, .9)', 0.8],
+        [1.8, color, 0.92],
+      ]) {
+        g.globalAlpha = al * fade;
+        g.strokeStyle = col;
+        g.lineWidth = lw;
+        g.beginPath();
+        g.moveTo(s.x + Math.cos(a) * r0, s.y + Math.sin(a) * r0);
+        g.lineTo(s.x + Math.cos(a) * r1, s.y + Math.sin(a) * r1);
+        g.stroke();
+      }
+      g.globalAlpha = 0.8 * fade * (0.4 + pose.impact);
+      g.fillStyle = '#fffdf7';
+      g.beginPath();
+      g.arc(s.x + Math.cos(a) * r1, s.y + Math.sin(a) * r1, 2 + pose.impact * 2, 0, TAU);
+      g.fill();
+      g.restore();
+      return;
+    }
+
+    // 当たる範囲。扇の外周を細い一線で示す。軌跡はこの内側だけを走る。
+    g.globalAlpha = 0.15 * fade * (1 + pose.flash * 0.5);
+    g.strokeStyle = color;
+    g.lineWidth = 1;
+    g.beginPath();
+    g.arc(s.x, s.y, reach, m.baseAim - arc / 2, m.baseAim + arc / 2);
+    g.stroke();
+    if (style !== 'wave') {
+      // 扇の両端に、刃が通る目安の刻み。
+      g.globalAlpha = 0.22 * fade;
+      for (const sgn of [-1, 1]) {
+        const a = m.baseAim + sgn * arc / 2;
+        g.beginPath();
+        g.moveTo(s.x + Math.cos(a) * reach * 0.88, s.y + Math.sin(a) * reach * 0.88);
+        g.lineTo(s.x + Math.cos(a) * reach, s.y + Math.sin(a) * reach);
+        g.stroke();
+      }
+    }
+
+    if (style === 'wave') {
+      this.drawWaveTrail(g, s, m, pose, reach, arc, color, fade);
+    } else if (style === 'sweep') {
+      this.drawSweepTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade);
+    } else {
+      this.drawArcTrail(g, s, m, pose, reach, color, aFrom, head, dir, style, family, fade);
+    }
+
+    // 刃先の光。打撃中ほど強い。
+    if (!(style === 'wave' && pose.fly < 0.9) && (pose.phase === 'strike' || pose.impact > 0.03)) {
+      const tipR = reach * 0.985;
+      g.globalAlpha = (0.5 + pose.impact * 0.4) * fade;
+      g.fillStyle = '#fffdf7';
+      g.beginPath();
+      g.arc(s.x + Math.cos(head) * tipR, s.y + Math.sin(head) * tipR,
+        2.2 + pose.impact * 2.6, 0, TAU);
+      g.fill();
+      g.globalAlpha *= 0.5;
       g.strokeStyle = color;
       g.lineWidth = 1.2;
       g.beginPath();
-      g.arc(s.x, s.y, tipR, tipA - 0.16 * dir, tipA + 0.09 * dir, dir < 0);
+      g.arc(s.x, s.y, tipR, head - 0.16 * dir, head + 0.09 * dir, dir < 0);
       g.stroke();
     }
 
-    // 槌・大剣は地面を打つ。着弾の輪と土煙を足す。
-    if (family === 'smash' && pose.impact > 0.02) {
+    // 槌・大剣は地面を打つ。着弾の輪を足す (扇の内側に置く)。
+    if ((style === 'smash') && pose.impact > 0.02) {
       g.globalAlpha = pose.impact * 0.5;
       g.strokeStyle = 'rgba(120, 92, 48, .8)';
       g.lineWidth = 1.5 + pose.impact * 2;
       g.beginPath();
-      g.ellipse(s.x + Math.cos(m.baseAim) * rOut * 0.62,
-        s.y + Math.sin(m.baseAim) * rOut * 0.62,
-        rOut * 0.17 * (1.5 - pose.impact), rOut * 0.075 * (1.5 - pose.impact), m.baseAim, 0, TAU);
+      g.ellipse(s.x + Math.cos(m.baseAim) * reach * 0.62,
+        s.y + Math.sin(m.baseAim) * reach * 0.62,
+        reach * 0.17 * (1.5 - pose.impact), reach * 0.075 * (1.5 - pose.impact), m.baseAim, 0, TAU);
       g.stroke();
     }
 
-    // 属性の名残。炎・氷・雷などは、軌跡の縁に小さな粒を散らす。
+    // 属性の名残。軌跡の縁に小さな粒を散らす (扇の内側)。
     if (pose.phase === 'strike') {
       const el = m.el || 'none';
       const n = el === 'none' ? 2 : 5;
       for (let i = 0; i < n; i++) {
-        const aa = current - dir * (i + 1) * 0.08;
-        const rr = rOut * (0.8 + (i % 3) * 0.08);
+        const aa = head - dir * (i + 1) * 0.08;
+        const rr = reach * (0.8 + (i % 3) * 0.06);
         g.globalAlpha = (0.45 - i * 0.06) * fade;
         g.fillStyle = i === 0 ? '#fffdf7' : color;
         g.beginPath();
@@ -2601,6 +2635,188 @@ export class Renderer {
       }
     }
     g.restore();
+  }
+
+  /** 弧の帯を、墨の縁・紙を抜く白・武器色の芯の 3 層で引く。 */
+  bandArc(x, y, r, from, to, wK, color, alpha) {
+    if (!(alpha > 0.002) || Math.abs(to - from) < 1e-4) return;
+    const g = this.ctx;
+    const ccw = to < from;
+    const layers = [
+      [12.5 * wK, 'rgba(28, 35, 49, .5)', 0.52],
+      [8.8 * wK, 'rgba(255, 253, 247, .92)', 0.8],
+      [4.2 * wK, color, 0.86],
+    ];
+    for (const [lw, col, k] of layers) {
+      g.globalAlpha = alpha * k;
+      g.strokeStyle = col;
+      g.lineWidth = Math.max(0.5, lw);
+      g.beginPath();
+      g.arc(x, y, r, from, to, ccw);
+      g.stroke();
+    }
+  }
+
+  /**
+   * 刃 (style: wave) の斬撃波。刃を離れた三日月が、手元から扇の外周 = 間合いまで
+   * 飛びながら広がる。飛び切ったとき、弧の角度は扇 (arc)、半径は間合い (reach) に
+   * ちょうど重なるので、見えた範囲がそのまま当たる範囲になる。
+   */
+  drawWaveTrail(g, s, m, pose, reach, arc, color, fade) {
+    const fly = clamp(pose.fly || 0, 0, 1);
+    const grow = clamp(fly * 1.5, 0, 1);
+    const r = reach * (0.18 + 0.82 * fly);
+    const span = arc * (1 - (1 - grow) ** 3);
+    const from = m.baseAim - span / 2;
+    const to = m.baseAim + span / 2;
+    // 飛んだ跡を薄く残す。切った範囲がそのまま読める。
+    g.globalAlpha = 0.09 * fade * fly;
+    g.fillStyle = color;
+    g.beginPath();
+    g.moveTo(s.x, s.y);
+    g.arc(s.x, s.y, r, from, to);
+    g.closePath();
+    g.fill();
+    // 三日月。頭ほど濃く、後ろの波ほど薄く小さく。
+    for (let i = 2; i >= 0; i--) {
+      const rr = r * (1 - i * 0.11);
+      const w = span * (1 - i * 0.1);
+      const al = (i === 0 ? 0.95 : 0.4 / i) * fade * (0.3 + 0.7 * fly);
+      this.bandArc(s.x, s.y, rr, m.baseAim - w / 2, m.baseAim + w / 2,
+        0.95 - i * 0.18, color, al);
+    }
+    // 波の先端だけ、紙から浮かせる白。
+    if (span > 0.01) {
+      g.globalAlpha = 0.7 * fade * fly;
+      g.strokeStyle = 'rgba(255, 253, 247, .95)';
+      g.lineWidth = 1.4;
+      g.beginPath();
+      g.arc(s.x, s.y, r * 1.005, from, to);
+      g.stroke();
+    }
+    // 飛び出す瞬間、手元に残る残光。
+    g.globalAlpha = (1 - fly) * 0.5 * fade;
+    g.fillStyle = '#fffdf7';
+    g.beginPath();
+    g.arc(s.x, s.y, 2 + (1 - fly) * 5, 0, TAU);
+    g.fill();
+  }
+
+  /**
+   * 刀 (style: sweep) の薙ぎ。扇の端から端まで、左右へ振り抜く。
+   * 尾は薄く、刃先ほど濃い帯で、通り過ぎた範囲をそのまま見せる。
+   */
+  drawSweepTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade) {
+    const wK = 1.3;
+    // 薙いだ面。刃が通った角度のあいだだけ、薄く色を敷く。
+    if (Math.abs(head - aFrom) > 1e-4) {
+      g.globalAlpha = 0.08 * fade;
+      g.fillStyle = color;
+      g.beginPath();
+      g.moveTo(s.x, s.y);
+      g.arc(s.x, s.y, reach, aFrom, head, head < aFrom);
+      g.closePath();
+      g.fill();
+    }
+    this.taperArc(s.x, s.y, reach * 0.99, aFrom, head, wK, color, 0.95 * fade, 9);
+    // 振り抜けの残響。扇の内側に細い二本目。
+    this.taperArc(s.x, s.y, reach * 0.62, aFrom, head, 0.32, color, 0.3 * fade, 7);
+    // 刃の通り道を、扇の外周に沿って墨で締める。
+    g.globalAlpha = 0.35 * fade;
+    g.strokeStyle = 'rgba(28, 35, 49, .5)';
+    g.lineWidth = 1.2;
+    g.beginPath();
+    g.arc(s.x, s.y, reach * 0.99, aFrom, head, head < aFrom);
+    g.stroke();
+    // 振り切った側の土煙。左右どちらへ振ったかが読める。
+    if (pose.phase !== 'strike') {
+      g.globalAlpha = 0.3 * fade;
+      g.fillStyle = 'rgba(120, 92, 48, .7)';
+      for (let i = 0; i < 3; i++) {
+        const a = head + dir * (0.05 + i * 0.09);
+        g.beginPath();
+        g.arc(s.x + Math.cos(a) * reach * 0.94, s.y + Math.sin(a) * reach * 0.94,
+          1.2 + i * 0.7, 0, TAU);
+        g.fill();
+      }
+    }
+  }
+
+  /**
+   * 標準の弧 (style: arc / claw / smash / punch / bite)。
+   * 振り始めから刃先までを削って描く。
+   */
+  drawArcTrail(g, s, m, pose, reach, color, aFrom, head, dir, style, family, fade) {
+    const passes = family === 'claw' ? Math.max(1, m.passes) : 1;
+    const wK = family === 'claw' ? 0.34
+      : family === 'punch' || family === 'bite' ? 0.55
+        : style === 'smash' ? 1.35 : 0.95;
+    // 重い一振り (剣・槌) は、振り始めから刃先まで扇を丸ごと見せる。
+    // 速い連撃 (爪・牙・拳・汎用の刃) は、短い残像の streak で速さを出す。
+    const heavy = style === 'forward' || style === 'smash';
+    if (heavy && Math.abs(head - aFrom) > 1e-4) {
+      // 切った面を薄く敷く。扇の内側だけ。
+      g.globalAlpha = 0.07 * fade;
+      g.fillStyle = color;
+      g.beginPath();
+      g.moveTo(s.x, s.y);
+      g.arc(s.x, s.y, reach, aFrom, head, head < aFrom);
+      g.closePath();
+      g.fill();
+    }
+    // 爪は 3 本。鉤爪の間隔を空けて、通った跡を並べる。
+    for (let p = 0; p < passes; p++) {
+      const lag = p * 0.13;
+      const h = head - dir * lag;
+      const tail = heavy
+        ? Math.abs(h - aFrom)
+        : Math.min(0.62 + (family === 'claw' ? 0.3 : 0.12), Math.abs(h - aFrom));
+      const from = h - dir * tail;
+      this.taperArc(s.x, s.y, reach * (1 - p * 0.05), from, h, wK * (1 - p * 0.1), color,
+        (0.95 - p * 0.12) * fade, heavy ? 9 : 6);
+    }
+    // 剣は「前へ出る」動きで見せる。弧に加えて、正面へ短い一線と、
+    // 刃先が前方 (照準の方向) へ走る光。刀の左右の薙ぎと動きが分かれる。
+    if (style === 'forward') {
+      const a = m.baseAim;
+      const run0 = pose.phase === 'windup' ? 0.3 : 0.3 + 0.66 * clamp(pose.t, 0, 1);
+      g.globalAlpha = 0.5 * fade;
+      g.strokeStyle = 'rgba(255, 253, 247, .95)';
+      g.lineWidth = 1.4;
+      g.beginPath();
+      g.moveTo(s.x + Math.cos(a) * reach * 0.26, s.y + Math.sin(a) * reach * 0.26);
+      g.lineTo(s.x + Math.cos(a) * reach * run0, s.y + Math.sin(a) * reach * run0);
+      g.stroke();
+      g.globalAlpha = 0.7 * fade;
+      g.strokeStyle = color;
+      g.lineWidth = 0.8;
+      g.beginPath();
+      g.moveTo(s.x + Math.cos(a) * reach * 0.3, s.y + Math.sin(a) * reach * 0.3);
+      g.lineTo(s.x + Math.cos(a) * reach * (run0 - 0.03), s.y + Math.sin(a) * reach * (run0 - 0.03));
+      g.stroke();
+      // 前へ走る刃先。
+      const tipR = reach * run0;
+      g.globalAlpha = (0.55 + pose.flash * 0.4) * fade;
+      g.fillStyle = '#fffdf7';
+      g.beginPath();
+      g.arc(s.x + Math.cos(a) * tipR, s.y + Math.sin(a) * tipR, 1.8 + pose.flash * 2.2, 0, TAU);
+      g.fill();
+    }
+  }
+
+  /** 振り始めから刃先までの帯。頭ほど濃く太く、尾ほど薄く細い。 */
+  taperArc(x, y, r, from, head, wK, color, alpha, segs = 7) {
+    const span = head - from;
+    if (!(alpha > 0.002) || Math.abs(span) < 1e-4) return;
+    for (let i = 0; i < segs; i++) {
+      const t0 = i / segs;
+      const t1 = (i + 1) / segs;
+      const mid = (t0 + t1) / 2;
+      const b0 = from + span * t0;
+      const b1 = from + span * t1;
+      const k = 0.35 + 0.65 * mid;
+      this.bandArc(x, y, r, b0, b1, wK * (0.55 + 0.45 * mid), color, alpha * k);
+    }
   }
 
   /** 鞭・鎖の一振り。輪ではなく、しなる線として描く。 */

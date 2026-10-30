@@ -392,7 +392,10 @@ export class WeaponInst {
     st.bounce = Math.max(0, Math.round(st.bounce || 0));
     st.chain = Math.max(0, Math.round(st.chain || 0));
     st.orbit = Math.max(0, Math.round(st.orbit || 0));
-    st.arc = st.arc || 0;
+    // 斬撃は扇が無いと当たらない。武器語から作った文 (form:剣 など) が
+    // 扇 0 のままにならないよう、斬撃の既定の扇を入れる。見た目の軌跡も
+    // この扇から作るので、範囲とモーションが食い違わない。
+    st.arc = st.arc > 0.02 ? st.arc : (kind === 'slash' ? 1.8 : 0);
     st.spread = clamp(st.spread || 0, 0, Math.PI);
     st.duration = Math.max(0.3, st.duration || 0);
     st.homing = clamp(st.homing || 0, 0, 1);

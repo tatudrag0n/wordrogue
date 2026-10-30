@@ -19,7 +19,7 @@ import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
 import { WeaponInst } from './weapon.js?v=1.47';
 import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.47';
-import { fireWeapon, damage as damageEnemy } from './combat.js?v=1.47';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.47';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -1494,7 +1494,9 @@ export class Run {
           const aim = tgt
             ? Math.atan2(tgt.y - this.player.y, tgt.x - this.player.x)
             : this.player.face;
-          startWeaponMotion(wi, res, aim, { interval, elapsed: 0 });
+          startWeaponMotion(wi, res, aim, {
+            interval, elapsed: 0, ...attackShape(st, this.player.stats),
+          });
         }
       }
 

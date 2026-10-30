@@ -179,6 +179,14 @@ body { user-select: none; }
   display: grid; place-items: center;
   font-size: 1rem;
 }
+/* 使い方 (初回の説明) を開き直す「?」。閉じるボタンの左に並べる。 */
+.btn-help {
+  right: 52px;
+  font-size: .92rem;
+  font-weight: 800;
+  color: var(--fg-dim);
+}
+.btn-help:hover:not(:disabled) { color: var(--accent); }
 
 kbd {
   font-family: var(--mono);
@@ -220,6 +228,8 @@ code {
 }
 
 .panel-head { position: relative; padding-right: 46px; padding-bottom: 10px; flex: none; }
+/* 「?」と「✕」が並ぶ見出しは、本文がボタンの下へ潜らないよう右を広く取る。 */
+.panel-head:has(.btn-help) { padding-right: 92px; }
 /* 見出しの下に朱の帯 — 紙の一枚に「見出し」と「本文」の境目をつける */
 .panel-head::after {
   content: '';
@@ -1162,37 +1172,6 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .forge-side-head { display: flex; align-items: baseline; justify-content: space-between; }
 .forge-side-head h3 { margin: 0; font-size: .95rem; letter-spacing: .04em; color: var(--fg-dim); }
 
-/* 語を置くときの 3 手順。接続詞プールを消した余白はここに回す。 */
-.forge-how {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: .78rem;
-  color: var(--fg-mute);
-}
-.forge-how li {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  line-height: 1.35;
-}
-.forge-how b {
-  flex: none;
-  min-width: 62px;
-  padding: 1px 7px;
-  border: 1px solid var(--line-2);
-  border-radius: 999px;
-  background: #e9eef7;
-  color: var(--fg-dim);
-  font-size: .74rem;
-  font-weight: 700;
-  text-align: center;
-}
-.forge-how em { color: var(--accent); font-style: normal; font-weight: 700; }
-
 .lexicon {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -1607,7 +1586,7 @@ body.touch .hud-choice-title { font-size: 1rem; }
 /* ══ 遊び方 ═══════════════════════════════════════════════════════════ */
 
 .panel-howto { width: min(720px, 100%); }
-.howto-body { overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+.howto-body { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .howto-body h3 {
   margin: 0 0 6px;
   font-size: 1rem;
@@ -1618,6 +1597,36 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .howto-body strong { color: var(--fg); }
 .howto-list { margin: 0; padding-left: 20px; font-size: .87rem; color: var(--fg-dim); }
 .howto-list li { margin: 3px 0; }
+
+/* 遊び方は **見出しだけ** を並べ、読みたい節だけ開く。
+   長い説明を常に全部見せると、かえって読まれなくなる。 */
+.howto-sec {
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  padding: 0 12px;
+}
+.howto-sec > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.howto-sec > summary::-webkit-details-marker { display: none; }
+.howto-sec > summary::after {
+  content: '＋';
+  margin-left: auto;
+  color: var(--fg-mute);
+  font-size: .8rem;
+  font-weight: 700;
+}
+.howto-sec[open] > summary::after { content: '−'; }
+.howto-sec > summary h3 { margin: 0; font-size: .98rem; }
+.howto-sec[open] > summary h3 { color: var(--accent); }
+.howto-sec-body { padding-bottom: 10px; }
+.howto-sec-body > :last-child { margin-bottom: 0; }
 
 /* ══ 書庫 ══════════════════════════════════════════════════════════════ */
 
@@ -1658,6 +1667,57 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .panel-grow { width: min(760px, 100%); }
 .grow-body { overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 .grow-body h3 { margin: 0 0 8px; font-size: .95rem; color: var(--accent-ink); letter-spacing: .06em; }
+
+/* ── 強化: 左に部位、右に所持語 ─────────────────────────────────────────
+   所持語を部位の下に置くと、語が多いほどパネルが縦に伸びて下の語に
+   手が届かなくなる。部位の右に独立した一覧を置き、その中だけで
+   スクロールさせれば、どの語も必ず押せる (掴める)。 */
+.panel-parts {
+  width: min(1120px, 100%);
+  height: min(880px, 100%);
+}
+.grow-parts-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  overflow: hidden;
+}
+.grow-parts-col {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 4px;
+}
+.grow-pool {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #eff3fa;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+}
+.grow-side-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.grow-side-head h3 { margin: 0; font-size: .95rem; letter-spacing: .04em; color: var(--fg-dim); }
+.grow-pool > .grow-note { margin: 0; }
+/* 語はドラッグの起点なので touch-action: none。指では一覧の上をなぞって
+   スクロールできないぶん、上下ボタンでも動かせるようにする。 */
+.grow-pool-scroll { display: flex; gap: 4px; flex: none; }
+.grow-scroll {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: .66rem;
+  color: var(--fg-dim);
+}
+.grow-scroll:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .grow-note { margin: 0 0 8px; font-size: .78rem; color: var(--fg-dim); line-height: 1.65; }
 .grow-note strong { color: var(--accent); }
 .grow-gacha { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -1949,7 +2009,20 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .grow-part-eff.none { font-size: .68rem; color: var(--fg-mute); }
 .grow-part-fix { display: block; margin-top: 2px; color: var(--fg-dim); }
 
-.grow-words { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 所持語は右の列の中でスクロールする。語が多いほど伸びるのではなく、
+   一覧の中だけが動くので、パネルの外へはみ出さない。 */
+.grow-words {
+  flex: 1 1 auto;
+  min-height: 96px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-content: start;
+  padding: 4px;
+}
 .grow-word {
   font-size: .88rem;
   font-weight: 700;
@@ -2075,6 +2148,42 @@ body.touch .hud-choice-title { font-size: 1rem; }
   color: var(--fg-mute);
 }
 .dict-empty { padding: 26px; text-align: center; color: var(--fg-mute); font-size: .9rem; }
+
+/* ══ 初回の説明 (タブ右上の「?」) ═════════════════════════════════════════
+   タブの中に長い説明を置かず、初めて開いたときだけこれを出す。 */
+.help-screen { z-index: 60; }
+.panel-help { width: min(560px, 100%); }
+.tip-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tip-list li {
+  display: grid;
+  grid-template-columns: 5.4em minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  font-size: .9rem;
+  line-height: 1.7;
+}
+.tip-list b {
+  justify-self: start;
+  padding: 1px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: #e9eef7;
+  color: var(--fg-dim);
+  font-size: .78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tip-list span { color: var(--fg-dim); }
+@media (max-width: 560px) {
+  .tip-list li { grid-template-columns: 1fr; gap: 2px; }
+}
 
 .dev-panel { width: min(420px, 100%); }
 .dev-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -2452,7 +2561,6 @@ html, body {
   #forge .pword,
   #forge .sen-word { font-size: 1.06rem; }
   #forge .sen-item { gap: 0; }
-  #forge .forge-how { font-size: .74rem; }
   .conn-picker { max-width: min(92vw, 340px); }
 }
 
@@ -3139,9 +3247,22 @@ html, body {
 /* 語のランクは札の文字を出さず、下の「レアリティの色」だけで示す。 */
 
 
-/* ══ 強化タブ: スクロールなしで全体を表示 ═══════════════════════════════ */
-.panel-grow { display: flex; flex-direction: column; max-height: none !important; height: auto; }
-.panel-grow > .grow-body { overflow: visible; flex: none; min-height: 0; }
+/* ══ 強化タブ: パネルを画面に収め、中を部位と所持語に分ける ═════════════ */
+.panel-grow { display: flex; flex-direction: column; }
+.panel-grow > .grow-body { min-height: 0; }
+
+/* 狭い画面では 2 列をやめ、上に部位・下に所持語を置く。
+   どちらも自分の高さでスクロールするので、下の語にも必ず届く。 */
+@media (max-width: 900px) {
+  .panel-parts { width: 100%; height: 100%; }
+  .grow-parts-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(150px, 40%);
+    gap: 10px;
+  }
+  .grow-pool { padding: 8px; }
+  .grow-words { min-height: 0; }
+}
 
 /* 支援ボタン (タイトル) */
 .btn.btn-donate { border-color: var(--accent); color: var(--accent-ink); background: rgba(224,72,45,.07); }

@@ -18,7 +18,7 @@
 //   2. 文が完成するほど強くなる … 部位の文の力 (power) が効果と体に乗る
 // ============================================================================
 
-import { makeWord, WORDS, CONNECTOR_SET } from '../data/words.js?v=1.48';
+import { makeWord, WORDS, CONNECTOR_SET } from '../data/words.js?v=1.49';
 import {
   canConnect, connectorFor, CONNECTORS, CONNECT_ORDER, ROLE_LABEL,
 } from '../data/words.connect.js';

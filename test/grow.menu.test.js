@@ -31,6 +31,8 @@ const IDS = [
   'deckWords', 'deckCount',
   'btnStart', 'btnStages', 'btnHowto', 'btnGrow', 'btnWords', 'btnDict', 'btnSettings',
   'recBest', 'recClear', 'recKills', 'recRuns', 'recBroken',
+  // 初回の説明 (js/ui/tips.js)。実画面では index.html の #tabHelp。
+  'tabHelp', 'tabHelpTitle', 'tabHelpLead', 'tabHelpBody', 'tabHelpClose', 'tabHelpOk',
 ];
 for (const id of [...IDS, 'growTotal']) {
   const e = dom.doc.createElement('div');
@@ -59,6 +61,13 @@ for (const id of ['gachaWord', 'gachaCat', 'gachaEff', 'gachaSeal', 'gachaNew', 
 veil.append(reels, card);
 for (const id of ['gachaNote', 'gachaAgain', 'gachaClose', 'gachaX']) veil.append(set(id, 'button'));
 dom.doc.body.append(veil);
+
+// #tabHelp は最初は伏せておく (HTML の hidden と同じ)。
+dom.doc.getElementById('tabHelp').hidden = true;
+// 各タブ右上の「?」。実画面では index.html の [data-help]。
+const helpBtn = set('fakeGrowHelp', 'button');
+helpBtn.dataset.help = 'grow';
+dom.doc.body.append(helpBtn);
 
 const menu = new Menus({ save, audio: null });
 menu.show('grow');
@@ -94,6 +103,27 @@ const place = (partId, text) => {
   tap(wordBtn(text));
   tap(rowOf(partId));
 };
+
+// 説明は初めて開いたときだけ。以後は「?」から開き直す。
+sec('タブの説明は初回だけ出す (2 回目は「?」から)');
+{
+  const help = dom.doc.getElementById('tabHelp');
+  ok(!help.hidden, '初めて開いたのに説明が出ない');
+  ok(/強化/.test(dom.doc.getElementById('tabHelpTitle').textContent), '説明の見出しが違う');
+  ok(q('#tabHelpBody li').length >= 2, '説明の項目が無い');
+  ok(save.seenTip('grow'), '見た記録が残らない');
+
+  menu.tips.close();
+  ok(help.hidden, '説明が閉じない');
+
+  menu.show('grow');
+  ok(help.hidden, '2 回目にも説明が出る (タブが説明で埋まる)');
+
+  helpBtn.dispatchEvent({ type: 'click' });
+  ok(!help.hidden, '「?」から説明を開き直せない');
+  menu.tips.close();
+  console.log('  初回だけ表示 / 閉じる / 2 回目は出ない / 「?」で開き直せる');
+}
 
 // 十連の結果表示は実際の click ハンドラーから検証する。
 sec('十連ボタンで10件を抽選し、結果一覧を開示する');
@@ -171,7 +201,17 @@ sec('所持語をタップして選び、部位の行をタップで置く。行
   ok(q('#growWords .grow-word.sel').length === 1, '語をもう一度選べない');
   tap(wordBtn('妙'));
   ok(q('#growWords .grow-word.sel').length === 0, '選んだ語をもう一度押しても外れない');
-  console.log(`  選ぶ → 行 → 入る / 語タップで接続詞 ${before || 'なし'} → ${after} / 戻すで復帰`);
+
+  // 一覧のスクロール位置は描き直しても保つ。ここが 0 に戻ると、
+  // 下のほうの語を選ぶたびに先頭へ跳ねて使えなくなる。
+  const box = dom.doc.getElementById('growWords');
+  box.scrollTop = 120;
+  tap(wordBtn('妙'));
+  ok(box.scrollTop === 120, `語を選ぶと一覧が先頭へ戻る: ${box.scrollTop}`);
+  tap(wordBtn('妙'));
+  ok(box.scrollTop === 120, `語の選択を外すと一覧が先頭へ戻る: ${box.scrollTop}`);
+  box.scrollTop = 0;
+  console.log(`  選ぶ → 行 → 入る / 語タップで接続詞 ${before || 'なし'} → ${after} / 戻すで復帰 / スクロール位置を保持`);
 }
 
 sec('ドラッグで置く・並べ替える・別の部位へ移す・所持語へ戻す');

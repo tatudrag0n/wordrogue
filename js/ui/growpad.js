@@ -12,7 +12,7 @@
 // ============================================================================
 
 import { el, clear } from '../core/util.js';
-import { WORDS, CATEGORIES } from '../data/words.js?v=1.48';
+import { WORDS, CATEGORIES } from '../data/words.js?v=1.49';
 import { PART_MAX_LEN, PARTS } from '../core/save.js';
 import { makePartSentence } from '../game/parts.js';
 import {
@@ -166,10 +166,14 @@ export class GrowPad extends SenPad {
     const hiddenN = owned.length - usable.length;
     if (menu.growWordsNote) {
       menu.growWordsNote.textContent = hiddenN
-        ? `体に効く ${usable.length} 語。ほか ${hiddenN} 語は武器の文で使う語 (部位では何も起きない) なので隠している`
+        ? `体に効く ${usable.length} 語。武器用の ${hiddenN} 語は隠している`
         : `体に効く ${usable.length} 語`;
     }
     if (!menu.growWords) return;
+    // 語を置くたびに描き直すので、一覧のスクロール位置を保つ。
+    // ここを戻さないと、下のほうの語を選ぶたびに先頭へ跳ね返り、
+    // 下の語ほど使えなくなる。
+    const scrollTop = menu.growWords.scrollTop || 0;
     clear(menu.growWords);
     usable.forEach((t, i) => {
       const info = WORDS[t];
@@ -200,6 +204,7 @@ export class GrowPad extends SenPad {
       this.makeDraggable(b, place, () => this.onPoolTap(t));
       menu.growWords.append(b);
     });
+    if (scrollTop) menu.growWords.scrollTop = scrollTop;
   }
 
   /** 操作の説明と、直前の操作の結果。 */
@@ -209,17 +214,15 @@ export class GrowPad extends SenPad {
     if (this.msg) { note.textContent = this.msg; return; }
     if (this.armed) {
       const t = this.padTextOf(this.armed);
-      note.textContent = `「${t}」を選択中 — 部位の行を押すとそこに入る。押した位置で並びが決まる。`
+      note.textContent = `「${t}」を選択中 — 部位の行を押すと入る。`
         + (this.hint ? ` ${this.hint}` : '');
       return;
     }
     if (this.held) {
-      note.textContent = `「${this.padTextOf(this.held.word)}」を持ち上げ中 — 部位の行を押すとそこへ移る。所持語の箱を押すと外れる。`;
+      note.textContent = `「${this.padTextOf(this.held.word)}」を持ち上げ中 — 部位の行を押すとそこへ移る。`;
       return;
     }
-    note.textContent = '部位は 1 文。10 文字まで、語はいくつでも並べられる。'
-      + '所持語をドラッグして部位の行へ落とすと、その位置に入る。'
-      + '語をタップすると接続詞が順に回り、接続詞のマスをタップすると一覧から選べる。'
+    note.textContent = '部位は 1 文・10 文字まで。語を選んで行をタップ、またはドラッグで置く。'
       + (this.hint ? ` ${this.hint}` : '');
   }
 

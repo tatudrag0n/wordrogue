@@ -573,6 +573,7 @@ failed += await run('test/words.test.js');
 failed += await run('test/grammar.test.mjs');
 failed += await run('test/sim.test.js');
 failed += await run('test/motion.test.js');
+failed += await run('test/render.test.js');
 failed += await run('test/meaning.test.js');
 failed += await run('test/forge.drag.test.js');
 failed += await run('test/grow.menu.test.js');

@@ -605,9 +605,9 @@ sec('約束された剣 を UI から作れる (熟語自身の受身)');
   for (const t of ['約', '束', '剣']) wi.sentence.push(makeWord(t));
   wi._sig = null;
   forge.render();
-  const place = { kind: 'slot', wi, wIdx: 0, index: 1 };
-  const chip = dom.doc.querySelectorAll('.sen-conn')[1];
-  const menu = forge.openConnPicker(place, chip);
+  // 空の接続詞チップは非表示なので、実際に操作できる語の長押しで開く。
+  await longPress(chipsOf(forge)[1]);
+  const menu = dom.doc.querySelector('.conn-picker');
   const head = menu.querySelector('.conn-picker-head').textContent;
   ok(head.includes('熟語「約束」'), `見出しに熟語が出ない: ${head}`);
   const picks = [...menu.querySelectorAll('.conn-pick')].map((b) => b.textContent);

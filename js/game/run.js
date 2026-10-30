@@ -6,24 +6,24 @@
 // paused は時間だけを止めるフラグ。言葉鍛冶を開いている間も世界は止まる。
 // ============================================================================
 
-import { TAU, clamp, dist2, rng, angleDiff } from '../core/util.js';
-import { getStage } from '../data/stages.js';
-import { ENEMIES } from '../data/enemies.js';
+import { TAU, clamp, dist2, rng, angleDiff } from '../core/util.js?v=1.50';
+import { getStage } from '../data/stages.js?v=1.50';
+import { ENEMIES } from '../data/enemies.js?v=1.50';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.49';
-import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.49';
-import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
-import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.49';
-import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.49';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.49';
+} from '../data/words.js?v=1.50';
+import { isConnector } from '../data/words.connect.js?v=1.50';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.50';
+import { resolvePlayerStats, BASE_PLAYER } from './stats.js?v=1.50';
+import { normPartEntries } from './parts.js?v=1.50';
+import { WeaponInst } from './weapon.js?v=1.50';
+import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.50';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.50';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
-} from './entities.js';
+} from './entities.js?v=1.50';
 
 // ダッシュ。1 秒あたりの消費量と回復量。
 export const DASH_COST = 34;           // 押している間、毎秒 34 消費

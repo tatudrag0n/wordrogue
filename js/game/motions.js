@@ -14,7 +14,7 @@
 // 乱数は使わない。攻撃回数 (motionSeq) だけで決まるので、テストで再現できる。
 // ============================================================================
 
-import { TAU, clamp } from '../core/util.js';
+import { TAU, clamp } from '../core/util.js?v=1.50';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (t) => t * t * (3 - 2 * t);

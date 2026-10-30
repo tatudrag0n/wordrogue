@@ -43,8 +43,8 @@
 import {
   poolOfText, posOfText, WORD_POOLS, NOUN_POOL, COMPOUND_POOLS, MAX_COMPOUND_POOL_LEN,
   compoundPoolOf,
-} from './words.pool.js';
-import { PHRASE_BONUS } from './words.phrase.js';
+} from './words.pool.js?v=1.50';
+import { PHRASE_BONUS } from './words.phrase.js?v=1.50';
 export { NOUN_POOL, WORD_POOLS, COMPOUND_POOLS };
 
 /** 登録済み熟語の最長文字数。文の判定と同じ上限。 */

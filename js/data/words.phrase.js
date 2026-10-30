@@ -32,7 +32,7 @@
 //   熟語を足すときは必ずそのテストを通してから入れること。
 // ============================================================================
 
-import { DICT_COMPOUNDS } from './words.compounds.js';
+import { DICT_COMPOUNDS } from './words.compounds.js?v=1.50';
 
 /** 熟語の格。文力 (power) と自然さ (natural) への加点。 */
 export const PHRASE_TIER = {

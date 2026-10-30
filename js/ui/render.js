@@ -4,9 +4,9 @@
 // 外部画像ファイルを一切使わない。全部その場で描く。
 // ============================================================================
 
-import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.49';
-import { motionPose, motionKey, WEAPON_MOTIONS } from '../game/motions.js?v=1.49';
+import { TAU, clamp, lerp, dist2 } from '../core/util.js?v=1.50';
+import { ELEMENTS } from '../data/words.js?v=1.50';
+import { motionPose, motionKey, WEAPON_MOTIONS } from '../game/motions.js?v=1.50';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */

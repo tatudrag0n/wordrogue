@@ -5,7 +5,7 @@
 // ゲーム画面を長押ししながら動かすとスティックが現れる。
 // ============================================================================
 
-import { clamp, TAU } from './util.js';
+import { clamp, TAU } from './util.js?v=1.50';
 
 export class Input {
   /** @param {HTMLElement} surface スティックの操作面にする要素 */

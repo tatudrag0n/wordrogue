@@ -103,8 +103,16 @@ if (syntaxBad) {
   const vers = new Map();
   const jsFiles = files.filter((f) => f.includes(`${sep}js${sep}`));
   for (const f of [...jsFiles, join(ROOT, 'index.html')]) {
-    for (const m of (await readFile(f, 'utf8')).matchAll(/[?&]v=([0-9]+\.[0-9]+)/g)) {
+    const content = await readFile(f, 'utf8');
+    for (const m of content.matchAll(/[?&]v=([0-9]+\.[0-9]+)/g)) {
       if (!vers.has(m[1])) vers.set(m[1], f.replace(ROOT, ''));
+    }
+    // エントリだけでなく、その先の辞書なども同じ版の URL で読む。
+    // クエリのない import があると、古いモジュールがキャッシュから復活する。
+    if (jsFiles.includes(f)) {
+      for (const m of content.matchAll(/(?:from\s*|import\s*)['"](\.{1,2}\/[^'"]+\.js)(\?v=[0-9]+\.[0-9]+)?['"]/g)) {
+        if (!m[2]) bad.push(`${f.replace(ROOT, '')}: ${m[1]} に ?v= が無い`);
+      }
     }
   }
   const vList = [...vers.keys()];

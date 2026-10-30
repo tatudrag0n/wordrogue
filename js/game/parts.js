@@ -18,12 +18,12 @@
 //   2. 文が完成するほど強くなる … 部位の文の力 (power) が効果と体に乗る
 // ============================================================================
 
-import { makeWord, WORDS, CONNECTOR_SET } from '../data/words.js?v=1.49';
+import { makeWord, WORDS, CONNECTOR_SET } from '../data/words.js?v=1.50';
 import {
   canConnect, connectorFor, CONNECTORS, CONNECT_ORDER, ROLE_LABEL,
-} from '../data/words.connect.js';
-import { Sentence } from './sentence.js';
-import { PART_MAX_LEN } from '../core/save.js';
+} from '../data/words.connect.js?v=1.50';
+import { Sentence } from './sentence.js?v=1.50';
+import { PART_MAX_LEN } from '../core/save.js?v=1.50';
 
 /** 接続詞の役割。画面の見出しに使う。 */
 export const ROLE_ORDER = ['adn', 'adv', 'case'];

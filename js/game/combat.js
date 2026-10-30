@@ -7,11 +7,31 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.46';
-import { startWeaponMotion } from './motions.js?v=1.46';
+import { ELEMENTS } from '../data/words.js?v=1.47';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.47';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
+
+/**
+ * 武器の攻撃が届く形 (半径と扇の角度)。モーションはこの値だけを見て描くので、
+ * 見た目と当たり判定は必ず一致する。
+ *   斬撃 … 扇 (st.arc) を半径 st.range × 大きさ
+ *   薙ぎ … 全方位を半径 st.range + 範囲
+ * @param {object} st 武器ステータス
+ * @param {object} [stats] プレイヤー能力 (大きさを持つ)
+ * @returns {{reach:number, arc:number}}
+ */
+export function attackShape(st, stats = {}) {
+  const size = (stats && stats.size) || 1;
+  if (st.kind === 'whip') {
+    return { reach: (st.range + (st.area || 0)) * size, arc: 0 };
+  }
+  return {
+    reach: (st.range || 100) * size * (st.size || 1),
+    arc: st.arc || 0,
+  };
+}
 
 /**
  * 属性ごとの当たりの粒。形そのものが属性の意味になる。
@@ -95,14 +115,19 @@ export function fireWeapon(run, wi, res) {
   // 打撃の瞬間へ進める。直接 fireWeapon を呼ぶテストでは、その場で
   // 振り始める。どちらも当たり判定・威力・間隔は変えない。
   const interval = 1 / Math.max(0.05, st.rate || 1);
+  // 見た目の扇と間合いを、これから当てる範囲に合わせる。
+  const shape = attackShape(st, p.stats);
   if (!wi.motion || wi.motion.seq < (wi.motionSeq || 0)) {
-    const m = startWeaponMotion(wi, res, aim, { interval, elapsed: 0 });
+    const m = startWeaponMotion(wi, res, aim, {
+      interval, elapsed: 0, reach: shape.reach, arc: shape.arc,
+    });
     // 予備動作を先に始めていない直接攻撃は、打撃の瞬間から見せる。
     m.elapsed = m.impactAt;
   } else {
     wi.aim = aim;
     wi.motion.aim = aim;
     wi.motion.baseAim = aim;
+    syncMotionShape(wi.motion, shape.reach, shape.arc);
     wi.motion.elapsed = Math.max(wi.motion.elapsed, wi.motion.impactAt);
   }
 
@@ -166,10 +191,14 @@ function doMeteor(run, wi, st, el, elInfo) {
 // ─────────────────────────────────────────────────────────────────────────────
 function doSlash(run, wi, st, aim, el, elInfo) {
   const p = run.player;
-  const reach = st.range * (p.stats.size || 1) * st.size;
-  const arc = st.arc;
+  // 当たる範囲と、描く扇は同じ値から作る。ここがずれると
+  // 「見えていない敵に当たる」「見えている敵に当たらない」が起きる。
+  const shape = attackShape(st, p.stats);
+  const reach = shape.reach;
+  const arc = shape.arc > 0.02 ? shape.arc : Math.PI * 2 / 3;
   // 刃の軌跡は、モーションの打撃〜振り抜けのあいだだけ描く。
   const motion = wi.motion || null;
+  if (motion) syncMotionShape(motion, reach, arc);
   const life = motion
     ? Math.max(0.28, motion.duration - motion.windup + 0.08)
     : 0.32;
@@ -208,8 +237,9 @@ function doSlash(run, wi, st, aim, el, elInfo) {
 
 function doWhip(run, wi, st, aim, el, elInfo) {
   const p = run.player;
-  const reach = (st.range + (st.area || 0)) * (p.stats.size || 1);
+  const reach = attackShape(st, p.stats).reach;
   const motion = wi.motion || null;
+  if (motion) syncMotionShape(motion, reach, 0);
   const life = motion
     ? Math.max(0.34, motion.duration - motion.windup + 0.08)
     : 0.36;

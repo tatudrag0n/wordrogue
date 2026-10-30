@@ -14,8 +14,8 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js?v=1.46';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan } from '../data/words.js?v=1.46';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js?v=1.47';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan } from '../data/words.js?v=1.47';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
@@ -392,7 +392,10 @@ export class WeaponInst {
     st.bounce = Math.max(0, Math.round(st.bounce || 0));
     st.chain = Math.max(0, Math.round(st.chain || 0));
     st.orbit = Math.max(0, Math.round(st.orbit || 0));
-    st.arc = st.arc || 0;
+    // 斬撃は扇が無いと当たらない。武器語から作った文 (form:剣 など) が
+    // 扇 0 のままにならないよう、斬撃の既定の扇を入れる。見た目の軌跡も
+    // この扇から作るので、範囲とモーションが食い違わない。
+    st.arc = st.arc > 0.02 ? st.arc : (kind === 'slash' ? 1.8 : 0);
     st.spread = clamp(st.spread || 0, 0, Math.PI);
     st.duration = Math.max(0.3, st.duration || 0);
     st.homing = clamp(st.homing || 0, 0, 1);

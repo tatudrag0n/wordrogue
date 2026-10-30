@@ -22,7 +22,7 @@
 // 熟語の判定は、接続詞を挟まずに続いた語だけで見る (「発の電」は熟語ではない)。
 // ============================================================================
 
-import { evaluate, makeWord, WORDS } from '../data/words.js?v=1.46';
+import { evaluate, makeWord, WORDS } from '../data/words.js?v=1.47';
 import { connectorsAfter, formAfter, CONNECTORS } from '../data/words.connect.js';
 
 /** 文の文字数の上限。接続詞も末尾語も数える。 */

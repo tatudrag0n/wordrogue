@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.47';
+} from '../data/words.js?v=1.48';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.47';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.48';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.47';
-import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.47';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.47';
+import { WeaponInst } from './weapon.js?v=1.48';
+import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.48';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.48';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,

@@ -18,11 +18,11 @@
 import { $, el, clear } from '../core/util.js';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
-} from '../data/words.js?v=1.47';
+} from '../data/words.js?v=1.48';
 import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js';
-import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.47';
+import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.48';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { keyStats } from '../game/weapon.js?v=1.47';
+import { keyStats } from '../game/weapon.js?v=1.48';
 import { SenPad } from './senpad.js';
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
@@ -114,6 +114,9 @@ export class Forge extends SenPad {
 
     $('#forgeClose').addEventListener('click', () => this.close());
     $('#forgeBack').addEventListener('click', () => this.close());
+    // タブ右上の「?」。初回の説明を開き直せる。
+    this.helpBtn = $('#btnForgeHelp');
+    this.helpBtn?.addEventListener('click', () => this.opt.tip?.('forge'));
     this.hintBtn.addEventListener('click', () => {
       this.hintOn = !this.hintOn;
       this.hintEl.hidden = !this.hintOn;
@@ -147,6 +150,8 @@ export class Forge extends SenPad {
     this.root.hidden = false;
     this.run.paused = true;
     this.render();
+    // 初めて開いたときだけ、短い説明を重ねる (以後は「?」から)。
+    this.opt.tip?.('forge');
   }
 
   close() {

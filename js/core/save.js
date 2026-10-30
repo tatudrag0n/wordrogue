@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord, DRAWABLE_ALL } from '../data/words.js?v=1.47';
+import { WORDS, drawWord, DRAWABLE_ALL } from '../data/words.js?v=1.48';
 import { CONNECTORS, canConnect } from '../data/words.connect.js';
 import {
   RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
-} from '../data/ranks.js?v=1.47';
+} from '../data/ranks.js?v=1.48';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -30,6 +30,9 @@ const DEFAULTS = {
   settings: { volume: 0.5, screenShake: true, showDamage: true },
   seenIntro: false,
   guide: 0,            // 初回の操作ガイド。0 = まだ見ていない
+  // タブごとの短い説明を見たか。初めて開いたときだけ案内を出し、
+  // 2 回目からは画面を説明文で埋めない (くわしくはチュートリアルと遊び方)。
+  tips: {},
 };
 
 function deepMerge(base, patch) {
@@ -537,6 +540,19 @@ export class Save {
     this.save();
   }
   setting(k) { return this.data.settings[k]; }
+
+  // ── 初回の説明 ───────────────────────────────────────────────────────────
+  // タブの説明は初めて開いたときだけ出す。以後は「?」から開ける。
+  seenTip(key) {
+    return !!(this.data.tips && this.data.tips[key]);
+  }
+
+  markTip(key) {
+    if (!this.data.tips || typeof this.data.tips !== 'object') this.data.tips = {};
+    if (this.data.tips[key]) return;
+    this.data.tips[key] = 1;
+    this.save();
+  }
 }
 
 export { KEY, DEFAULTS };

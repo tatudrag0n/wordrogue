@@ -2,18 +2,18 @@
 // ワードローグ — 起動とメインループ
 // ============================================================================
 
-import { $, clamp } from './core/util.js?v=1.47';
-import { Input } from './core/input.js?v=1.47';
-import { Audio } from './core/audio.js?v=1.47';
-import { Save } from './core/save.js?v=1.47';
-import { Run } from './game/run.js?v=1.47';
-import { Renderer } from './ui/render.js?v=1.47';
-import { Hud } from './ui/hud.js?v=1.47';
-import { Forge } from './ui/forge.js?v=1.47';
-import { Menus } from './ui/menus.js?v=1.47';
+import { $, clamp } from './core/util.js?v=1.48';
+import { Input } from './core/input.js?v=1.48';
+import { Audio } from './core/audio.js?v=1.48';
+import { Save } from './core/save.js?v=1.48';
+import { Run } from './game/run.js?v=1.48';
+import { Renderer } from './ui/render.js?v=1.48';
+import { Hud } from './ui/hud.js?v=1.48';
+import { Forge } from './ui/forge.js?v=1.48';
+import { Menus } from './ui/menus.js?v=1.48';
 
-import { STAGES } from './data/stages.js?v=1.47';
-import { WORDS, makeWord, CONNECTOR_SET } from './data/words.js?v=1.47';
+import { STAGES } from './data/stages.js?v=1.48';
+import { WORDS, makeWord, CONNECTOR_SET } from './data/words.js?v=1.48';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態
@@ -286,6 +286,8 @@ function startRun(weaponIds) {
   app.forge?.close();
   app.forge = new Forge(run, {
     audio: app.audio,
+    // 初めて開いたときの短い説明 (js/ui/tips.js)。実行中は Menus が持つ。
+    tip: (key) => app.menus.showTip(key),
     onClose: () => {
       if (app.mode !== 'forge') return;
       app.mode = 'play';
@@ -527,6 +529,11 @@ function closeDevMode() {
 function onKey(e) {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
+  // 初回の説明はどの画面の上にも出る。まずこれを閉じる。
+  if (app.menus?.tips?.isOpen?.()) {
+    if (k === 'escape' || k === 'enter' || k === ' ') { e.preventDefault(); app.menus.tips.close(); }
+    return;
+  }
   if (app.mode === 'dev') {
     if (k === 'escape') { e.preventDefault(); closeDevMode(); }
     return;

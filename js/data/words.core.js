@@ -1,7 +1,9 @@
 // ============================================================================
 // ワードローグ — 語テーブル (属性)
 // フォーマット: 語  種別  属性  効果(半角スペース区切り)
-//   種別: element / phenom / form / modifier / verb / connect
+//   種別: element / phenom / modifier / verb / connect / weapon
+//     weapon … 基本武器 (刃・剣・銃・鋏・鋸…) だけ。語彙からは引かない。
+//             「形態語」という分類は無い — 物の形を指す語も普通の語 (効果) として扱う。
 //   属性: element のときだけ必須。それ以外は -
 //   効果: key+数値 の並び。
 //     効果は武器の文で読む。装甲・回復・吸血・会心・幸運・吸引・盾など、
@@ -37,25 +39,27 @@ export const ELEMENTS = {
 export const CATEGORIES = {
   element:  { name: '属性', color: '#e8762a', weight: 30 },
   phenom:   { name: '現象', color: '#12a58a', weight: 20 },
-  // 形態語は武器語ではない「ただの語」。数だけ多いので抽選の重みは落としてある。
-  form:     { name: '形態', color: '#2f7fc4', weight: 12 },
   modifier: { name: '効果', color: '#4e9b1f', weight: 24 },
   verb:     { name: '動詞', color: '#d94f7a', weight: 18 },
   connect:  { name: '接続', color: '#5b7fb5', weight: 18 },
+  // 武器 (基本武器の語) だけの分類。辞書の一覧には出さない — 武器語は
+  // 語彙から引かず、レベルアップの 3 択でだけ得る。語の分類に「形態」は無い。
+  weapon:   { name: '武器', color: '#2f7fc4', weight: 12 },
 };
 
 /**
  * 武器語 = **基本武器の語だけ**。
  *
- * 武器語といえるのは次の 3 つをまとめて満たす語だけだった。
+ * 武器語といえるのは次の 3 つをまとめて満たす語だけ。
  *   1. レベルアップの 3 択で「武器語」として出る
  *   2. 文の中にあると攻撃の型を決める
  *   3. 文の末尾 (武器の名前) になれる
- * 環・弾・玉・球・壁 のような形態語は 1 を満たさない (語彙から引けるただの語) ので、
- * 武器語から外した。武器語はこの 15 語だけ。
+ * 環・弾・玉・球・壁 のような語は 1 を満たさない (語彙から引けるただの語) ので、
+ * 武器語ではない。武器語はこの 18 語だけ。
  */
 export const WEAPON_WORDS = [
   '刃', '剣', '刀', '斧', '槌', '槍', '矛', '牙', '爪', '弓', '鞭', '鎖', '杖', '拳', '銃', '針',
+  '鋏', '鋸',
 ];
 export const WEAPON_WORD_SET = new Set(WEAPON_WORDS);
 
@@ -67,7 +71,8 @@ export const isWeaponWord = (text) => WEAPON_WORD_SET.has(text);
 //   1. 属性 element … 属性値 (el) を持ち、文全体の属性を決める体言。特殊武器になれる。
 //   2. 現象 phenom  … 属性値は持たないが、自然現象・自然の力そのものを指す体言 (渦)。
 //                     属性と同じく特殊武器になれる。
-//   3. 形態 form    … 具体的な物の形・道具を指す体言。武器の頭になれるのは基本武器だけ。
+//   3. 物 (形・道具) … 具体的な物の形・道具を指す体言。効果 (modifier) として扱い、
+//                     武器の頭になれるのは基本武器 (武器語) だけ。
 //   4. 動詞 verb    … 動作・作用そのものが主役で、述語になる語。
 //   5. 効果 modifier… 上のどれでもなく、他の語を修飾するのが主役の語。
 //   6. 接続 connect … 送り仮名。語ではない。
@@ -76,12 +81,28 @@ export const isWeaponWord = (text) => WEAPON_WORD_SET.has(text);
 // 1 語が複数カテゴリに属してよい (words.js の cats)。
 //   動詞の形 (述語) を持つ語は、本来の分類に加えて verb も持つ (震える・還る・走る)。
 //   形容の形は品詞 (pos) で表し、分類は増やさない。
-// 境界の例: 岩は地の力として属性、小さい石は投擲する弾体として形態。
+// 境界の例: 岩は地の力として属性、小さい石は投げる物として効果。
 //           圧・律は現象そのものより作用の修飾が主役なので効果。
 // ─────────────────────────────────────────────────────────────────────────
 
 // 品詞と接続詞 (送り仮名) は語ごとに words.pool.js で決める。
 // ここは語の種別・属性・効果だけを持つ。
+
+/**
+ * 物の形 (刃・弾・環・盾…) を表す語。
+ *
+ * **これは分類 (カテゴリ) ではない。** 語のカテゴリに「形態」は無い。
+ * 「刃弾」「弾環」のように形の語を 2 つ並べると日本語にならないので、
+ * その並びだけを落とすための文法の一覧。
+ */
+export const SHAPE_WORDS = new Set([
+  '刃', '剣', '刀', '斧', '槌', '槍', '矛', '戈', '牙', '爪', '拳', '鋏', '鋸',
+  '弾', '銃', '玉', '矢', '針', '弓', '杖', '球', '珠', '環', '輪',
+  '鞭', '鎖', '壁', '網', '盾',
+]);
+
+/** 物の形を表す語か (分類ではなく、並べ方の判定用)。 */
+export const isShapeWord = (text) => SHAPE_WORDS.has(text);
 
 /**
  * 末尾語を直接修飾できない語。
@@ -94,7 +115,7 @@ export const isWeaponWord = (text) => WEAPON_WORD_SET.has(text);
  * 「長柄の槍」「氷晶の剣」は の で係れば普通に読める。
  */
 export const TAIL_UNMODIFIABLE = new Set([
-  '刃', '剣', '刀', '斧', '槌', '槍', '矛', '戈', '牙', '爪',
+  '刃', '剣', '刀', '斧', '槌', '槍', '矛', '戈', '牙', '爪', '鋏', '鋸',
   '弾', '銃', '玉', '矢', '針', '弓', '球', '珠', '光', '雷',
   '岩', '石', '環', '輪', '鞭', '鎖', '壁', '網', '盾', '杖', '拳',
 ]);
@@ -215,54 +236,58 @@ const RAW_ELEMENT = `
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 形態語: 何を一般に撃つかを決める核
+// 武器と物の語
 //
-// 武器語はすべて 1 文字。「太刀」「大剣」のように 2 文字では作らない。
+// 武器語 (基本武器) はすべて 1 文字。「太刀」「大剣」のように 2 文字では作らない。
 // 末尾語と並べたときに日本語として破綻しない形だけを置く。
+// 武器語以外の「弾・環・玉・盾」のような物の語は、ただの語 (効果) として扱う。
+// **「形態語」という分類は無い** — 辞書にも一覧にも出さない。
 // ─────────────────────────────────────────────────────────────────────────────
 const RAW_FORM = `
-刃     form  -  dmg+5  speed+60  pierce+2
-剣     form  -  dmg+8  size+0.20
-刀     form  -  dmg+9  arc+0.5  size+0.30
-斧     form  -  dmg+11  speed-10  size+0.35  knock+30
-槌     form  -  dmg+14  speed-20  size+0.35  knock+45
-槍     form  -  dmg+7  crit+0.04  speed+40
-矛     form  -  dmg+13  pierce+5  crit+0.06  speed+30
-戈     form  -  dmg+9  arc+0.8  size+0.25
-牙     form  -  dmg+6  crit+0.03
-爪     form  -  dmg+4  count+2  speed+20  arc+0.6
-拳     form  -  dmg+7  speed+40  arc+0.6
+刃     weapon  -  dmg+5  speed+60  pierce+2
+剣     weapon  -  dmg+8  size+0.20
+刀     weapon  -  dmg+9  arc+0.5  size+0.30
+斧     weapon  -  dmg+11  speed-10  size+0.35  knock+30
+槌     weapon  -  dmg+14  speed-20  size+0.35  knock+45
+槍     weapon  -  dmg+7  crit+0.04  speed+40
+矛     weapon  -  dmg+13  pierce+5  crit+0.06  speed+30
+戈     modifier  -  dmg+9  arc+0.8  size+0.25
+牙     weapon  -  dmg+6  crit+0.03
+爪     weapon  -  dmg+4  count+2  speed+20  arc+0.6
+拳     weapon  -  dmg+7  speed+40  arc+0.6
+鋏     weapon  -  dmg+6  crit+0.06  count+1
+鋸     weapon  -  dmg+8  arc+0.5  pierce+2
 
-弾     form  -  dmg+6  count+1  explode+30
-銃     form  -  dmg+7  count+1  speed+40
-玉     form  -  dmg+4  count+2  spread+0.3
-矢     form  -  dmg+5  speed+90  pierce+1
-針     form  -  dmg+2  speed+90  count+1
-弓     form  -  dmg+5  speed+110  pierce+1
-杖     form  -  dmg+6  pierce+2  speed+30
-球     form  -  dmg+6  area+6  size+0.15
-珠     form  -  dmg+10  pierce+4  bounce+2  crit+0.06
-還     form  -  dmg+11  pierce+5  bounce+3  speed+40
+弾     modifier  -  dmg+6  count+1  explode+30
+銃     weapon  -  dmg+7  count+1  speed+40
+玉     modifier  -  dmg+4  count+2  spread+0.3
+矢     modifier  -  dmg+5  speed+90  pierce+1
+針     weapon  -  dmg+2  speed+90  count+1
+弓     weapon  -  dmg+5  speed+110  pierce+1
+杖     weapon  -  dmg+6  pierce+2  speed+30
+球     modifier  -  dmg+6  area+6  size+0.15
+珠     modifier  -  dmg+10  pierce+4  bounce+2  crit+0.06
+還     modifier  -  dmg+11  pierce+5  bounce+3  speed+40
 
-石     form  -  dmg+7  speed-20  size+0.25  knock+20
+石     modifier  -  dmg+7  speed-20  size+0.25  knock+20
 
-環     form  -  orbit+1  count+2  dmg+5
-輪     form  -  orbit+1  dmg+7  size+0.15
-鞭     form  -  dmg+7  area+12  range+40
-鎖     form  -  dmg+6  area+14  bounce+3
-壁     form  -  dmg+6  shield+18  area+10
-網     form  -  dmg+5  area+14  slowImmune+1
-盾     form  -  dmg+4  shield+22  armor+2
+環     modifier  -  orbit+1  count+2  dmg+5
+輪     modifier  -  orbit+1  dmg+7  size+0.15
+鞭     weapon  -  dmg+7  area+12  range+40
+鎖     weapon  -  dmg+6  area+14  bounce+3
+壁     modifier  -  dmg+6  shield+18  area+10
+網     modifier  -  dmg+5  area+14  slowImmune+1
+盾     modifier  -  dmg+4  shield+22  armor+2
 
 # ── 鍛冶と具足 (盾・壁と同じ「ただの物」の語。部位強化でも効く) ──
-#   体の強化に使う語を別の分類にはしない。甲・鍔・盾・壁はみな形態語で、
+#   体の強化に使う語を別の分類にはしない。甲・鍔・盾・壁はみな物の語 (効果) で、
 #   文の中でも体の中でも同じ効き方をする。
-甲     form  -  dmg+4  armor+3  shield+12
-鞘     form  -  dmg+3  speed+30  rate+0.15
-鍔     form  -  dmg+2  armor+3  shield+16
-釘     form  -  dmg+4  pierce+3  speed+25
-柄     form  -  size-0.12  speed+20  rate+0.15
-晶     form  -  dmg+4  crit+0.04  pierce+1
+甲     modifier  -  dmg+4  armor+3  shield+12
+鞘     modifier  -  dmg+3  speed+30  rate+0.15
+鍔     modifier  -  dmg+2  armor+3  shield+16
+釘     modifier  -  dmg+4  pierce+3  speed+25
+柄     modifier  -  size-0.12  speed+20  rate+0.15
+晶     modifier  -  dmg+4  crit+0.04  pierce+1
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -494,7 +519,7 @@ const RAW_VERB = `
 // 追加語彙
 //
 // 「一」「山」「海」「砲」のような、1 文字で意味の通る語をまとめて足した。
-// 分類は既存の語と同じ基準で決めている (属性 → 現象 → 形態 → 動詞 → 効果)。
+// 分類は既存の語と同じ基準で決めている (属性 → 現象 → 効果 → 動詞)。
 // どの語も 1 文字なので、並べただけで文になる。
 //   山の剣 / 海を斬る / 砲の弾 / 七の刃
 // 動詞の活用形は words.pool.js に置く (る・られた・り …)。
@@ -561,75 +586,75 @@ const RAW_EXT_PHENOM = `
 `;
 
 const RAW_EXT_FORM = `
-井     form  -  dmg+3  pierce+2
-孔     form  -  dmg+3  pierce+3
-器     form  -  dmg+4  count+1
-園     form  -  dmg+2  area+10
-壷     form  -  dmg+5  area+10
-宮     form  -  dmg+3  armor+2
-宿     form  -  dmg+2  regen+0.5
-尾     form  -  dmg+3  speed+20
-巣     form  -  dmg+2  count+2
-幕     form  -  dmg+2  area+10  shield+10
-庭     form  -  dmg+2  area+10
-廬     form  -  dmg+2  armor+2
-房     form  -  dmg+2  area+8
-手     form  -  dmg+4  rate+0.3
-指     form  -  dmg+2  crit+0.03  pierce+1
-掌     form  -  dmg+3  knock+35
-斗     form  -  dmg+4  size+0.20
-朶     form  -  dmg+2  count+2
-杆     form  -  dmg+3  range+30
-束     form  -  dmg+3  count+2
-棺     form  -  dmg+5  lifesteal+0.003
-殿     form  -  dmg+3  armor+3
-牛     form  -  dmg+7  knock+40
-犀     form  -  dmg+6  pierce+4
-犬     form  -  dmg+4  speed+30
-狼     form  -  dmg+6  crit+0.05
-獅     form  -  dmg+7  knock+35
-獣     form  -  dmg+6
-虎     form  -  dmg+7  crit+0.05  knock+30
-蚊     form  -  dmg+1  count+2  speed+30
-蛇     form  -  dmg+4  poison+3
-蝦     form  -  dmg+3  armor+2
-螺     form  -  dmg+4  orbit+1
-蟇     form  -  dmg+5  poison+2
-袖     form  -  dmg+2  speed+20
-裹     form  -  dmg+3  pierce+2
-製     form  -  dmg+3  armor+1
-褥     form  -  dmg+2  regen+0.5
-象     form  -  dmg+7  knock+45
-車     form  -  dmg+6  knock+30
-釭     form  -  dmg+3  burn+2
-鉾     form  -  dmg+9  pierce+4
-鎌     form  -  dmg+6  arc+0.7  count+1
-鎗     form  -  dmg+8  pierce+3
-鎚     form  -  dmg+13  knock+40
-鏡     form  -  dmg+4  reflect+0.6
-門     form  -  dmg+4  armor+2  area+8
-雀     form  -  dmg+2  speed+50  count+1
-靫     form  -  dmg+3  count+2  speed+20
-頤     form  -  dmg+2  armor+1
-頭     form  -  dmg+4  crit+0.04
-顔     form  -  dmg+3  armor+1
-魚     form  -  dmg+3  speed+30  count+1
-鱗     form  -  shield+14  armor+2
-鳥     form  -  dmg+2  speed+50  count+1
-鹿     form  -  dmg+4  speed+40
-羽     form  -  dmg+2  speed+40  count+1
-翼     form  -  dmg+3  speed+50
-砲     form  -  dmg+8  explode+34  count+1
-符     form  -  dmg+3  count+2  homing+0.15
-箍     form  -  dmg+2  shield+14
-箱     form  -  dmg+3  shield+14
-籠     form  -  dmg+4  area+12
-蓋     form  -  dmg+2  shield+16  armor+1
-綱     form  -  dmg+4  area+10  knock+30
-線     form  -  dmg+3  pierce+3  range+40
-縄     form  -  dmg+4  area+8
-脚     form  -  dmg+2  speed+35
-種     form  -  dmg+2  count+2
+井     modifier  -  dmg+3  pierce+2
+孔     modifier  -  dmg+3  pierce+3
+器     modifier  -  dmg+4  count+1
+園     modifier  -  dmg+2  area+10
+壷     modifier  -  dmg+5  area+10
+宮     modifier  -  dmg+3  armor+2
+宿     modifier  -  dmg+2  regen+0.5
+尾     modifier  -  dmg+3  speed+20
+巣     modifier  -  dmg+2  count+2
+幕     modifier  -  dmg+2  area+10  shield+10
+庭     modifier  -  dmg+2  area+10
+廬     modifier  -  dmg+2  armor+2
+房     modifier  -  dmg+2  area+8
+手     modifier  -  dmg+4  rate+0.3
+指     modifier  -  dmg+2  crit+0.03  pierce+1
+掌     modifier  -  dmg+3  knock+35
+斗     modifier  -  dmg+4  size+0.20
+朶     modifier  -  dmg+2  count+2
+杆     modifier  -  dmg+3  range+30
+束     modifier  -  dmg+3  count+2
+棺     modifier  -  dmg+5  lifesteal+0.003
+殿     modifier  -  dmg+3  armor+3
+牛     modifier  -  dmg+7  knock+40
+犀     modifier  -  dmg+6  pierce+4
+犬     modifier  -  dmg+4  speed+30
+狼     modifier  -  dmg+6  crit+0.05
+獅     modifier  -  dmg+7  knock+35
+獣     modifier  -  dmg+6
+虎     modifier  -  dmg+7  crit+0.05  knock+30
+蚊     modifier  -  dmg+1  count+2  speed+30
+蛇     modifier  -  dmg+4  poison+3
+蝦     modifier  -  dmg+3  armor+2
+螺     modifier  -  dmg+4  orbit+1
+蟇     modifier  -  dmg+5  poison+2
+袖     modifier  -  dmg+2  speed+20
+裹     modifier  -  dmg+3  pierce+2
+製     modifier  -  dmg+3  armor+1
+褥     modifier  -  dmg+2  regen+0.5
+象     modifier  -  dmg+7  knock+45
+車     modifier  -  dmg+6  knock+30
+釭     modifier  -  dmg+3  burn+2
+鉾     modifier  -  dmg+9  pierce+4
+鎌     modifier  -  dmg+6  arc+0.7  count+1
+鎗     modifier  -  dmg+8  pierce+3
+鎚     modifier  -  dmg+13  knock+40
+鏡     modifier  -  dmg+4  reflect+0.6
+門     modifier  -  dmg+4  armor+2  area+8
+雀     modifier  -  dmg+2  speed+50  count+1
+靫     modifier  -  dmg+3  count+2  speed+20
+頤     modifier  -  dmg+2  armor+1
+頭     modifier  -  dmg+4  crit+0.04
+顔     modifier  -  dmg+3  armor+1
+魚     modifier  -  dmg+3  speed+30  count+1
+鱗     modifier  -  shield+14  armor+2
+鳥     modifier  -  dmg+2  speed+50  count+1
+鹿     modifier  -  dmg+4  speed+40
+羽     modifier  -  dmg+2  speed+40  count+1
+翼     modifier  -  dmg+3  speed+50
+砲     modifier  -  dmg+8  explode+34  count+1
+符     modifier  -  dmg+3  count+2  homing+0.15
+箍     modifier  -  dmg+2  shield+14
+箱     modifier  -  dmg+3  shield+14
+籠     modifier  -  dmg+4  area+12
+蓋     modifier  -  dmg+2  shield+16  armor+1
+綱     modifier  -  dmg+4  area+10  knock+30
+線     modifier  -  dmg+3  pierce+3  range+40
+縄     modifier  -  dmg+4  area+8
+脚     modifier  -  dmg+2  speed+35
+種     modifier  -  dmg+2  count+2
 `;
 
 const RAW_EXT_MODIFIER = `

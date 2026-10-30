@@ -16,19 +16,21 @@
 
 import {
   RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
-} from './words.core.js?v=1.48';
-import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.48';
+  SHAPE_WORDS, isShapeWord,
+} from './words.core.js?v=1.49';
+import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.49';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
   PREDICATE_CONNECTORS, isAdnominal, isConnector, formAfter,
 } from './words.connect.js';
 import { poolOfText, posOfText } from './words.pool.js';
-import { rankMul } from './ranks.js?v=1.48';
+import { rankMul } from './ranks.js?v=1.49';
 
 export {
   CATEGORIES, ELEMENTS, PHRASE_BONUS, CONNECTORS, CONNECT_ORDER, POS,
-  TAIL_UNMODIFIABLE, PREDICATE_CONNECTORS, isAdnominal, isConnector,
+  TAIL_UNMODIFIABLE, SHAPE_WORDS, isShapeWord,
+  PREDICATE_CONNECTORS, isAdnominal, isConnector,
   // 武器語 (基本武器) の一覧と判定。UI もここを通る。
   WEAPON_WORDS, WEAPON_WORD_SET as BASIC_WEAPONS, isWeaponWord,
 };
@@ -131,25 +133,27 @@ export function hasKana(text) { return KANA_RE.test(text); }
 /**
  * 語彙から引ける語のカテゴリ。
  * 武器語 (基本武器) は語彙から引かない — レベルアップの 3 択でだけ得る。
- * 形態語の残り (弾・環・玉・壁…) はただの語なので引ける。
+ * 弾・環・玉・壁 のような物の語は、ただの語 (効果) なので引ける。
  * 接続詞は鍛冶の接続詞プールから無限に使えるので引かない。
  * 辞書には残す — 文の分割と末尾語の判定に使う。
+ *
+ * 「形態語」という分類は無い。武器の形を決めるのは基本武器の 18 語だけ。
  */
-const isDrawableCat = (c) => c === 'element' || c === 'phenom' || c === 'form'
+const isDrawableCat = (c) => c === 'element' || c === 'phenom'
   || c === 'modifier' || c === 'verb';
 
 /** 語彙から引ける語だけ (接続詞・動詞・武器語を除く)。 */
 export const DRAWABLE = Object.keys(WORDS).filter((w) => {
   const c = WORDS[w].cat;
   if (c === 'connect' || c === 'verb') return false;
-  return c !== 'form' || !isWeaponWord(w);
+  return c !== 'weapon';
 });
 
 /**
  * 語彙から引ける語。動詞も含む。
  * 接続詞は鍛冶の接続詞プールから無限に使えるので引かない。
  * 動詞は 1 枚で 1 つの動作になる。武器語 (基本武器) は 3 択でだけ得る。
- * 形態語の残り (弾・環・玉…) はただの語として引ける。
+ * 弾・環・玉 のような物の語はただの語 (効果) として引ける。
  * 出る比重は種別ごとに少しずつ抑えてある。
  */
 export const DRAWABLE_ALL = Object.keys(WORDS).filter(
@@ -179,7 +183,7 @@ export const SIMPLE_POOL = Object.keys(WORDS).filter((w) => {
 
 /** 種別ごとの語配列。 */
 export const WORDS_BY_CAT = {
-  element: [], phenom: [], form: [], modifier: [], verb: [], connect: [],
+  element: [], phenom: [], modifier: [], verb: [], connect: [], weapon: [],
 };
 for (const w of Object.keys(WORDS)) WORDS_BY_CAT[WORDS[w].cat].push(w);
 
@@ -510,13 +514,15 @@ export function evaluate(words, opt = {}) {
   //   「爆裂」+「する」 -> 爆裂する
   const compounds = conn.compounds;
 
-  // 形を表す語どうしは隣り合えない。パーツ (部位) も武器と同じ規則で落とす。
+  // 形を表す語どうしは隣り合えない。パーツ (部位) も同じ規則で落とす。
+  // 「刃弾」「弾環」は日本語に無い並び。これは分類ではなく文法の規則で、
+  // 語のカテゴリに「形態」は無い (弾・環・玉 はただの語=効果)。
   // 熟語の内側 (電光石火の 光石) は 1 つの名詞なので許す。
   // 末尾語との隣接は、下の末尾語判定が「末尾語を修飾できない」として扱う。
   {
     const tailIdx = opt.tail ? segs.lastIndexOf(opt.tail) : -1;
     for (let i = 0; i + 1 < segs.length; i++) {
-      if (WORDS[segs[i]]?.cat !== 'form' || WORDS[segs[i + 1]]?.cat !== 'form') continue;
+      if (!isShapeWord(segs[i]) || !isShapeWord(segs[i + 1])) continue;
       if (phrase.mask[i] || phrase.mask[i + 1]) continue;
       if (opt.tail && (i === tailIdx || i + 1 === tailIdx)) continue;
       return {
@@ -562,6 +568,12 @@ export function evaluate(words, opt = {}) {
     const tailIdx = segs.lastIndexOf(opt.tail);
     for (let i = tailIdx - 1; i >= 0; i--) {
       if (CONNECTOR_SET.has(segs[i])) continue;
+      // 格「の」で結ばれていれば「光の刃」「雷の刃」のように普通に読める。
+      // 形の重複として落とすのは、連体節 (〜された・〜る) で名詞句の頭に
+      // 形の語が来ているとき (斬られた刃剣) と、直結しているときだけ。
+      const genitive = compounds.some((c) => c.idx === i + 1
+        && c.role === 'case' && (c.next === 'noun' || c.connector === 'へ'));
+      if (genitive) break;
       if (TAIL_UNMODIFIABLE.has(segs[i])) {
         return {
           ...base, segments: segs, content, valid: false,
@@ -652,8 +664,8 @@ export function evaluate(words, opt = {}) {
   const headNounUse = compounds.some((c) => c.start === 0 && c.role === 'case');
   if (headCat === 'element') {
     parts.push({ key: 'topic', label: '属性で始まる', v: 1.2 });
-  } else if (headCat === 'form') {
-    parts.push({ key: 'topicform', label: '形で始まる', v: -0.8 });
+  } else if (headCat === 'weapon') {
+    parts.push({ key: 'topicform', label: '武器語で始まる', v: -0.8 });
   } else if (headCat === 'modifier' && !headBound && !headNounUse) {
     parts.push({ key: 'topicmod', label: '効果で始まる', v: -0.3 });
   } else if (headCat === 'verb' && !headBound) {
@@ -789,7 +801,7 @@ export function evaluate(words, opt = {}) {
     // 連体形（い・な・された・る）が直前にあれば、その接続詞が末尾語に係っている。
     const boundToTail = compounds.some((c) => c.idx === headPos + 1);
     compoundBindInfo = { bound: boundToTail };
-    if (boundToTail || headInfo.cat !== 'form') {
+    if (boundToTail || !isWeaponWord(head)) {
       parts.push({ key: 'modifier', label: '末尾語を修飾', v: 0.6 });
     }
     // い形容詞・な形容詞は連体形でしか名詞を修飾しない。
@@ -804,7 +816,7 @@ export function evaluate(words, opt = {}) {
       });
     }
   }
-  // 武器語 (形態語) の直前に、名詞を修飾できない裸の語幹が付いている。
+  // 武器語の直前に、名詞を修飾できない裸の語幹が付いている。
   //   「炎必刃」(必は必ず+動詞が要る)「電速銃」(速い銃が本来)「毒固壁」
   //   「電貫弓」(貫く弓が本来)… 成立はするが日本語として不自然なので弱くする。
   //   熟語として登録された並び (必殺刃の「殺刃」) は語幹複合として認める。
@@ -815,7 +827,7 @@ export function evaluate(words, opt = {}) {
     for (const t of segs) { segOff.push(off); off += t.length; }
     const inPhrase = (a, b) => inCompoundSpan(joined, a, b);
     for (let i = 1; i < segs.length; i++) {
-      if (WORDS[segs[i]]?.cat !== 'form') continue;
+      if (!isWeaponWord(segs[i])) continue;
       // 末尾語として渡された語は tail 側の判定 (bareadj 等) に任せる。
       if (opt.tail && i === segs.lastIndexOf(opt.tail)) continue;
       const j = i - 1;
@@ -830,7 +842,7 @@ export function evaluate(words, opt = {}) {
       if (inPhrase(segOff[j], segOff[j] + segs[j].length + segs[i].length)) continue;
       parts.push({
         key: 'bareform',
-        label: `「${segs[j]}」が裸で${isWeaponWord(segs[i]) ? '武器語' : '形態語'}「${segs[i]}」に付いている`,
+        label: `「${segs[j]}」が裸で武器語「${segs[i]}」に付いている`,
         v: -0.6,
       });
     }
@@ -911,8 +923,10 @@ export function evaluate(words, opt = {}) {
   const bonusWords = Math.max(0, content - 1);
   const predicated = hasPredicate;
   // 自然さが本命。ボーナスは自然さに勝たないよう小さくする。
-  // 要求: 自然な文が不自然な文より弱くならない（bonus 0.05→0.008で長さの影響を抑え、自然 0.30→0.38で重み付け）
-  fx.power = 1 + bonusWords * 0.008 + natural * 0.38 + phraseBonus;
+  // 要求: 自然な文が不自然な文より弱くならない（bonus 0.05→0.006 で長さの影響を抑え、
+  // 自然 0.30→0.38 で重み付け）。長さの加点が自然さの差を追い越すと、語を並べただけの
+  // 文が自然な文より強くなるので、1 語あたりは自然さの 1 段 (0.38 × 0.05) より小さくする。
+  fx.power = 1 + bonusWords * 0.006 + natural * 0.38 + phraseBonus;
 
   // 評価。自然さと完成度で決まる。
   //   連用修飾と連体の重なりを評価するようになったので、しきい値も
@@ -995,6 +1009,8 @@ export function possibleCompounds(available, limit = 16) {
  */
 export function drawWord(rng, opts = {}) {
   const cat = opts.cat;
+  // 武器語 (基本武器) は語彙から引かない。3 択でだけ得る。
+  if (cat === 'weapon') return null;
   const pool = cat ? WORDS_BY_CAT[cat] : DRAWABLE_ALL;
   if (!pool || !pool.length) return null;
 
@@ -1024,7 +1040,7 @@ export function drawWord(rng, opts = {}) {
  * レベルアップの 3 択には他の語より低い確率で出る。
  * 語彙からは引けない — 戦闘中に得た武器語は、そのまま新しい文になる。
  *
- * 環・弾・玉 のような形態語は武器語ではない (ただの語)。ここでは出ない。
+ * 弾・環・玉 のような物の語は武器語ではない (ただの語)。ここでは出ない。
  * @param {Function} rng
  * @param {Set<string>} [exclude] すでに入っている武器語
  * @returns {object|null}

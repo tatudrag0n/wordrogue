@@ -6,7 +6,7 @@
 
 import { TAU, clamp, dist2, angleDiff } from '../core/util.js';
 import { ENEMIES, enemyWords, enemySentence } from '../data/enemies.js';
-import { ELEMENTS } from '../data/words.js?v=1.48';
+import { ELEMENTS } from '../data/words.js?v=1.49';
 
 let eUid = 0;
 

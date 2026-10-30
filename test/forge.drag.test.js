@@ -698,7 +698,7 @@ sec('語彙の＋で属性語から特殊武器の文を作る');
   console.log(`  ＋ →「${wi.sentence.text}」(${run.weapons.length} 本目)`);
 }
 
-sec('形態語 (弾・環・玉) は武器語ではない — ＋ も付かない');
+sec('物の語 (弾・環・玉) は武器語ではない — ＋ も付かない');
 {
   const { run, forge } = openForge();
   run.lexicon.fill(null);
@@ -709,9 +709,9 @@ sec('形態語 (弾・環・玉) は武器語ではない — ＋ も付かな�
   for (const c of chips) {
     const t = c.querySelector('span').textContent;
     if (t === '剣') { ok(!!c.querySelector('.pword-craft'), `武器語「${t}」に＋ が無い`); continue; }
-    ok(!c.querySelector('.pword-craft:not(.is-form)'), `形態語「${t}」に＋ が付いている`);
+    ok(!c.querySelector('.pword-craft'), `物の語「${t}」に＋ が付いている`);
   }
-  // 形態語の語彙は文の中にも置ける (ただの語)。置いた語は取り外せる。
+  // 物の語の語彙は文の中にも置ける (ただの語)。置いた語は取り外せる。
   const wi = run.weapons[0];
   const tama = chips.find((c) => c.querySelector('span').textContent === '弾');
   ok(!!tama, '語彙に「弾」が無い');
@@ -719,7 +719,7 @@ sec('形態語 (弾・環・玉) は武器語ではない — ＋ も付かな�
   const end = rowEnd(forge);
   dragToPoint(tama, end.x, end.y);
   await settle();
-  ok(wi.sentence.count === before + 1, `形態語が文に置けない: ${wi.sentence.text}`);
+  ok(wi.sentence.count === before + 1, `物の語が文に置けない: ${wi.sentence.text}`);
   forge.render();
   // 取り外しは語彙の箱へのドラッグで行う (別テストで確認)。
 
@@ -742,7 +742,7 @@ sec('形態語 (弾・環・玉) は武器語ではない — ＋ も付かな�
   ok(run.weapons.length === w0 - 1, `文が外れない: ${w0} -> ${run.weapons.length}`);
   ok(run.lexicon.filter(Boolean).length >= lexBefore, '外した文の語が語彙に戻っていない');
   ok(run.lexicon.some((w) => w && w.text === '剣'), '「剣」が語彙に戻らない');
-  console.log(`  形態語「弾」は語彙から引けて文に置ける / 文は ${run.weapons.length} 本`);
+  console.log(`  「弾」は語彙から引けて文に置ける / 文は ${run.weapons.length} 本`);
 }
 
 sec('文末は語で閉じる。接続詞で終わる文は不成文');

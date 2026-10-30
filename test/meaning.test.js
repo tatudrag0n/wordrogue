@@ -109,7 +109,7 @@ sec('属性語の意味が文の属性と状態になる');
 // ─────────────────────────────────────────────────────────────────────────────
 sec('効果語の意味が性能に乗る');
 {
-  const mods = Object.keys(WORDS).filter((t) => WORDS[t].cat === 'modifier' || WORDS[t].cat === 'form');
+  const mods = Object.keys(WORDS).filter((t) => WORDS[t].cat === 'modifier');
   const inert = [];
   for (const t of mods) {
     // 連体「な」で受けられる語だけを見る。受けられない語は別の並びで確かめる。
@@ -122,7 +122,7 @@ sec('効果語の意味が性能に乗る');
     if (!fxKeys(r).length) inert.push(t);
   }
   ok(!inert.length, `武器に何も足さない効果語: ${inert.join(' ')}`);
-  console.log(`  効果・形態語 ${mods.length} 語 / 効果なし ${inert.length}`);
+  console.log(`  効果語 ${mods.length} 語 / 効果なし ${inert.length}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

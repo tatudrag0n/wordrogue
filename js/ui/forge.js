@@ -18,11 +18,11 @@
 import { $, el, clear } from '../core/util.js';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
-} from '../data/words.js?v=1.48';
+} from '../data/words.js?v=1.49';
 import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js';
-import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.48';
+import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.49';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { keyStats } from '../game/weapon.js?v=1.48';
+import { keyStats } from '../game/weapon.js?v=1.49';
 import { SenPad } from './senpad.js';
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
@@ -546,7 +546,6 @@ export class Forge extends SenPad {
         class: 'pword'
           + (this.armed === w ? ' armed' : '')
           + (this.forgetMode ? ' forgetable' : '')
-          + (w.cat === 'form' ? ' is-form' : '')
           // 体に効く効果 (p.) を持つ語は、部位強化でもそのまま効く
           + (info?.player ? ' is-self' : ''),
         style: { borderColor: cat.color },
@@ -562,7 +561,7 @@ export class Forge extends SenPad {
       if (this.forgetMode) this.makeTappable(node, () => this.onPoolTap(w));
       else this.makeDraggable(node, place, () => this.onPoolTap(w));
       // 武器語 (基本武器) と属性語・現象語は、この語から新しい文を作れる。
-      // 形態語 (弾・環・玉…) は武器語ではないので + が出ない。
+      // 弾・環・玉 のような物の語はただの語なので + が出ない。
       const canCraft = !this.forgetMode && this.run.canCraftFromWord(w);
       if (canCraft) node.append(this.renderCraftButton(w, info));
       box.append(node);
@@ -653,10 +652,10 @@ export class Forge extends SenPad {
       d.append(el('span', { class: 'dl' },
         '属性・現象の語。語彙の右の＋でこの語を頭にした文 (特殊武器) を作れる。'
         + '攻撃できる動詞を述べると撃つようになる。'));
-    } else if (info?.cat === 'form') {
+    } else if (info?.cat === 'weapon') {
       d.append(el('span', { class: 'dl' },
-        '形態語。文に置いて効果で支えるただの語 (武器語ではない)。'
-        + '武器語 (3 択で得られる) は刃・剣・刀・斧・槍・矛・牙・爪・弓・鞭・鎖・杖・拳・銃・針の 15 語だけ。'));
+        '武器語 (基本武器)。文の中に置くと攻撃の型が決まり、文の末尾にも置ける。'
+        + '語彙からは引かず、レベルアップの 3 択でだけ得られる。'));
     } else {
       d.append(el('span', { class: 'dl' }, '文に置ける。並べた並びで文の力が上がる。'));
     }

@@ -5,8 +5,8 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.48';
-import { motionPose, motionKey, WEAPON_MOTIONS } from '../game/motions.js?v=1.48';
+import { ELEMENTS } from '../data/words.js?v=1.49';
+import { motionPose, motionKey, WEAPON_MOTIONS } from '../game/motions.js?v=1.49';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -2267,13 +2267,110 @@ export class Renderer {
         break;
       }
       case '銃': {
+        // 真上から見た拳銃。銃身 (スライド) が +X、握りは後ろ (-X) へ伸びる。
+        // 横から見た絵にしないよう、銃身の軸を挟んで上下対称に描く。
+        // 照星・照門と、スライド後部の刻みで「上から見ている」ことを示す。
         g.fillStyle = pale;
         g.beginPath();
-        g.moveTo(-7, -2.5); g.lineTo(18, -2); g.lineTo(18, 2); g.lineTo(2, 3);
-        g.lineTo(-1, 8); g.lineTo(-7, 8); g.lineTo(-5, 2); g.closePath();
+        g.moveTo(-9.0, -3.4);
+        g.lineTo(-2.4, -3.0);
+        g.lineTo(15.4, -2.5);
+        g.lineTo(18.0, -1.5);
+        g.lineTo(18.0, 1.5);
+        g.lineTo(15.4, 2.5);
+        g.lineTo(-2.4, 3.0);
+        g.lineTo(-9.0, 3.4);
+        g.quadraticCurveTo(-11.6, 0, -9.0, -3.4);
+        g.closePath();
+        g.fill(); g.stroke();
+        // スライド後部の刻み。
+        g.lineWidth = 0.8;
+        for (let i = 0; i < 3; i++) {
+          const x = -4.2 + i * 1.9;
+          g.beginPath(); g.moveTo(x, -2.7); g.lineTo(x, 2.7); g.stroke();
+        }
+        g.lineWidth = 1.2;
+        // 銃身の色の帯。
+        g.fillStyle = color;
+        g.fillRect(2.0, -1.3, 12.0, 2.6);
+        // 銃口。
+        g.fillStyle = ink;
+        g.beginPath(); g.ellipse(17.3, 0, 0.9, 1.2, 0, 0, TAU); g.fill();
+        // 照星 (前) と照門 (後ろ、左右 2 つ)。
+        g.fillStyle = color;
+        g.beginPath(); g.arc(13.4, 0, 0.8, 0, TAU); g.fill();
+        g.beginPath(); g.arc(-5.6, -1.7, 0.6, 0, TAU); g.fill();
+        g.beginPath(); g.arc(-5.6, 1.7, 0.6, 0, TAU); g.fill();
+        break;
+      }
+      case '鋏': {
+        // 真上から見た鋏。要 (軸) を中心に、二枚の刃が前へ少し開き、
+        // 握りの輪が後ろへ開く。上下 (左右) を対称に描く。
+        for (const side of [-1, 1]) {
+          // 刃。要から前へ、外へ開きながら細くなる楔。
+          g.fillStyle = pale;
+          g.beginPath();
+          g.moveTo(1.0, side * 0.2);
+          g.lineTo(12.0, side * 2.2);
+          g.lineTo(20.6, side * 3.6);
+          g.lineTo(19.6, side * 1.9);
+          g.lineTo(11.4, side * 0.5);
+          g.closePath();
+          g.fill(); g.stroke();
+          // 刃の峰 (片刃に見せる)。
+          g.strokeStyle = color;
+          g.lineWidth = 0.9;
+          g.beginPath();
+          g.moveTo(2.4, side * 1.2);
+          g.lineTo(18.2, side * 2.9);
+          g.stroke();
+          g.strokeStyle = ink;
+          g.lineWidth = 1.2;
+          // 柄と握りの輪。刃とは逆向きに開く。
+          g.beginPath();
+          g.moveTo(-0.4, side * 0.3);
+          g.lineTo(-6.4, side * 2.6);
+          g.stroke();
+          g.beginPath();
+          g.ellipse(-9.8, side * 4.0, 3.4, 2.3, 0, 0, TAU);
+          g.stroke();
+        }
+        // 要 (軸) の鋲。
+        g.fillStyle = color;
+        g.beginPath(); g.arc(0, 0, 1.9, 0, TAU); g.fill(); g.stroke();
+        break;
+      }
+      case '鋸': {
+        // 真上から見た鋸。細長い刃の片側に歯を並べ、後ろに柄が付く。
+        // 歯を片側だけに出すことで、剣や鉈と見分けがつく。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(-2.0, -3.0);
+        g.lineTo(20.0, -2.2);
+        g.lineTo(20.0, 0.2);
+        g.lineTo(-2.0, 1.0);
+        g.closePath();
+        g.fill(); g.stroke();
+        // 歯。
+        for (let i = 0; i < 7; i++) {
+          const x = 3.4 + i * 2.4;
+          g.beginPath();
+          g.moveTo(x, 0.9);
+          g.lineTo(x + 1.1, 3.0);
+          g.lineTo(x + 2.2, 0.9);
+          g.closePath();
+          g.fill(); g.stroke();
+        }
+        // 柄。
+        g.beginPath();
+        g.moveTo(-2.2, -3.2);
+        g.lineTo(-11.4, -2.6);
+        g.quadraticCurveTo(-12.6, 0, -11.4, 2.2);
+        g.lineTo(-2.2, 1.2);
+        g.closePath();
         g.fill(); g.stroke();
         g.fillStyle = color;
-        g.fillRect(3, -1.2, 9, 2.4);
+        g.beginPath(); g.arc(-3.0, -1.2, 1.1, 0, TAU); g.fill();
         break;
       }
       case '針': {

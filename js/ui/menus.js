@@ -5,12 +5,12 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.48';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.48';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.49';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.49';
 import { evaluatePart, partConnChoices } from '../game/parts.js';
 import { partEffectRows, partTotalRows } from '../game/stats.js';
 import { GrowPad } from './growpad.js';
-import { Tips } from './tips.js?v=1.48';
+import { Tips } from './tips.js?v=1.49';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
   PARTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
@@ -870,7 +870,7 @@ export class Menus {
 
     for (const id of Object.keys(WEAPONS)) {
       const d = WEAPONS[id];
-      // 基本武器 (武器語) のみ選択可能。形態語由来の武器は除外。
+      // 基本武器 (武器語) のみ選択可能。武器語でない語を末尾にした武器は除外。
       if (!BASIC_WEAPONS.has(d.tail)) continue;
       const usable = avail.includes(id);
       const on = this.picked.includes(id);
@@ -950,11 +950,12 @@ export class Menus {
   }
 
   buildDictTabs() {
-    // 形態語は辞書に載せないので「形態」タブも出さない。
+    // 武器語 (刃・剣・銃・鋏・鋸…) は辞書に載せないので「武器」タブも出さない。
+    // 辞書の分類に「形態」は無い。
     const cats = [
       ['all', `すべて`, '#2b5cb8'],
       ...Object.entries(CATEGORIES)
-        .filter(([k]) => k !== 'form')
+        .filter(([k]) => k !== 'weapon')
         .map(([k, v]) => [k, v.name, v.color]),
     ];
     clear(this.dictTabs);
@@ -993,8 +994,9 @@ export class Menus {
   }
 
   renderDictList() {
-    // 形態語 (剣・銃・環 …) は武器の末尾語で、語彙から引けない。辞書にも載せない。
-    const all = Object.values(WORDS).filter((w) => w.cat !== 'form' || (w.cats || []).length > 1);
+    // 武器語 (刃・剣・銃・鋏・鋸…) は語彙から引けない。辞書にも載せない。
+    // 弾・環・玉 のような物の語はただの語 (効果) なので載せる。
+    const all = Object.values(WORDS).filter((w) => w.cat !== 'weapon' || (w.cats || []).length > 1);
     const q = this.dictQuery;
     const rows = all.filter((w) => {
       if (this.dictCat !== 'all' && !(w.cats || [w.cat]).includes(this.dictCat)) return false;

@@ -35,7 +35,7 @@
 // ============================================================================
 
 import { PHRASE_BONUS } from './words.phrase.js';
-import { compoundFormSpec } from './words.compound-forms.js?v=1.48';
+import { compoundFormSpec } from './words.compound-forms.js?v=1.49';
 
 /**
  * 名詞が共通で持つ格の接続詞。
@@ -58,7 +58,7 @@ export const NOUN_POOL_SPEC = [
 const RAW_POOL = `
 # ── 属性 (既定は体言 +N。形を持つ語だけ書く) ──
 熱  a   い:adn+ く:adv+ +N
-烈  n   しい:adn+ しく:adv+
+烈  a   しい:adn+ しく:adv+
 震  n   える:adn*x えし:adn*x えて:advx
 蝕  n   む:adn* まれた:adn*p んで:adv
 輝  n   く:adn*x ける:adn*x いて:advx
@@ -355,6 +355,54 @@ const RAW_POOL = `
 苦  a   い:adn+ く:adv+
 危  a   ない:adn+ なく:adv+
 平  na  らかな:adn+ らかに:adv+
+
+# ── 送り仮名の補完 (全語チェックで足した語) ──
+# 形容・動詞として使えるのに、形を持っていなかった語。辞書に載っている
+# 自然な形だけを、その語の送り仮名として置く。
+激  a   しい:adn+ しく:adv+
+晴  n   れる:adn*x れた:adn*x れて:advx
+凪  n   ぐ:adn*x いだ:adn*x いで:advx
+紅  a   い:adn+ く:adv+
+碧  a   い:adn+ く:adv+
+灼  v   く:adn* かれた:adn*p いて:adv
+濁  v   る:adn*x った:adn*x り:advx って:advx らす:adn*
+汚  a   い:adn+ く:adv+ す:adn* れた:adn*p れて:advx
+純  na  な:adn+ に:adv+
+怒  n   る:adn*x った:adn*x り:advx
+愛  n   する:adn* した:adn* された:adn*p して:adv
+望  n   む:adn* んだ:adn*p んで:adv
+痛  a   い:adn+ く:adv+ む:adn*x んだ:adn*x んで:advx
+狂  n   う:adn*x った:adn*x って:advx
+満  n   ちる:adn*x ちた:adn*x ちて:advx たす:adn* たした:adn*p たして:adv
+異  na  なる:adn+ に:adv+
+空  n   く:adn*x いた:adn*x いて:advx
+超  n   える:adn* えた:adn* えて:adv
+怪  a   しい:adn+ しく:adv+
+楽  a   しい:adn+ しく:adv+
+丸  a   い:adn+ く:adv+
+憂  a   い:adn+ く:adv+ う:adn* えた:adn*p えて:adv
+勝  n   つ:adn*x った:adn*x って:advx
+助  n   ける:adn* けた:adn*p けて:adv
+伏  n   せる:adn* せた:adn*p せて:adv
+倣  n   う:adn* った:adn*p って:adv
+憤  n   る:adn*x った:adn*x り:advx
+戒  n   める:adn* めた:adn*p めて:adv
+極  n   める:adn* めた:adn*p めて:adv まる:adn*x まった:adn*x
+模  n   す:adn* した:adn*p して:adv
+想  n   う:adn* った:adn*p って:adv
+証  n   する:adn* した:adn*p して:adv
+約  n   する:adn* した:adn*p して:adv
+服  n   する:adn*x した:adn*x して:advx
+離  n   れる:adn*x れた:adn*x れて:advx
+限  n   る:adn*x った:adn*x り:advx
+量  n   る:adn* った:adn*p って:adv
+上  n   る:adn*x った:adn*x り:advx げる:adn* げた:adn*p げて:adv
+下  n   る:adn*x り:advx げる:adn* げた:adn*p げて:adv
+代  n   わる:adn*x わった:adn*x える:adn* えて:adv
+処  n   する:adn* した:adn*p して:adv
+和  na  やかな:adn+ やかに:adv+
+邪  na  な:adn+ に:adv+
+侘  n   びる:adn*x びた:adn*x びて:advx
 `;
 
 /** 品詞の略号。 */

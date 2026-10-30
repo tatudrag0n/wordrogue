@@ -14,8 +14,8 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js?v=1.45';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan } from '../data/words.js?v=1.45';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js?v=1.46';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan } from '../data/words.js?v=1.46';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
@@ -82,6 +82,12 @@ export class WeaponInst {
     this.aim = 0;           // 照準角
     this.orbitAngle = 0;
     this.flash = 0;         // 攻撃フラッシュ
+    /** 予備動作から振り抜けまでの、見た目だけのモーション。 */
+    this.motion = null;
+    this.lastMotion = null;
+    this.motionSeq = 0;
+    /** テストと UI の確認用 (直近のモーションだけ保持)。 */
+    this.motionLog = [];
     this._sig = null;       // 再計算の判定用シグネチャ
     this._cache = null;
   }
@@ -193,9 +199,11 @@ export class WeaponInst {
     const ws = this.sentence.words;
     for (let i = 0; i + 1 < ws.length; i++) {
       if (!isForm(ws[i].text) || !isForm(ws[i + 1].text)) continue;
+      // 接続詞が間に入っていれば、語は隣り合っていない。
+      //   刃の剣 / 約束された剣 … 形を重ねたのではなく、修飾されている。
+      if (this.sentence.conns[i]) continue;
       // 熟語として固定された並び (電光石火の「光石」) は重複ではない。
-      // 接続詞を挟まず、登録済み熟語の範囲内に収まっているときだけ許す。
-      if (!this.sentence.conns[i] && this.inPhrase(i)) continue;
+      if (this.inPhrase(i)) continue;
       return [ws[i].text, ws[i + 1].text];
     }
     return null;

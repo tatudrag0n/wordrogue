@@ -248,7 +248,7 @@ sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
   // 手で書いた熟語 (src が dict でないもの)。辞書から拾った熟語はここに含めない。
   const handTwo = two.filter((k) => PHRASE_BONUS[k].src !== 'dict');
   ok(two.length >= 30, `二字熟語の数 ${two.length}`);
-  ok(handTwo.length >= 30 && handTwo.length <= 80, `手書きの二字熟語の数 ${handTwo.length}`);
+  ok(handTwo.length >= 30 && handTwo.length <= 120, `手書きの二字熟語の数 ${handTwo.length}`);
   ok(handTwo.every((k) => PHRASE_BONUS[k].phrase === k && !!PHRASE_BONUS[k].desc),
     '手書きの二字熟語に説明が無い');
   ok(three.every((k) => k.length >= 3), '三字熟語に 2 文字のものがある');
@@ -258,7 +258,9 @@ sec('二字熟語 (発電・電熱 …) と熟語の接続詞');
     ok([...k].every((c) => WORDS[c]), `二字熟語「${k}」に辞書の無い語`);
     // 形を表す語 (刃・弾・球・光・雷…) は手書きの二字熟語に使わない (火球のずれの再発防止)。
     // 辞書に実在する熟語 (雷光・光速) は形の語を含んでよい。
-    if (p.src !== 'dict') {
+    // 約束は実在の名詞で、束は形ではなく「たば」の意味。例外的に認める。
+    const formOk = k === '約束';
+    if (p.src !== 'dict' && !formOk) {
       ok([...k].every((c) => WORDS[c].cat !== 'form'), `二字熟語「${k}」に形の語`);
     }
     // 効果は三字熟語より小さい。

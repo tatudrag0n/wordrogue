@@ -17,9 +17,11 @@
 // ============================================================================
 
 import {
-  WORDS, CONNECTOR_SET, evaluate, makeWord,
+  WORDS, CONNECTOR_SET, evaluate, makeWord, PHRASE_BONUS,
 } from '../js/data/words.js';
-import { connectorFor } from '../js/data/words.connect.js';
+import { connectorFor, connectorsAfter, compoundsEndingIn, formAfter } from '../js/data/words.connect.js';
+import { COMPOUND_POOLS } from '../js/data/words.pool.js';
+import { Sentence } from '../js/game/sentence.js';
 import { WeaponInst } from '../js/game/weapon.js';
 import { evaluatePart } from '../js/game/parts.js';
 import { resolvePlayerStats, BASE_PLAYER } from '../js/game/stats.js';
@@ -105,6 +107,11 @@ const NATURAL = [
   ['焔', 'を', '燃', 'やす', '剣'],
   ['天', '焦', 'がす', '滅', '亡', 'の', '光'],
   ['静', 'かに', '燃', 'える', '聖', 'なる', '炎'],
+  // 熟語自身の活用。末尾の 1 字 (約・束) の形ではなく、熟語「約束」の形。
+  ['約', '束', 'された', '剣'],
+  ['約', '束', 'する', '剣'],
+  ['破', '壊', 'する', '槌'],
+  ['攻', '撃', 'して', '斬', 'る', '剣'],
 
   // 連用修飾語は目的語句の前後どちらにも置ける。
   // どちらも「目的語 → 後方の他動詞」の係りが解決する。
@@ -178,6 +185,9 @@ const UNNATURAL = [
   ['焔', 'を', '斬', 'る'],               // 文末が接続詞
   ['風', 'の', '潮', 'の'],
   ['斬', 'された', '刃'],                 // 斬 に された は無い
+  ['反', '射', 'る', '剣'],               // 熟語「反射」の形は する/された。射る を借りない
+  ['爆', '発', 'る', '剣'],               // 爆発 + る は無い
+  ['約', '束', 'す', '剣'],               // 約束 + す は無い
   ['静', 'に', '剣'],                     // 静 に は無い
   ['焔', 'する', '剣'],                   // 焔 に する は無い
   ['焔', 'に', '剣'],
@@ -206,6 +216,77 @@ const UNNATURAL = [
 for (const tokens of UNNATURAL) {
   const r = weaponEval(tokens);
   ok(!r.valid, `不自然な「${tokens.join('')}」が成立した: ${r.reasonText || r.reason}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+sec('語と熟語の接続詞は、その語・熟語ごとに固定されている');
+{
+  const NOUNS = new Set(['の', 'と', 'も', 'や', 'を', 'に', 'へ', 'で', 'から', 'まで', 'より', 'が', 'は']);
+  const leaked = [];
+  const dead = [];
+  const unbuildable = [];
+  let forms = 0;
+  let compounds = 0;
+
+  for (const text of Object.keys(PHRASE_BONUS)) {
+    compounds++;
+    const chars = [...text];
+    const opts = connectorsAfter(chars);
+    if (!opts.length) { dead.push(text); continue; }
+    // 登録済みの熟語で使える形は、その熟語の固定プールと名詞の格だけ。
+    // 末尾 1 字の活用 (反射 → る / 約束 → す など) は混ざらない。
+    const own = new Set();
+    for (const c of compoundsEndingIn(chars)) for (const e of c.pool) own.add(e.k);
+    const extra = opts.filter((k) => !own.has(k) && !NOUNS.has(k));
+    if (extra.length) leaked.push(`${text}: ${extra.join('・')}`);
+
+    const sen = new Sentence();
+    for (const c of chars) sen.push(makeWord(c));
+    const at = sen.count - 1;
+    const usable = opts.slice();
+    for (const k of usable) {
+      if (!sen.setConnAt(at, k).ok) continue;
+      forms++;
+      const f = formAfter(chars, k)?.form;
+      const probe = new Sentence();
+      probe.entries = sen.entries.map((e) => ({ word: e.word, conn: e.conn }));
+      // 形の役割に合わせて、文を閉じる語を足す。
+      if (f?.role === 'adn') probe.push(makeWord('剣'));
+      else if (f?.role === 'adv') {
+        probe.push(makeWord('斬'));
+        if (!probe.setConnAt(probe.count - 1, 'る').ok) { unbuildable.push(`${text}${k} (斬る)`); continue; }
+        probe.push(makeWord('剣'));
+      } else if (k === 'を') {
+        probe.push(makeWord('斬'));
+        probe.setConnAt(probe.count - 1, 'る');
+        probe.push(makeWord('剣'));
+      } else if (k === 'が' || k === 'は') {
+        probe.push(makeWord('燃'));
+        probe.setConnAt(probe.count - 1, 'える');
+        probe.push(makeWord('剣'));
+      } else if (['に', 'へ', 'で', 'から', 'まで', 'より'].includes(k)) {
+        probe.push(makeWord('斬'));
+        probe.setConnAt(probe.count - 1, 'る');
+        probe.push(makeWord('剣'));
+      } else {
+        probe.push(makeWord('剣'));
+      }
+      const ev = probe.evaluate();
+      if (!ev.valid) {
+        unbuildable.push(`${text}${k} -> ${probe.text}: ${ev.reasonText || ev.reason}`);
+      }
+    }
+  }
+  ok(dead.length === 0, `どの接続詞も結べない熟語 ${dead.length}: ${dead.slice(0, 12).join(' ')}`);
+  ok(leaked.length === 0, `熟語の外の活用が混ざった ${leaked.length}: ${leaked.slice(0, 8).join(' / ')}`);
+  ok(unbuildable.length === 0, `熟語の形から文を作れない ${unbuildable.length}: ${unbuildable.slice(0, 8).join(' / ')}`);
+  // 約束された剣は、末尾語の 束 ではなく熟語 約束 に結ぶ。
+  const hit = formAfter(['約', '束'], 'された');
+  ok(hit?.compound && hit.source === '約束', `「約束された」が熟語に結ばない: ${JSON.stringify(hit)}`);
+  ok(!connectorsAfter(['反', '射']).includes('る'), '「反射」に末尾語「射」の「る」が混ざる');
+  ok(connectorsAfter(['反', '射']).includes('された'), '「反射された」を作れない');
+  console.log(`  熟語 ${compounds} / 形 ${forms} / 行き止まり ${dead.length}`
+    + ` / よその活用 ${leaked.length} / 文にできない ${unbuildable.length}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

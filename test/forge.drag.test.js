@@ -597,6 +597,33 @@ sec('熟語の接続詞がメニューに出る (発電する)');
   console.log(`  メニュー「${head}」→ 「${wi.sentence.text}」`);
 }
 
+sec('約束された剣 を UI から作れる (熟語自身の受身)');
+{
+  const { run, forge } = openForge();
+  const wi = run.weapons[0];
+  wi.sentence.clear();
+  for (const t of ['約', '束', '剣']) wi.sentence.push(makeWord(t));
+  wi._sig = null;
+  forge.render();
+  const place = { kind: 'slot', wi, wIdx: 0, index: 1 };
+  const chip = dom.doc.querySelectorAll('.sen-conn')[1];
+  const menu = forge.openConnPicker(place, chip);
+  const head = menu.querySelector('.conn-picker-head').textContent;
+  ok(head.includes('熟語「約束」'), `見出しに熟語が出ない: ${head}`);
+  const picks = [...menu.querySelectorAll('.conn-pick')].map((b) => b.textContent);
+  ok(picks.includes('された'), `された が候補に無い: ${picks.join(',')}`);
+  ok(!picks.includes('る'), `末尾の 1 字 (束る) の活用が混ざる: ${picks.join(',')}`);
+  ok(!picks.includes('す'), `末尾の 1 字 (束す) の活用が混ざる: ${picks.join(',')}`);
+  const btn = [...menu.querySelectorAll('.conn-pick')].find((b) => b.textContent === 'された');
+  btn.dispatchEvent({ type: 'click', preventDefault() {}, stopPropagation() {} });
+  ok(wi.sentence.text === '約束された剣', `約束された剣 にならない: ${wi.sentence.text}`);
+  const res = wi.resolve(run.player.stats);
+  ok(res.valid, `約束された剣 が不成文: ${res.reasonText}`);
+  ok(res.active, '約束された剣 が攻撃しない');
+  ok(res.evalResult.idiom?.phrase === '約束', `熟語として評価されない: ${res.evalResult.idiom?.phrase}`);
+  console.log(`  メニュー「${head}」→ 「${wi.sentence.text}」 ${res.gradeInfo.name}`);
+}
+
 sec('熟語が成立すると、構成する語が光る');
 {
   const { run, forge } = openForge();

@@ -6,7 +6,8 @@
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
 import { ELEMENTS } from '../data/words.js?v=1.49';
-import { motionPose, motionKey, WEAPON_MOTIONS } from '../game/motions.js?v=1.49';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.49';
+import { motionPose } from '../game/motions.js?v=1.49';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -97,6 +98,7 @@ export class Renderer {
     this.step('bullets', () => this.drawBullets(run));
     this.step('player', () => this.drawPlayer(run));
     this.step('weapon-spirits', () => this.drawWeaponSpirits(run));
+    this.step('helpers', () => this.drawHelpers(run));
     this.step('lightnings', () => this.drawLightnings(run));
     this.step('texts', () => this.drawDamageTexts(run));
 
@@ -998,6 +1000,11 @@ export class Renderer {
     g.save();
     g.globalCompositeOperation = 'source-over';
     for (const s of run.rings) {
+      // 鞭の渦。手元から外へらせん状に走る鞭の線。
+      if (s.spiral) {
+        this.drawWhipSpiral(s, run);
+        continue;
+      }
       if (s.motion && s.motion.family === 'whip') {
         this.drawWhipMotion(s, run);
         continue;
@@ -2577,6 +2584,57 @@ export class Renderer {
         g.stroke();
         break;
       }
+      case '鉄球': {
+        // 鎖の先の鉄の塊。球そのものが武器。
+        g.strokeStyle = ink;
+        g.lineWidth = 1.4;
+        for (let i = 0; i < 4; i++) {
+          g.beginPath();
+          g.arc(-9 - i * 3.6, Math.sin(i * 1.9) * 1.4, 1.5, 0, TAU);
+          g.stroke();
+        }
+        g.fillStyle = pale;
+        g.beginPath(); g.arc(6, 0, 8.4, 0, TAU); g.fill(); g.stroke();
+        g.strokeStyle = 'rgba(28, 35, 49, .5)';
+        g.lineWidth = 1;
+        g.beginPath(); g.arc(6, 0, 5.4, 0.6, 2.4); g.stroke();
+        g.fillStyle = color;
+        g.globalAlpha *= 0.75;
+        g.beginPath(); g.arc(8.5, 1.5, 2.6, 0, TAU); g.fill();
+        break;
+      }
+      case '双剣': {
+        // 二刀。同じ形の刃を上下に並べる。
+        g.save();
+        g.translate(0, -3.4);
+        g.fillStyle = color;
+        blade(21, 1.9, 0.03);
+        g.restore();
+        g.save();
+        g.translate(0, 3.4);
+        g.fillStyle = color;
+        blade(21, 1.9, 0.03);
+        g.restore();
+        break;
+      }
+      case '分身': {
+        // 式神。炎の形をした小さな霊。
+        g.fillStyle = pale;
+        g.beginPath();
+        g.moveTo(9, 0);
+        g.quadraticCurveTo(4, -9, -3, -6);
+        g.quadraticCurveTo(-11, -2, -6, 0);
+        g.quadraticCurveTo(-11, 2, -3, 6);
+        g.quadraticCurveTo(4, 9, 9, 0);
+        g.closePath();
+        g.fill(); g.stroke();
+        g.fillStyle = color;
+        g.globalAlpha *= 0.8;
+        g.beginPath();
+        g.ellipse(1, 0, 3.4, 4.4, 0, 0, TAU);
+        g.fill();
+        break;
+      }
       default:
         blade(23, 2.2, 0.06);
         break;
@@ -2916,6 +2974,74 @@ export class Renderer {
     }
   }
 
+  /**
+   * 鞭の渦 (kind: whip)。手元から外へらせん状に伸びる鞭の線。
+   * 当たり (spiralTick) は、この帯の先端の位置で刻まれる。
+   */
+  drawWhipSpiral(s, run) {
+    const g = this.ctx;
+    const maxLife = s.maxLife || 0.6;
+    const p = clamp(1 - s.life / maxLife, 0, 1);
+    const fade = p < 0.85 ? 1 : 1 - (p - 0.85) / 0.15;
+    const turns = s.turns || 2.2;
+    const reach = s.reach || 100;
+    const color = s.color || '#d4a94e';
+    // 渦の先端から、少し後ろまでを描く。尻尾ほど細く薄い。
+    const head = p;
+    const tail = Math.max(0, head - 0.5);
+    const pt = (f) => {
+      const a = (s.baseAim || 0) + turns * TAU * f;
+      const r = reach * f;
+      return { x: s.x + Math.cos(a) * r, y: s.y + Math.sin(a) * r };
+    };
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    const N = 30;
+    // 墨の縁 → 紙を抜く白 → 色の芯。鞭のしなりを 3 本のらせんで作る。
+    for (const [lw, col, al] of [
+      [6.2, 'rgba(28, 35, 49, .48)', 0.5],
+      [4.4, 'rgba(255, 253, 247, .92)', 0.82],
+      [2.1, color, 0.9],
+    ]) {
+      g.globalAlpha = al * fade;
+      g.strokeStyle = col;
+      g.lineWidth = lw;
+      g.beginPath();
+      for (let i = 0; i <= N; i++) {
+        const f = tail + (head - tail) * (i / N);
+        const q = pt(f);
+        if (i === 0) g.moveTo(q.x, q.y); else g.lineTo(q.x, q.y);
+      }
+      g.stroke();
+    }
+    // 鞭先。先ほど濃く、光る。
+    const tip = pt(head);
+    g.globalAlpha = (0.75 + 0.25 * Math.sin(run.t * 30)) * fade;
+    g.fillStyle = '#fffdf7';
+    g.beginPath();
+    g.arc(tip.x, tip.y, 2.4, 0, TAU);
+    g.fill();
+    g.globalAlpha = 0.55 * fade;
+    g.strokeStyle = color;
+    g.lineWidth = 1.3;
+    g.beginPath();
+    g.arc(tip.x, tip.y, 4.6, 0, TAU);
+    g.stroke();
+    // 通った跡。渦全体を、うっすらと一本で締める。
+    g.globalAlpha = 0.14 * fade;
+    g.strokeStyle = color;
+    g.lineWidth = 1;
+    g.beginPath();
+    for (let i = 0; i <= 60; i++) {
+      const f = (i / 60) * head;
+      const q = pt(f);
+      if (i === 0) g.moveTo(q.x, q.y); else g.lineTo(q.x, q.y);
+    }
+    g.stroke();
+    g.restore();
+  }
+
   /** 鞭・鎖の一振り。輪ではなく、しなる線として描く。 */
   drawWhipMotion(s, run) {
     const g = this.ctx;
@@ -2998,32 +3124,56 @@ export class Renderer {
     }
   }
 
-  // 武器の種類ごとに異なる「待機モーション」。攻撃の合間にも武器が息づく。
+  // 武器の攻撃の実体。プレイヤーは武器を持たない — 手元に絵はなく、
+  // 軌道刃 (orbit)・鉄球 (flail)・城壁 (aura) のように、それ自体が攻撃の
+  // ものだけを描く。それ以外の攻撃は、斬撃・弾・光線・渦の演出が担う。
   drawWeaponSpirits(run) {
     const g = this.ctx, p = run.player;
-    const count = Math.max(1, run.weapons.length);
     for (let i = 0; i < run.weapons.length; i++) {
       const wi = run.weapons[i];
       const report = run.weaponReport?.()[i];
       const res = wi._res || report?.res;
       if (!res || !res.active) continue;
 
-      const glyph = res.tail || wi.def.glyph || wi.def.name || '刃';
-      const key = motionKey(wi, res);
-      const base = WEAPON_MOTIONS[key] || WEAPON_MOTIONS.blade;
+      const glyph = KIND_GLYPH[res.kind] || res.tail || wi.def.glyph || wi.def.name || '刃';
       const color = res.elementInfo?.color || '#d4a94e';
-      const m = wi.motion;
-      const pose = m ? motionPose(m) : null;
-      const aim = m?.baseAim ?? wi.aim ?? p.faceVis ?? p.face;
-      // 武器の大きさは間合いに合わせる。刃が 20px で軌跡が 100px だと、
-      // 何が切っているのか読めない。持ち替えても大きさは変わらないよう、
-      // 武器の間合い (range) を基準にする。
-      const reachK = clamp((res.stats.range || 90) / 92, 0.8, 1.9);
-      const baseScale = 1.25 + reachK * 0.85;
-      const side = count === 1 ? 0 : (i === 0 ? -0.42 : i === 1 ? 0.62 : 2.35);
+
+      // ── 鉄球。鎖についた鉄の塊が、体のまわりを旋回する。 ──
+      if (res.kind === 'flail') {
+        const balls = wi.flailBalls || [];
+        for (const ball of balls) {
+          const dx = ball.x - p.x, dy = ball.y - p.y;
+          const dl = Math.hypot(dx, dy) || 1;
+          // 鎖。手元から球まで、小さな輪を並べる。遠心力で少し外に膨らむ。
+          g.save();
+          g.globalAlpha = 0.55;
+          g.strokeStyle = 'rgba(28, 35, 49, .58)';
+          g.lineWidth = 1.3;
+          const nx = -dy / dl, ny = dx / dl;
+          const seg = 6;
+          for (let k = 1; k <= seg; k++) {
+            const f = k / seg;
+            const wob = Math.sin(f * Math.PI) * dl * 0.035;
+            g.beginPath();
+            g.arc(p.x + dx * f + nx * wob, p.y + dy * f + ny * wob, 1.5, 0, TAU);
+            g.stroke();
+          }
+          g.restore();
+          // 球。回転に合わせてくるりと向きが変わる。
+          g.save();
+          g.translate(ball.x, ball.y);
+          g.rotate((ball.a || 0) + run.t * 4);
+          g.shadowColor = color;
+          g.shadowBlur = 6;
+          this.drawWeaponGlyph(g, glyph, 1.2, color, 0.95);
+          g.restore();
+        }
+        continue;
+      }
 
       // ── 軌道刃。回り続ける刃そのものが攻撃の動き。 ──
       if (res.kind === 'orbit') {
+        const reachK = clamp((res.stats.range || 90) / 92, 0.8, 1.9);
         const n = Math.max(1, Math.round((res.stats.orbit || 1) + 1));
         const radius = (44 + (res.stats.area || 0)) * (p.stats.size || 1)
           * (0.7 + (res.stats.size || 1) * 0.4);
@@ -3044,6 +3194,8 @@ export class Renderer {
 
       // ── 常時展開する城壁。武器は体のまわりに浮かぶ護符。 ──
       if (res.kind === 'aura') {
+        const reachK = clamp((res.stats.range || 90) / 92, 0.8, 1.9);
+        const aim = wi.aim ?? p.faceVis ?? p.face;
         const radius = (p.stats.size || 1) * (p.r + 15);
         g.save();
         g.globalAlpha = 0.3 + 0.1 * Math.sin(run.t * 2.8 + i);
@@ -3063,107 +3215,64 @@ export class Renderer {
         g.restore();
         continue;
       }
+    }
+  }
 
-      // ── 手に持つ武器。攻撃中はモーションの姿勢をそのまま使う。 ──
-      let angle = aim + (base.rest || 0) + side + Math.sin(run.t * 1.8 + i * 1.7) * 0.035;
-      let hx = p.x + Math.cos(aim + side) * (p.r + 4);
-      let hy = p.y + Math.sin(aim + side) * (p.r + 4);
-      let scale = baseScale;
-      let alpha = 0.86;
-      let spin = 0;
-      let lungeX = 0, lungeY = 0;
-
-      if (m && pose) {
-        angle = pose.angle;
-        lungeX = pose.x;
-        lungeY = pose.y;
-        scale = baseScale * (0.94 + pose.extension * 0.22);
-        alpha = 0.72 + 0.28 * pose.alpha;
-        spin = pose.spin;
-        if (key === 'hammer' || key === 'greatblade') {
-          // 振りかぶりでは少し浮かせ、落とす瞬間に沈む。
-          const lift = pose.phase === 'windup' ? -4 - pose.phaseT * 5
-            : pose.phase === 'strike' ? -4 * (1 - pose.phaseT) : 0;
-          hy += lift;
-        }
-        if (base.recoil) {
-          // 銃の反動。撃った瞬間だけ手元が後ろへ下がる。
-          const kick = pose.phase === 'strike' ? Math.sin(pose.phaseT * Math.PI) : 0;
-          lungeX = -Math.cos(m.baseAim) * base.recoil * kick;
-          lungeY = -Math.sin(m.baseAim) * base.recoil * kick;
-        }
-        hx = p.x + Math.cos(angle) * (p.r * 0.72) + lungeX;
-        hy = p.y + Math.sin(angle) * (p.r * 0.72) + lungeY;
-      } else {
-        // 待機中は呼吸に合わせてごく僅かに揺らす。大きく回さない。
-        hx += Math.cos(aim + side + Math.PI / 2) * Math.sin(run.t * 2.1 + i) * 1.1;
-        hy += Math.sin(aim + side + Math.PI / 2) * Math.sin(run.t * 2.1 + i) * 1.1;
-      }
-
+  /**
+   * 自律する分身 (式神)。敵を追いかけて自分で斬る。プレイヤーのそばに
+   * いるときは漂い、敵へ向かうときは体を伸ばして走る。
+   */
+  drawHelpers(run) {
+    const g = this.ctx;
+    for (const h of run.helpers) {
+      const born = clamp((h.born || 0) * 3, 0, 1);
+      const speed = Math.hypot(h.vx, h.vy);
+      const stretch = 1 + clamp(speed / 420, 0, 0.5);
       g.save();
-      g.globalAlpha = alpha;
-      // 手元から握りへ短い腕。武器が体から浮いて見えないようにする。
-      // 太く描くと武器が 2 本に見えるので、細く淡く。
-      const armLen = Math.hypot(hx - p.x, hy - p.y);
-      if (armLen > p.r) {
-        g.strokeStyle = 'rgba(28, 35, 49, .18)';
+      g.translate(h.x, h.y);
+      g.rotate(h.face || 0);
+      g.scale(stretch, 1 / stretch);
+      // 墨の体。紙の上で白く縁取りして浮かせる。
+      g.globalAlpha = 0.82 * born;
+      g.fillStyle = 'rgba(255, 253, 247, .92)';
+      g.beginPath();
+      g.ellipse(0, 0, h.r + 2.6, (h.r + 2.6) / stretch, 0, 0, TAU);
+      g.fill();
+      g.globalAlpha = 0.9 * born;
+      g.fillStyle = '#1c2331';
+      g.beginPath();
+      g.ellipse(0, 0, h.r, h.r / stretch, 0, 0, TAU);
+      g.fill();
+      // 攻撃の瞬間は色の芯が光る。
+      if (h.atkT > 0) {
+        g.globalAlpha = clamp(h.atkT / 0.18, 0, 1) * 0.85;
+        g.fillStyle = h.color || '#d4a94e';
+        g.beginPath();
+        g.ellipse(0, 0, h.r * 0.62, (h.r * 0.62) / stretch, 0, 0, TAU);
+        g.fill();
+      }
+      g.restore();
+      // 進行方向の目。
+      g.save();
+      g.globalAlpha = 0.9 * born;
+      g.fillStyle = '#fdfbf4';
+      g.beginPath();
+      g.arc(h.x + Math.cos(h.face || 0) * h.r * 0.45,
+        h.y + Math.sin(h.face || 0) * h.r * 0.45, h.r * 0.22, 0, TAU);
+      g.fill();
+      g.restore();
+      // 残像の尾。速く走っているときだけ伸びる。
+      if (speed > 130) {
+        g.save();
+        g.globalAlpha = clamp(speed / 700, 0, 0.4) * born;
+        g.strokeStyle = h.color || '#d4a94e';
         g.lineWidth = 1.6;
         g.lineCap = 'round';
         g.beginPath();
-        g.moveTo(p.x + Math.cos(aim + side) * (p.r * 0.85),
-          p.y + Math.sin(aim + side) * (p.r * 0.85));
-        g.lineTo(hx, hy);
+        g.moveTo(h.x - Math.cos(h.face || 0) * h.r, h.y - Math.sin(h.face || 0) * h.r);
+        g.lineTo(h.x - Math.cos(h.face || 0) * (h.r + speed * 0.05),
+          h.y - Math.sin(h.face || 0) * (h.r + speed * 0.05));
         g.stroke();
-      }
-
-      g.translate(hx, hy);
-      g.rotate(angle + spin);
-      g.shadowColor = color;
-      g.shadowBlur = m ? 8 + (pose?.flash || 0) * 7 : 3;
-      this.drawWeaponGlyph(g, glyph, scale, color, alpha);
-      g.restore();
-
-      // ── 撃つ・放つ武器の、筒先の光。 ──
-      if (m && pose && (base.family === 'ranged' || base.family === 'cast')) {
-        const reach = (base.family === 'cast' ? 18 : 27) * (scale / 2);
-        const tipX = hx + Math.cos(angle) * reach * scale;
-        const tipY = hy + Math.sin(angle) * reach * scale;
-        if (pose.phase === 'strike' || (pose.phase === 'follow' && base.family === 'cast')) {
-          g.save();
-          g.globalAlpha = (0.65 + pose.flash * 0.35) * pose.alpha;
-          g.fillStyle = '#fffdf7';
-          g.beginPath();
-          g.arc(tipX, tipY, 2.2 + pose.flash * 3.4, 0, TAU);
-          g.fill();
-          g.strokeStyle = color;
-          g.lineWidth = 1.25;
-          for (let k = 0; k < 5; k++) {
-            const aa = angle + (k - 2) * 0.28;
-            g.beginPath();
-            g.moveTo(tipX + Math.cos(aa) * 3, tipY + Math.sin(aa) * 3);
-            g.lineTo(tipX + Math.cos(aa) * (7 + pose.flash * 7), tipY + Math.sin(aa) * (7 + pose.flash * 7));
-            g.stroke();
-          }
-          g.restore();
-        }
-      }
-
-      // 刃のきらめき。打撃の瞬間だけ、刃先に細い光を走らせる。
-      if (m && pose && pose.impact > 0.08 && ['slash', 'claw', 'smash', 'thrust', 'punch'].includes(m.family)) {
-        const tipX = hx + Math.cos(angle) * 25 * (scale / 2);
-        const tipY = hy + Math.sin(angle) * 25 * (scale / 2);
-        g.save();
-        g.globalAlpha = pose.impact * 0.75;
-        g.strokeStyle = '#fffdf7';
-        g.lineWidth = 1;
-        g.beginPath();
-        g.moveTo(tipX - Math.cos(angle) * 16 * (scale / 2), tipY - Math.sin(angle) * 16 * (scale / 2));
-        g.lineTo(tipX + Math.cos(angle) * 5, tipY + Math.sin(angle) * 5);
-        g.stroke();
-        g.fillStyle = color;
-        g.beginPath();
-        g.arc(tipX, tipY, 1.8, 0, TAU);
-        g.fill();
         g.restore();
       }
     }

@@ -74,7 +74,7 @@ export const WEAPONS = {
   },
   whip: {
     id: 'whip', name: '鞭', kind: 'whip', glyph: '鞭', tail: '鞭',
-    desc: '周囲を薙ぐ。近接の範囲攻撃。',
+    desc: '渦を描きながら伸びていく。触れた敵を手元から遠くまでなぎ払う。',
     base: { dmg: 10, rate: 1.25, range: 130, area: 10, size: 1, knock: 60, crit: 0.05 },
     grow: { dmg: 3.4, rate: 0.1, range: 7, area: 2 },
     startWord: '嵐', startWord2: '豪', maxLevel: 8, unlock: { stage: 3 },
@@ -116,8 +116,8 @@ export const WEAPONS = {
     startWord: '毒', startWord2: '蝕', maxLevel: 8, unlock: { stage: 16 },
   },
   claw: {
-    id: 'claw', name: '爪', kind: 'slash', glyph: '爪', tail: '爪',
-    desc: '短く速い。近くを連続で薙ぐ。',
+    id: 'claw', name: '爪', kind: 'slash', glyph: '爪', tail: '爪', pattern: 'cross',
+    desc: '短く速い。近くを連続で薙ぎ、3 回に 1 回は前後を十字に引っ掻く。',
     base: { dmg: 7, rate: 2.6, range: 100, arc: 2.3, area: 6, size: 0.9, crit: 0.08, knock: 20 },
     grow: { dmg: 2.3, rate: 0.16, range: 4, arc: 0.04 },
     startWord: '血', startWord2: '蓮', maxLevel: 8, unlock: { stage: 5 },
@@ -137,8 +137,8 @@ export const WEAPONS = {
     startWord: '漆', startWord2: '裂', maxLevel: 8, unlock: { stage: 17 },
   },
   greatblade: {
-    id: 'greatblade', name: '斧', kind: 'slash', glyph: '斧', tail: '斧',
-    desc: '重い一振り。遠くまで薙ぎ、敵を吹き飛ばす。',
+    id: 'greatblade', name: '斧', kind: 'slash', glyph: '斧', tail: '斧', pattern: 'spin',
+    desc: '重い一振り。遠くまで薙ぎ、敵を吹き飛ばす。3 回に 1 回は体ごと回る大旋回。',
     base: { dmg: 18, rate: 0.6, range: 168, arc: 3.0, area: 18, size: 1.2, knock: 110, crit: 0.06 },
     grow: { dmg: 5.6, rate: 0.05, range: 9, arc: 0.05, area: 2 },
     startWord: '鋼', startWord2: '剛', maxLevel: 8, unlock: { stage: 7 },
@@ -196,7 +196,7 @@ export const WEAPONS = {
   },
   chain: {
     id: 'chain', name: '鎖', kind: 'whip', glyph: '鎖', tail: '鎖',
-    desc: '鎖を回す。届く範囲が広く、庭の端まで薙ぐ。',
+    desc: '鎖を渦巻かせる。届く範囲が広く、庭の端まで巻き込む。',
     base: { dmg: 11, rate: 1.0, range: 156, area: 14, size: 1, knock: 74, crit: 0.05 },
     grow: { dmg: 3.6, rate: 0.08, range: 8, area: 2.4 },
     startWord: '嵐', startWord2: '豪', maxLevel: 8, unlock: { stage: 19 },
@@ -279,6 +279,26 @@ export const VERB_SHAPE = {
 };
 
 /**
+ * 2 文字以上の武器語。**最初から選べる武器ではない** — 戦闘中に文の中で
+ * 熟語として隣り合った瞬間に、その武器の攻撃の型へ変わる。
+ * どの武器の文に現れてもよい (「烈鉄球」の銃は鉄球として振るわれる)。
+ *   鉄球 … 鎖のついた鉄の塊。体のまわりを旋回し続け、掃いたところを吹き飛ばす。
+ *   双剣 … 二刀。左右交互に斬り、3 回に 1 回は体ごと回る全面斬り。
+ *   分身 … 式神。プレイヤーから離れて敵を追い、勝手に倒す。
+ * 接続詞で隔たった「鉄の球」は武器語ではない。
+ */
+export const COMPOUND_WEAPON_KINDS = {
+  鉄球: { kind: 'flail', shape: 'ball' },
+  双剣: { kind: 'dual', shape: 'blade' },
+  分身: { kind: 'helper', shape: 'spirit' },
+};
+
+/** 熟語武器の攻撃の型から、描画に使う語を引く。 */
+export const KIND_GLYPH = {
+  flail: '鉄球', dual: '双剣', helper: '分身',
+};
+
+/**
  * 特殊武器: **属性語と現象語だけ**。炎・水・岩・雷・光・闇のような属性語は、
  * 攻撃できる動詞が付いている場合のみ武器として成立する。
  *   例 「天焦がす滅亡の光」… 焦がす (動詞の述語形) があるので「光」が武器になる。
@@ -305,6 +325,7 @@ export const KIND_SHAPE = {
   slash: 'blade', shot: 'shot', pierce: 'arrow', orbit: 'blade',
   bomb: 'bomb', chain: 'shot', boomerang: 'blade', whip: 'blade',
   aura: 'orb', beam: 'arrow',
+  flail: 'ball', dual: 'blade', helper: 'spirit',
 };
 
 /**
@@ -379,6 +400,7 @@ export const KIND_LABEL = {
   orbit: '軌道', whip: '薙ぎ', aura: '城壁', beam: '光線',
   flame: '火炎放射', meteor: '隕石',
   boomerang: '還り刃', pierce: '貫通', none: '',
+  flail: '鉄球', dual: '双剣', helper: '分身',
 };
 
 /** 武器レベルに応じた基礎値を計算する。末尾語 (tail) の効果は文の側で加わる。 */

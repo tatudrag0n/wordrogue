@@ -132,12 +132,12 @@ const RAW_POOL = `
 柔  na  らかな:adn+ らかに:adv+
 静  na  かな:adn+ かに:adv+
 穏  na  やかな:adn+ やかに:adv+
-奇  na  なる:adn+
+奇  na  なる:adn+ に:adv+
 雅  na  な:adn+ やかな:adn+ やかに:adv+
 華  na  やかな:adn+ やかに:adv+
 密  na  な:adn+ に:adv+
-壮  na  なる:adn+
-燦  na  なる:adn+ めく:adn*x めいて:advx
+壮  na  なる:adn+ に:adv+
+燦  na  なる:adn+ めく:adn*x めいて:advx に:adv+
 聖  na  なる:adn+ +N
 確  na  かな:adn+ かに:adv+
 滑  na  らかな:adn+ らかに:adv+ る:adn*x
@@ -196,155 +196,155 @@ const RAW_POOL = `
 感  n   じる:adn* じて:adv
 
 # ── 動詞 (全部書く) ──
-爆  v   ぜる:adn*x ぜて:advx
-殺  v   す:adn* された:adn*p して:adv
-滅  v   ぼす:adn* びる:adn*x ぼされた:adn*p ぼして:adv びて:advx
-轟  v   く:adn*x いて:advx
-侵  v   す:adn* された:adn*p して:adv
-炸  v   ぜる:adn*x ぜて:advx
-破  v   る:adn* れる:adn*x られた:adn*p って:adv れて:advx
-沸  v   く:adn*x かす:adn* かされた:adn*p いて:advx かして:adv
-凍  v   る:adn*x える:adn*x って:advx えて:advx
-燃  v   える:adn*x やす:adn* やされた:adn*p えて:advx やして:adv
-焼  v   く:adn* ける:adn*x かれた:adn*p いて:adv けて:advx
-焦  v   げる:adn*x がす:adn* がされた:adn*p げて:advx がして:adv
-溶  v   ける:adn*x かす:adn* かされた:adn*p けて:advx かして:adv
-融  v   ける:adn*x かす:adn* かされた:adn*p けて:advx かして:adv
-蒸  v   す:adn* された:adn*p して:adv
-貫  v   く:adn* かれた:adn*p いて:adv き:adv*
-射  v   る:adn* られた:adn*p て:adv
-斬  v   る:adn* られた:adn*p り:adv* って:adv
-砕  v   く:adn* ける:adn*x かれた:adn*p いて:adv けて:advx
-殴  v   る:adn* られた:adn*p って:adv
+爆  v   ぜる:adn*x ぜて:advx ぜた:adn*x ぜ:advx
+殺  v   す:adn* された:adn*p して:adv した:adn*p し:adv*
+滅  v   ぼす:adn* びる:adn*x ぼされた:adn*p ぼして:adv びて:advx ぼした:adn*p ぼし:adv* びた:adn*x び:advx
+轟  v   く:adn*x いて:advx いた:adn*x き:advx
+侵  v   す:adn* された:adn*p して:adv した:adn*p し:adv*
+炸  v   ぜる:adn*x ぜて:advx ぜた:adn*x ぜ:advx
+破  v   る:adn* れる:adn*x られた:adn*p って:adv れて:advx った:adn*p り:adv* れた:adn*x れ:advx
+沸  v   く:adn*x かす:adn* かされた:adn*p いて:advx かして:adv いた:adn*x き:advx かした:adn*p かし:adv*
+凍  v   る:adn*x える:adn*x って:advx えて:advx った:adn*x り:advx えた:adn*x え:advx
+燃  v   える:adn*x やす:adn* やされた:adn*p えて:advx やして:adv えた:adn*x え:advx やした:adn*p やし:adv*
+焼  v   く:adn* ける:adn*x かれた:adn*p いて:adv けて:advx いた:adn*p き:adv* けた:adn*x け:advx
+焦  v   げる:adn*x がす:adn* がされた:adn*p げて:advx がして:adv げた:adn*x げ:advx がした:adn*p がし:adv*
+溶  v   ける:adn*x かす:adn* かされた:adn*p けて:advx かして:adv けた:adn*x け:advx かした:adn*p
+融  v   ける:adn*x かす:adn* かされた:adn*p けて:advx かして:adv けた:adn*x け:advx かした:adn*p
+蒸  v   す:adn* された:adn*p して:adv した:adn*p し:adv*
+貫  v   く:adn* かれた:adn*p いて:adv き:adv* いた:adn*p
+射  v   る:adn* られた:adn*p て:adv った:adn*p り:adv*
+斬  v   る:adn* られた:adn*p り:adv* って:adv った:adn*p
+砕  v   く:adn* ける:adn*x かれた:adn*p いて:adv けて:advx いた:adn*p き:adv* けた:adn*x
+殴  v   る:adn* られた:adn*p って:adv った:adn*p り:adv*
 渦  n   +N
 乱  n   れる:adn*x れた:adn*x れて:advx +N
 還  n   る:adn*x +N
-散  v   る:adn*x らす:adn* らされた:adn*p って:advx らして:adv
-伸  v   びる:adn*x ばす:adn* ばされた:adn*p びて:advx ばして:adv
-縮  v   む:adn*x める:adn* められた:adn*p んで:advx めて:adv
-跳  v   ねる:adn*x ぶ:adn*x ねて:advx んで:advx
-響  v   く:adn*x いて:advx
-裂  v   く:adn* ける:adn*x かれた:adn*p いて:adv けて:advx
-舞  v   う:adn*x って:advx い:adv*x
-吸  v   う:adn* われた:adn*p って:adv
-吐  v   く:adn* かれた:adn*p いて:adv
-潜  v   む:adn*x る:adn*x んで:advx って:advx
-浮  v   く:adn*x かぶ:adn*x いて:advx んで:advx
-沈  v   む:adn*x める:adn* められた:adn*p んで:advx めて:adv
-昇  v   る:adn*x って:advx
-降  v   る:adn*x って:advx
-挟  v   む:adn* まれた:adn*p んで:adv
-掴  v   む:adn* まれた:adn*p んで:adv
-掘  v   る:adn* られた:adn*p って:adv
-叩  v   く:adn* かれた:adn*p いて:adv
-踏  v   む:adn* まれた:adn*p んで:adv み:adv*
-擦  v   る:adn* れる:adn*x られた:adn*p って:adv れて:advx
-潰  v   す:adn* れる:adn*x された:adn*p して:adv れて:advx
-嚇  v   す:adn* された:adn*p して:adv
-縛  v   る:adn* られた:adn*p って:adv
-鍛  v   える:adn* えた:adn* えて:adv
-研  v   ぐ:adn* ぎ:adv がれた:adn*p
+散  v   る:adn*x らす:adn* らされた:adn*p って:advx らして:adv った:adn*x り:advx らした:adn*p
+伸  v   びる:adn*x ばす:adn* ばされた:adn*p びて:advx ばして:adv びた:adn*x び:advx ばした:adn*p ばし:adv*
+縮  v   む:adn*x める:adn* められた:adn*p んで:advx めて:adv んだ:adn*x み:advx めた:adn*p
+跳  v   ねる:adn*x ぶ:adn*x ねて:advx んで:advx ねた:adn*x ね:advx んだ:adn*x び:advx
+響  v   く:adn*x いて:advx いた:adn*x き:advx
+裂  v   く:adn* ける:adn*x かれた:adn*p いて:adv けて:advx いた:adn*p き:adv* けた:adn*x
+舞  v   う:adn*x って:advx い:adv*x った:adn*x
+吸  v   う:adn* われた:adn*p って:adv った:adn*p い:adv*
+吐  v   く:adn* かれた:adn*p いて:adv いた:adn*p き:adv*
+潜  v   む:adn*x る:adn*x んで:advx って:advx んだ:adn*x み:advx った:adn*x り:advx
+浮  v   く:adn*x かぶ:adn*x いて:advx んで:advx いた:adn*x き:advx かんだ:adn*x かび:advx
+沈  v   む:adn*x める:adn* められた:adn*p んで:advx めて:adv んだ:adn*x み:advx めた:adn*p
+昇  v   る:adn*x って:advx った:adn*x り:advx
+降  v   る:adn*x って:advx った:adn*x り:advx
+挟  v   む:adn* まれた:adn*p んで:adv んだ:adn*p み:adv*
+掴  v   む:adn* まれた:adn*p んで:adv んだ:adn*p み:adv*
+掘  v   る:adn* られた:adn*p って:adv った:adn*p り:adv*
+叩  v   く:adn* かれた:adn*p いて:adv いた:adn*p き:adv*
+踏  v   む:adn* まれた:adn*p んで:adv み:adv* んだ:adn*p
+擦  v   る:adn* れる:adn*x られた:adn*p って:adv れて:advx った:adn*p り:adv* れた:adn*x れ:advx
+潰  v   す:adn* れる:adn*x された:adn*p して:adv れて:advx した:adn*p し:adv* れた:adn*x れ:advx
+嚇  v   す:adn* された:adn*p して:adv した:adn*p し:adv*
+縛  v   る:adn* られた:adn*p って:adv った:adn*p り:adv*
+鍛  v   える:adn* えた:adn* えて:adv え:adv*
+研  v   ぐ:adn* ぎ:adv がれた:adn*p いだ:adn*p
 駆  v   ける:adn*x けた:adn*x け:adv*x
-浴  v   びる:adn* びた:adn* びて:adv
-浸  v   す:adn* した:adn* された:adn*p して:adv
-錆  v   びる:adn*x びた:adn*x びて:advx
-癒  v   す:adn* える:adn*x して:adv えて:advx
+浴  v   びる:adn* びた:adn* びて:adv び:adv*
+浸  v   す:adn* した:adn* された:adn*p して:adv し:adv*
+錆  v   びる:adn*x びた:adn*x びて:advx び:advx
+癒  v   す:adn* える:adn*x して:adv えて:advx した:adn*p し:adv* えた:adn*x え:advx
 
 # ── 中二病の動詞 ──
-絶  v   つ:adn* たれた:adn*p て:adv える:adn*x えて:advx
+絶  v   つ:adn* たれた:adn*p て:adv える:adn*x えて:advx った:adn*p ち:adv* えた:adn*x え:advx
 終  v   わる:adn*x わった:adn*x わり:advx わって:advx える:adn* えて:adv
-戮  v   する:adn* された:adn*p して:adv
-屠  v   る:adn* られた:adn*p り:adv* って:adv
-討  v   つ:adn* たれた:adn*p ち:adv* って:adv
-刈  v   る:adn* られた:adn*p り:adv* って:adv
-祓  v   う:adn* われた:adn*p い:adv* って:adv
-祟  v   る:adn*x られた:adn*p り:advx って:advx
-葬  v   る:adn* られた:adn*p り:adv* って:adv
-刺  v   す:adn* された:adn*p して:adv
-刻  v   む:adn* まれた:adn*p み:adv* んで:adv
-煉  v   る:adn* られた:adn*p り:adv* って:adv
+戮  v   する:adn* された:adn*p して:adv した:adn*p し:adv*
+屠  v   る:adn* られた:adn*p り:adv* って:adv った:adn*p
+討  v   つ:adn* たれた:adn*p ち:adv* って:adv った:adn*p
+刈  v   る:adn* られた:adn*p り:adv* って:adv った:adn*p
+祓  v   う:adn* われた:adn*p い:adv* って:adv った:adn*p
+祟  v   る:adn*x られた:adn*p り:advx って:advx った:adn*x
+葬  v   る:adn* られた:adn*p り:adv* って:adv った:adn*p
+刺  v   す:adn* された:adn*p して:adv した:adn*p し:adv*
+刻  v   む:adn* まれた:adn*p み:adv* んで:adv んだ:adn*p
+煉  v   る:adn* られた:adn*p り:adv* って:adv った:adn*p
 
 # ── 追加動詞 (1 文字で動作になる語) ──
-分  v   ける:adn* けて:adv かれた:adn*p
-切  v   る:adn* り:adv* られた:adn*p
-刳  v   る:adn* り:adv*
-動  v   く:adn*x き:advx
-化  v   する:adn* して:adv
-吟  v   じる:adn* じて:adv
-吹  v   く:adn* き:adv*
-呈  v   する:adn* して:adv
-哭  v   く:adn*x
-啜  v   る:adn*
-在  v   る:adn*x
-坐  v   る:adn*x
-垂  v   れる:adn*x れて:advx
-壊  v   す:adn* れた:adn*p して:adv
-変  v   じる:adn* じて:adv わった:adn*x
-失  v   う:adn* って:adv
-奏  v   でる:adn* でて:adv
-奔  v   る:adn*x って:advx
-封  v   じる:adn* じて:adv
-尽  v   くす:adn* きる:adn*x くして:adv きて:advx
-崩  v   す:adn* れた:adn*p して:adv
-嵌  v   る:adn*x めた:adn*p
-干  v   す:adn* した:adn*p
-廻  v   る:adn*x す:adn* り:adv
-弁  v   じる:adn* じて:adv
-従  v   う:adn*x って:advx
-成  v   る:adn*x した:adn*
-戯  v   れる:adn*x れて:advx
-拘  v   る:adn*x って:advx
-捕  v   らえる:adn* らえた:adn*p えて:adv
-揺  v   れる:adn*x らす:adn* れて:advx らして:adv
-損  v   じる:adn* じて:adv
-操  v   る:adn*
-攻  v   める:adn* めて:adv めた:adn*p
-放  v   つ:adn* って:adv
-敗  v   れる:adn*x れて:advx
-斂  v   する:adn* して:adv
-断  v   つ:adn* ち:adv*
-来  v   る:adn*x た:adn*x
-枯  v   れる:adn*x らす:adn* れて:advx
-歌  v   う:adn* って:adv
-歩  v   く:adn*x き:advx
-残  v   る:adn*x す:adn*
-毀  v   つ:adn* ち:adv*
-消  v   す:adn* えた:adn*x して:adv えて:advx
-游  v   ぐ:adn*x いで:advx
-犯  v   す:adn* した:adn*p
-猟  v   る:adn*
-生  v   きる:adn*x きた:adn*x きて:advx
-盗  v   む:adn* んだ:adn*p んで:adv
-知  v   る:adn* った:adn*p って:adv
-移  v   る:adn*x す:adn* って:advx して:adv
-繚  v   る:adn*x
-聚  v   する:adn* して:adv
-脱  v   する:adn* して:adv
-落  v   ちる:adn*x とす:adn* ちて:advx として:adv
-蕩  v   ける:adn*x
+分  v   ける:adn* けて:adv かれた:adn*p けた:adn*p け:adv*
+切  v   る:adn* り:adv* られた:adn*p った:adn*p
+刳  v   る:adn* り:adv* った:adn*p
+動  v   く:adn*x き:advx いた:adn*x
+化  v   する:adn* して:adv した:adn*p し:adv*
+吟  v   じる:adn* じて:adv じた:adn*p じ:adv*
+吹  v   く:adn* き:adv* いた:adn*p
+呈  v   する:adn* して:adv した:adn*p し:adv*
+哭  v   く:adn*x いた:adn*x き:advx
+啜  v   る:adn* った:adn*p り:adv*
+在  v   る:adn*x った:adn*x り:advx
+坐  v   る:adn*x った:adn*x り:advx
+垂  v   れる:adn*x れて:advx れた:adn*x れ:advx
+壊  v   す:adn* れた:adn*p して:adv した:adn*p し:adv*
+変  v   じる:adn* じて:adv わった:adn*x じ:adv*
+失  v   う:adn* って:adv った:adn*p い:adv*
+奏  v   でる:adn* でて:adv でた:adn*p で:adv*
+奔  v   る:adn*x って:advx った:adn*x り:advx
+封  v   じる:adn* じて:adv じた:adn*p じ:adv*
+尽  v   くす:adn* きる:adn*x くして:adv きて:advx くした:adn*p くし:adv* きた:adn*x き:advx
+崩  v   す:adn* れた:adn*p して:adv した:adn*p し:adv*
+嵌  v   る:adn*x めた:adn*p り:advx め:adv*
+干  v   す:adn* した:adn*p し:adv*
+廻  v   る:adn*x す:adn* り:adv った:adn*x した:adn*p
+弁  v   じる:adn* じて:adv じた:adn*p じ:adv*
+従  v   う:adn*x って:advx った:adn*x い:advx
+成  v   る:adn*x した:adn* り:advx し:adv*
+戯  v   れる:adn*x れて:advx れた:adn*x れ:advx
+拘  v   る:adn*x って:advx った:adn*x り:advx
+捕  v   らえる:adn* らえた:adn*p えて:adv らえ:adv*
+揺  v   れる:adn*x らす:adn* れて:advx らして:adv れた:adn*x れ:advx らした:adn*p
+損  v   じる:adn* じて:adv じた:adn*p じ:adv*
+操  v   る:adn* った:adn*p り:adv*
+攻  v   める:adn* めて:adv めた:adn*p め:adv*
+放  v   つ:adn* って:adv った:adn*p ち:adv*
+敗  v   れる:adn*x れて:advx れた:adn*x れ:advx
+斂  v   する:adn* して:adv した:adn*p し:adv*
+断  v   つ:adn* ち:adv* った:adn*p
+来  v   る:adn*x た:adn*x り:advx
+枯  v   れる:adn*x らす:adn* れて:advx れた:adn*x れ:advx らした:adn*p らし:adv*
+歌  v   う:adn* って:adv った:adn*p い:adv*
+歩  v   く:adn*x き:advx いた:adn*x
+残  v   る:adn*x す:adn* った:adn*x り:advx した:adn*p し:adv*
+毀  v   つ:adn* ち:adv* った:adn*p
+消  v   す:adn* えた:adn*x して:adv えて:advx した:adn*p し:adv* え:advx
+游  v   ぐ:adn*x いで:advx いだ:adn*x ぎ:advx
+犯  v   す:adn* した:adn*p し:adv*
+猟  v   る:adn* った:adn*p り:adv*
+生  v   きる:adn*x きた:adn*x きて:advx き:advx
+盗  v   む:adn* んだ:adn*p んで:adv み:adv*
+知  v   る:adn* った:adn*p って:adv り:adv*
+移  v   る:adn*x す:adn* って:advx して:adv った:adn*x り:advx した:adn*p
+繚  v   る:adn*x った:adn*x り:advx
+聚  v   する:adn* して:adv した:adn*p し:adv*
+脱  v   する:adn* して:adv した:adn*p し:adv*
+落  v   ちる:adn*x とす:adn* ちて:advx として:adv ちた:adn*x ち:advx とした:adn*p とし:adv*
+蕩  v   ける:adn*x けた:adn*x け:advx
 衝  v   く:adn* いた:adn*x き:adv*
 見  v   る:adn* た:adn*p て:adv
-誅  v   する:adn* した:adn*p
-賜  v   る:adn* った:adn*p
-走  v   る:adn*x り:advx
-躇  v   う:adn*x って:advx
-躊  v   う:adn*x って:advx
-躍  v   る:adn*x り:advx
-転  v   ぶ:adn*x がす:adn* んで:advx
-追  v   う:adn* った:adn*p って:adv
-逐  v   う:adn* って:adv
-造  v   る:adn* った:adn*p
-遁  v   れる:adn*x れて:advx
-遊  v   ぶ:adn*x んで:advx
-遡  v   る:adn*x って:advx
-避  v   ける:adn* けて:adv
-酌  v   む:adn* んで:adv
-閉  v   じる:adn* じて:adv
-開  v   く:adn*x いた:adn*x いて:advx
-闘  v   う:adn*x った:adn*x って:advx
-闢  v   く:adn*x
-飛  v   ぶ:adn*x んだ:adn*x んで:advx
-鳴  v   る:adn*x いた:adn*x いて:advx
+誅  v   する:adn* した:adn*p し:adv*
+賜  v   る:adn* った:adn*p り:adv*
+走  v   る:adn*x り:advx った:adn*x
+躇  v   う:adn*x って:advx った:adn*x い:advx
+躊  v   う:adn*x って:advx った:adn*x い:advx
+躍  v   る:adn*x り:advx った:adn*x
+転  v   ぶ:adn*x がす:adn* んで:advx んだ:adn*x び:advx がした:adn*p がし:adv*
+追  v   う:adn* った:adn*p って:adv い:adv*
+逐  v   う:adn* って:adv った:adn*p い:adv*
+造  v   る:adn* った:adn*p り:adv*
+遁  v   れる:adn*x れて:advx れた:adn*x れ:advx
+遊  v   ぶ:adn*x んで:advx んだ:adn*x び:advx
+遡  v   る:adn*x って:advx った:adn*x り:advx
+避  v   ける:adn* けて:adv けた:adn*p け:adv*
+酌  v   む:adn* んで:adv んだ:adn*p み:adv*
+閉  v   じる:adn* じて:adv じた:adn*p じ:adv*
+開  v   く:adn*x いた:adn*x いて:advx き:advx
+闘  v   う:adn*x った:adn*x って:advx い:advx
+闢  v   く:adn*x いた:adn*x き:advx
+飛  v   ぶ:adn*x んだ:adn*x んで:advx び:advx
+鳴  v   る:adn*x いた:adn*x いて:advx り:advx
 
 # ── 追加の形容語 ──
 安  a   い:adn+ く:adv+
@@ -361,21 +361,21 @@ const RAW_POOL = `
 # 自然な形だけを、その語の送り仮名として置く。
 激  a   しい:adn+ しく:adv+
 晴  n   れる:adn*x れた:adn*x れて:advx
-凪  n   ぐ:adn*x いだ:adn*x いで:advx
+凪  n   ぐ:adn*x いだ:adn*x いで:advx +N
 紅  a   い:adn+ く:adv+
 碧  a   い:adn+ く:adv+
-灼  v   く:adn* かれた:adn*p いて:adv
+灼  v   く:adn* かれた:adn*p いて:adv いた:adn*p き:adv*
 濁  v   る:adn*x った:adn*x り:advx って:advx らす:adn*
 汚  a   い:adn+ く:adv+ す:adn* れた:adn*p れて:advx
 純  na  な:adn+ に:adv+
 怒  n   る:adn*x った:adn*x り:advx
-愛  n   する:adn* した:adn* された:adn*p して:adv
+愛  n   する:adn* した:adn* された:adn*p して:adv +N
 望  n   む:adn* んだ:adn*p んで:adv
 痛  a   い:adn+ く:adv+ む:adn*x んだ:adn*x んで:advx
 狂  n   う:adn*x った:adn*x って:advx
 満  n   ちる:adn*x ちた:adn*x ちて:advx たす:adn* たした:adn*p たして:adv
 異  na  なる:adn+ に:adv+
-空  n   く:adn*x いた:adn*x いて:advx
+空  n   く:adn*x いた:adn*x いて:advx +N
 超  n   える:adn* えた:adn* えて:adv
 怪  a   しい:adn+ しく:adv+
 楽  a   しい:adn+ しく:adv+

@@ -231,6 +231,16 @@ export const WEAPON_MOTIONS = {
       { id: 'basic3', from: -1.00, to: 1.00, curve: 0.04, label: '薙ぎ' },
     ],
   },
+  // ── 双剣: 二刀の速い斬撃波。左右交互に飛ぶ。 ──
+  dualblades: {
+    style: 'wave', family: 'slash', duration: 0.40, windup: 0.30, impact: 0.50, follow: 0.78,
+    rest: -0.5, lunge: 6, weight: 0.6,
+    variants: [
+      { id: 'migi', from: -1.00, to: 1.00, curve: 0.05, label: '右の一刀' },
+      { id: 'hidari', from: 1.00, to: -1.00, curve: -0.05, label: '左の一刀' },
+      { id: 'ren', from: -1.00, to: 1.00, curve: 0.02, label: '連刃' },
+    ],
+  },
 };
 
 
@@ -372,6 +382,10 @@ export function syncMotionShape(m, reach, arc) {
 /** 攻撃の型と武器の形から、描画の family を決める。 */
 function familyOf(base, res) {
   const kind = res?.kind;
+  // 双剣。乗っている武器の持ち方が射撃・詠唱でも、二刀の斬撃として描く。
+  if (kind === 'dual') {
+    return base.family === 'ranged' || base.family === 'cast' ? 'slash' : base.family;
+  }
   if (kind === 'whip') return 'whip';
   if (kind === 'pierce') return 'thrust';
   if (kind === 'shot' || kind === 'chain' || kind === 'beam' || kind === 'bomb') {
@@ -384,6 +398,9 @@ function familyOf(base, res) {
 
 /** モーションの元になる武器の持ち方。 */
 export function motionKey(wi, res) {
+  // 双剣。文の中で熟語になった二刀は、どの武器の文でも二刀の振り方をする。
+  // 鉄球 (旋回) と分身 (自律) は撃つのではないので、モーションを持たない。
+  if (res?.kind === 'dual') return 'dualblades';
   const tail = res?.tail;
   if (tail && GLYPH_MOTION[tail]) return GLYPH_MOTION[tail];
   const glyph = wi?.def?.glyph || wi?.def?.name;

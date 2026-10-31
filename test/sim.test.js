@@ -246,16 +246,18 @@ sec('すべての武器が文の中の武器語で攻撃を決める');
 {
   const PS = { atk: 1, atkMul: 1, crit: 0, lifesteal: 0, magnet: 0, xpMul: 0, armor: 0, slowImmune: 0, hp: 100 };
   for (const [id, def] of Object.entries(WEAPONS)) {
-    ok(WORDS[def.tail], `${def.name}: 武器語「${def.tail}」が辞書に無い`);
+    // 2 文字の武器 (鉄球・双剣・分身) は部品 2 語が並んで武器語になる。
+    const seed = def.seed || [def.tail];
+    for (const t of seed) ok(WORDS[t], `${def.name}: 武器語「${t}」が辞書に無い`);
     const wi = new WeaponInst(id, 1);
     // 武器語は自動で付かない。開始時の文に自分で置く。
-    setFlat(wi, [def.startWord, def.startWord2, def.tail]);
+    setFlat(wi, [...seed]);
     const r = wi.resolve(PS);
     ok(r.active, `${def.name}: 開始語+武器語で不成文 (${r.reasonText})`);
     ok(r.kind === def.kind, `${def.name}: 武器語「${def.tail}」で ${def.kind} になるはずが ${r.kind}`);
     ok(r.title.endsWith(def.tail), `${def.name}: 名前が武器語で終わらない: ${r.title}`);
-    ok(r.evalResult.segments[r.evalResult.segments.length - 1] === def.tail,
-      `${def.name}: 分割の最後が武器語でない: ${r.evalResult.segments.join('/')}`);
+    ok(r.evalResult.text.endsWith(def.tail),
+      `${def.name}: 文面が武器語で終わらない: ${r.evalResult.text}`);
     console.log(`  ${def.name.padEnd(4)} → 「${r.title}」 ${r.kind} / ${r.shape}`);
   }
 }
@@ -1028,7 +1030,7 @@ sec('語をタップすると直後の接続詞が切り替わる');
   // 「燃」… 動詞。プールは える・やす・やされた・えて・やして。一周したら無し。
   setFlat(wi, ['焔', '燃']);
   const opts2 = wi.sentence.connOptions(1);
-  ok(opts2.join(',') === 'える,やす,やされた,えて,やして', `「燃」の接続詞 ${opts2.join(',')}`);
+  ok(opts2.join(',') === 'える,やす,やされた,えて,やして,えた,え,やした,やし', `「燃」の接続詞 ${opts2.join(',')}`);
   const p2 = { kind: 'slot', wi, index: 1 };
   const seen2 = [];
   for (let i = 0; i < opts2.length + 1; i++) seen2.push(r.cycleConnector(p2).text);
@@ -1036,7 +1038,7 @@ sec('語をタップすると直後の接続詞が切り替わる');
   // 「斬」… る・られた・り・って (プールの順そのまま)。
   setFlat(wi, ['焔', '斬']);
   const opts3 = wi.sentence.connOptions(1);
-  ok(opts3.join(',') === 'る,られた,り,って', `「斬」の接続詞 ${opts3.join(',')}`);
+  ok(opts3.join(',') === 'る,られた,り,って,った', `「斬」の接続詞 ${opts3.join(',')}`);
 
   // 文面には接続詞が入る。
   setFlat(wi, ['焔', 'を', '斬']);
@@ -1130,6 +1132,7 @@ sec('形と攻撃は文の中の武器語が決める');
   for (const id of Object.keys(WEAPONS)) {
     const def = WEAPONS[id];
     // 基本武器は単体で型を決める。特殊武器は開始文 (動詞なし) では決めず既定のまま。
+    // 2 文字の武器は部品 2 語 (seed) を置いた瞬間に型が決まる。
     const basic = BASIC_WEAPONS.has(def.tail);
     const [wantShape, wantKind] = basic
       ? (FORM_SHAPE[def.tail] || [def.shape || KIND_SHAPE[def.kind], def.kind])
@@ -1139,7 +1142,7 @@ sec('形と攻撃は文の中の武器語が決める');
     const r = freshWeapon(stage, [id]);
     const wi = r.weapons[0];
     ok(wi && wi.defId === id, `${id}: 武器=${wi && wi.defId} (ステージ ${stage})`);
-    setFlat(wi, [def.startWord, def.startWord2, def.tail]);
+    setFlat(wi, def.seed || [def.startWord, def.startWord2, def.tail]);
     const res = wi.resolve(r.player.stats);
     ok(res.active, `${id}: 不成文 (${res.reasonText})`);
     ok(res.shape === wantShape, `${id}: 形 ${res.shape} が ${wantShape} でない`);

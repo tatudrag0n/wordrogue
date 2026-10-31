@@ -14,7 +14,7 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE } from '../data/weapons.js?v=1.49';
+import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.49';
 import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.49';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
@@ -38,6 +38,20 @@ const HAND_TRAITS = {
 };
 
 let wUid = 0;
+
+/**
+ * 文面に 2 文字以上の武器語 (鉄球・双剣・分身) が熟語として現れているか。
+ * 接続詞はひらがななので、漢字だけの部分列が一致する = 語が隣り合っている。
+ * 「鉄の球」のように隔たっているときは武器語ではない。
+ * @returns {object|null} COMPOUND_WEAPON_KINDS の値
+ */
+function compoundWeaponOf(text) {
+  if (!text) return null;
+  for (const [phrase, info] of Object.entries(COMPOUND_WEAPON_KINDS)) {
+    if (text.includes(phrase)) return info;
+  }
+  return null;
+}
 
 /**
  * 語 (熟語ならその語幹) が「何をする攻撃か」を持つか。
@@ -82,6 +96,8 @@ export class WeaponInst {
     this.aim = 0;           // 照準角
     this.orbitAngle = 0;
     this.flash = 0;         // 攻撃フラッシュ
+    /** 何回撃ったか。攻撃のパターン (3 回に 1 回は範囲、など) に使う。 */
+    this.attackCount = 0;
     /** 予備動作から振り抜けまでの、見た目だけのモーション。 */
     this.motion = null;
     this.lastMotion = null;
@@ -226,8 +242,9 @@ export class WeaponInst {
    */
   evaluate() {
     // 初期状態は武器名だけで成立させる。これは意図的な「基本武器の素振り」で、
-    // 余分な語を得た後は通常の文法評価に戻る。
-    if (this.sentence.words.length === 1 && this.sentence.words[0].text === this.def.tail) {
+    // 余分な語を得た後は通常の文法評価に戻る。1 文字の武器語 (刃) も、
+    // 2 語に分かれた熟語武器 (鉄球 = 鉄+球) も、文面が武器名と一致していればよい。
+    if (this.sentence.text === this.def.tail) {
       const e = this.sentence.evaluate({ minContent: 1 });
       return {
         ...e, valid: true, reason: null, reasonText: '', grade: 'plain',
@@ -294,7 +311,11 @@ export class WeaponInst {
     // 語 1 つの品詞ではなく、文の中で熟語になった語幹まで見て型を決める。
     // 特殊武器は頭にした属性の攻撃を使う。通常武器は武器語と動詞の従来ルールを保つ。
     const elementKind = special ? ELEMENT_KIND[WORDS[tail]?.el] : null;
-    let kind = verbKindOf(verb) || elementKind || (info && info[1]) || this.def.kind;
+    // 2 文字以上の武器語 (鉄球・双剣・分身)。文面に熟語として現れた瞬間に
+    // 攻撃の型が変わる。述語の動詞があれば動詞が勝つ (「貫通する鉄球」は貫通)。
+    const compHit = compoundWeaponOf(e.text);
+    let kind = verbKindOf(verb) || (compHit ? compHit.kind : null)
+      || elementKind || (info && info[1]) || this.def.kind;
     // 武器語も属性語も無い文は、頭の熟語 (爆裂・貫通) が何をする文かを決める。
     if (!tail && !verb) {
       const head = (e.segments || []).find((t) => WORDS[t]?.cat !== 'connect') || null;
@@ -302,7 +323,9 @@ export class WeaponInst {
     }
     const shape = verb
       ? (KIND_SHAPE[kind] || (info && info[0]) || this.def.shape || 'blade')
-      : ((info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade');
+      : (compHit
+        ? compHit.shape
+        : ((info && info[0]) || this.def.shape || KIND_SHAPE[kind] || 'blade'));
     // 手の部位に属性語を置いていれば、文に属性が無くてもその属性を纏う。
     // 「炎の右手」で炎の斬撃になる、という意味の対応。
     const handEl = ps.handElement && ps.handElement !== 'none' ? ps.handElement : null;

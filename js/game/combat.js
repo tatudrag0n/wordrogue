@@ -97,6 +97,7 @@ export function fireWeapon(run, wi, res) {
 
   wi.flash = 1;
   wi.phase += 0.6;
+  wi.attackCount = (wi.attackCount || 0) + 1;
 
   // 照準。敵がいれば最寄りを向く。angle を返す (敵オブジェクトではない)。
   const tgt = run.nearestEnemy(p.x, p.y);
@@ -133,6 +134,7 @@ export function fireWeapon(run, wi, res) {
 
   switch (kind) {
     case 'slash': doSlash(run, wi, st, aim, el, elInfo); break;
+    case 'dual': doDual(run, wi, st, aim, el, elInfo); break;
     case 'shot':  doShot(run, wi, st, aim, false, el, elInfo); break;
     case 'pierce': doShot(run, wi, st, aim, false, el, elInfo); break;
     case 'bomb':  doBomb(run, wi, st, aim, el, elInfo); break;
@@ -189,81 +191,174 @@ function doMeteor(run, wi, st, el, elInfo) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 近接
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 扇形 (arc が TAU なら円の全体) の内側の敵に 1 回ずつ当てる。
+ * hit に入っていない敵だけ。doSlash / doDual で同じ判定を使うので、
+ * 見た目と当たり判定がずれる場所が 1 つも生まれない。
+ * @returns {number} 当たった数
+ */
+function hitSector(run, x, y, aim, reach, arc, st, el, hit) {
+  let n = 0;
+  const full = arc >= TAU - 1e-6;
+  for (const e of run.enemies) {
+    if (e.dead || (hit && hit.has(e.uid))) continue;
+    const d2 = dist2(e.x, e.y, x, y);
+    if (d2 > reach * reach) continue;
+    if (!full) {
+      const a = Math.atan2(e.y - y, e.x - x);
+      let diff = (a - aim) % TAU;
+      if (diff > Math.PI) diff -= TAU;
+      if (diff < -Math.PI) diff += TAU;
+      if (Math.abs(diff) > arc / 2) continue;
+    }
+    if (hit) hit.add(e.uid);
+    run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el });
+    n++;
+  }
+  return n;
+}
+
+/** 攻撃 3 回ごとの特別な振り。def.pattern に入っている武器だけが持つ。 */
+const SLASH_PATTERNS = { cross: 0.65, spin: 0.72 };
+
 function doSlash(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   // 当たる範囲と、描く扇は同じ値から作る。ここがずれると
   // 「見えていない敵に当たる」「見えている敵に当たらない」が起きる。
   const shape = attackShape(st, p.stats);
-  const reach = shape.reach;
-  const arc = shape.arc > 0.02 ? shape.arc : Math.PI * 2 / 3;
+  let reach = shape.reach;
+  let arc = shape.arc > 0.02 ? shape.arc : Math.PI * 2 / 3;
+  // 常に同じ攻撃をしない。3 回に 1 回、十字 (前後) か旋回 (円の全体) になる。
+  const patKey = wi.def.pattern && (wi.attackCount % 3 === 0) ? wi.def.pattern : null;
+  const patMul = patKey ? SLASH_PATTERNS[patKey] : 1;
+  const pst = patMul < 1 ? { ...st, dmg: st.dmg * patMul } : st;
+  let aim2 = aim;
+  let extra = null;
+  if (patKey === 'cross') {
+    extra = aim + Math.PI;
+  } else if (patKey === 'spin') {
+    arc = Math.PI * 2;
+    reach *= 1.06;
+  }
   // 刃の軌跡は、モーションの打撃〜振り抜けのあいだだけ描く。
   const motion = wi.motion || null;
   if (motion) syncMotionShape(motion, reach, arc);
   const life = motion
     ? Math.max(0.28, motion.duration - motion.windup + 0.08)
     : 0.32;
-  run.slashes.push({
-    x: p.x, y: p.y, a: aim,
-    r: reach,
-    arc,
-    life, maxLife: life,
-    color: elInfo.color,
-    el,
-    motion,
-    hit: new Set(),
-  });
+  const mk = (a, m, hitOwn) => {
+    run.slashes.push({
+      x: p.x, y: p.y, a,
+      r: reach,
+      arc,
+      life, maxLife: life,
+      color: elInfo.color,
+      el,
+      motion: m,
+      hit: hitOwn ? new Set() : null,
+    });
+    return run.slashes.at(-1);
+  };
+  const s = mk(aim2, motion, true);
   run.audio.slash();
   // 刃の先で属性が弾ける。風なら風の弧、炎なら火の粉。
   const fx = ELEM_FX[el] || ELEM_FX.none;
-  run.burst(p.x + Math.cos(aim) * reach * 0.72, p.y + Math.sin(aim) * reach * 0.72, 6, elInfo.color, {
-    a: aim, spread: arc * 0.9, spd: fx.spd * 1.4, spdMin: fx.spd * 0.4,
+  run.burst(p.x + Math.cos(aim2) * reach * 0.72, p.y + Math.sin(aim2) * reach * 0.72, 6, elInfo.color, {
+    a: aim2, spread: Math.min(Math.PI, arc) * 0.9, spd: fx.spd * 1.4, spdMin: fx.spd * 0.4,
     life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
   });
-
-  // 扇形内の敵に 1 回だけ当てる。
-  for (const e of run.enemies) {
-    if (e.dead || run.slashes.at(-1).hit.has(e.uid)) continue;
-    const d2 = dist2(e.x, e.y, p.x, p.y);
-    if (d2 > reach * reach) continue;
-    const a = Math.atan2(e.y - p.y, e.x - p.x);
-    let diff = (a - aim) % TAU;
-    if (diff > Math.PI) diff -= TAU;
-    if (diff < -Math.PI) diff += TAU;
-    if (Math.abs(diff) > arc / 2) continue;
-    run.slashes.at(-1).hit.add(e.uid);
-    run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el });
+  hitSector(run, p.x, p.y, aim2, reach, arc, pst, el, s.hit);
+  if (extra != null) {
+    // 反対側。同じ軌道の鏡写し。モーションは角度だけ裏返す。
+    const back = motion ? { ...motion, baseAim: extra } : null;
+    const sb = mk(extra, back, true);
+    run.burst(p.x + Math.cos(extra) * reach * 0.72, p.y + Math.sin(extra) * reach * 0.72, 5, elInfo.color, {
+      a: extra, spread: Math.min(Math.PI, arc) * 0.9, spd: fx.spd * 1.4, spdMin: fx.spd * 0.4,
+      life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
+    });
+    hitSector(run, p.x, p.y, extra, reach, arc, pst, el, sb.hit);
   }
 }
 
+// ── 鞭。渦を描きながら手元から外へ伸びていき、通ったところをなぎ払う。 ─────
+// 当たりは run.spiralTick が渦の先端の位置で刻む (見えた渦がそのまま当たる)。
 function doWhip(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = attackShape(st, p.stats).reach;
-  const motion = wi.motion || null;
-  if (motion) syncMotionShape(motion, reach, 0);
-  const life = motion
-    ? Math.max(0.34, motion.duration - motion.windup + 0.08)
-    : 0.36;
+  // 渦が手元から外周まで走る時間。間合いが長いほどゆっくり。
+  const life = clamp(0.5 + (st.range || 100) / 420, 0.5, 0.95);
   run.rings.push({
-    x: p.x, y: p.y, r: reach, life, maxLife: life,
-    color: elInfo.color, el, motion, hit: new Set(),
+    x: p.x, y: p.y,
+    spiral: true,
+    turns: 2.2,
+    baseAim: aim,
+    reach,
+    life, maxLife: life,
+    color: elInfo.color, el,
+    st: { ...st },
+    hit: new Set(),
   });
   run.audio.slash();
   const fx = ELEM_FX[el] || ELEM_FX.none;
-  const n = 8;
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * TAU + Math.random() * 0.3;
-    run.burst(p.x + Math.cos(a) * reach * 0.9, p.y + Math.sin(a) * reach * 0.9, 1, elInfo.color, {
-      a, spread: 0.4, spd: fx.spd, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
+  run.burst(p.x + Math.cos(aim) * reach * 0.2, p.y + Math.sin(aim) * reach * 0.2, 5, elInfo.color, {
+    a: aim, spread: 1.2, spd: fx.spd, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
+  });
+}
+
+// ── 双剣。左右交互の二刀斬り。2 回斬ったあとの 3 回目は体ごと回る全面斬り。 ──
+function doDual(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const shape = attackShape(st, p.stats);
+  const n = wi.attackCount || 0;
+  const spin = n % 3 === 0;
+  const motion = wi.motion || null;
+  const fx = ELEM_FX[el] || ELEM_FX.none;
+  if (spin) {
+    // 全面斬り。その場で体ごと回り、周囲ぜんぶを薙ぐ。1 回の力は少し落ちる。
+    const st2 = { ...st, dmg: st.dmg * 0.72, knock: st.knock };
+    const reach = shape.reach * 1.08;
+    const arc = Math.PI * 2;
+    if (motion) syncMotionShape(motion, reach, arc);
+    const life = motion ? Math.max(0.34, motion.duration - motion.windup + 0.12) : 0.36;
+    run.slashes.push({
+      x: p.x, y: p.y, a: aim, r: reach, arc,
+      life, maxLife: life,
+      color: elInfo.color, el, motion,
+      hit: new Set(),
+      spin: true,
     });
+    run.audio.slash();
+    run.audio.tone?.({ freq: 320, type: 'sawtooth', dur: 0.16, vol: 0.05, slide: 1.8 });
+    run.shake(2.4);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * TAU;
+      run.burst(p.x + Math.cos(a) * reach * 0.88, p.y + Math.sin(a) * reach * 0.88, 1, elInfo.color, {
+        a, spread: 0.4, spd: fx.spd * 1.2, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
+      });
+    }
+    hitSector(run, p.x, p.y, aim, reach, arc, st2, el, run.slashes.at(-1).hit);
+    return;
   }
-  for (const e of run.enemies) {
-    if (e.dead) continue;
-    if (dist2(e.x, e.y, p.x, p.y) > reach * reach) continue;
-    const rr = reach + e.r;
-    if (dist2(e.x, e.y, p.x, p.y) > rr * rr) continue;
-    run.rings.at(-1).hit.add(e.uid);
-    run.damage(e, st, { crit: rollCrit(st), knock: st.knock || 60, element: el });
-  }
+  // 通常の 2 回は、左右交互の二刀斬り。振る側を攻撃ごとに変える。
+  const side = n % 2 === 1 ? 1 : -1;
+  const a0 = aim + side * 0.46;
+  const arc = Math.max(0.9, shape.arc * 0.72);
+  const reach = shape.reach;
+  if (motion) syncMotionShape(motion, reach, arc);
+  const life = motion ? Math.max(0.24, motion.duration - motion.windup + 0.06) : 0.28;
+  run.slashes.push({
+    x: p.x, y: p.y, a: a0, r: reach, arc,
+    life, maxLife: life,
+    color: elInfo.color, el, motion,
+    hit: new Set(),
+  });
+  run.audio.slash();
+  run.burst(p.x + Math.cos(a0) * reach * 0.72, p.y + Math.sin(a0) * reach * 0.72, 5, elInfo.color, {
+    a: a0, spread: arc * 0.9, spd: fx.spd * 1.4, spdMin: fx.spd * 0.4,
+    life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
+  });
+  hitSector(run, p.x, p.y, a0, reach, arc, st, el, run.slashes.at(-1).hit);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

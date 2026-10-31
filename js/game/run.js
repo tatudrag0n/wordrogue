@@ -129,9 +129,11 @@ export class Run {
     if (!this.weapons.length) this.weapons.push(new WeaponInst('sword', 1));
 
     // ステージ開始時は武器名だけ。素振り (武器名単体) で攻撃できる。
-    // 語を足すと文が強くなる。
+    // 語を足すと文が強くなる。2 文字の武器 (鉄球・双剣・分身) は
+    // 部品 2 つの語 (鉄+球) を隣り合わせで置く。
     for (const wi of this.weapons) {
-      if (wi.def.tail) wi.sentence.push(makeWord(wi.def.tail));
+      const seed = wi.def.seed || (wi.def.tail ? [wi.def.tail] : null);
+      if (seed) for (const t of seed) wi.sentence.push(makeWord(t));
     }
 
     // 開始時の語彙は空。語はレベルアップやくじで得て、自由に組み立てる。
@@ -153,6 +155,8 @@ export class Run {
     this.enemies = [];
     this.bullets = [];
     this.fields = [];
+    /** 自律する分身 (式神)。武器語「分身」の武器が維持する。 */
+    this.helpers = [];
     this.pickups = [];
     this.slashes = [];
     this.rings = [];
@@ -1294,6 +1298,8 @@ export class Run {
     this.playerTick(d, input);
     this.waveTick();
     this.weaponTick(d);
+    this.helperTick(d);
+    this.spiralTick(d);
     this.motionTick(d);
     this.enemyTick(d);
     this.bulletTick(d);
@@ -1422,7 +1428,8 @@ export class Run {
       if (p.dashTrail[i].life <= 0) p.dashTrail.splice(i, 1);
     }
 
-    // ダッシュ中は敵を弾き飛ばす。
+    // ダッシュ中は敵を弾き飛ばし、体当たりで傷つける。
+    // 弾きは毎フレーム、斬りは敵ごとにクールダウンを置いて連続ヒットを防ぐ。
     if (p.dashing) {
       for (const e of this.enemies) {
         if (e.dead) continue;
@@ -1431,10 +1438,45 @@ export class Run {
         const a = Math.atan2(e.y - p.y, e.x - p.x);
         e.x += Math.cos(a) * 260 * dt;
         e.y += Math.sin(a) * 260 * dt;
+        if ((e.dashHitCd || 0) > 0) continue;
+        e.dashHitCd = 0.55;
+        this.dashStrike(e, a);
       }
+    }
+    for (const e of this.enemies) {
+      if (e.dashHitCd > 0) e.dashHitCd -= dt;
     }
 
     if (p.stats.regen > 0 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.stats.regen * dt);
+  }
+
+  /**
+   * ダッシュの体当たり。体の周囲を短く薙いで、敵を切る。
+   * 威力は素手の定数 × 攻撃倍率。文の武器ではないので熟語斬りは起きない。
+   * @param {object} e 敵
+   * @param {number} a 敵の方向
+   */
+  dashStrike(e, a) {
+    const p = this.player;
+    const st = {
+      dmg: 7 * (p.stats.atk || 1) * (p.stats.atkMul || 1),
+      crit: 0, critDmg: 1.5, lifesteal: 0, cutPower: 0, cutChance: 0,
+      knock: 40, size: 1, el: 'none', pierce: 0, area: 0,
+    };
+    const reach = p.r + 34;
+    // 見た目は短い斬撃。当たる範囲と同じ扇を描く (モーションを持たない古い形)。
+    this.slashes.push({
+      x: p.x, y: p.y, a,
+      r: reach, arc: 1.5,
+      life: 0.22, maxLife: 0.22,
+      color: '#c9862b', el: 'none',
+      hit: new Set([e.uid]),
+    });
+    this.burst(e.x, e.y, 5, '#c9862b', {
+      spd: 210, spdMin: 60, life: 0.24, r: 1.8, shape: 'spark', drag: 6,
+    });
+    this.audio.dashSlash?.();
+    this.damage(e, st, { crit: false, knock: st.knock, element: 'none' });
   }
 
   waveTick() {
@@ -1476,10 +1518,22 @@ export class Run {
         this.orbitTick(wi, st, dt);
         continue;
       }
+      if (st.kind === 'flail') {
+        // 鉄球。鎖についた鉄の塊が、体のまわりを旋回し続ける。
+        wi.motion = null;
+        this.flailTick(wi, st, dt);
+        continue;
+      }
       if (st.kind === 'aura') {
         // 常時展開する城壁は、攻撃ではなく息づかいで見せる。
         wi.motion = null;
         this.auraTick(wi, st, dt);
+        continue;
+      }
+      if (st.kind === 'helper') {
+        // 分身は撃つのではなく、維持する。動きと攻撃は helperTick が担う。
+        wi.motion = null;
+        this.helperWeaponTick(wi, st);
         continue;
       }
 
@@ -1549,6 +1603,180 @@ export class Run {
     if (wi.cd <= 0) {
       wi.cd = 1 / Math.max(0.05, st.rate);
       fireWeapon(this, wi, wi._res);
+    }
+  }
+
+  /**
+   * 鉄球。鎖についた鉄の塊を、体のまわりを旋回させ続ける。
+   * 球の位置は描画 (drawWeaponSpirits) も見る。攻撃は rate ごとの「掃き」で、
+   * 球のいまの場所に短い当たり (field) を置く。見える球がそのまま当たる。
+   * @param {object} wi WeaponInst (kind: flail)
+   * @param {object} st resolve 済みステータス
+   * @param {number} dt
+   */
+  flailTick(wi, st, dt) {
+    const p = this.player;
+    const want = Math.max(1, Math.round(st.count || 1));
+    const balls = wi.flailBalls || (wi.flailBalls = []);
+    while (balls.length < want) {
+      balls.push({ off: (balls.length / want) * TAU, a: 0, x: p.x, y: p.y });
+    }
+    while (balls.length > want) balls.pop();
+    for (let i = 0; i < balls.length; i++) balls[i].off = (i / balls.length) * TAU;
+
+    // 重いぶん、回りはじめはゆっくり。rate が上がると加速する。
+    const w = 2.1 + st.rate * 0.45;
+    wi.orbitAngle = (wi.orbitAngle || 0) + dt * w;
+    const radius = clamp((st.range || 100) * 0.62, 44, 250) * (p.stats.size || 1)
+      + (st.area || 0) * 0.6;
+
+    wi.cd -= dt;
+    const strike = wi.cd <= 0;
+    if (strike) wi.cd = 1 / Math.max(0.05, st.rate || 1);
+
+    for (const ball of balls) {
+      const a = wi.orbitAngle + ball.off;
+      ball.a = a;
+      ball.x = p.x + Math.cos(a) * radius;
+      ball.y = p.y + Math.sin(a) * radius;
+      if (!strike) continue;
+      // 鉄球が掃く瞬間。球のいまの場所に、短い当たりを置く。
+      this.fields.push(makeField(ball.x, ball.y, 15 * (st.size || 1) * (p.stats.size || 1), st.dmg, {
+        life: 0.12,
+        element: st.el,
+        knock: st.knock || 90,
+      }));
+      this.burst(ball.x, ball.y, 4, (ELEMENTS[st.el] || ELEMENTS.none).color, {
+        spd: 150, spdMin: 40, life: 0.22, r: 2, shape: 'shard', drag: 5,
+      });
+    }
+    if (strike) {
+      this.audio.tone?.({ freq: 92, type: 'square', dur: 0.09, vol: 0.06, slide: 0.4 });
+      this.shake(1.6);
+    }
+  }
+
+  /**
+   * 鞭の渦。手元から外へらせん状に走り、通ったところを斬る。
+   * doWhip が spiral 付きの輪を置き、ここが先端の位置で当たりを刻む。
+   * 見えている渦の帯と、当たる範囲が同じ幅になる。
+   * @param {number} dt
+   */
+  spiralTick(dt) {
+    for (const s of this.rings) {
+      if (!s.spiral || !s.st || s.life <= 0) continue;
+      const maxLife = s.maxLife || 0.6;
+      const prev = 1 - s.life / maxLife;
+      const now = 1 - Math.max(0, s.life - dt) / maxLife;
+      if (now <= 0) continue;
+      const reach = s.reach || 100;
+      const r0 = reach * prev;
+      const r1 = reach * now;
+      const st = s.st;
+      // 渦の帯の太さ。描画の鞭の幅と揃える。
+      const band = 12 + 7 * (st.size || 1);
+      for (const e of this.enemies) {
+        if (e.dead || s.hit.has(e.uid)) continue;
+        const d = Math.hypot(e.x - s.x, e.y - s.y);
+        if (d > r1 + e.r || d < r0 - e.r) continue;
+        s.hit.add(e.uid);
+        this.damage(e, st, {
+          crit: this.rand() < (st.crit || 0),
+          knock: st.knock,
+          element: s.el,
+        });
+        this.burst(e.x, e.y, 3, s.color, {
+          spd: 170, spdMin: 50, life: 0.22, r: 1.8, shape: 'spark', drag: 6,
+        });
+      }
+    }
+  }
+
+  /**
+   * 分身の数を保つ。文が破れたり武器を外したりしたら、helperTick が霧散させる。
+   * @param {object} wi WeaponInst (kind: helper)
+   * @param {object} st resolve 済みステータス
+   */
+  helperWeaponTick(wi, st) {
+    const want = Math.max(1, Math.round(st.count || 1));
+    const mine = this.helpers.filter((h) => h.wi === wi);
+    if (mine.length > want) {
+      let extra = mine.length - want;
+      for (let i = this.helpers.length - 1; i >= 0 && extra > 0; i--) {
+        if (this.helpers[i].wi === wi) { this.helpers.splice(i, 1); extra--; }
+      }
+    }
+    while (mine.length < want) {
+      const a = this.rand() * TAU;
+      const p = this.player;
+      this.helpers.push({
+        x: p.x + Math.cos(a) * 26, y: p.y + Math.sin(a) * 26,
+        vx: 0, vy: 0, r: 7 * (st.size || 1),
+        wi, st: { ...st },
+        el: st.el || 'none',
+        color: (ELEMENTS[st.el] || ELEMENTS.none).color,
+        glyph: wi.def.glyph || wi.def.name || '分身',
+        cd: this.rand() * 0.5,
+        atkT: 0,
+        born: 0,
+        face: a,
+      });
+      mine.push(this.helpers.at(-1));
+    }
+  }
+
+  /**
+   * 分身の振る舞い。目の前の敵へ飛んでいって斬りつけ、いなければ
+   * プレイヤーのまわりを漂う。敵の攻撃は当たらない (霊なので)。
+   * @param {number} dt
+   */
+  helperTick(dt) {
+    const p = this.player;
+    // 武器を外した / 文が破れた分身は、その場で霧散する。
+    for (let i = this.helpers.length - 1; i >= 0; i--) {
+      const h = this.helpers[i];
+      if (!this.weapons.includes(h.wi) || !(h.wi._res && h.wi._res.active)) {
+        this.helpers.splice(i, 1);
+      }
+    }
+    for (const h of this.helpers) {
+      h.born += dt;
+      if (h.cd > 0) h.cd -= dt;
+      if (h.atkT > 0) h.atkT -= dt;
+      // 文が変わったら性能を追従させる。
+      if (h.wi._res?.active) h.st = h.wi._res.stats;
+      const spd = Math.max(500, (h.st.speed || 300)) * 0.62;
+      let tx = p.x + Math.cos(h.face + this.t * 0.9) * 46;
+      let ty = p.y + Math.sin(h.face + this.t * 0.9) * 46;
+      let go = false;
+      const tgt = this.nearestEnemy(h.x, h.y);
+      if (tgt && dist2(tgt.x, tgt.y, h.x, h.y) < (this.viewR * 1.1) ** 2) {
+        tx = tgt.x; ty = tgt.y; go = true;
+        const d = Math.hypot(tgt.x - h.x, tgt.y - h.y) || 1;
+        // 射程の縁で留まるのではなく、体ごと突っ込む。
+        const hitR = tgt.r + h.r + 6;
+        if (d < hitR && h.cd <= 0) {
+          h.cd = 1 / Math.max(0.05, h.st.rate || 1);
+          h.atkT = 0.18;
+          h.face = Math.atan2(tgt.y - h.y, tgt.x - h.x);
+          const reach = 20 + 14 * (h.st.size || 1);
+          this.slashes.push({
+            x: h.x, y: h.y, a: h.face, r: reach, arc: 1.7,
+            life: 0.2, maxLife: 0.2,
+            color: h.color, el: h.el, hit: new Set(),
+          });
+          this.damage(tgt, h.st, { crit: rng() < (h.st.crit || 0), knock: h.st.knock, element: h.el });
+        }
+      }
+      const dx = tx - h.x, dy = ty - h.y;
+      const dd = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, 7 * dt);
+      h.vx += ((dx / dd) * (go ? spd : spd * 0.5) - h.vx) * k;
+      h.vy += ((dy / dd) * (go ? spd : spd * 0.5) - h.vy) * k;
+      h.x += h.vx * dt;
+      h.y += h.vy * dt;
+      this.clampToArena(h, h.r);
+      if (dd > 8) h.face = Math.atan2(dy, dx);
     }
   }
 

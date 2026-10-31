@@ -46,7 +46,7 @@ export const NA_ADJECTIVE_COMPOUNDS = new Set(`
   深刻 深遠 壮大 壮絶 壮麗 端麗 明白 巧妙 賢明 厳密 厳重 厳正
   軽妙 温雅 温厚 温和 豪華 豪壮 剛強 剛力 強硬 強壮 強大 短気
   気軽 気長 気密 無精 素敵 適正 端正 清明 精鋭 絶大 絶妙 天真
-  鈍感 鈍重 特大 痛快 闊達 冷静 冷徹
+  鈍感 鈍重 特大 冷静 冷徹
 `.trim().split(/\s+/));
 
 const SURU_T = 'する:adn* した:adn* して:adv* される:adn*p された:adn*p されて:adv*p';

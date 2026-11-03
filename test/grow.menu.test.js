@@ -14,6 +14,7 @@ const { Menus } = await import('../js/ui/menus.js');
 const { Save, PARTS, PART_MAX_LEN } = await import('../js/core/save.js');
 const { evaluatePart, partConnChoices, partCanSetConn, partWordForms } = await import('../js/game/parts.js');
 const { resolvePlayerStats, partEffectRows, partTotalRows, isPartUsable } = await import('../js/game/stats.js');
+const { WORDS } = await import('../js/data/words.js');
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL:', m); } };
@@ -78,7 +79,7 @@ const nameOf = (id) => PARTS.find((p) => p.id === id).name;
 /** 部位のコマ (毎回選び直す — 再描画でノードが入れ替わる) */
 const boxOf = (id) => partsBox().find((b) => b.querySelector('.grow-part-name').textContent === nameOf(id));
 const rowOf = (id) => boxOf(id).querySelector('.sen-row');
-const chipsOf = (id) => q('.sen-word', boxOf(id));
+const chipsOf = (id) => q('.sen-word:not(.sen-tail)', boxOf(id));
 const wordsBox = () => q('#growWords .pword');
 const wordBtn = (t) => wordsBox().find((b) => b.textContent.trim().startsWith(t));
 const click = (node) => node.dispatchEvent({ type: 'click' });
@@ -164,13 +165,14 @@ sec('7 部位が縦に並び、どの部位も 10 文字の 1 文');
   ok(PART_MAX_LEN === 10, `部位の上限が ${PART_MAX_LEN} 文字`);
   // 並びは縦 1 列 (人型配置ではない)。
   ok(parts.every((b) => b.parentNode === dom.doc.getElementById('growParts')), '部位が 1 列に並んでいない');
-  // 所持語は「体に効く語」だけを出す。武器の文で使う語 (炎・弾) は隠す。
-  const usable = save.collection.filter((t) => isPartUsable(t));
-  ok(wordsBox().length === usable.length,
-    `所持語が体に効く語だけになっていない: ${wordsBox().length} / ${usable.length}`);
-  ok(!wordsBox().some((b) => /^(炎|弾)$/.test(b.textContent.trim())), '武器の文で使う語が出ている');
-  ok(/隠している/.test(dom.doc.getElementById('growWordsNote').textContent), '隠した語の説明が出ない');
-  console.log(`  部位 ${parts.length} / 上限 ${PART_MAX_LEN} 文字 / 所持語 ${wordsBox().length} / 隠した ${save.collection.length - usable.length}`);
+  // 所持語は **制限なし**。持っている語をすべて出す (使う語を絞らない方式)。
+  const owned = save.collection.filter((t) => !!WORDS[t]);
+  ok(wordsBox().length === owned.length,
+    `所持語がすべて出ていない: ${wordsBox().length} / ${owned.length}`);
+  ok(/所持 \d+ 語/.test(dom.doc.getElementById('growWordsNote').textContent), '所持語の説明が出ない');
+  // 部位名は文の右端に固定チップ (鍛冶の末尾語と同じ) で付く。
+  ok(q('.sen-word.sen-tail', parts[0]).length === 1, '部位名の固定チップが無い');
+  console.log(`  部位 ${parts.length} / 上限 ${PART_MAX_LEN} 文字 / 所持語 ${wordsBox().length} (制限なし) / 末尾チップあり`);
 }
 
 sec('所持語をタップして選び、部位の行をタップで置く。行の語をタップで接続詞が回る');
@@ -242,7 +244,7 @@ sec('文は 10 文字まで。語の数に上限はない');
 {
   save.partClear('lfot');
   // 1 文字の語を 10 個並べる。11 個目 (11 文字目) は入らない。
-  const one = save.collection.filter((t) => t.length === 1 && isPartUsable(t));
+  const one = save.collection.filter((t) => t.length === 1);
   ok(one.length > 0, '1 文字の語が 1 つも無い');
   let n = 0;
   while (n < PART_MAX_LEN) {
@@ -343,10 +345,10 @@ sec('部位の効きが数字で出る (何がどれだけ変わるか)');
   console.log(`  合計 ${q('.eff', totalEl).map((x) => x.textContent).join(' ')}`);
 }
 
-sec('武器の文で使う語は一覧に出さず、意味の効く部位は語を示す');
+sec('制限なしの所持語。武器用の語も出る。意味の効く部位は語を示す');
 {
-  ok(!wordsBox().some((x) => x.textContent.trim().startsWith('炎')), '武器の文で使う語が一覧に出ている');
-  ok(!wordsBox().some((x) => x.textContent.trim().startsWith('弾')), '武器の文で使う語が一覧に出ている');
+  // 制限なしの方式。武器の文で使う語 (炎・弾) も一覧に出る。
+  ok(wordsBox().some((x) => x.textContent.trim().startsWith('炎')), '武器用の語が一覧に出ていない');
 
   // 速 は体に直接は効かないが、足で意味が効く。一覧に出て、効く部位が出る。
   if (!save.ownsWord('速')) save.data.collection.push('速');

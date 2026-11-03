@@ -487,7 +487,9 @@ export class Menus {
     }
 
     const head = el('div', { class: 'grow-part-head' },
-      el('b', {}, `「${p.text}${part.name}」`),
+      // 部位の名前 (頭・左腕…) は文の右端に固定チップで付くので、
+      // ここでは置いた語の並びだけを出す。
+      el('b', {}, `「${p.text}」`),
       el('span', { class: `grow-part-grade grade-${p.ev.grade}` }, p.gradeInfo?.name || ''),
       el('span', {}, `文の力 ${p.power.toFixed(2)}`),
       el('span', {}, `効き ×${p.gain.toFixed(2)}`),

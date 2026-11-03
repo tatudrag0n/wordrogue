@@ -16,7 +16,7 @@ import { WORDS, CATEGORIES } from '../data/words.js?v=1.49';
 import { PART_MAX_LEN, PARTS } from '../core/save.js';
 import { makePartSentence, evaluatePart } from '../game/parts.js';
 import {
-  wordEffectRows, wordDirectEffectRows, isPartUsable, wordMeaningParts, PART_KIND_LABELS,
+  wordEffectRows, wordDirectEffectRows, wordMeaningParts, PART_KIND_LABELS,
 } from '../game/stats.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import { SenPad } from './senpad.js';
@@ -101,6 +101,12 @@ export class GrowPad extends SenPad {
         const place = { kind: 'slot', part: p.id, index: i };
         line.append(this.renderWord(e, place, words, idiomIdx.has(i), idiomName));
       });
+      // 部位名は **固定の末尾語**。鍛冶の末尾語 (人) と同じく、枠の外に付く。
+      // 評価 (evaluatePart) もこの名前を「地頭」「速い足」の 後ろの語 として読む。
+      line.append(el('div', {
+        class: 'sen-word sen-tail',
+        title: `「${p.name}」— 部位の名前。文の右端に固定で付きます。外せません。`,
+      }, el('span', {}, p.name)));
       // 行の余白 (語の後ろ) をタップ = 末尾へ入れる。
       this.bindRowBlank(line, { part: p.id });
 
@@ -188,24 +194,20 @@ export class GrowPad extends SenPad {
     line.addEventListener('pointercancel', () => { down = null; });
   }
 
-  /** 所持語。鍛冶の語彙 (pword) と同じチップで並べる。検索と並び替えに従う。 */
+  /** 所持語。**制限なし** — 持っている語ぜんぶ。鍛冶の語彙 (pword) と同じチップ。 */
   renderPool() {
     const menu = this.menu;
     const save = this.save;
     const owned = save.collection.filter((t) => !!WORDS[t]);
-    const usable = owned.filter((t) => isPartUsable(t));
     // 検索と並び替え (メニューの状態を鍛冶・デッキと共通の形で持つ)。
     const q = (menu.growQuery || '').trim();
-    const filtered = usable.filter((t) => !q || t.includes(q)
+    const filtered = owned.filter((t) => !q || t.includes(q)
       || (menu.wordEffectText(t) || '').includes(q));
     const sorted = menu.sortWords(filtered, menu.growSort || 'effect', (t) => save.rankIndex(t));
     this.poolWords = sorted;
-    const hiddenN = owned.length - usable.length;
     if (menu.growWordsNote) {
       menu.growWordsNote.textContent = (q ? `「${q}」で ${sorted.length} 語 / ` : '')
-        + (hiddenN
-          ? `体に効く ${usable.length} 語。武器用の ${hiddenN} 語は隠している`
-          : `体に効く ${usable.length} 語`);
+        + `所持 ${owned.length} 語 — どの語でも部位に入れられる`;
     }
     if (!menu.growWords) return;
     // 語を置くたびに描き直すので、一覧のスクロール位置を保つ。
@@ -241,7 +243,7 @@ export class GrowPad extends SenPad {
           + `\nタップで選び、部位の行をタップで置く。ドラッグで直接置ける。`
           + (direct.length ? `\n体に効く: ${direct.map((r) => `${r.label} ${r.text}`).join(' / ')}`
             : '\n体に直接は効かない (文にすれば文の力ぶん強くなる)')
-          + (kinds.length ? `\n効く部位: ${where} (語の意味が${where}で働く)` : '')
+          + (kinds.length ? `\n意味が効く部位: ${where} (語の意味が${where}の働きに合う)` : '')
           + (eff.length && !direct.length ? '\n文にすれば文の力ぶんだけ強くなる' : '')
           + (used ? `\n部位に ${used} 語入っている (同じ語をいくつでも置ける)` : ''),
       }, el('span', {}, t));
@@ -252,7 +254,7 @@ export class GrowPad extends SenPad {
       }, direct.map((r) => r.label).join('・')));
       // 意味が効く部位。鍛冶のチップとの違いは 1 つも作らない — 小さな足跡で添える。
       if (where) node.append(el('i', {
-        class: 'pword-where', title: `効く部位: ${where}`,
+        class: 'pword-where', title: `意味が効く部位: ${where}`,
       }, where));
       // ランクの印。頭文字 1 字を語の色で。
       const rank = save.rankOf(t);

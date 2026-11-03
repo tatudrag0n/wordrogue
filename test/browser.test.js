@@ -180,7 +180,7 @@ sec('恒久強化は廃止。体を強くするのは部位の語だけ');
       plainLex: plain.lexicon, wiseLex: buffed.lexicon,
       plainXp: plain.xpMul, wiseXp: buffed.xpMul,
       plainArmor: plain.armor, wiseArmor: buffed.armor,
-      slots: document.querySelectorAll('#growParts [data-part="head"] .sen-row .sen-word').length,
+      slots: document.querySelectorAll('#growParts [data-part="head"] .sen-row .sen-word:not(.sen-tail)').length,
       limit: (document.querySelector('#growParts [data-part="head"] .grow-part-lv') || {}).textContent || '',
       total: (document.getElementById('growTotal').textContent || '').slice(0, 80),
     };
@@ -1641,7 +1641,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   ok(menu.gachaOk, '言葉くじが引けない');
   ok(menu.coll >= menu.gachaBefore, `くじで所持語が減った: ${menu.gachaBefore} -> ${menu.coll}`);
   ok(menu.part.includes('癒'), `部位に語が入らない: ${menu.part}`);
-  console.log(`    部位 7 / 所持 ${menu.words} 語 (体に効く語だけ) / くじ後の言玉 ${menu.ink}`);
+  console.log(`    部位 7 / 所持 ${menu.words} 語 (制限なし) / くじ後の言玉 ${menu.ink}`);
 
   // ランに渡すと、部位の語が能力に乗り、デッキが開始時の語彙に入る。
   const applied = await evalJs(`(async () => {
@@ -1708,8 +1708,10 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   ok(conn.undoDisabled === false, '「戻す」が押せない');
   ok(conn.totalRows > 0, '部位の合計に効果が出ていない');
   ok(conn.wordEff > 0, '所持語に効きの表示が無い');
-  ok(conn.words > 0 && conn.words < 40, `所持語が絞られていない: ${conn.words}`);
-  ok(/体に効く/.test(conn.noteEl), `絞り込みの説明が出ない: ${conn.noteEl}`);
+  // 所持語は制限なし。持っている語ぜんぶ (コレクションと同じ数)。
+  ok(conn.words === app.save.collection.filter(t => t).length,
+    `所持語がぜんぶ出ていない: ${conn.words}`);
+  ok(/所持 \d+ 語/.test(conn.noteEl), `所持語の説明が出ない: ${conn.noteEl}`);
   console.log(`    接続詞 ${conn.labels.join(' ')} → ${conn.conn} / 所持語 ${conn.words} / ${conn.limit}`);
 }
 

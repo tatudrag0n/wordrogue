@@ -241,6 +241,13 @@ function doSlash(run, wi, st, aim, el, elInfo) {
     arc = Math.PI * 2;
     reach *= 1.06;
   }
+  // 旋回攻撃の輪。回った範囲を読ませる。
+  if (patKey === 'spin') {
+    run.rings.push({
+      x: p.x, y: p.y, r: reach * 0.9, life: 0.28, maxLife: 0.28,
+      color: elInfo.color, hit: new Set(), thin: true,
+    });
+  }
   // 刃の軌跡は、モーションの打撃〜振り抜けのあいだだけ描く。
   const motion = wi.motion || null;
   if (motion) syncMotionShape(motion, reach, arc);
@@ -300,6 +307,12 @@ function doWhip(run, wi, st, aim, el, elInfo) {
     hit: new Set(),
   });
   run.audio.slash();
+  // 渦の口火。手元がふくらんでから、鞭が伸びていく。
+  run.rings.push({
+    x: p.x, y: p.y, r: 18, life: 0.2, maxLife: 0.2,
+    color: elInfo.color, hit: new Set(), thin: true,
+  });
+  run.shake(1.2);
   const fx = ELEM_FX[el] || ELEM_FX.none;
   run.burst(p.x + Math.cos(aim) * reach * 0.2, p.y + Math.sin(aim) * reach * 0.2, 5, elInfo.color, {
     a: aim, spread: 1.2, spd: fx.spd, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
@@ -331,6 +344,11 @@ function doDual(run, wi, st, aim, el, elInfo) {
     run.audio.slash();
     run.audio.tone?.({ freq: 320, type: 'sawtooth', dur: 0.16, vol: 0.05, slide: 1.8 });
     run.shake(2.4);
+    // 全面斬りの輪。回った範囲がそのまま広がっていく。
+    run.rings.push({
+      x: p.x, y: p.y, r: reach * 0.92, life: 0.3, maxLife: 0.3,
+      color: elInfo.color, hit: new Set(), thin: true,
+    });
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * TAU;
       run.burst(p.x + Math.cos(a) * reach * 0.88, p.y + Math.sin(a) * reach * 0.88, 1, elInfo.color, {
@@ -400,6 +418,15 @@ function doShot(run, wi, st, aim, boomerang, el, elInfo) {
     b.wi = wi;
     run.bullets.push(b);
   }
+  // 口火。銃口から広がる細い輪と、進行方向へ走る火花。
+  const mx = p.x + Math.cos(aim) * 12, my = p.y + Math.sin(aim) * 12;
+  run.rings.push({
+    x: mx, y: my, r: 13 * st.size, life: 0.14, maxLife: 0.14,
+    color: elInfo.color, hit: new Set(), thin: true,
+  });
+  run.burst(mx, my, 5, elInfo.color, {
+    a: aim, spread: 0.5, spd: 320, spdMin: 120, life: 0.14, r: 1.6, shape: 'spark', drag: 7,
+  });
   run.audio.shoot();
   run.shake(1.4);
 }
@@ -427,6 +454,15 @@ function doBomb(run, wi, st, aim, el, elInfo) {
   });
   b.st = st; b.wi = wi;
   run.bullets.push(b);
+  // 投げの口火。手元がほんのり明くなって、弾が飛んでいく。
+  run.rings.push({
+    x: p.x + Math.cos(aim) * 10, y: p.y + Math.sin(aim) * 10,
+    r: 10 * st.size, life: 0.16, maxLife: 0.16,
+    color: elInfo.color, hit: new Set(), thin: true,
+  });
+  run.burst(p.x + Math.cos(aim) * 12, p.y + Math.sin(aim) * 12, 4, elInfo.color, {
+    a: aim, spread: 0.7, spd: 240, spdMin: 80, life: 0.16, r: 1.6, shape: 'ember', drag: 6,
+  });
   run.audio.tone({ freq: 200, type: 'square', dur: 0.1, vol: 0.05, slide: 0.6 });
 }
 
@@ -478,6 +514,14 @@ function doBeam(run, wi, st, aim, el, elInfo) {
   });
 
   const dx = Math.cos(aim), dy = Math.sin(aim);
+  // 口火。光の出るところが白くはじける。
+  run.rings.push({
+    x: p.x + dx * 14, y: p.y + dy * 14, r: 16 * st.size, life: 0.18, maxLife: 0.18,
+    color: elInfo?.color || '#e8a30a', hit: new Set(), thin: true,
+  });
+  run.burst(p.x + dx * 14, p.y + dy * 14, 6, elInfo?.color || '#e8a30a', {
+    a: aim, spread: 0.6, spd: 300, spdMin: 100, life: 0.16, r: 1.8, shape: 'spark', drag: 7,
+  });
   for (const e of run.enemies) {
     if (e.dead || hit.has(e.uid)) continue;
     // 線分と円の最近点距離で判定。

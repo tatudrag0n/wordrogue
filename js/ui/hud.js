@@ -256,21 +256,26 @@ export class Hud {
   /** 武器チップ。不成文の武器は赤くして取り消し線を付ける。 */
   _chips(run, onChipClick) {
     const report = run.weaponReport();
-    if (this._chipNodes.length !== report.length) {
+    // 数だけでなく「どの武器か」でも作り直す。同じ数でも武器が入れ替われば
+    // (新しい戦闘、文の外し直し) 前回の武器名が残ってしまうため。
+    const sig = report.map(({ wi }) => wi.uid).join(',');
+    if (this._chipNodes.length !== report.length || this._chipSig !== sig) {
+      this._chipSig = sig;
       this.hudWeapons.textContent = '';
       this._chipNodes = report.map(({ wi }) => {
         const node = el('button', { class: 'wchip', type: 'button' },
           el('span', { class: 'wchip-lv' }, `Lv${wi.level}`),
-          el('span', { class: 'wchip-txt' }, wi.name),
+          el('span', { class: 'wchip-txt' }, ''),
         );
         node.addEventListener('click', () => onChipClick?.(wi));
         this.hudWeapons.append(node);
-        return { wi, node };
+        return { node };
       });
     }
     for (let i = 0; i < report.length; i++) {
-      const { wi, node } = this._chipNodes[i];
-      const res = report[i].res;
+      // 表示は必ず現状の武器。キャッシュ側の古い武器を見ない。
+      const { wi, res } = report[i];
+      const node = this._chipNodes[i].node;
       node.className = 'wchip'
         + (res.active ? '' : ' broken')
         + (res.active && res.grade === 'great' ? ' great' : '')

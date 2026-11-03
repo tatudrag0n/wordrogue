@@ -1111,6 +1111,14 @@ export class Run {
       spd: e.boss ? 380 : 250, spdMin: 80,
       life: e.boss ? 0.55 : 0.3, r: 1.7, shape: 'spark', drag: 5,
     });
+    // 撃破の輪。連斬が続くほど大きく広がる。
+    this.rings.push({
+      x: e.x, y: e.y, r: e.r * (2.2 + Math.min(3, this.combo * 0.25)),
+      life: 0.32, maxLife: 0.32,
+      color: e.def.color || '#d39a35', hit: new Set(), thin: true,
+    });
+    // 連斬の手応え。一瞬だけ世界がゆっくりになる。
+    if (this.combo >= 3) this.slowmo = Math.max(this.slowmo, 0.045);
     if (e.boss) {
       this.rings.push({
         x: e.x, y: e.y, r: 180, life: 0.7, maxLife: 0.7,
@@ -1475,6 +1483,11 @@ export class Run {
     this.burst(e.x, e.y, 5, '#c9862b', {
       spd: 210, spdMin: 60, life: 0.24, r: 1.8, shape: 'spark', drag: 6,
     });
+    // 体当たりの衝撃の輪。
+    this.rings.push({
+      x: e.x, y: e.y, r: 15, life: 0.2, maxLife: 0.2,
+      color: '#c9862b', hit: new Set(), thin: true,
+    });
     this.audio.dashSlash?.();
     this.damage(e, st, { crit: false, knock: st.knock, element: 'none' });
   }
@@ -1640,12 +1653,20 @@ export class Run {
       ball.x = p.x + Math.cos(a) * radius;
       ball.y = p.y + Math.sin(a) * radius;
       if (!strike) continue;
-      // 鉄球が掃く瞬間。球のいまの場所に、短い当たりを置く。
+      // 鉄球が掃く瞬間。球のいまの場所に、短い当たりと掃きの弧。
       this.fields.push(makeField(ball.x, ball.y, 15 * (st.size || 1) * (p.stats.size || 1), st.dmg, {
         life: 0.12,
         element: st.el,
         knock: st.knock || 90,
       }));
+      // 掃きの弧。球の進行方向 (接線) に短く走る一閃。
+      this.slashes.push({
+        x: ball.x, y: ball.y,
+        a: a + Math.PI / 2, r: 26 * (st.size || 1), arc: 1.9,
+        life: 0.15, maxLife: 0.15,
+        color: (ELEMENTS[st.el] || ELEMENTS.none).color, el: st.el,
+        hit: new Set(),
+      });
       this.burst(ball.x, ball.y, 4, (ELEMENTS[st.el] || ELEMENTS.none).color, {
         spd: 150, spdMin: 40, life: 0.22, r: 2, shape: 'shard', drag: 5,
       });
@@ -1764,6 +1785,11 @@ export class Run {
             x: h.x, y: h.y, a: h.face, r: reach, arc: 1.7,
             life: 0.2, maxLife: 0.2,
             color: h.color, el: h.el, hit: new Set(),
+          });
+          // 式神の一閃。小さな輪がはじける。
+          this.rings.push({
+            x: h.x, y: h.y, r: 11 * (h.st.size || 1), life: 0.16, maxLife: 0.16,
+            color: h.color, hit: new Set(), thin: true,
           });
           this.damage(tgt, h.st, { crit: rng() < (h.st.crit || 0), knock: h.st.knock, element: h.el });
         }

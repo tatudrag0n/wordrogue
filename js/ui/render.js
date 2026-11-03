@@ -1282,6 +1282,125 @@ export class Renderer {
     }
   }
 
+  /**
+   * 墨の玉の質感。紙を抜く白い縁 → 体 → 下側の陰と上側の照り → 筆の毛 → 墨の縁。
+   * ベタ塗りの丸をそのまま置くより、置かれている感が出る。
+   * @param {CanvasRenderingContext2D} g
+   * @param {number} x 中心
+   * @param {number} y
+   * @param {number} r 半径
+   * @param {string} col 体の色
+   * @param {{seed?:number, halo?:number, alpha?:number, shade?:number}} [opt]
+   *   seed … 筆の毛の位相。個体で固定する (ちらつかない)。
+   */
+  inkBlob(g, x, y, r, col, opt = {}) {
+    const seed = opt.seed || 0;
+    g.save();
+    g.translate(x, y);
+    // 紙を抜く白い縁。紙地に沈まないように。
+    g.globalAlpha = 0.95;
+    g.fillStyle = 'rgba(255, 253, 247, .95)';
+    g.beginPath();
+    g.arc(0, 0, r + (opt.halo ?? 2.6), 0, TAU);
+    g.fill();
+    // 体。
+    g.globalAlpha = opt.alpha ?? 1;
+    g.fillStyle = col;
+    g.beginPath();
+    g.arc(0, 0, r, 0, TAU);
+    g.fill();
+    // 陰と照り。体の内側にだけ乗せる。
+    g.save();
+    g.beginPath();
+    g.arc(0, 0, r, 0, TAU);
+    g.clip();
+    g.globalAlpha = (opt.shade ?? 0.2);
+    g.fillStyle = '#1c2331';
+    g.beginPath();
+    g.arc(r * 0.24, r * 0.3, r * 0.98, 0, TAU);
+    g.fill();
+    g.globalAlpha = 0.3;
+    g.fillStyle = 'rgba(255, 253, 247, .55)';
+    g.beginPath();
+    g.arc(-r * 0.3, -r * 0.34, r * 0.58, 0, TAU);
+    g.fill();
+    g.restore();
+    // 筆の毛。縁の内側に短い弧を 4 本 (個体で位相を固定)。
+    g.globalAlpha = 0.32;
+    g.strokeStyle = 'rgba(28, 35, 49, .55)';
+    g.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+      const a = seed * 2.13 + i * 1.63;
+      g.beginPath();
+      g.arc(0, 0, r * 0.82, a, a + 0.46);
+      g.stroke();
+    }
+    // 墨の縁。
+    g.globalAlpha = 1;
+    g.strokeStyle = 'rgba(28, 35, 49, .78)';
+    g.lineWidth = 1.6;
+    g.beginPath();
+    g.arc(0, 0, r, 0, TAU);
+    g.stroke();
+    g.restore();
+  }
+
+  /**
+   * 目。白目 + 瞳 (look の方向へ寄せる) + 照りの点。
+   * @param {number} x 白目の中心
+   * @param {number} y
+   * @param {number} er 白目の半径
+   * @param {number} lookA 瞳が向く角度
+   * @param {{wide?:number, drowsy?:boolean}} [opt]
+   */
+  inkEye(g, x, y, er, lookA, opt = {}) {
+    g.save();
+    g.translate(x, y);
+    // まぶた。drowsy なら細い目。
+    g.globalAlpha = 1;
+    g.fillStyle = '#fdfbf4';
+    g.beginPath();
+    if (opt.drowsy) {
+      g.ellipse(0, 0, er, er * 0.4, 0, 0, TAU);
+    } else {
+      g.arc(0, 0, er * (opt.wide ?? 1), 0, TAU);
+    }
+    g.fill();
+    g.strokeStyle = 'rgba(28, 35, 49, .55)';
+    g.lineWidth = 1;
+    g.stroke();
+    // 瞳。
+    const px = Math.cos(lookA) * er * 0.32, py = Math.sin(lookA) * er * 0.32;
+    g.fillStyle = '#1c2331';
+    g.beginPath();
+    g.arc(px, py, er * 0.46, 0, TAU);
+    g.fill();
+    // 照り。瞳の左上の一点。生き物らしさの核。
+    g.fillStyle = '#fdfbf4';
+    g.beginPath();
+    g.arc(px - er * 0.16, py - er * 0.18, er * 0.15, 0, TAU);
+    g.fill();
+    g.restore();
+  }
+
+  /**
+   * 怒りの眉。目の上に短く 2 本。中ボスと突進型が持つ。
+   */
+  inkBrow(g, x, y, len, lookA, mirror) {
+    g.save();
+    g.translate(x, y);
+    g.rotate((mirror ? -0.5 : 0.5) + lookA * 0.25);
+    g.globalAlpha = 0.8;
+    g.strokeStyle = 'rgba(28, 35, 49, .8)';
+    g.lineWidth = 1.6;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-len * 0.5, mirror ? len * 0.28 : -len * 0.28);
+    g.lineTo(len * 0.5, mirror ? -len * 0.28 : len * 0.28);
+    g.stroke();
+    g.restore();
+  }
+
   drawEnemies(run) {
     const g = this.ctx;
     for (const e of run.enemies) {
@@ -1341,7 +1460,6 @@ export class Renderer {
       }
 
       const col = e.flash > 0.05 ? '#ffffff' : e.def.color;
-      g.fillStyle = col;
       // 紙地に輪郭。塗りだけでは明るい地で溶ける。
       g.strokeStyle = 'rgba(28, 35, 49, .5)';
       g.lineWidth = 1.7;
@@ -1359,6 +1477,7 @@ export class Renderer {
       switch (e.def.ai) {
         case 'shooter':
           g.rotate(e.face);
+          g.fillStyle = col;
           g.beginPath();
           g.moveTo(e.r * 1.3, 0);
           g.lineTo(-e.r, -e.r * 0.9);
@@ -1366,17 +1485,48 @@ export class Renderer {
           g.closePath();
           g.fill();
           g.stroke();
+          // 砲身の線と、内側の照り。筒の向きが読める。
+          g.globalAlpha = 0.5;
+          g.strokeStyle = 'rgba(28, 35, 49, .7)';
+          g.lineWidth = 1.2;
+          g.beginPath();
+          g.moveTo(-e.r * 0.2, -e.r * 0.34);
+          g.lineTo(e.r * 0.95, -e.r * 0.34);
+          g.moveTo(-e.r * 0.2, e.r * 0.34);
+          g.lineTo(e.r * 0.95, e.r * 0.34);
+          g.stroke();
+          g.globalAlpha = 0.3;
+          g.fillStyle = '#fdfbf4';
+          g.beginPath();
+          g.ellipse(-e.r * 0.18, -e.r * 0.42, e.r * 0.5, e.r * 0.16, -0.2, 0, TAU);
+          g.fill();
           break;
         case 'charger':
-        case 'boss':
+        case 'boss': {
           g.rotate(e.face);
-          polyPath(g, 6, e.r, e.r * 0.78);
+          const rr = e.r;
+          g.fillStyle = col;
+          polyPath(g, 6, rr, rr * 0.78);
           g.fill();
           g.stroke();
+          // 内側にもう一枚。棘の生きた甲羅のように見せる。
+          g.globalAlpha = 0.4;
+          g.strokeStyle = 'rgba(28, 35, 49, .65)';
+          g.lineWidth = 1.1;
+          polyPath(g, 6, rr * 0.66, rr * 0.5);
+          g.stroke();
+          // 甲羅の照り。上側に薄い紙色。
+          g.globalAlpha = 0.32;
+          g.fillStyle = '#fdfbf4';
+          g.beginPath();
+          g.ellipse(-rr * 0.2, -rr * 0.42, rr * 0.52, rr * 0.2, -0.35, 0, TAU);
+          g.fill();
           break;
+        }
         case 'wraith':
         case 'ghost':
           g.rotate(e.face + Math.PI / 2);
+          g.fillStyle = col;
           g.beginPath();
           g.moveTo(0, -e.r * 1.5);
           g.lineTo(e.r, 0);
@@ -1385,23 +1535,44 @@ export class Renderer {
           g.closePath();
           g.fill();
           g.stroke();
+          // 裾の揺らぎ。霊の体は末端がほどける。
+          g.globalAlpha = 0.45;
+          g.strokeStyle = 'rgba(28, 35, 49, .5)';
+          g.lineWidth = 1.1;
+          for (let i = -1; i <= 1; i++) {
+            g.beginPath();
+            g.moveTo(i * e.r * 0.34, e.r * 1.05);
+            g.quadraticCurveTo(
+              i * e.r * 0.5, e.r * 1.4 + Math.sin(run.t * 7 + i + e.uid) * 1.6,
+              i * e.r * 0.2, e.r * 1.62);
+            g.stroke();
+          }
+          g.globalAlpha = 0.3;
+          g.fillStyle = '#fdfbf4';
+          g.beginPath();
+          g.ellipse(0, -e.r * 0.5, e.r * 0.26, e.r * 0.5, 0, 0, TAU);
+          g.fill();
           break;
         default: {
           const sq = e.def.wobble ? 1 + Math.sin(e.wob) * 0.09 : 1;
-          g.beginPath();
-          g.arc(0, 0, e.r * sq, 0, TAU);
-          g.fill();
-          g.stroke();
+          this.inkBlob(g, 0, 0, e.r * sq, col, { seed: e.uid * 0.37, halo: 2.2 });
         }
       }
       g.restore();
 
-      // ヨコの点滅 (紙だと白は消えるので墨のHighlightにする)。
-      g.globalAlpha = 0.85;
-      g.fillStyle = 'rgba(28, 35, 49, .72)';
-      g.beginPath();
-      g.arc(e.x - e.r * 0.3, e.y - e.r * 0.3, Math.max(1.2, e.r * 0.18), 0, TAU);
-      g.fill();
+      // 目と眉。プレイヤーのほうを見る。単なる点ではなく、生き物の目。
+      const lookA = Math.atan2(run.player.y - e.y, run.player.x - e.x);
+      const er = Math.max(1.7, e.r * 0.24);
+      const ex = e.x + Math.cos(lookA) * e.r * 0.36;
+      const ey = e.y + Math.sin(lookA) * e.r * 0.36;
+      this.inkEye(g, ex, ey, er, lookA);
+      if (e.def.ai === 'charger' || e.def.ai === 'boss' || e.midBoss) {
+        // 怒りの眉。突進型とボスは険しい。
+        const px = Math.cos(lookA + Math.PI / 2) * er * 1.05;
+        const py = Math.sin(lookA + Math.PI / 2) * er * 1.05;
+        this.inkBrow(g, ex + px, ey + py, er * 1.5, lookA, false);
+        this.inkBrow(g, ex - px, ey - py, er * 1.5, lookA, true);
+      }
 
       // 状態異常の印。色の点だけだと意味が読めないので、一字を添える。
       const marks = [];
@@ -2085,32 +2256,79 @@ export class Renderer {
     g.rotate(face);
     g.scale(stretch, 1 / stretch * (1 - moveK * 0.02));
 
-    // 自機は墨の丸。紙の上でいちばん濃く見えるように、周囲だけを白く抜く。
+    // 自機は墨の玉。紙の上でいちばん濃く見えるように、周囲だけを白く抜く。
+    // 陰と照りと筆の毛で、置かれている質感を出す。
     g.globalAlpha = 0.9;
     g.fillStyle = 'rgba(255, 253, 247, .95)';
     g.beginPath();
     g.arc(0, 0, p.r + 3.5, 0, TAU);
     g.fill();
     g.globalAlpha = 1;
-    g.fillStyle = p.flash > 0.05 ? '#b8332b' : '#1c2331';
+    const bodyCol = p.flash > 0.05 ? '#b8332b' : '#1c2331';
+    g.fillStyle = bodyCol;
     g.beginPath();
     g.arc(0, 0, p.r, 0, TAU);
     g.fill();
-
-    // 進行方向のトゲ。
-    g.fillStyle = '#e8b425';
+    // 下側の陰と上側の照り。球の丸み。
+    g.save();
     g.beginPath();
-    g.moveTo(p.r * 1.5, 0);
-    g.lineTo(p.r * 0.4, -p.r * 0.62);
-    g.lineTo(p.r * 0.4, p.r * 0.62);
-    g.closePath();
+    g.arc(0, 0, p.r, 0, TAU);
+    g.clip();
+    g.globalAlpha = 0.24;
+    g.fillStyle = '#0d1118';
+    g.beginPath();
+    g.arc(p.r * 0.26, p.r * 0.34, p.r * 0.96, 0, TAU);
     g.fill();
-
-    // 視線。
+    g.globalAlpha = 0.26;
     g.fillStyle = '#fdfbf4';
     g.beginPath();
-    g.arc(p.r * 0.45, 0, p.r * 0.24, 0, TAU);
+    g.ellipse(-p.r * 0.3, -p.r * 0.42, p.r * 0.5, p.r * 0.28, -0.5, 0, TAU);
     g.fill();
+    g.restore();
+    // 筆の毛。縁の内側に短い弧を 4 本。
+    g.globalAlpha = 0.3;
+    g.strokeStyle = 'rgba(253, 251, 244, .5)';
+    g.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+      const a = 0.9 + i * 1.63;
+      g.beginPath();
+      g.arc(0, 0, p.r * 0.82, a, a + 0.44);
+      g.stroke();
+    }
+    g.strokeStyle = 'rgba(13, 17, 24, .8)';
+    for (let i = 0; i < 3; i++) {
+      const a = 3.3 + i * 1.9;
+      g.beginPath();
+      g.arc(0, 0, p.r * 0.86, a, a + 0.4);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+
+    // 前方の金の筆先。トゲではなく、筆がそりたつように幅を持たせる。
+    g.fillStyle = '#e8b425';
+    g.beginPath();
+    g.moveTo(p.r * 0.34, -p.r * 0.56);
+    g.quadraticCurveTo(p.r * 1.42, -p.r * 0.24, p.r * 1.62, 0);
+    g.quadraticCurveTo(p.r * 1.42, p.r * 0.24, p.r * 0.34, p.r * 0.56);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = 'rgba(28, 35, 49, .6)';
+    g.lineWidth = 1.2;
+    g.lineJoin = 'round';
+    g.stroke();
+    // 筆先の照り。
+    g.globalAlpha = 0.65;
+    g.fillStyle = '#fdfbf4';
+    g.beginPath();
+    g.ellipse(p.r * 1.05, -p.r * 0.16, p.r * 0.3, p.r * 0.09, 0.12, 0, TAU);
+    g.fill();
+    g.globalAlpha = 1;
+
+    // 目。進行方向へ 2 つ。ときどき瞬きする。
+    const blinkEye = Math.sin(p.anim * 1.7 + 2.1) > 0.982;
+    const er = p.r * 0.21;
+    this.inkEye(g, p.r * 0.52, -p.r * 0.42, er, 0, { drowsy: blinkEye, wide: 1.05 });
+    this.inkEye(g, p.r * 0.52, p.r * 0.42, er, 0, { drowsy: blinkEye, wide: 1.05 });
     g.restore();
     g.globalAlpha = 1;
 
@@ -2126,6 +2344,17 @@ export class Renderer {
       g.beginPath();
       g.arc(p.x, p.y, p.r + 6 + (1 - k) * 10, dir - 0.42, dir + 0.42);
       g.stroke();
+      // 放射線。撃った方向へ 3 本、一瞬だけ走る。
+      for (let i = 0; i < 3; i++) {
+        const aa = dir + (i - 1) * 0.26;
+        g.globalAlpha = k * (0.34 - Math.abs(i - 1) * 0.08);
+        g.lineWidth = 1.3;
+        g.beginPath();
+        g.moveTo(p.x + Math.cos(aa) * (p.r + 3), p.y + Math.sin(aa) * (p.r + 3));
+        g.lineTo(p.x + Math.cos(aa) * (p.r + 9 + (2 - Math.abs(i - 1)) * 5 * k),
+          p.y + Math.sin(aa) * (p.r + 9 + (2 - Math.abs(i - 1)) * 5 * k));
+        g.stroke();
+      }
       g.globalAlpha = k * 0.5;
       g.fillStyle = '#fffdf7';
       g.beginPath();
@@ -2585,7 +2814,7 @@ export class Renderer {
         break;
       }
       case '鉄球': {
-        // 鎖の先の鉄の塊。球そのものが武器。
+        // 鎖の先の鉄の塊。球そのものが武器。鋳物の重さを出す。
         g.strokeStyle = ink;
         g.lineWidth = 1.4;
         for (let i = 0; i < 4; i++) {
@@ -2593,14 +2822,26 @@ export class Renderer {
           g.arc(-9 - i * 3.6, Math.sin(i * 1.9) * 1.4, 1.5, 0, TAU);
           g.stroke();
         }
+        // 鉄の玉。縁は厚く、照りと鋳肌を乗せる。
         g.fillStyle = pale;
-        g.beginPath(); g.arc(6, 0, 8.4, 0, TAU); g.fill(); g.stroke();
-        g.strokeStyle = 'rgba(28, 35, 49, .5)';
-        g.lineWidth = 1;
-        g.beginPath(); g.arc(6, 0, 5.4, 0.6, 2.4); g.stroke();
+        g.beginPath(); g.arc(6, 0, 8.4, 0, TAU); g.fill();
+        g.save();
+        g.beginPath(); g.arc(6, 0, 8.4, 0, TAU); g.clip();
+        g.globalAlpha *= 0.5;
         g.fillStyle = color;
-        g.globalAlpha *= 0.75;
-        g.beginPath(); g.arc(8.5, 1.5, 2.6, 0, TAU); g.fill();
+        g.beginPath(); g.arc(7.8, 2.4, 7.6, 0, TAU); g.fill();
+        g.globalAlpha *= 0.8;
+        g.fillStyle = pale;
+        g.beginPath(); g.arc(3.6, -3, 3.4, 0, TAU); g.fill();
+        g.restore();
+        g.strokeStyle = 'rgba(28, 35, 49, .85)';
+        g.lineWidth = 1.8;
+        g.beginPath(); g.arc(6, 0, 8.4, 0, TAU); g.stroke();
+        // 鋲。2 つ。
+        g.fillStyle = ink;
+        g.globalAlpha *= 0.7;
+        g.beginPath(); g.arc(9, -2.6, 0.9, 0, TAU); g.fill();
+        g.beginPath(); g.arc(3.2, 3.4, 0.9, 0, TAU); g.fill();
         break;
       }
       case '双剣': {
@@ -3227,40 +3468,28 @@ export class Renderer {
     for (const h of run.helpers) {
       const born = clamp((h.born || 0) * 3, 0, 1);
       const speed = Math.hypot(h.vx, h.vy);
-      const stretch = 1 + clamp(speed / 420, 0, 0.5);
-      g.save();
-      g.translate(h.x, h.y);
-      g.rotate(h.face || 0);
-      g.scale(stretch, 1 / stretch);
-      // 墨の体。紙の上で白く縁取りして浮かせる。
-      g.globalAlpha = 0.82 * born;
-      g.fillStyle = 'rgba(255, 253, 247, .92)';
-      g.beginPath();
-      g.ellipse(0, 0, h.r + 2.6, (h.r + 2.6) / stretch, 0, 0, TAU);
-      g.fill();
-      g.globalAlpha = 0.9 * born;
-      g.fillStyle = '#1c2331';
-      g.beginPath();
-      g.ellipse(0, 0, h.r, h.r / stretch, 0, 0, TAU);
-      g.fill();
+      // 墨の玉。自機と同じ質感で、小さく。
+      this.inkBlob(g, h.x, h.y, h.r * born, '#1c2331', {
+        seed: (h.wi?.uid || 1) * 0.53 + (h.face || 0),
+        halo: 2.2,
+        shade: 0.24,
+      });
       // 攻撃の瞬間は色の芯が光る。
       if (h.atkT > 0) {
-        g.globalAlpha = clamp(h.atkT / 0.18, 0, 1) * 0.85;
+        const k = clamp(h.atkT / 0.18, 0, 1);
+        g.save();
+        g.globalAlpha = k * 0.75 * born;
         g.fillStyle = h.color || '#d4a94e';
         g.beginPath();
-        g.ellipse(0, 0, h.r * 0.62, (h.r * 0.62) / stretch, 0, 0, TAU);
+        g.arc(h.x, h.y, h.r * 0.66, 0, TAU);
         g.fill();
+        g.restore();
       }
-      g.restore();
-      // 進行方向の目。
-      g.save();
-      g.globalAlpha = 0.9 * born;
-      g.fillStyle = '#fdfbf4';
-      g.beginPath();
-      g.arc(h.x + Math.cos(h.face || 0) * h.r * 0.45,
-        h.y + Math.sin(h.face || 0) * h.r * 0.45, h.r * 0.22, 0, TAU);
-      g.fill();
-      g.restore();
+      // 目。進行方向を見る。
+      this.inkEye(g,
+        h.x + Math.cos(h.face || 0) * h.r * 0.4 * born,
+        h.y + Math.sin(h.face || 0) * h.r * 0.4 * born,
+        h.r * 0.26 * born, h.face || 0);
       // 残像の尾。速く走っているときだけ伸びる。
       if (speed > 130) {
         g.save();

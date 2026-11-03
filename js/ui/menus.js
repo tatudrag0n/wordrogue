@@ -166,6 +166,25 @@ export class Menus {
       this.dictQuery = this.dictSearch.value.trim();
       this.renderDict();
     });
+    this.dictSort = 'effect';
+    // 語の一覧 (部位・デッキ・辞書) の並び替えボタン。3 か所で同じ形。
+    this.growSort = 'effect';
+    this.deckSort = 'effect';
+    this.buildSortButtons('dictSort', 'dictSort', () => this.renderDictList());
+    this.buildSortButtons('deckSort', 'deckSort', () => this.renderWords());
+    this.buildSortButtons('growSort', 'growSort', () => this.growPad?.render());
+    // 検索欄。部位の所持語と言葉デッキ (辞書はすでに上でつないでいる)。
+    for (const [inputId, key, rerender] of [
+      ['growSearch', 'growQuery', () => this.growPad?.render()],
+      ['deckSearch', 'deckQuery', () => this.renderWords()],
+    ]) {
+      const input = $(`#${inputId}`);
+      if (!input) continue;
+      input.addEventListener('input', () => {
+        this[key] = input.value.trim();
+        rerender();
+      });
+    }
 
     for (const b of document.querySelectorAll('[data-close]')) {
       b.addEventListener('click', () => {
@@ -352,6 +371,84 @@ export class Menus {
       el('i', {}, r.label), r.text));
   }
 
+  // ── 語の一覧の検索と並び替え (部位・デッキ・辞書で共通) ─────────────────
+
+  /** 語の効果を文字にしたもの (検索用)。語そのものの名前も含む。 */
+  wordEffectText(text) {
+    const info = WORDS[text];
+    if (!info) return '';
+    const lines = Menus.fxLine(info);
+    const cat = CATEGORIES[info.cat];
+    return [text, cat?.name || '', ...lines].join(' ');
+  }
+
+  /** 語の効果の合計 (並び替え用のざっくりした強さ)。 */
+  wordEffectTotal(text) {
+    const info = WORDS[text];
+    if (!info) return 0;
+    let sum = 0;
+    for (const v of Object.values(info.fx || {})) {
+      if (typeof v === 'number') sum += Math.abs(v);
+    }
+    for (const v of Object.values(info.player || {})) {
+      if (typeof v === 'number') sum += Math.abs(v);
+    }
+    return sum;
+  }
+
+  /**
+   * 語の一覧を 3 種の並びで整える。
+   *   effect … 効果の合計が大きい順 (同じなら名前順)
+   *   name   … 五十音順
+   *   rank   … レアリティ (ランク) の高い順
+   * @param {string[]} list
+   * @param {string} key effect | name | rank
+   * @param {(text:string)=>number} rankFn 語のランク段階 (0..4)
+   */
+  sortWords(list, key, rankFn) {
+    const rows = [...list];
+    if (key === 'name') {
+      rows.sort((a, b) => a.localeCompare(b, 'ja'));
+    } else if (key === 'rank') {
+      rows.sort((a, b) => (rankFn(b) - rankFn(a))
+        || this.wordEffectTotal(b) - this.wordEffectTotal(a)
+        || a.localeCompare(b, 'ja'));
+    } else {
+      // 効果順 (既定)。語そのものが体に効く語 (p.) も先に来る。
+      rows.sort((a, b) => this.wordEffectTotal(b) - this.wordEffectTotal(a)
+        || a.localeCompare(b, 'ja'));
+    }
+    return rows;
+  }
+
+  /** 並び替えの 3 択 (効果 / 名前 / レア度) を小さなボタンで作る。 */
+  buildSortButtons(containerId, stateKey, rerender) {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    clear(box);
+    const opts = [
+      ['effect', '効果'],
+      ['name', '名前'],
+      ['rank', 'レア度'],
+    ];
+    for (const [key, label] of opts) {
+      const b = el('button', {
+        class: 'btn word-sort' + (this[stateKey] === key ? ' on' : ''),
+        type: 'button',
+        title: `${label}順で並べる`,
+      }, label);
+      b.addEventListener('click', () => {
+        this.audio?.tap?.();
+        this[stateKey] = key;
+        // 押した瞬間にだけ class を付け替える (全体を描き直さない)。
+        for (const sib of box.querySelectorAll('.word-sort')) sib.classList.remove('on');
+        b.classList.add('on');
+        rerender();
+      });
+      box.append(b);
+    }
+  }
+
   /**
    * 語のランクは **色だけ** で示す (札の文字は出さない)。
    * 色は語のボタン自身に付く (.grow-word.rk0〜.rk4)。
@@ -466,18 +563,37 @@ export class Menus {
     }
 
     // 言葉デッキ。押すと出し入れ。戦闘開始時の語彙になる。
+    // 検索と並び替え (効果 / 名前 / レア度) に従う。
     const maxLabel = Number.isFinite(DECK_MAX) ? `${DECK_MAX}` : '∞';
     if (this.deckCount) this.deckCount.textContent = `${save.deck.length} / ${maxLabel} 語 (最低 ${DECK_MIN})`;
     if (!this.deckWords) return;
+    const dq = (this.deckQuery || '').trim();
+    const pool = save.collection.filter((t) => !dq || t.includes(dq)
+      || (this.wordEffectText(t) || '').includes(dq));
+    const rows = this.sortWords(pool, this.deckSort || 'effect', (t) => save.rankIndex(t));
     clear(this.deckWords);
-    for (const t of save.collection) {
+    if (!rows.length) {
+      this.deckWords.append(el('div', { class: 'grow-words-empty' }, '見つからなかった。'));
+    }
+    for (const t of rows) {
       const inDeck = save.inDeck(t);
+      const info = WORDS[t];
+      const cat = CATEGORIES[info?.cat] || CATEGORIES.modifier;
       const b = el('button', {
-        class: 'btn grow-word deck' + (inDeck ? ' in' : '') + ' rk' + save.rankIndex(t),
+        class: 'pword deck-pword' + (inDeck ? ' in' : ''),
+        style: { borderColor: cat.color },
+        type: 'button',
         disabled: inDeck && save.deck.length <= DECK_MIN,
         title: (inDeck ? (save.deck.length <= DECK_MIN ? `最低 ${DECK_MIN} 語を保つため外せない` : 'デッキに入っている — 押すと外れる') : '押すとデッキに入る')
-          + `\n${this.rankTip(t)}`,
-      }, (inDeck ? '✓ ' : '') + t);
+          + `\n${this.rankTip(t)}\n${this.wordEffectText(t)}`,
+      }, el('span', {}, (inDeck ? '✓ ' : '') + t));
+      const rk = save.rankOf(t);
+      if (save.rankIndex(t) > 0 && rk) {
+        b.append(el('span', {
+          class: 'pword-rank', style: { color: rk.color },
+          title: `ランク ${rk.name}`,
+        }, rk.name.slice(0, 1)));
+      }
       b.addEventListener('click', () => {
         save.toggleDeck(t);
         this.audio?.tap?.();
@@ -1013,12 +1129,24 @@ export class Menus {
       this.dictList.append(el('div', { class: 'dict-empty' }, '見つからなかった。'));
       return;
     }
-    // 属性 → 効果 → 動詞 → 接続 の順に見せたいのでカテゴリ順に並べる。
-    const order = Object.keys(CATEGORIES);
-    rows.sort((a, b) => {
-      const d = order.indexOf(a.cat) - order.indexOf(b.cat);
-      return d !== 0 ? d : a.text.localeCompare(b.text, 'ja');
-    });
+    // 並び替え。効果 / 名前 / レア度 (既定は分類順 → 効果の強い順)。
+    if (this.dictSort && this.dictSort !== 'category') {
+      const sorted = this.sortWords(rows.map((w) => w.text), this.dictSort,
+        (t) => this.save.rankIndex(t));
+      const byText = new Map(rows.map((w) => [w.text, w]));
+      rows.length = 0;
+      for (const t of sorted) {
+        const w = byText.get(t);
+        if (w) rows.push(w);
+      }
+    } else {
+      // 属性 → 効果 → 動詞 → 接続 の順に見せたいのでカテゴリ順に並べる。
+      const order = Object.keys(CATEGORIES);
+      rows.sort((a, b) => {
+        const d = order.indexOf(a.cat) - order.indexOf(b.cat);
+        return d !== 0 ? d : a.text.localeCompare(b.text, 'ja');
+      });
+    }
 
     for (const w of rows) {
       const cat = CATEGORIES[w.cat] || { name: w.cat, color: '#2b5cb8' };

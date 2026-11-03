@@ -201,7 +201,7 @@ sec('恒久強化は廃止。体を強くするのは部位の語だけ');
     return {
       growHidden: document.getElementById('grow').hidden,
       gacha: !!document.getElementById('gachaBtn') && !!document.getElementById('gachaTenBtn'),
-      deck: document.querySelectorAll('#deckWords .grow-word').length,
+      deck: document.querySelectorAll('#deckWords .pword').length,
       leftovers: document.querySelectorAll('#archiveUpgrades, #archiveWords, .up-row, .up-buy').length,
     };
   })()`);
@@ -1629,7 +1629,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
     return {
       shown: !document.getElementById('grow').hidden,
       parts: document.querySelectorAll('#growParts .grow-part').length,
-      words: document.querySelectorAll('#growWords .grow-word').length,
+      words: document.querySelectorAll('#growWords .pword').length,
       gachaBefore, gachaOk: g.ok, coll: save.collection.length,
       part: save.partWordList().join(''),
       ink: save.ink,
@@ -1691,10 +1691,10 @@ sec('部位強化はメニューで設定し、戦闘に効く');
       pickerSameAsForge: !!document.querySelector('.conn-picker'),
       note: note ? note.textContent.trim() : '',
       conn: (app.save.partRaw('head') || []).filter(Boolean)[0].conn,
-      words: document.querySelectorAll('#growWords .grow-word').length,
+      words: document.querySelectorAll('#growWords .pword').length,
       noteEl: document.getElementById('growWordsNote').textContent,
       totalRows: document.querySelectorAll('#growTotal .eff').length,
-      wordEff: document.querySelectorAll('#growWords .grow-word-eff').length,
+      wordEff: document.querySelectorAll('#growWords .pword-eff').length,
       undoDisabled: document.getElementById('btnGrowUndo').disabled,
       limit: (live().querySelector('.grow-part-lv') || {}).textContent || '',
     };

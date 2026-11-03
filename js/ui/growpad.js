@@ -14,7 +14,7 @@
 import { el, clear } from '../core/util.js';
 import { WORDS, CATEGORIES } from '../data/words.js?v=1.49';
 import { PART_MAX_LEN, PARTS } from '../core/save.js';
-import { makePartSentence } from '../game/parts.js';
+import { makePartSentence, evaluatePart } from '../game/parts.js';
 import {
   wordEffectRows, wordDirectEffectRows, isPartUsable, wordMeaningParts, PART_KIND_LABELS,
 } from '../game/stats.js';
@@ -47,6 +47,26 @@ export class GrowPad extends SenPad {
 
   // ── 描画 ──────────────────────────────────────────────────────────────
 
+  /**
+   * 熟語を構成している語の位置 (文中の index の集合)。鍛冶 (forge.js) と同じ。
+   * 評価結果の文面から熟語の文字範囲を割り出し、語ごとに重なるかで決める。
+   */
+  idiomWordIndices(sen, ev) {
+    const out = new Set();
+    const phrase = ev?.idiom?.phrase;
+    if (!phrase || !ev?.text) return out;
+    const at = ev.text.indexOf(phrase);
+    if (at < 0) return out;
+    const end = at + phrase.length;
+    let pos = 0;
+    sen.entries.forEach((e, i) => {
+      const wLen = e.word.text.length;
+      if (pos < end && pos + wLen > at) out.add(i);
+      pos += wLen + (e.conn ? e.conn.text.length : 0);
+    });
+    return out;
+  }
+
   /** 部位 7 行と所持語を描き直す。 */
   render() {
     const menu = this.menu;
@@ -59,13 +79,18 @@ export class GrowPad extends SenPad {
 
     for (const p of PARTS) {
       const words = this.save.partRaw(p.id).filter(Boolean);
+      // 部位が置く側 (所持語) と同じ見た目の語チップ。鍛冶の文の行とそろえる。
       const box = el('div', { class: 'grow-part' + (words.length ? ' filled' : '') });
       box.dataset.padRow = '1';   // 行のどこへ落としても挿入できる
       box.dataset.part = p.id;
-      const row = el('div', { class: 'grow-part-row' });
-      row.append(el('span', { class: 'grow-part-name' }, p.name));
-
       const sen = makePartSentence(words);
+      // 熟語が成立していれば、その語を鍛冶と同じく光らせる。
+      const ev = words.length ? evaluatePart(words) : null;
+      const idiomIdx = ev?.ev?.idiom ? this.idiomWordIndices(sen, ev.ev) : new Set();
+      const idiomName = ev?.ev?.idiom?.name || '';
+      const gradeName = ev?.valid ? (ev.gradeInfo?.name || '') : '不成文';
+      const gradeCls = ev?.valid ? (ev.ev?.grade || 'plain') : 'broken';
+
       const line = el('div', { class: 'sen-row' + (words.length ? '' : ' empty') });
       // 行そのものが受け皿。落とした x 座標に近い境目へ差し込む。
       this.rows.set(line, { part: p.id });
@@ -74,20 +99,25 @@ export class GrowPad extends SenPad {
       }
       sen.entries.forEach((e, i) => {
         const place = { kind: 'slot', part: p.id, index: i };
-        line.append(this.renderWord(e, place, words));
+        line.append(this.renderWord(e, place, words, idiomIdx.has(i), idiomName));
       });
       // 行の余白 (語の後ろ) をタップ = 末尾へ入れる。
       this.bindRowBlank(line, { part: p.id });
 
-      const lv = el('span', { class: 'grow-part-lv' },
-        `${sen.len} / ${PART_MAX_LEN} 文字`);
+      // 端っこに固定される部位名だけが、鍛冶の文の行との違い。
+      const row = el('div', { class: 'grow-part-row' });
+      row.append(el('span', { class: 'grow-part-name' }, p.name));
+      row.append(line);
+      row.append(el('span', { class: `grow-part-grade grade-${gradeCls}` }, gradeName));
+      row.append(el('span', { class: 'grow-part-lv' },
+        `${sen.len} / ${PART_MAX_LEN} 文字`));
       const clearBtn = el('button', {
         class: 'btn grow-part-clear', type: 'button',
         title: `「${p.name}」の語をすべて外す`,
         disabled: !words.length,
       }, '空にする');
       clearBtn.addEventListener('click', () => this.clearPart(p));
-      row.append(line, lv, clearBtn);
+      row.append(clearBtn);
       box.append(row);
       box.append(menu.renderGrowPartNote(p, words.map((x) => ({ text: x.text, conn: x.conn }))));
       menu.growParts.append(box);
@@ -97,8 +127,8 @@ export class GrowPad extends SenPad {
     this.renderNote();
   }
 
-  /** 文の語 1 つ。右に接続詞。 */
-  renderWord(entry, place, words) {
+  /** 文の語 1 つ。右に接続詞。鍛冶 (forge.js) の語チップと同じ見た目。 */
+  renderWord(entry, place, words, inIdiom = false, idiomName = '') {
     const w = entry.word.text;
     const info = WORDS[w];
     const cat = CATEGORIES[info?.cat] || CATEGORIES.modifier;
@@ -106,9 +136,11 @@ export class GrowPad extends SenPad {
     const heldNow = this.held && this.padTextOf(this.held.word) === w
       && this.padKeyOf(this.held.place) === this.padKeyOf(place);
     const chip = el('div', {
-      class: 'sen-word' + (armed ? ' armed' : '') + (heldNow ? ' held' : ''),
-      style: { borderColor: cat.color },
+      class: 'sen-word' + (armed ? ' armed' : '') + (heldNow ? ' held' : '')
+        + (inIdiom ? ' idiom-word' : ''),
+      style: inIdiom ? {} : { borderColor: cat.color },
       title: `${w} [${cat.name}]`
+        + (inIdiom ? `\n熟語「${idiomName}」を構成する語` : '')
         + `\nタップ: 後ろの接続詞を切り替える`
         + `\n長押し: 接続詞の一覧`
         + `\nドラッグ: 並べ替える / 別の部位へ移す / 所持語へ戻す`
@@ -156,18 +188,24 @@ export class GrowPad extends SenPad {
     line.addEventListener('pointercancel', () => { down = null; });
   }
 
-  /** 所持語。体に効く語だけを並べる。 */
+  /** 所持語。鍛冶の語彙 (pword) と同じチップで並べる。検索と並び替えに従う。 */
   renderPool() {
     const menu = this.menu;
     const save = this.save;
     const owned = save.collection.filter((t) => !!WORDS[t]);
     const usable = owned.filter((t) => isPartUsable(t));
-    this.poolWords = usable;
+    // 検索と並び替え (メニューの状態を鍛冶・デッキと共通の形で持つ)。
+    const q = (menu.growQuery || '').trim();
+    const filtered = usable.filter((t) => !q || t.includes(q)
+      || (menu.wordEffectText(t) || '').includes(q));
+    const sorted = menu.sortWords(filtered, menu.growSort || 'effect', (t) => save.rankIndex(t));
+    this.poolWords = sorted;
     const hiddenN = owned.length - usable.length;
     if (menu.growWordsNote) {
-      menu.growWordsNote.textContent = hiddenN
-        ? `体に効く ${usable.length} 語。武器用の ${hiddenN} 語は隠している`
-        : `体に効く ${usable.length} 語`;
+      menu.growWordsNote.textContent = (q ? `「${q}」で ${sorted.length} 語 / ` : '')
+        + (hiddenN
+          ? `体に効く ${usable.length} 語。武器用の ${hiddenN} 語は隠している`
+          : `体に効く ${usable.length} 語`);
     }
     if (!menu.growWords) return;
     // 語を置くたびに描き直すので、一覧のスクロール位置を保つ。
@@ -175,9 +213,14 @@ export class GrowPad extends SenPad {
     // 下の語ほど使えなくなる。
     const scrollTop = menu.growWords.scrollTop || 0;
     clear(menu.growWords);
-    usable.forEach((t, i) => {
+    if (!sorted.length) {
+      menu.growWords.append(el('div', { class: 'grow-words-empty' },
+        q ? '見つからなかった。' : '語を持っていない — 言葉くじで引こう'));
+    }
+    sorted.forEach((t, i) => {
       const info = WORDS[t];
       if (!info) return;
+      const cat = CATEGORIES[info.cat] || CATEGORIES.modifier;
       const src = [fxText(info.fx, FX_LABEL), info.player ? `体 ${fxText(info.player, PS_LABEL)}` : '']
         .filter((x) => x && x !== '効果なし').join(' / ') || '効果なし';
       const used = save.partWordList().filter((x) => x === t).length;
@@ -185,11 +228,15 @@ export class GrowPad extends SenPad {
       const eff = wordEffectRows(t);
       const kinds = wordMeaningParts(t);
       const where = kinds.map((k) => PART_KIND_LABELS[k] || k).join('・');
-      const b = el('button', {
-        class: 'btn grow-word' + (this.armed === t ? ' sel' : '') + (used ? ' used' : '')
-          + (direct.length || kinds.length ? ' has-eff' : ' no-eff') + ' rk' + save.rankIndex(t),
-        type: 'button',
-        title: `${CATEGORIES[info.cat]?.name || info.cat} / ランク ${save.rankOf(t).name}: ${src}`
+      const armedNow = !!this.armed && this.padTextOf(this.armed) === t;
+      // 鍛冶の語彙チップ (pword) と同じ骨格。色は語の分類、肩にランクの印。
+      const node = el('div', {
+        class: 'pword'
+          + (armedNow ? ' armed' : '')
+          + (used ? ' used' : '')
+          + (info.player ? ' is-self' : ''),
+        style: { borderColor: cat.color },
+        title: `${t} [${cat.name}] / ランク ${save.rankOf(t).name}: ${src}`
           + `\n${menu.rankTip(t)}`
           + `\nタップで選び、部位の行をタップで置く。ドラッグで直接置ける。`
           + (direct.length ? `\n体に効く: ${direct.map((r) => `${r.label} ${r.text}`).join(' / ')}`
@@ -197,12 +244,27 @@ export class GrowPad extends SenPad {
           + (kinds.length ? `\n効く部位: ${where} (語の意味が${where}で働く)` : '')
           + (eff.length && !direct.length ? '\n文にすれば文の力ぶんだけ強くなる' : '')
           + (used ? `\n部位に ${used} 語入っている (同じ語をいくつでも置ける)` : ''),
-      }, t, used ? el('i', { class: 'grow-word-used' }, `×${used}`) : null);
-      if (direct.length) b.append(el('i', { class: 'grow-word-eff' }, direct.map((r) => r.text).join(' ')));
-      if (where) b.append(el('i', { class: 'grow-word-eff where' }, where));
+      }, el('span', {}, t));
+      if (used > 1) node.append(el('span', { class: 'pword-n' }, `×${used}`));
+      // 体に直接効く語は、その効きを小さく足跡で添える。
+      if (direct.length) node.append(el('i', {
+        class: 'pword-eff', title: direct.map((r) => `${r.label} ${r.text}`).join(' / '),
+      }, direct.map((r) => r.label).join('・')));
+      // 意味が効く部位。鍛冶のチップとの違いは 1 つも作らない — 小さな足跡で添える。
+      if (where) node.append(el('i', {
+        class: 'pword-where', title: `効く部位: ${where}`,
+      }, where));
+      // ランクの印。頭文字 1 字を語の色で。
+      const rank = save.rankOf(t);
+      if (rank && save.rankIndex(t) > 0) {
+        node.append(el('span', {
+          class: 'pword-rank', style: { color: rank.color },
+          title: `ランク ${rank.name}`,
+        }, rank.name.slice(0, 1)));
+      }
       const place = { kind: 'pool', index: i };
-      this.makeDraggable(b, place, () => this.onPoolTap(t));
-      menu.growWords.append(b);
+      this.makeDraggable(node, place, () => this.onPoolTap(t));
+      menu.growWords.append(node);
     });
     if (scrollTop) menu.growWords.scrollTop = scrollTop;
   }

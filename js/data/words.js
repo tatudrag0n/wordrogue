@@ -312,19 +312,37 @@ export function inCompoundSpan(joined, start, end) {
  * @returns {{phrase:string,name:string,desc:string,fx:Object}|null}
  */
 export function findCompound(text) {
-  if (!text) return null;
-  let best = null;
-  for (let i = 0; i < text.length; i++) {
+  return findCompounds(text)[0] || null;
+}
+
+/**
+ * 文面の中の合成語を **すべて** 探す。重なりは許さない。
+ * 左から走査し、その位置で最長の熟語を採って、採ったぶんだけ進む。
+ *   「毒蝕弾の発電刃」→ [毒蝕弾, 発電] (毒蝕 のような内側は採らない)
+ * @param {string} text
+ * @returns {Array<{phrase:string,name:string,desc:string,fx:Object,power:number,natural:number}>}
+ */
+export function findCompounds(text) {
+  if (!text) return [];
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    let hit = null;
     for (let l = Math.min(MAX_COMPOUND, text.length - i); l >= 2; l--) {
       const sub = text.slice(i, i + l);
-      const hit = PHRASE_BONUS[sub];
-      if (hit) {
-        if (!best || hit.phrase.length > best.phrase.length) best = hit;
-        break;
-      }
+      const p = PHRASE_BONUS[sub];
+      if (p) { hit = p; break; }
+    }
+    if (hit) {
+      out.push(hit);
+      i += hit.phrase.length;
+    } else {
+      i++;
     }
   }
-  return best;
+  // 長い熟語ほど先に来るように並べる (表示と内訳の主役は最初の 1 つ)。
+  out.sort((a, b) => b.phrase.length - a.phrase.length);
+  return out;
 }
 
 /**
@@ -411,7 +429,7 @@ const REASONS = {
  * @returns {{
  *   valid:boolean, reason:string, reasonText:string, text:string,
  *   segments:string[], content:number, grade:string, gradeInfo:Object,
- *   element:string, fx:Object, idiom:Object|null, phraseBonus:number, bonusWords:number
+ *   element:string, fx:Object, idiom:Object|null, idioms:Array, phraseBonus:number, bonusWords:number
  * }}
  */
 export function evaluate(words, opt = {}) {
@@ -619,10 +637,13 @@ export function evaluate(words, opt = {}) {
     if (v > best) { best = v; element = k; }
   }
 
-  // 熟語 (合成語) ボーナス。文面中の部分列として探す。
-  const idiom = findCompound(joined);
-  if (idiom) {
-    for (const [k, v] of Object.entries(idiom.fx)) {
+  // 熟語 (合成語) ボーナス。文面中の重ならない熟語 **すべて** に乗る。
+  //   「毒蝕弾の発電刃」→ 毒蝕弾 と 発電 の両方。内側の部分列 (毒蝕) は別に数えない。
+  // idiom はいちばん長い 1 つ (表示・互換用)。全員のぶんは idioms に入る。
+  const idioms = findCompounds(joined);
+  const idiom = idioms[0] || null;
+  for (const id of idioms) {
+    for (const [k, v] of Object.entries(id.fx)) {
       fx[k] = (fx[k] || 0) + v;
     }
   }
@@ -911,15 +932,18 @@ export function evaluate(words, opt = {}) {
     }
   }
   // 熟語の加点は格で違う。三字熟語 +0.7 / 二字熟語 +0.4 (PHRASE_TIER)。
-  if (idiom) parts.push({ key: 'idiom', label: `熟語「${idiom.name}」`, v: idiom.natural ?? 0.7 });
+  // 複数の熟語が成立していれば、そのぶんだけ重ねて乗る。
+  for (const id of idioms) {
+    parts.push({ key: 'idiom', label: `熟語「${id.name}」`, v: id.natural ?? 0.7 });
+  }
   const natural = Math.max(0, parts.reduce((s, p) => s + p.v, 0));
 
   // 文の力。自然な分量だけが足される。
   //   実質語 1 つに 5% (長さは少しだけ報いる)
   //   自然さに 1 単位あたり 30% — 自然さが本命。
   //   熟語はさらに固定で足す。別の語と重なっていても熟語が成立すれば乗る。
-  //   三字熟語 +0.20 / 二字熟語 +0.10 (PHRASE_TIER)。
-  const phraseBonus = idiom ? (idiom.power ?? 0.2) : 0;
+  //   三字熟語 +0.20 / 二字熟語 +0.10 (PHRASE_TIER)。複数なら合算。
+  const phraseBonus = idioms.reduce((s, id) => s + (id.power ?? 0.2), 0);
   const bonusWords = Math.max(0, content - 1);
   const predicated = hasPredicate;
   // 自然さが本命。ボーナスは自然さに勝たないよう小さくする。
@@ -952,6 +976,7 @@ export function evaluate(words, opt = {}) {
     element,
     fx,
     idiom,
+    idioms,
     phraseBonus,
     bonusWords,
     natural,

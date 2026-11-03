@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { TAU, clamp, dist2, rng, angleDiff } from '../core/util.js';
-import { getStage } from '../data/stages.js';
+import { getStage, fieldFor } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
@@ -157,6 +157,10 @@ export class Run {
     this.fields = [];
     /** 自律する分身 (式神)。武器語「分身」の武器が維持する。 */
     this.helpers = [];
+    /** 庭の仕掛け。岩が障害物、湧き泉・墨の沼・突風がギミック。 */
+    this.obstacles = [];
+    this.gimmicks = [];
+    this.buildField();
     this.pickups = [];
     this.slashes = [];
     this.rings = [];
@@ -957,6 +961,147 @@ export class Run {
     return Math.abs(x) > a.w / 2 - r || Math.abs(y) > a.h / 2 - r;
   }
 
+  // ── 庭の仕掛け (岩・湧き泉・墨の沼・突風) ──────────────────────────────────
+
+  /**
+   * ステージごとの岩とギミックを置く。
+   * 出発点 (中央) と壁の際は空け、どうしも離して置く。
+   */
+  buildField() {
+    const f = fieldFor(this.stage);
+    const a = this.arenaRect;
+    const placed = [];
+    const put = (r, margin = 200) => {
+      for (let tries = 0; tries < 50; tries++) {
+        const x = this.rand.range(-a.w / 2 + margin, a.w / 2 - margin);
+        const y = this.rand.range(-a.h / 2 + margin, a.h / 2 - margin);
+        // 出発点の周りは必ず空ける。
+        if (x * x + y * y < 210 * 210) continue;
+        // 他の仕掛けとも離す。
+        if (placed.some((o) => dist2(o.x, o.y, x, y) < (o.r + r + 130) ** 2)) continue;
+        placed.push({ x, y, r });
+        return { x, y, r };
+      }
+      return null;
+    };
+    for (let i = 0; i < f.rocks; i++) {
+      const o = put(this.rand.range(34, 54));
+      if (o) this.obstacles.push({ ...o, seed: this.rand() * TAU });
+    }
+    for (const kind of f.gimmicks) {
+      if (kind === 'spring') {
+        const o = put(44, 240);
+        if (o) this.gimmicks.push({ kind, x: o.x, y: o.y, r: 44, cd: 0, hinted: false });
+      } else if (kind === 'ink') {
+        for (let k = 0; k < 2; k++) {
+          const o = put(56, 210);
+          if (o) this.gimmicks.push({ kind, x: o.x, y: o.y, r: 56, hinted: false });
+        }
+      } else if (kind === 'wind') {
+        this.gimmicks.push({ kind, a: this.rand() * TAU, cd: 4 + this.rand() * 4, gustT: 0, hinted: false });
+      }
+    }
+  }
+
+  /** 岩から円 (体) を押し出す。めり込む向きの速度だけ殺すので、縁を滑る。 */
+  collideObstacles(obj, r) {
+    for (const o of this.obstacles) {
+      const dx = obj.x - o.x, dy = obj.y - o.y;
+      const d2 = dx * dx + dy * dy;
+      const rr = r + o.r;
+      if (d2 >= rr * rr || d2 < 1e-6) continue;
+      const d = Math.sqrt(d2);
+      const k = (rr - d) / d;
+      obj.x += dx * k;
+      obj.y += dy * k;
+      if (obj.vx !== undefined) {
+        const nx = dx / d, ny = dy / d;
+        const dot = obj.vx * nx + obj.vy * ny;
+        if (dot < 0) {
+          obj.vx -= nx * dot;
+          obj.vy -= ny * dot;
+        }
+      }
+    }
+  }
+
+  /** 点が岩に当たるか。弾の消滅判定用。 */
+  hitsObstacle(x, y, r = 0) {
+    for (const o of this.obstacles) {
+      const rr = r + o.r * 0.92;
+      if (dist2(x, y, o.x, o.y) < rr * rr) return true;
+    }
+    return false;
+  }
+
+  /** 墨の沼のなかか。入っていると重くなる (1 → 普通どおり / 0.55 → 重い)。 */
+  inkSlowAt(x, y) {
+    for (const g of this.gimmicks) {
+      if (g.kind !== 'ink') continue;
+      if (dist2(x, y, g.x, g.y) < (g.r * 0.92) ** 2) return 0.55;
+    }
+    return 1;
+  }
+
+  /** 庭のギミックの動き。湧き泉の回復と、突風。 */
+  gimmickTick(dt) {
+    const p = this.player;
+    for (const g of this.gimmicks) {
+      if (g.kind === 'spring') {
+        g.cd -= dt;
+        if (g.cd <= 0 && p.alive && p.hp < p.maxHp
+          && dist2(p.x, p.y, g.x, g.y) < (g.r * 0.8) ** 2) {
+          g.cd = 0.4;
+          this.healPlayer(p.maxHp * 0.012);
+          if (!g.hinted) {
+            g.hinted = true;
+            this.pushHint('湧き泉 — 立っていると少しずつ回復する');
+          }
+          if (this.rand() < 0.6) {
+            this.burst(p.x + (this.rand() - 0.5) * 26, p.y + (this.rand() - 0.5) * 12, 1,
+              '#37b24d', { spd: 55, spdMin: 15, life: 0.7, r: 1.8, shape: 'leaf', grav: -26, drag: 3 });
+          }
+        }
+      } else if (g.kind === 'wind') {
+        if (g.gustT > 0) {
+          g.gustT -= dt;
+          const k = Math.min(1, g.gustT / 0.5);
+          p.vx += Math.cos(g.a) * 300 * k * dt;
+          p.vy += Math.sin(g.a) * 300 * k * dt;
+          for (const e of this.enemies) {
+            if (e.dead) continue;
+            e.x += Math.cos(g.a) * 125 * k * dt;
+            e.y += Math.sin(g.a) * 125 * k * dt;
+          }
+          if (g.gustT <= 0) g.cd = 5.5 + this.rand() * 3;
+        } else {
+          g.cd -= dt;
+          if (g.cd <= 0) {
+            g.gustT = 1.7;
+            g.a = this.rand() * TAU;
+            if (!g.hinted) {
+              g.hinted = true;
+              this.pushHint('突風 — 体が押される。読んで避ける');
+            }
+            // 吹き出しの木の葉。風の向きが一目で分かる。
+            const cx = p.x - Math.cos(g.a) * 160;
+            const cy = p.y - Math.sin(g.a) * 160;
+            for (let i = 0; i < 10; i++) {
+              this.burst(cx + (this.rand() - 0.5) * 200, cy + (this.rand() - 0.5) * 200, 1,
+                '#8aa06a', { a: g.a, spread: 0.5, spd: 260, spdMin: 120, life: 0.8, r: 2, shape: 'leaf', drag: 1.2 });
+            }
+            this.audio.tone?.({ freq: 250, type: 'sine', dur: 0.45, vol: 0.04, slide: 1.5 });
+          }
+        }
+      } else if (g.kind === 'ink') {
+        if (!g.hinted && p.alive && dist2(p.x, p.y, g.x, g.y) < (g.r * 0.92) ** 2) {
+          g.hinted = true;
+          this.pushHint('墨の沼 — 足を取られる。敵もそう');
+        }
+      }
+    }
+  }
+
   /** 庭の内壁に沿った 1 点 (中心原点)。 */
   arenaEdgePoint(hw, hh) {
     switch (this.rand.int(4)) {
@@ -1304,6 +1449,7 @@ export class Run {
     }
 
     this.playerTick(d, input);
+    this.gimmickTick(d);
     this.waveTick();
     this.weaponTick(d);
     this.helperTick(d);
@@ -1399,14 +1545,17 @@ export class Run {
       if (Math.abs(p.vx) < 1) p.vx = 0;
       if (Math.abs(p.vy) < 1) p.vy = 0;
     } else {
-      const spd = p.stats.spd * (p.dashing ? DASH_MULT : 1);
+      // 墨の沼は足を取る。ただしダッシュであれば抜けられる。
+      const ink = p.dashing ? 1 : this.inkSlowAt(p.x, p.y);
+      const spd = p.stats.spd * (p.dashing ? DASH_MULT : 1) * ink;
       const k = Math.min(1, (p.dashing ? 26 : 16) * dt);
       p.vx += (dirX * spd - p.vx) * k;
       p.vy += (dirY * spd - p.vy) * k;
     }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    // 庭の壁。外には出られない (箱庭)。
+    // 庭の壁。外には出られない (箱庭)。岩にもめり込まない。
+    this.collideObstacles(p, p.r);
     this.clampToArena(p, p.r);
 
     // 歩いた跡の墨。速く動くほど薄く小さく散る。
@@ -1818,7 +1967,17 @@ export class Run {
         if (e.spawned < 1) continue;
       }
       updateEnemy(e, ctx, dt);
+      // 墨の沼は敵の足も取る。動いたぶんを沼の重さで減らす。
+      const slow = this.inkSlowAt(e.x, e.y);
+      if (slow < 1) {
+        const px = e._fx ?? e.x, py = e._fy ?? e.y;
+        e.x = px + (e.x - px) * slow;
+        e.y = py + (e.y - py) * slow;
+      }
+      e._fx = e.x; e._fy = e.y;
       // 庭の壁。突進や爆風で外へ吹き飛んでも、次のフレームで内側へ戻す。
+      // 岩にもめり込まない。
+      this.collideObstacles(e, e.r);
       this.clampToArena(e, e.r);
       // 状態異常 (燃焼・毒) のダメージで倒れた場合も、直接攻撃と同じ
       // 報酬・墨・連斬を通す。以前はここで dead にしてしまい、
@@ -1842,6 +2001,17 @@ export class Run {
       // 壁際で欠けないように除く。
       if (!b.orbit && !b.continuous && this.outsideArena(b.x, b.y, b.r)) {
         if (b.kindName === 'bomb') this.explode(b, b.st);
+        this.bullets.splice(i, 1);
+        continue;
+      }
+      // 岩に当たった弾も消える。軌道刃と式神の攻撃は岩を縫うように通る。
+      if (!b.orbit && !b.continuous && this.hitsObstacle(b.x, b.y, b.r * 0.8)) {
+        if (b.kindName === 'bomb') this.explode(b, b.st);
+        else {
+          this.burst(b.x, b.y, 4, b.color || '#8a8f98', {
+            spd: 120, spdMin: 40, life: 0.2, r: 1.6, shape: 'shard', drag: 6,
+          });
+        }
         this.bullets.splice(i, 1);
         continue;
       }

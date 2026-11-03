@@ -86,6 +86,7 @@ export class Renderer {
 
     this.step('ground', () => this.drawGround(run));
     this.step('decals', () => this.drawDecals(run));
+    this.step('field', () => this.drawField(run));
     this.step('corpses', () => this.drawCorpses(run));
     this.step('fields', () => this.drawFields(run));
     this.step('pickups', () => this.drawPickups(run));
@@ -96,6 +97,7 @@ export class Renderer {
     this.step('beams', () => this.drawBeams(run));
     this.step('enemies', () => this.drawEnemies(run));
     this.step('bullets', () => this.drawBullets(run));
+    this.step('wind', () => this.drawWind(run));
     this.step('player', () => this.drawPlayer(run));
     this.step('weapon-spirits', () => this.drawWeaponSpirits(run));
     this.step('helpers', () => this.drawHelpers(run));
@@ -3456,6 +3458,220 @@ export class Renderer {
         g.restore();
         continue;
       }
+    }
+  }
+
+  /**
+   * 庭の仕掛け。岩・湧き泉・墨の沼。地面の上、生き物の下に置く。
+   * 岩は角のない不整形の巨石。湧き泉はさざ波の立つ緑の池。
+   */
+  drawField(run) {
+    const g = this.ctx;
+    // 墨の沼。入ると足を取られる暗い溜まり。
+    for (const gm of run.gimmicks) {
+      if (gm.kind !== 'ink') continue;
+      g.save();
+      g.translate(gm.x, gm.y);
+      // 濃い墨。紙に落ちた溜まり。
+      g.globalAlpha = 0.52;
+      g.fillStyle = '#1c2331';
+      this.inkPuddle(g, gm.r);
+      g.globalAlpha = 0.34;
+      g.fillStyle = '#000000';
+      this.inkPuddle(g, gm.r * 0.62, 1.7);
+      // 澱んだ表面の照り。うっすら漂う弧。
+      g.globalAlpha = 0.16;
+      g.fillStyle = '#fdfbf4';
+      g.beginPath();
+      g.ellipse(-gm.r * 0.22, -gm.r * 0.26, gm.r * 0.4, gm.r * 0.2, -0.4, 0, TAU);
+      g.fill();
+      // 縁のはみ出し。墨が紙に染みた足跡。
+      g.globalAlpha = 0.14;
+      g.fillStyle = '#1c2331';
+      for (let i = 0; i < 3; i++) {
+        const a = i * 2.4 + gm.r;
+        g.beginPath();
+        g.ellipse(Math.cos(a) * gm.r * 1.04, Math.sin(a) * gm.r * 0.86,
+          gm.r * 0.13, gm.r * 0.08, a, 0, TAU);
+        g.fill();
+      }
+      g.restore();
+    }
+    // 湧き泉。緑の水が湧き、さざ波が立つ。
+    for (const gm of run.gimmicks) {
+      if (gm.kind !== 'spring') continue;
+      g.save();
+      g.translate(gm.x, gm.y);
+      // 石の縁。
+      g.globalAlpha = 0.5;
+      g.strokeStyle = 'rgba(28, 35, 49, .55)';
+      g.lineWidth = 2.2;
+      this.inkPuddle(g, gm.r * 1.06);
+      // 水。
+      g.globalAlpha = 0.3;
+      g.fillStyle = '#37b24d';
+      this.inkPuddle(g, gm.r * 0.9);
+      g.globalAlpha = 0.24;
+      g.fillStyle = '#fdfbf4';
+      g.beginPath();
+      g.ellipse(-gm.r * 0.2, -gm.r * 0.24, gm.r * 0.42, gm.r * 0.26, -0.4, 0, TAU);
+      g.fill();
+      // 広がるさざ波。生きている水。
+      for (let i = 0; i < 3; i++) {
+        const f = ((run.t * 0.5 + i / 3) % 1);
+        g.globalAlpha = (1 - f) * 0.34;
+        g.strokeStyle = '#eaf5df';
+        g.lineWidth = 1.2;
+        g.beginPath();
+        this.inkPuddlePath(g, gm.r * (0.2 + f * 0.62));
+        g.stroke();
+      }
+      // 縁の草。
+      g.globalAlpha = 0.55;
+      g.strokeStyle = '#4f7d2f';
+      g.lineWidth = 1.3;
+      for (let i = 0; i < 7; i++) {
+        const a = i * 2.39 + 0.6;
+        const bx = Math.cos(a) * gm.r * 1.02, by = Math.sin(a) * gm.r * 1.02;
+        g.beginPath();
+        g.moveTo(bx, by);
+        g.quadraticCurveTo(bx + Math.cos(a) * 3, by + Math.sin(a) * 3 - 4, bx + Math.cos(a) * 5, by + Math.sin(a) * 5 - 7);
+        g.stroke();
+      }
+      g.restore();
+    }
+    // 岩。庭に置かれた巨石。体も弾も通さない。
+    for (const o of run.obstacles) {
+      g.save();
+      g.translate(o.x, o.y);
+      const blob = (k) => {
+        g.beginPath();
+        for (let i = 0; i <= 10; i++) {
+          const a = (i / 10) * TAU;
+          const rr = o.r * (0.86 + 0.13 * Math.sin(o.seed + a * 3.7) + 0.05 * Math.sin(o.seed * 2 + a * 8.1));
+          const x = Math.cos(a) * rr, y = Math.sin(a) * rr * 0.92;
+          if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+        }
+        g.closePath();
+      };
+      // 足元の影。
+      g.globalAlpha = 0.15;
+      g.fillStyle = '#1c2331';
+      g.beginPath();
+      g.ellipse(o.r * 0.08, o.r * 0.24, o.r * 1.04, o.r * 0.8, 0, 0, TAU);
+      g.fill();
+      // 石の体。紙の上の灰色に、ほのかな色気。
+      g.globalAlpha = 1;
+      blob(0);
+      g.fillStyle = '#a9a798';
+      g.fill();
+      // 下側の陰。
+      g.save();
+      blob(0);
+      g.clip();
+      g.globalAlpha = 0.28;
+      g.fillStyle = '#3c3a32';
+      g.beginPath();
+      g.ellipse(o.r * 0.14, o.r * 0.4, o.r * 1.0, o.r * 0.82, 0, 0, TAU);
+      g.fill();
+      // 上側の照り。
+      g.globalAlpha = 0.34;
+      g.fillStyle = '#fdfbf4';
+      g.beginPath();
+      g.ellipse(-o.r * 0.26, -o.r * 0.38, o.r * 0.56, o.r * 0.3, -0.5, 0, TAU);
+      g.fill();
+      // 筆の毛。石の肌の割れ。
+      g.globalAlpha = 0.3;
+      g.strokeStyle = 'rgba(28, 35, 49, .6)';
+      g.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        const a = o.seed + i * 2.1;
+        g.beginPath();
+        g.moveTo(Math.cos(a) * o.r * 0.7, Math.sin(a) * o.r * 0.6);
+        g.quadraticCurveTo(
+          Math.cos(a + 0.5) * o.r * 0.45, Math.sin(a + 0.5) * o.r * 0.4,
+          Math.cos(a + 0.9) * o.r * 0.2, Math.sin(a + 0.9) * o.r * 0.15);
+        g.stroke();
+      }
+      g.restore();
+      // 墨の縁。
+      g.globalAlpha = 0.8;
+      g.strokeStyle = 'rgba(28, 35, 49, .75)';
+      g.lineWidth = 1.8;
+      blob(0);
+      g.stroke();
+      // 苔。アクセント色の点。
+      g.globalAlpha = 0.5;
+      g.fillStyle = run.stage.accent || '#4f7d2f';
+      for (let i = 0; i < 4; i++) {
+        const a = o.seed * 1.7 + i * 1.9;
+        g.beginPath();
+        g.arc(Math.cos(a) * o.r * 0.62, Math.sin(a) * o.r * 0.58, 1.6 + (i % 2), 0, TAU);
+        g.fill();
+      }
+      g.restore();
+    }
+  }
+
+  /** ぐにゃりとした池の形。中心原点で r が半径の目安。 */
+  inkPuddle(g, r, wob = 1) {
+    this.inkPuddlePath(g, r, wob);
+    g.fill();
+  }
+
+  inkPuddlePath(g, r, wob = 1) {
+    const pts = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * TAU;
+      const rr = r * (1 + 0.09 * wob * Math.sin(a * 3 + r) + 0.05 * wob * Math.sin(a * 5 - r));
+      pts.push([Math.cos(a) * rr, Math.sin(a) * rr * 0.8]);
+    }
+    // 中点どうしを曲線でつないで、なめらかな池の形にする。
+    const n = pts.length;
+    g.moveTo((pts[0][0] + pts[n - 1][0]) / 2, (pts[0][1] + pts[n - 1][1]) / 2);
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[i], p1 = pts[(i + 1) % n];
+      g.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
+    }
+    g.closePath();
+  }
+
+  /**
+   * 突風。吹いているあいだ、視界を風の筋が流れる。
+   * 描画だけ。押す力は run.gimmickTick が与える。
+   */
+  drawWind(run) {
+    const g = this.ctx;
+    for (const gm of run.gimmicks) {
+      if (gm.kind !== 'wind' || !(gm.gustT > 0)) continue;
+      const k = Math.min(1, gm.gustT / 0.4);
+      const a = gm.a;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      g.save();
+      g.lineCap = 'round';
+      // 視界の範囲に、風下へ走る筋を敷き詰める。
+      const vw = this.w || 960;
+      const vh = this.h || 720;
+      for (let i = 0; i < 26; i++) {
+        // 筋の位置は種で固定し、時刻で流す。乱数を使わない。
+        const h1 = Math.sin(i * 127.1) * 0.5 + 0.5;
+        const h2 = Math.sin(i * 311.7) * 0.5 + 0.5;
+        const speed = 340 + h1 * 260;
+        const span = vw + vh;
+        const f = ((h2 * span + run.t * speed) % span) - span / 2;
+        // カメラ中心から風向きに沿った直線上に置く。
+        const cx = this.camX + (h1 - 0.5) * vw * 1.2 - ca * (h2 - 0.5) * 60 + ca * f * 0.9;
+        const cy = this.camY + (h2 - 0.5) * vh * 1.2 - sa * (h1 - 0.5) * 60 + sa * f * 0.9;
+        const len = 22 + h1 * 44;
+        g.globalAlpha = (0.14 + h2 * 0.2) * k;
+        g.strokeStyle = '#fdfbf4';
+        g.lineWidth = 1 + h1 * 1.2;
+        g.beginPath();
+        g.moveTo(cx - ca * len * 0.4, cy - sa * len * 0.4);
+        g.lineTo(cx + ca * len * 0.6, cy + sa * len * 0.6);
+        g.stroke();
+      }
+      g.restore();
     }
   }
 

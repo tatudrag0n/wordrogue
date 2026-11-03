@@ -346,6 +346,26 @@ export function getStage(id) {
   return STAGES.find((s) => s.id === id) || STAGES[0];
 }
 
+/**
+ * 庭の仕掛け。障害物の岩と、ステージごとのギミック。
+ *   spring … 湧き泉。その上に立っていると少しずつ回復する。
+ *   ink    … 墨の沼。入ると体も敵も足を取られる。
+ *   wind   … 突風。一定間隔で庭の風が吹き、体を押す。
+ * 既定はステージ番号から導く (奥へ進むほど仕掛けが増える)。
+ * 個別に変えたいときは、ステージ定義の field に { rocks, gimmicks } を書く。
+ */
+export function fieldFor(stage) {
+  const f = stage.field || {};
+  const id = stage.id;
+  const rocks = f.rocks ?? (id >= 3 ? Math.min(5, Math.floor(id / 4) + 1) : 0);
+  const gimmicks = f.gimmicks ?? [
+    ...(id >= 4 ? ['spring'] : []),
+    ...(id >= 8 ? ['wind'] : []),
+    ...(id >= 12 ? ['ink'] : []),
+  ];
+  return { rocks, gimmicks };
+}
+
 /** 指定ステージまでにクリアした最高 ID。 */
 export function clearedCount(list) {
   return Array.isArray(list) ? list.length : 0;

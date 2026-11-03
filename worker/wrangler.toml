@@ -8,6 +8,18 @@ TURNSTILE_SITEKEY = "0x4AAAAAAFoIrBZA8W28_M_k"
 ALLOWED_ORIGINS = "https://tatudrag0n.github.io,http://localhost:8099,http://127.0.0.1:8099,http://localhost:5173,https://wordrogue.pages.dev,https://wordrogue.mct-official.com"
 # 決済後の戻り先 (Stripe success_url / cancel_url の基準)
 SITE_URL = "https://wordrogue.pages.dev"
+# フィードバック通知メール (Cloudflare Email Service)。
+# 差出人は Email Routing を有効にしたドメインのアドレスであること。
+FEEDBACK_EMAIL_FROM = "feedback@mct-official.com"
+FEEDBACK_EMAIL_FROM_NAME = "Wordrogue フィードバック"
+# 通知の宛先。Cloudflare アカウントで「検証済みの宛先アドレス」である必要がある。
+FEEDBACK_EMAIL_TO = "tatudragon0327@gmail.com"
+
+# フィードバック通知の送信バインディング。
+# 宛先をこの 1 件に固定して、この Worker が踏み台にならないようにする。
+[[send_email]]
+name = "EMAIL"
+allowed_destination_addresses = ["tatudragon0327@gmail.com"]
 
 [[d1_databases]]
 binding = "DB"

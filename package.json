@@ -13,6 +13,7 @@
     "test:motion": "node test/motion.test.js",
     "test:render": "node test/render.test.js",
     "test:meaning": "node test/meaning.test.js",
+    "test:worker": "node test/worker.email.test.mjs",
     "test:browser": "node test/browser.test.js",
     "shot": "node test/shot.mjs"
   },

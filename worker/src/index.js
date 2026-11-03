@@ -88,12 +88,27 @@ function clientIp(request) {
 }
 
 async function handleHealth(request, env) {
-  return json({ ok: true, service: "wordrogue-api", time: new Date().toISOString() });
+  return json({
+    ok: true,
+    service: "wordrogue-api",
+    time: new Date().toISOString(),
+    // 通知メールが「設定されているか」だけを返す。宛先そのものは出さない。
+    feedback_email: {
+      configured: !!(env.EMAIL && env.FEEDBACK_EMAIL_TO && env.FEEDBACK_EMAIL_FROM),
+    },
+  });
 }
 
 // ── フィードバックのメール通知 ────────────────────────────────────────────
 
 const TYPE_LABEL = { word: "語の投稿", bug: "不具合報告" };
+
+/**
+ * 通知メールの 1 時間あたりの上限。
+ * IP を分散されても受信箱と送信ドメインの評価を焼かないための歯止め。
+ * 上限を超えてもフィードバック自体は保存される (通知だけ止まる)。
+ */
+const EMAIL_HOURLY_LIMIT = 30;
 
 function escapeHtml(value) {
   return String(value == null ? "" : value)
@@ -124,6 +139,11 @@ function feedbackFields(type, payload) {
   ];
 }
 
+function adminUrl(env) {
+  const base = (env.SITE_URL || "https://wordrogue.pages.dev").replace(/\/+$/, "");
+  return base + "/admin.html";
+}
+
 function buildFeedbackEmail(env, detail) {
   const label = TYPE_LABEL[detail.type] || detail.type;
   const id = String(detail.id == null ? "-" : detail.id);
@@ -137,6 +157,7 @@ function buildFeedbackEmail(env, detail) {
     "",
     `ボット確認: ${detail.turnstileOk ? "通過" : "なし"}`,
     `受信時刻: ${new Date().toISOString()}`,
+    `管理画面: ${adminUrl(env)}`,
   ].join("\n");
 
   const rows = fields.map(([k, v]) =>
@@ -148,7 +169,8 @@ function buildFeedbackEmail(env, detail) {
     '<div style="font-family:system-ui,sans-serif;font-size:14px;line-height:1.6">',
     `<p style="margin:0 0 8px"><strong>${escapeHtml(label)}</strong> (ID: ${escapeHtml(id)})</p>`,
     `<table style="border-collapse:collapse">${rows}</table>`,
-    `<p style="margin:12px 0 0;color:#666;font-size:12px">管理者ページで確認: admin.html (ID ${escapeHtml(id)})</p>`,
+    `<p style="margin:12px 0 0;color:#666;font-size:12px">管理画面: ` +
+      `<a href="${escapeHtml(adminUrl(env))}">admin.html</a> (ID ${escapeHtml(id)})</p>`,
     "</div>",
   ].join("");
 
@@ -162,12 +184,30 @@ function buildFeedbackEmail(env, detail) {
 }
 
 /**
+ * 直近 1 時間の受付が上限を超えていないか。
+ * 数えられないときは通知する側に倒す (通知は二次的な副作用なので、止めるより出す)。
+ */
+async function overHourlyLimit(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS c FROM submissions WHERE created_at > datetime('now','-1 hour')"
+    ).first();
+    return !!(row && row.c >= EMAIL_HOURLY_LIMIT);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
  * フィードバックを管理者へメール通知する。
  * 呼び出し側が待たなくてもいいように、例外を投げずに結果を返す。
  */
 async function notifyByEmail(env, detail) {
   if (!env.EMAIL || !env.FEEDBACK_EMAIL_TO || !env.FEEDBACK_EMAIL_FROM) {
     return { sent: false, reason: "not_configured" };
+  }
+  if (await overHourlyLimit(env)) {
+    return { sent: false, reason: "hourly_limit" };
   }
   let message;
   try {
@@ -273,7 +313,7 @@ async function handleSubmit(request, env, origin, ctx) {
   const id = result && result.meta && result.meta.last_row_id;
 
   // 管理者へのメール通知。保存は済んでいるので、失敗しても受付は成功で返す。
-  const pending = scheduleNotify(env, ctx, { id, type, payload, turnstileOk, ipHash });
+  const pending = scheduleNotify(env, ctx, { id, type, payload, turnstileOk });
   if (pending) await pending;
 
   return json({ ok: true, id }, 201, origin, env);

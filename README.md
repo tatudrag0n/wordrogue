@@ -884,9 +884,13 @@ npm run shot -- title title.png 800
 - 費用: 検証済み宛先への送信は無料 (Workers Free でも可)。任意の宛先へ送るには
   Workers Paid プランが必要
 - 件名は `[Wordrogue] 語の投稿 #<id>` / `[Wordrogue] 不具合報告 #<id>`。本文は素の
-  テキストと表の HTML の 2 部構成で、投稿内容をそのまま載せる
-- テスト: `npm run test:worker` (D1 と Email を差し替え、送信内容・失敗時・
-  ハニーポット・`waitUntil` を検証)
+  テキストと表の HTML の 2 部構成で、投稿内容と管理画面へのリンクを載せる
+- 通知は 1 時間 `EMAIL_HOURLY_LIMIT` (30) 通まで。超えた分は保存だけして通知しない。
+  IP を分散されても受信箱と送信ドメインの評価を焼かないための歯止め
+- 通知の設定状況は `GET /api/health` の `feedback_email.configured` で分かる。
+  宛先アドレスそのものは返さない
+- テスト: `npm run test:worker` (D1 と Email を差し替え、送信内容・エスケープ・
+  失敗時・未設定・上限・ハニーポット・`waitUntil`・`wrangler.toml` との宛先一致を検証)
 
 ## 支援 (Stripe)
 

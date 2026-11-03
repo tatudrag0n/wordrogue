@@ -210,8 +210,12 @@ export class Audio {
 
   setBgm(name, intensity = 0) {
     if (!this.enabled) return;
+    // 曲が用意されていない (今後のステージなど) ときは、
+    // 下の合成の BGM に任せる。404 を毎フレーム叩かないように覚えておく。
+    if (this._bgmFailed && this._bgmFailed.has(name)) { this._bgmEl = null; return; }
     if (this._bgmName === name && this._bgmEl) return;
     if (this._bgmEl) { try { this._bgmEl.pause(); } catch {} }
+    this._bgmEl = null;
     this._bgmName = name;
     let el = this._bgmTracks[name];
     if (!el) {
@@ -219,6 +223,14 @@ export class Audio {
         el = document.createElement('audio');
         el.src = 'assets/bgm/' + name + '.wav';
         el.loop = true;
+        el.addEventListener('error', () => {
+          this._bgmFailed = this._bgmFailed || new Set();
+          this._bgmFailed.add(name);
+          if (this._bgmEl === el) {
+            this._bgmEl = null;
+            this._bgmName = null;
+          }
+        });
         this._bgmTracks[name] = el;
       } catch { this._bgmEl = null; return; }
     }

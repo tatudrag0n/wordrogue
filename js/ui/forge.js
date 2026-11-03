@@ -19,6 +19,7 @@ import { $, el, clear } from '../core/util.js';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
 } from '../data/words.js?v=1.49';
+import { rankIndex } from '../data/ranks.js';
 import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js';
 import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.49';
 import { FX_LABEL, PS_LABEL } from './labels.js';
@@ -127,6 +128,39 @@ export class Forge extends SenPad {
       this.toggleForget();
     });
     this.undoBtn?.addEventListener('click', () => this.undo());
+
+    // 語彙の検索と並び替え。部位・デッキ・辞書と同じ 3 種 (+ 元どおり)。
+    this.lexQuery = '';
+    this.lexSort = 'slot';
+    const lexInput = $('#lexSearch');
+    lexInput?.addEventListener('input', () => {
+      this.lexQuery = lexInput.value.trim();
+      this.renderLexicon();
+    });
+    const sortBox = $('#lexSort');
+    if (sortBox) {
+      const opts = [
+        ['slot', '元どおり'],
+        ['effect', '効果'],
+        ['name', '名前'],
+        ['rank', 'レア度'],
+      ];
+      for (const [key, label] of opts) {
+        const b = el('button', {
+          class: 'btn word-sort' + (key === 'slot' ? ' on' : ''),
+          type: 'button',
+          title: `${label}の順で並べる`,
+        }, label);
+        b.addEventListener('click', () => {
+          this.opt.audio?.tap?.();
+          this.lexSort = key;
+          for (const sib of sortBox.querySelectorAll('.word-sort')) sib.classList.remove('on');
+          b.classList.add('on');
+          this.renderLexicon();
+        });
+        sortBox.append(b);
+      }
+    }
   }
 
   setRun(run) {
@@ -526,6 +560,32 @@ export class Forge extends SenPad {
   // ───────────────────────────────────────────────────────────────────────────
   // 語彙
   // ───────────────────────────────────────────────────────────────────────────
+  /** 語の効果の合計 (並び替え用のざっくりした強さ)。 */
+  lexEffectTotal(w) {
+    let sum = 0;
+    for (const v of Object.values(w.fx || {})) {
+      if (typeof v === 'number') sum += Math.abs(v);
+    }
+    for (const v of Object.values(w.player || {})) {
+      if (typeof v === 'number') sum += Math.abs(v);
+    }
+    return sum;
+  }
+
+  /** 語の効果を文字にしたもの (検索用)。 */
+  lexEffectText(w) {
+    const lines = [];
+    for (const [k, v] of Object.entries(w.fx || {})) {
+      if (!v) continue;
+      lines.push(`${FX_LABEL[k] || k} ${v}`);
+    }
+    for (const [k, v] of Object.entries(w.player || {})) {
+      if (!v) continue;
+      lines.push(`体 ${PS_LABEL[k] || k} ${v}`);
+    }
+    return lines.join(' ');
+  }
+
   renderLexicon() {
     const box = this.lexiconEl;
     clear(box);
@@ -535,11 +595,30 @@ export class Forge extends SenPad {
       if (w) counts.set(w.text, (counts.get(w.text) || 0) + 1);
     }
 
-    for (const [i, w] of this.run.lexicon.entries()) {
-      if (!w) {
-        box.append(el('div', { class: 'pword empty' }, ''));
-        continue;
+    // 検索と並び替え。**置き場 (data-place) は実スロットの番号のまま**。
+    // 見た目の順を変えても、ドラッグとタップの行き先がずれない。
+    const q = this.lexQuery || '';
+    const filled = this.run.lexicon
+      .map((w, i) => ({ w, i }))
+      .filter(({ w }) => !!w);
+    let view = filled;
+    if (q) {
+      view = view.filter(({ w }) => w.text.includes(q) || this.lexEffectText(w).includes(q));
+    }
+    if (this.lexSort !== 'slot') {
+      view = [...view];
+      const byName = (a, b) => a.w.text.localeCompare(b.w.text, 'ja');
+      if (this.lexSort === 'name') {
+        view.sort(byName);
+      } else if (this.lexSort === 'rank') {
+        view.sort((a, b) => rankIndex(b.w.text) - rankIndex(a.w.text)
+          || this.lexEffectTotal(b.w) - this.lexEffectTotal(a.w) || byName(a, b));
+      } else {
+        view.sort((a, b) => this.lexEffectTotal(b.w) - this.lexEffectTotal(a.w) || byName(a, b));
       }
+    }
+
+    const renderChip = (w, i) => {
       const cat = CATEGORIES[w.cat] || CATEGORIES.modifier;
       const info = WORDS[w.text];
       const node = el('div', {
@@ -556,6 +635,15 @@ export class Forge extends SenPad {
       }, el('span', {}, w.text));
       const n = counts.get(w.text);
       if (n > 1) node.append(el('span', { class: 'pword-n' }, `×${n}`));
+      // ランクの印。頭文字 1 字を語の色で。
+      const rk = rankIndex(w.text);
+      if (rk > 0) {
+        const RANK_COLORS = ['#6b7383', '#12a58a', '#2f7fc4', '#8b5cf6', '#d9a406'];
+        node.append(el('span', {
+          class: 'pword-rank', style: { color: RANK_COLORS[Math.min(RANK_COLORS.length - 1, rk)] },
+          title: `ランク ${rk}`,
+        }, '●'));
+      }
       const place = { kind: 'lexicon', index: i };
       this.makeDropTarget(node, place);
       if (this.forgetMode) this.makeTappable(node, () => this.onPoolTap(w));
@@ -565,14 +653,30 @@ export class Forge extends SenPad {
       const canCraft = !this.forgetMode && this.run.canCraftFromWord(w);
       if (canCraft) node.append(this.renderCraftButton(w, info));
       box.append(node);
+    };
+
+    if (this.lexSort === 'slot' && !q) {
+      // 元どおり: 空きスロットも含めて、語彙の枠の並びどおりに描く。
+      for (const [i, w] of this.run.lexicon.entries()) {
+        if (!w) {
+          box.append(el('div', { class: 'pword empty' }, ''));
+          continue;
+        }
+        renderChip(w, i);
+      }
+    } else {
+      if (!view.length) {
+        box.append(el('div', { class: 'grow-words-empty' }, '見つからなかった。'));
+      }
+      for (const { w, i } of view) renderChip(w, i);
     }
 
-    const filled = this.run.lexicon.filter(Boolean).length;
-    this.lexiconCount.textContent = `${filled} / ${this.run.lexicon.length}`;
+    const nFilled = this.run.lexicon.filter(Boolean).length;
+    this.lexiconCount.textContent = `${nFilled} / ${this.run.lexicon.length}`;
     this.lexiconCount.classList.toggle('full', this.run.lexiconFull);
     this.forgetBtn.classList.toggle('on', this.forgetMode);
     this.forgetBtn.textContent = this.forgetMode ? '忘れる (タップで捨てる)' : '忘れる';
-    this.forgetBtn.disabled = filled === 0;
+    this.forgetBtn.disabled = nFilled === 0;
   }
 
   // ───────────────────────────────────────────────────────────────────────────

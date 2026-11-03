@@ -2022,7 +2022,8 @@ export class Run {
       while (p.xp >= p.xpNext) {
         p.xp -= p.xpNext;
         p.level++;
-        p.xpNext = Math.round(5 + p.level * 4 + p.level ** 1.7);
+        // 必要経験値は段々きつく。序盤は流れるように、終盤は重く。
+        p.xpNext = Math.round(6 + p.level * 5 + p.level ** 1.9);
         this.grantLevelWords(p.level);
         this.onLevelUp?.(p.level);
       }

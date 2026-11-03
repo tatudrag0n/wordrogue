@@ -279,8 +279,9 @@ function startRun(weaponIds) {
   run.onLevelUp = (lv) => {
     app.audio.levelup();
     run.levelBurst?.(lv);
-    run.pushHint(`レベル ${lv} — 体力回復`);
-    run.healPlayer(run.player.maxHp);
+    run.pushHint(`レベル ${lv} — 体力を少し回復`);
+    // 全回復から 3 割回復へ。レベルアップが死亡の免除にならないように。
+    run.healPlayer(run.player.maxHp * 0.3);
   };
   // 3 択を選んだとき。語彙が満杯なら run 側で「捨てる」を決めてから入る。
   run.onWordChoice = (list) => {

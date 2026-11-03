@@ -11,6 +11,8 @@
  *
  * Storage: D1 (binding DB)
  * Spam protection: Cloudflare Turnstile (verified when a token is supplied)
+ * Notifications: 受け取ったフィードバックを管理者へメール通知する
+ *                (Cloudflare Email Service の send_email バインディング)
  * Payments: Stripe Checkout
  */
 
@@ -89,9 +91,119 @@ async function handleHealth(request, env) {
   return json({ ok: true, service: "wordrogue-api", time: new Date().toISOString() });
 }
 
+// ── フィードバックのメール通知 ────────────────────────────────────────────
+
+const TYPE_LABEL = { word: "語の投稿", bug: "不具合報告" };
+
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** payload を「項目名 → 値」の並びに落とす。空の項目は後で捨てる。 */
+function feedbackFields(type, payload) {
+  if (type === "word") {
+    return [
+      ["語", payload.word],
+      ["分類", payload.category],
+      ["属性", payload.element],
+      ["メモ", payload.note],
+      ["投稿者", payload.name],
+    ];
+  }
+  return [
+    ["タイトル", payload.title],
+    ["詳細", payload.description],
+    ["環境", payload.environment],
+    ["報告者", payload.name],
+    ["User-Agent", payload.userAgent],
+  ];
+}
+
+function buildFeedbackEmail(env, detail) {
+  const label = TYPE_LABEL[detail.type] || detail.type;
+  const id = String(detail.id == null ? "-" : detail.id);
+  const fields = feedbackFields(detail.type, detail.payload)
+    .filter(([, v]) => v != null && String(v).trim() !== "");
+
+  const text = [
+    `${label}を受け取りました (ID: ${id})`,
+    "",
+    ...fields.map(([k, v]) => `${k}: ${v}`),
+    "",
+    `ボット確認: ${detail.turnstileOk ? "通過" : "なし"}`,
+    `受信時刻: ${new Date().toISOString()}`,
+  ].join("\n");
+
+  const rows = fields.map(([k, v]) =>
+    '<tr><th align="left" style="padding:2px 12px 2px 0;vertical-align:top">' + escapeHtml(k) + "</th>" +
+    '<td style="padding:2px 0;white-space:pre-wrap">' + escapeHtml(v) + "</td></tr>"
+  ).join("");
+
+  const html = [
+    '<div style="font-family:system-ui,sans-serif;font-size:14px;line-height:1.6">',
+    `<p style="margin:0 0 8px"><strong>${escapeHtml(label)}</strong> (ID: ${escapeHtml(id)})</p>`,
+    `<table style="border-collapse:collapse">${rows}</table>`,
+    `<p style="margin:12px 0 0;color:#666;font-size:12px">管理者ページで確認: admin.html (ID ${escapeHtml(id)})</p>`,
+    "</div>",
+  ].join("");
+
+  return {
+    to: env.FEEDBACK_EMAIL_TO,
+    from: { email: env.FEEDBACK_EMAIL_FROM, name: env.FEEDBACK_EMAIL_FROM_NAME || "Wordrogue" },
+    subject: `[Wordrogue] ${label} #${id}`,
+    text,
+    html,
+  };
+}
+
+/**
+ * フィードバックを管理者へメール通知する。
+ * 呼び出し側が待たなくてもいいように、例外を投げずに結果を返す。
+ */
+async function notifyByEmail(env, detail) {
+  if (!env.EMAIL || !env.FEEDBACK_EMAIL_TO || !env.FEEDBACK_EMAIL_FROM) {
+    return { sent: false, reason: "not_configured" };
+  }
+  let message;
+  try {
+    message = buildFeedbackEmail(env, detail);
+  } catch (e) {
+    return { sent: false, reason: "build_failed", message: e && e.message };
+  }
+  try {
+    const res = await env.EMAIL.send(message);
+    return { sent: true, messageId: (res && res.messageId) || null };
+  } catch (e) {
+    // E_SENDER_NOT_VERIFIED / E_RECIPIENT_NOT_ALLOWED / E_RATE_LIMIT_EXCEEDED など。
+    return { sent: false, reason: (e && e.code) || "send_failed", message: e && e.message };
+  }
+}
+
+/**
+ * 通知は「送れたら送る」。送信の成否でフィードバックの受付を落とさない。
+ */
+function scheduleNotify(env, ctx, detail) {
+  const job = notifyByEmail(env, detail).then((r) => {
+    if (!r.sent && r.reason !== "not_configured") {
+      console.error("feedback email failed:", r.reason, r.message || "");
+    }
+    return r;
+  });
+  if (ctx && typeof ctx.waitUntil === "function") {
+    ctx.waitUntil(job);
+    return null;
+  }
+  return job;
+}
+
 // ── フィードバック ────────────────────────────────────────────────────────
 
-async function handleSubmit(request, env, origin) {
+async function handleSubmit(request, env, origin, ctx) {
   let body;
   try {
     body = await request.json();
@@ -159,6 +271,10 @@ async function handleSubmit(request, env, origin) {
   ).bind(type, payloadStr, turnstileOk ? 1 : 0, ipHash);
   const result = await stmt.run();
   const id = result && result.meta && result.meta.last_row_id;
+
+  // 管理者へのメール通知。保存は済んでいるので、失敗しても受付は成功で返す。
+  const pending = scheduleNotify(env, ctx, { id, type, payload, turnstileOk, ipHash });
+  if (pending) await pending;
 
   return json({ ok: true, id }, 201, origin, env);
 }
@@ -406,7 +522,7 @@ export default {
       return handleHealth(request, env);
     }
     if (url.pathname === "/api/submit" && request.method === "POST") {
-      return handleSubmit(request, env, origin);
+      return handleSubmit(request, env, origin, ctx);
     }
     if (url.pathname === "/api/submissions" && request.method === "GET") {
       return handleList(request, env, origin);

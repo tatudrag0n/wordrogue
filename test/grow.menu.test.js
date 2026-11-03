@@ -79,7 +79,7 @@ const nameOf = (id) => PARTS.find((p) => p.id === id).name;
 const boxOf = (id) => partsBox().find((b) => b.querySelector('.grow-part-name').textContent === nameOf(id));
 const rowOf = (id) => boxOf(id).querySelector('.sen-row');
 const chipsOf = (id) => q('.sen-word', boxOf(id));
-const wordsBox = () => q('#growWords .grow-word');
+const wordsBox = () => q('#growWords .pword');
 const wordBtn = (t) => wordsBox().find((b) => b.textContent.trim().startsWith(t));
 const click = (node) => node.dispatchEvent({ type: 'click' });
 /** タップ (pointerdown → pointerup)。鍛冶と同じ経路を通す。 */
@@ -176,7 +176,7 @@ sec('7 部位が縦に並び、どの部位も 10 文字の 1 文');
 sec('所持語をタップして選び、部位の行をタップで置く。行の語をタップで接続詞が回る');
 {
   tap(wordBtn('妙'));
-  ok(q('#growWords .grow-word.sel').length === 1, '選んだ語が sel にならない');
+  ok(q('#growWords .pword.armed').length === 1, '選んだ語が sel にならない');
   ok(/妙/.test(dom.doc.getElementById('growSelNote').textContent), '選択中の説明が出ない');
 
   tap(rowOf('head'));
@@ -198,9 +198,9 @@ sec('所持語をタップして選び、部位の行をタップで置く。行
 
   // 選んだ語をもう一度押すと選択が外れる。
   tap(wordBtn('妙'));
-  ok(q('#growWords .grow-word.sel').length === 1, '語をもう一度選べない');
+  ok(q('#growWords .pword.armed').length === 1, '語をもう一度選べない');
   tap(wordBtn('妙'));
-  ok(q('#growWords .grow-word.sel').length === 0, '選んだ語をもう一度押しても外れない');
+  ok(q('#growWords .pword.armed').length === 0, '選んだ語をもう一度押しても外れない');
 
   // 一覧のスクロール位置は描き直しても保つ。ここが 0 に戻ると、
   // 下のほうの語を選ぶたびに先頭へ跳ねて使えなくなる。

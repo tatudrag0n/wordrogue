@@ -825,6 +825,10 @@
         <section>
           <h3>言葉デッキ <span class="grow-deck-count" id="deckCount"></span></h3>
           <p class="grow-note">戦闘開始時の語彙。押すと出し入れできる。<strong>最低 10 語</strong>。</p>
+          <div class="word-tools">
+            <input type="search" id="deckSearch" placeholder="ことばを探す" autocomplete="off" spellcheck="false">
+            <div class="word-sorts" id="deckSort"></div>
+          </div>
            <div class="grow-words" id="deckWords"></div>
            <div class="grow-deck-actions">
              <button class="btn" id="deckSelectAll">全選択</button>
@@ -879,6 +883,10 @@
             </div>
           </div>
           <p class="grow-note" id="growWordsNote"></p>
+          <div class="word-tools">
+            <input type="search" id="growSearch" placeholder="ことばを探す" autocomplete="off" spellcheck="false">
+            <div class="word-sorts" id="growSort"></div>
+          </div>
           <div class="grow-words" id="growWords"></div>
         </aside>
       </div>
@@ -951,6 +959,7 @@
 
       <div class="dict-bar">
         <input type="search" id="dictSearch" placeholder="ことばを探す" autocomplete="off" spellcheck="false">
+        <div class="word-sorts" id="dictSort"></div>
         <span class="dict-count" id="dictCount"></span>
       </div>
       <div class="dict-tabs" id="dictTabs"></div>

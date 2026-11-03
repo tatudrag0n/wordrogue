@@ -3284,3 +3284,104 @@ html, body {
   background: linear-gradient(180deg, rgba(217, 164, 6, .16), rgba(217, 164, 6, .07));
   box-shadow: 0 0 0 1px rgba(217, 164, 6, .35);
 }
+
+/* ═══ 語の一覧の検索と並び替え (部位・デッキ・辞書で共通) ═══════════════ */
+.word-tools {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0 7px;
+  flex-wrap: wrap;
+}
+.word-tools input[type="search"] {
+  flex: 1 1 130px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  font: inherit;
+  font-size: .88rem;
+  background: #fff;
+  color: var(--ink);
+}
+.word-tools input[type="search"]:focus { outline: none; border-color: var(--accent); }
+.word-sorts { display: flex; gap: 4px; flex: 0 0 auto; }
+.word-sort {
+  font-size: .74rem;
+  padding: 5px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--fg-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.word-sort:hover { border-color: var(--accent); color: var(--accent); }
+.word-sort.on { background: var(--accent); border-color: var(--accent); color: #fff7f3; }
+
+/* 部位・デッキでも、鍛冶の語彙チップ (pword) と同じ見た目にそろえる。 */
+#growWords .pword, #deckWords .pword {
+  width: 46px;
+  height: 46px;
+  font-size: 1.12rem;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#deckWords .pword { cursor: pointer; touch-action: auto; }
+#deckWords .pword:disabled { opacity: .55; cursor: default; transform: none; }
+.pword.in { background: var(--accent); border-color: var(--accent); color: #fff7f3; }
+.pword.in:hover { background: var(--accent); border-color: var(--accent); color: #fff7f3; }
+.pword-rank {
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  font-family: var(--mono);
+  font-size: .58rem;
+  font-weight: 700;
+  opacity: .92;
+  pointer-events: none;
+}
+.grow-words-empty { color: var(--fg-dim); font-size: .85rem; padding: 8px 2px; }
+.pword.used { box-shadow: 0 0 0 1px rgba(47, 124, 196, .35) inset; }
+
+/* 部位の行頭。**ここだけが鍛冶の文と違う** — 部位名が固定で付く。 */
+.grow-part-grade {
+  font-size: .72rem;
+  padding: 2px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  color: var(--fg-dim);
+  flex: 0 0 auto;
+  white-space: nowrap;
+  align-self: center;
+}
+.pword-where {
+  position: absolute;
+  right: 2px;
+  top: 1px;
+  font-size: .52rem;
+  font-style: normal;
+  font-weight: 700;
+  color: rgba(28, 35, 49, .55);
+  pointer-events: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pword-eff {
+  position: absolute;
+  left: 2px;
+  bottom: 1px;
+  font-size: .52rem;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--ok);
+  pointer-events: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

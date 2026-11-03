@@ -161,16 +161,17 @@ export class Hud {
     if (this.btnDash) this.btnDash.classList.toggle('empty', p.stamina < 12);
 
     // 部位強化 (メインメニューで設定)。戦闘中は表示だけ。
-    const partTexts = p.stats.partTexts || [];
-    if (partTexts.length) {
+    // 出すのは語の並びそのもの — 部位に入れた文を全文で見せる。
+    const partRows = (p.stats.partRows || []).filter((r) => r.text);
+    if (partRows.length) {
       this.hudSelf.hidden = false;
       clear(this.hudSelf);
       this.hudSelf.append(
         el('span', { class: 'hud-self-mark' }, '部位'),
-        el('b', { class: 'hud-self-text' }, partTexts.join('・')),
+        el('b', { class: 'hud-self-text' }, partRows.map((r) => `「${r.text}」`).join('')),
       );
       this.hudSelf.classList.remove('invalid');
-      this.hudSelf.title = '部位強化の語 — メインメニューの「部位強化」で変更できる';
+      this.hudSelf.title = '部位強化の文 — メインメニューの「部位強化」で変更できる';
     } else {
       this.hudSelf.hidden = true;
     }

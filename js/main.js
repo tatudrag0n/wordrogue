@@ -346,6 +346,8 @@ function onRunEnd(cleared) {
   app.lastInk = ink;
 
   app.mode = 'result';
+  // 戦闘を離れるので BGM も止める。結果画面は静かに読ませる。
+  app.audio.bgmStop?.();
   app.menus.showResult({
     cleared,
     run: app.run,
@@ -428,6 +430,7 @@ function onPauseTitleClick() {
 function returnToTitle() {
   resetQuitButton();
   app.mode = 'title';
+  app.audio.bgmStop?.();
   app.hud.show(false);
   app.hud.setPaused(false);
   app.forge?.close();

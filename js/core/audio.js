@@ -27,17 +27,17 @@ export class Audio {
     this._mediaFetches = {};
     this._mediaAt = new Map();
     this._mediaGain = {
-      slot: 0.22, conn: 0.22, uns: 0.18, phrase: 0.32, broken: 0.24, levelup: 0.32,
-      gacha_spin: 0.20, gacha_shine: 0.32, gacha_tick: 0.16, gacha_lock: 0.22, gacha_reveal: 0.32,
-      boss_warn: 0.36, boss: 0.40, win: 0.34, lose: 0.36,
-      hit: 0.20, slash: 0.20, shoot: 0.18, kill: 0.20, explode: 0.26, hurt: 0.20,
-      combo: 0.20, dash: 0.18, heal: 0.28, xp: 0.16, pickup: 0.20,
-      ui_open: 0.20, ui_close: 0.18, ui_select: 0.18, ui_deny: 0.18,
-      heartbeat: 0.16, tick_urgent: 0.16, cast: 0.16, elem_hit: 0.14,
-      cast_fire: 0.18, cast_ice: 0.14, cast_thunder: 0.16, cast_wind: 0.16, cast_earth: 0.18,
-      cast_dark: 0.16, cast_water: 0.14, cast_gold: 0.14,
-      cast_shot: 0.14, cast_gun: 0.16, cast_arrow: 0.14, cast_thrust: 0.14,
-      hit_soft: 0.14, hit_sharp: 0.12, hit_heavy: 0.16, hit_ring: 0.14, hit_wind: 0.12, hit_coin: 0.12, hit_dark: 0.14,
+      slot: 0.38, conn: 0.38, uns: 0.36, phrase: 0.68, broken: 0.45, levelup: 0.55,
+      gacha_spin: 0.34, gacha_shine: 0.5, gacha_tick: 0.3, gacha_lock: 0.4, gacha_reveal: 0.55,
+      boss_warn: 0.6, boss: 0.68, win: 0.58, lose: 0.6,
+      hit: 0.6, slash: 0.3, shoot: 0.72, kill: 0.45, explode: 0.72, hurt: 0.68,
+      combo: 0.34, dash: 0.2, heal: 0.73, xp: 0.58, pickup: 0.58,
+      ui_open: 0.36, ui_close: 0.34, ui_select: 0.36, ui_deny: 0.36,
+      heartbeat: 0.3, tick_urgent: 0.36, cast: 0.34, elem_hit: 0.53,
+      cast_fire: 0.59, cast_ice: 0.34, cast_thunder: 0.4, cast_wind: 0.3, cast_earth: 0.4,
+      cast_dark: 0.36, cast_water: 0.32, cast_gold: 0.34,
+      cast_shot: 0.36, cast_gun: 0.4, cast_arrow: 0.32, cast_thrust: 0.36,
+      hit_soft: 0.34, hit_sharp: 0.34, hit_heavy: 0.3, hit_ring: 0.36, hit_wind: 0.3, hit_coin: 0.34, hit_dark: 0.36,
     };
     this._castKind = { slash:'slash', shot:'cast_shot', bomb:'cast_fire', beam:'cast_thunder', chain:'cast_thunder', whip:'cast_wind', orbit:'cast_gold', aura:'cast_water', boomerang:'cast_wind' };
     this._castWeapon = { gun:'cast_gun', arrow:'cast_arrow', needle:'cast_shot', dragon:'cast_thrust', flank:'cast_thrust', boulder:'cast_fire', bomb:'cast_fire' };
@@ -199,13 +199,23 @@ export class Audio {
     try {
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
-      src.playbackRate.value = rate;
+      // 毎回ほんの少し音程と速さを揺らす。同じ音の連発が機械に聞こえないように。
+      src.playbackRate.value = rate * (0.96 + Math.random() * 0.08);
       const g = this.ctx.createGain();
-      g.gain.value = this._mediaGain[name] ?? 0.2;
+      g.gain.value = (this._mediaGain[name] ?? 0.2) * (0.92 + Math.random() * 0.16);
       src.connect(g).connect(this.sfxGain);
       src.start();
       return true;
     } catch { return false; }
+  }
+
+  /** BGM を止める。戦闘を離れたとき (結果画面・タイトル)。 */
+  bgmStop() {
+    if (this._bgmEl) {
+      try { this._bgmEl.pause(); } catch {}
+      this._bgmEl = null;
+    }
+    this._bgmName = null;
   }
 
   setBgm(name, intensity = 0) {
@@ -238,7 +248,7 @@ export class Audio {
     try { el.currentTime = 0; } catch {}
     const p = el.play();
     if (p && p.catch) p.catch(() => {});
-    el.volume = Math.max(0.08, Math.min(0.34, 0.12 + intensity * 0.22));
+    el.volume = Math.max(0.1, Math.min(0.4, 0.15 + intensity * 0.25));
   }
 
   // ── ゲーム用の効果音 ─────────────────────────────────────────────────────

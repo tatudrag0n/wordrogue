@@ -37,7 +37,7 @@ export const SURU_INTRANSITIVE = new Set(`
   潜水 旋回 早退 遅刻 沈静 徹夜 冬眠 凍死 突貫 破滅 破裂 白熱 発芽
   発光 発泡 反響 反撃 反発 反乱 舞踏 矛盾 融合 流血 流通 流浪 連鎖
   連覇 急伸 続伸 長打 浮沈 紅潮 焼死 多発 散骨
-  消滅 崩壊 壊滅 全滅 再生 攻防 損傷 炎上 衝突 崩落
+  消滅 崩壊 壊滅 全滅 再生 攻防 損傷 炎上 衝突 崩落 爆散
 `.trim().split(/\s+/));
 
 /** 形容動詞として使える熟語。連体「〜な」と連用「〜に」を持つ。 */
@@ -49,8 +49,8 @@ export const NA_ADJECTIVE_COMPOUNDS = new Set(`
   鈍感 鈍重 特大 冷静 冷徹
 `.trim().split(/\s+/));
 
-const SURU_T = 'する:adn* した:adn* して:adv* される:adn*p された:adn*p されて:adv*p';
-const SURU_I = 'する:adn* した:adn* して:adv*';
+const SURU_T = 'する:adn* した:adn* して:adv* させる:adn* させた:adn* される:adn*p された:adn*p されて:adv*p';
+const SURU_I = 'する:adn* した:adn* して:adv* させる:adn* させた:adn*';
 const NA_ADJ = 'な:adn+ に:adv+';
 
 /**

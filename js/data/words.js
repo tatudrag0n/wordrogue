@@ -17,15 +17,15 @@
 import {
   RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
   SHAPE_WORDS, isShapeWord,
-} from './words.core.js?v=1.49';
-import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.49';
+} from './words.core.js?v=1.50';
+import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.50';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
   PREDICATE_CONNECTORS, isAdnominal, isConnector, formAfter,
 } from './words.connect.js';
 import { poolOfText, posOfText } from './words.pool.js';
-import { rankMul } from './ranks.js?v=1.49';
+import { rankMul } from './ranks.js?v=1.50';
 
 export {
   CATEGORIES, ELEMENTS, PHRASE_BONUS, CONNECTORS, CONNECT_ORDER, POS,
@@ -122,6 +122,9 @@ export const NA_ADJ_STEMS = new Set(Object.keys(WORDS).filter((w) => WORDS[w].po
 
 /** 品詞。 */
 export function posOf(text) { return WORDS[text]?.pos || null; }
+
+/** 武器の文の末尾に置ける終止形。「〜する」「〜させる」は文として閉じる。 */
+const TERMINAL_FORMS = new Set(['する', 'させる']);
 
 /** 分割判定に使う語集合。 */
 const DICT = new Set(Object.keys(WORDS));
@@ -504,10 +507,13 @@ export function evaluate(words, opt = {}) {
   // ただし部位 (implicitTail) は「速い足」のように体の部位名が後ろに付く。
   // 連体形 (速い・静かな・駆ける) と「の」で終わる形だけは、その名詞に係る
   // 形として閉じてよい。連用形 (速く) や「を」で終わる形は閉じない。
+  // ただし武器の文では「〜する」「〜させる」の終止形も文として成立する (「吸血する」など)。
+  // 部位 (implicitTail) は名詞で閉じる必要があるため、従来どおり不成立のまま。
   let implicitClose = null;
   if (CONNECTOR_SET.has(segs[segs.length - 1])) {
     implicitClose = opt.implicitTail ? trailingModifier(segs) : null;
-    if (!implicitClose) {
+    const terminal = !opt.implicitTail && TERMINAL_FORMS.has(segs[segs.length - 1]);
+    if (!implicitClose && !terminal) {
       return {
         ...base, segments: segs, content, valid: false,
         reason: 'tailconn', reasonText: REASONS.tailconn,

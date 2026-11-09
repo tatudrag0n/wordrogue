@@ -270,7 +270,13 @@ function doSlash(run, wi, st, aim, el, elInfo) {
     });
     return run.slashes.at(-1);
   };
-  const s = mk(aim2, motion, true);
+  // 数増やす系の語 (count) で斬撃が扇状に増える。幅は arc を基準に少し広げるだけ。
+  const n = Math.max(1, Math.min(6, Math.round(st.count || 1)));
+  const fan = n === 1 ? 0 : Math.min(arc * 0.6, 0.22 * (n - 1));
+  const slashes = [];
+  for (let i = 0; i < n; i++) {
+    slashes.push(mk(aim2 + (n === 1 ? 0 : (i / (n - 1) - 0.5) * fan), motion, true));
+  }
   run.audio.slash();
   // 刃の先で属性が弾ける。風なら風の弧、炎なら火の粉。
   const fx = ELEM_FX[el] || ELEM_FX.none;
@@ -278,7 +284,7 @@ function doSlash(run, wi, st, aim, el, elInfo) {
     a: aim2, spread: Math.min(Math.PI, arc) * 0.9, spd: fx.spd * 1.4, spdMin: fx.spd * 0.4,
     life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
   });
-  hitSector(run, p.x, p.y, aim2, reach, arc, pst, el, s.hit);
+  for (const s of slashes) hitSector(run, p.x, p.y, s.a, reach, arc, pst, el, s.hit);
   if (extra != null) {
     // 反対側。同じ軌道の鏡写し。モーションは角度だけ裏返す。
     const back = motion ? { ...motion, baseAim: extra } : null;

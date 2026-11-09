@@ -634,24 +634,27 @@ export function checkConnectors(segs, dict) {
     if (vp || ap) continue;
 
     // 名詞。保留した係り先を越えられるかを見る。
-    if (pendingObj.length) {
-      return fail('noobject',
-        `「${firstText(pendingObj)}」の受け先になる他動詞が文の中に無い。`
-        + '「〜を」のあとに、連用修飾を挟んで動詞を置くこと。'
-        + '連用形は動詞か形容を修飾する。',
-        acc);
-    }
-    if (pendingCase.length) {
-      return fail('noobject',
-        `「${firstText(pendingCase)}」の受け先になる動作か形容が文の中に無い。`
-        + `「〜${segs[units[k].connIdx] || 'に'}」のあとに動詞か形容を置くこと。`,
-        acc);
-    }
-    if (pendingAdv.length && !nominalRunCaseClosed(k)) {
-      return fail('connnoun',
-        `連用形「${firstText(pendingAdv)}」の係り先になる動詞・形容が文の中に無い。`
-        + '連用形は名詞に係らない。名詞の前は連体の形 (〜い・〜な・〜る) にすること。',
-        acc);
+    // 格を伴う名詞は保留に積んで決着する。格が連続する語順も即判定しない。
+    if (!(u.form && u.form.role === 'case')) {
+      if (pendingObj.length) {
+        return fail('noobject',
+          `「${firstText(pendingObj)}」の受け先になる他動詞が文の中に無い。`
+          + '「〜を」のあとに、連用修飾を挟んで動詞を置くこと。'
+          + '連用形は動詞か形容を修飾する。',
+          acc);
+      }
+      if (pendingCase.length) {
+        return fail('noobject',
+          `「${firstText(pendingCase)}」の受け先になる動作か形容が文の中に無い。`
+          + `「〜${segs[units[k].connIdx] || 'に'}」のあとに動詞か形容を置くこと。`,
+          acc);
+      }
+      if (pendingAdv.length && !nominalRunCaseClosed(k)) {
+        return fail('connnoun',
+          `連用形「${firstText(pendingAdv)}」の係り先になる動詞・形容が文の中に無い。`
+          + '連用形は名詞に係らない。名詞の前は連体の形 (〜い・〜な・〜る) にすること。',
+          acc);
+      }
     }
 
     // 名詞句の格。ここから係り先の解決を保留する。

@@ -13,8 +13,8 @@
 // level を上げるほど基礎値が伸びる。文の長さは武器レベルとは無関係で 10 文字まで。
 // ============================================================================
 
-import { WEAPON_WORD_SET } from './words.core.js?v=1.50';
-import { WORDS, weaponHeadKind } from './words.js?v=1.50';
+import { WEAPON_WORD_SET } from './words.core.js?v=1.51';
+import { WORDS, weaponHeadKind } from './words.js?v=1.51';
 
 /**
  * kind の種類と挙動:
@@ -315,9 +315,19 @@ export const ELEMENT_SHAPE = {
   gold: ['orb', 'shot'], none: ['orb', 'shot'],
 };
 
-/** 属性を頭にした特殊武器の既定攻撃。文中の述語があればそちらを優先する。 */
+/**
+ * 属性語が頭の特殊武器の既定の攻撃の型。
+ *   火 → 火炎放射、水 → 水鉄砲、雷 → 落雷、風 → 突風、闇 → 暗黒球、土 → 隕石。
+ */
 export const ELEMENT_KIND = {
-  fire: 'flame', light: 'beam', thunder: 'chain', earth: 'meteor',
+  fire: 'flame', water: 'spray', thunder: 'bolt', earth: 'meteor',
+  dark: 'shadow', wind: 'gust',
+};
+
+/** 単語ごとの攻撃の型上書き。属性の既定と違う振る舞いをさせる語。 */
+export const WORD_KIND = {
+  雨: 'rain',
+  波: 'wave',
 };
 
 /** 攻撃の型から描画の形を引くときの既定値。 */
@@ -325,6 +335,8 @@ export const KIND_SHAPE = {
   slash: 'blade', shot: 'shot', pierce: 'arrow', orbit: 'blade',
   bomb: 'bomb', chain: 'shot', boomerang: 'blade', whip: 'blade',
   aura: 'orb', beam: 'arrow',
+  flame: 'orb', spray: 'dot', gust: 'gust', bolt: 'arrow',
+  rain: 'dot', shadow: 'orb', wave: 'orb', meteor: 'bomb',
   flail: 'ball', dual: 'blade', helper: 'spirit',
 };
 
@@ -398,7 +410,8 @@ export function lookupDef(id) {
 export const KIND_LABEL = {
   slash: '斬撃', shot: '射撃', bomb: '爆弾', chain: '連鎖',
   orbit: '軌道', whip: '薙ぎ', aura: '城壁', beam: '光線',
-  flame: '火炎放射', meteor: '隕石',
+  flame: '火炎放射', spray: '水鉄砲', gust: '突風', bolt: '落雷',
+  rain: '雨降らせ', shadow: '暗黒球', wave: '波動', meteor: '隕石',
   boomerang: '還り刃', pierce: '貫通', none: '',
   flail: '鉄球', dual: '双剣', helper: '分身',
 };

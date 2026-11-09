@@ -7,8 +7,8 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.50';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.50';
+import { ELEMENTS } from '../data/words.js?v=1.51';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.51';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -147,6 +147,12 @@ export function fireWeapon(run, wi, res) {
     case 'aura':  doAura(run, wi, st, el); break;
     case 'beam':  doBeam(run, wi, st, aim, el, elInfo); break;
     case 'flame': doFlame(run, wi, st, aim, el, elInfo); break;
+    case 'spray': doSpray(run, wi, st, aim, el, elInfo); break;
+    case 'gust': doGust(run, wi, st, aim, el, elInfo); break;
+    case 'bolt': doBolt(run, wi, st, aim, el, elInfo); break;
+    case 'rain': doRain(run, wi, st, aim, el, elInfo); break;
+    case 'shadow': doShadow(run, wi, st, aim, el, elInfo); break;
+    case 'wave': doWave(run, wi, st, aim, el, elInfo); break;
     case 'meteor': doMeteor(run, wi, st, el, elInfo); break;
     default: break;
   }
@@ -191,6 +197,147 @@ function doMeteor(run, wi, st, el, elInfo) {
   run.burst(x, y, 8, elInfo.color, { spd: 95, spdMin: 25, life: 0.35, r: 3, shape: 'ember', grav: 40 });
 }
 
+// 水鉄砲。細い水の筋をまっすぐ飛ばす。連射が効き、count で水流が増える。
+function doSpray(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const n = Math.max(1, Math.round(st.count || 1));
+  const speed = Math.max(500, st.speed || 300);
+  for (let i = 0; i < n; i++) {
+    const a = aim + (run.rand() - 0.5) * 0.14;
+    const b = makeBullet({
+      x: p.x + Math.cos(a) * 14, y: p.y + Math.sin(a) * 14,
+      vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+      r: 4 * st.size, size: st.size, dmg: st.dmg * 0.6,
+      life: 0.5, pierce: st.pierce, element: el, color: elInfo.color,
+      kindName: 'shot',
+    });
+    b.st = st; b.wi = wi;
+    run.bullets.push(b);
+  }
+  run.burst(p.x + Math.cos(aim) * 14, p.y + Math.sin(aim) * 14, 4, elInfo.color, {
+    a: aim, spread: 0.3, spd: 200, life: 0.2, r: 2, shape: 'dot', drag: 6,
+  });
+  run.audio.shoot();
+}
+
+// 落雷。敵の頭上から稲妻を落とす。
+function doBolt(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const n = Math.max(1, Math.round(st.count || 1));
+  const near = run.enemies
+    .filter((e) => !e.dead && dist2(e.x, e.y, p.x, p.y) < 420 * 420)
+    .sort((a, b) => dist2(a.x, a.y, p.x, p.y) - dist2(b.x, b.y, p.x, p.y));
+  for (let i = 0; i < n; i++) {
+    const e = near[i % Math.max(1, near.length)] || null;
+    const x = e ? e.x : p.x + Math.cos(aim) * 120;
+    const y = e ? e.y : p.y + Math.sin(aim) * 120;
+    run.lightnings.push({
+      x1: x, y1: y - 320, x2: x, y2: y,
+      life: 0.22, maxLife: 0.22,
+      color: elInfo.color, el,
+    });
+    run.burst(x, y, 6, elInfo.color, {
+      spd: 160, spdMin: 40, life: 0.24, r: 2, shape: 'spark', drag: 5,
+    });
+    for (const t of run.enemies) {
+      if (t.dead || dist2(t.x, t.y, x, y) > (26 + t.r) ** 2) continue;
+      run.damage(t, st, { crit: rollCrit(st), element: el });
+    }
+  }
+  run.audio.tone({ freq: 1400, type: 'sawtooth', dur: 0.1, vol: 0.07, slide: 0.4 });
+  run.shake(2);
+}
+
+// 突風。広い範囲を吹き抜け、敵を押し戻す。
+function doGust(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.4 * st.size;
+  const arc = Math.min(2.4, 1.3 + (st.area || 0) / 90);
+  run.slashes.push({
+    x: p.x, y: p.y, a: aim, r: reach, arc,
+    life: 0.3, maxLife: 0.3,
+    color: elInfo.color, el, hit: new Set(),
+  });
+  run.burst(p.x + Math.cos(aim) * reach * 0.5, p.y + Math.sin(aim) * reach * 0.5, 8, elInfo.color, {
+    a: aim, spread: arc, spd: 240, life: 0.34, r: 2.6, shape: 'gust', drag: 4,
+  });
+  for (const e of run.enemies) {
+    if (e.dead) continue;
+    const d = Math.hypot(e.x - p.x, e.y - p.y);
+    if (d > reach + e.r) continue;
+    const diff = Math.atan2(Math.sin(Math.atan2(e.y - p.y, e.x - p.x) - aim), Math.cos(Math.atan2(e.y - p.y, e.x - p.x) - aim));
+    if (Math.abs(diff) > arc / 2) continue;
+    const push = 90 + (st.knock || 0);
+    e.vx += Math.cos(aim) * push * 2.2;
+    e.vy += Math.sin(aim) * push * 2.2;
+    run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el });
+  }
+  run.audio.tone({ freq: 520, type: 'noise', dur: 0.22, vol: 0.06, slide: -0.6 });
+  run.shake(1.2);
+}
+
+// 雨。前方の帯に小さな水滴を降らせる。
+function doRain(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const n = Math.max(6, Math.round(6 + (st.count || 1) * 2));
+  const dist = st.range * 1.2;
+  for (let i = 0; i < n; i++) {
+    const off = (run.rand() - 0.5) * dist * 1.6;
+    const x = p.x + Math.cos(aim) * dist + Math.cos(aim + Math.PI / 2) * off;
+    const y = p.y + Math.sin(aim) * dist + Math.sin(aim + Math.PI / 2) * off - 240;
+    const b = makeBullet({
+      x, y, vx: 0, vy: 420,
+      r: 3 * st.size, size: st.size, dmg: st.dmg * 0.45,
+      life: 1.2, pierce: 0, element: el, color: elInfo.color,
+      kindName: 'shot',
+    });
+    b.st = st; b.wi = wi;
+    run.bullets.push(b);
+  }
+  run.audio.tone({ freq: 720, type: 'sine', dur: 0.2, vol: 0.05, slide: -0.8 });
+}
+
+// 暗黒球。ゆっくり敵を追う闇の玉。
+function doShadow(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const n = Math.max(1, Math.round(st.count || 1));
+  for (let i = 0; i < n; i++) {
+    const a = aim + (i - (n - 1) / 2) * 0.3;
+    const b = makeBullet({
+      x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16,
+      vx: Math.cos(a) * 200, vy: Math.sin(a) * 200,
+      r: 7 * st.size, size: st.size, dmg: st.dmg,
+      life: 1.6, pierce: 99, homing: 0.5,
+      element: el, color: elInfo.color, kindName: 'shot',
+    });
+    b.st = st; b.wi = wi;
+    run.bullets.push(b);
+  }
+  run.audio.tone({ freq: 220, type: 'sine', dur: 0.18, vol: 0.06, slide: -0.5 });
+}
+
+// 波動。プレイヤーを中心に広がる環。触れた敵を巻き込む。
+function doWave(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.5 * st.size;
+  run.rings.push({
+    x: p.x, y: p.y,
+    spiral: true,
+    turns: 1,
+    baseAim: aim,
+    reach,
+    life: 0.45, maxLife: 0.45,
+    color: elInfo.color, el,
+    st: { ...st },
+    hit: new Set(),
+  });
+  run.rings.push({
+    x: p.x, y: p.y,
+    r: 30, life: 0.3, maxLife: 0.3,
+    color: elInfo.color, hit: new Set(), thin: true,
+  });
+  run.audio.tone({ freq: 300, type: 'sine', dur: 0.3, vol: 0.07, slide: 1.6 });
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // 近接
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,7 +417,13 @@ function doSlash(run, wi, st, aim, el, elInfo) {
     });
     return run.slashes.at(-1);
   };
-  const s = mk(aim2, motion, true);
+  // 数増やす系の語 (count) で斬撃が扇状に増える。幅は arc を基準に少し広げるだけ。
+  const n = Math.max(1, Math.min(6, Math.round(st.count || 1)));
+  const fan = n === 1 ? 0 : Math.min(arc * 0.6, 0.22 * (n - 1));
+  const slashes = [];
+  for (let i = 0; i < n; i++) {
+    slashes.push(mk(aim2 + (n === 1 ? 0 : (i / (n - 1) - 0.5) * fan), motion, true));
+  }
   run.audio.slash();
   // 刃の先で属性が弾ける。風なら風の弧、炎なら火の粉。
   const fx = ELEM_FX[el] || ELEM_FX.none;
@@ -278,7 +431,7 @@ function doSlash(run, wi, st, aim, el, elInfo) {
     a: aim2, spread: Math.min(Math.PI, arc) * 0.9, spd: fx.spd * 1.4, spdMin: fx.spd * 0.4,
     life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
   });
-  hitSector(run, p.x, p.y, aim2, reach, arc, pst, el, s.hit);
+  for (const s of slashes) hitSector(run, p.x, p.y, s.a, reach, arc, pst, el, s.hit);
   if (extra != null) {
     // 反対側。同じ軌道の鏡写し。モーションは角度だけ裏返す。
     const back = motion ? { ...motion, baseAim: extra } : null;
@@ -298,17 +451,22 @@ function doWhip(run, wi, st, aim, el, elInfo) {
   const reach = attackShape(st, p.stats).reach;
   // 渦が手元から外周まで走る時間。間合いが長いほどゆっくり。
   const life = clamp(0.5 + (st.range || 100) / 420, 0.5, 0.95);
-  run.rings.push({
-    x: p.x, y: p.y,
-    spiral: true,
-    turns: 2.2,
-    baseAim: aim,
-    reach,
-    life, maxLife: life,
-    color: elInfo.color, el,
-    st: { ...st },
-    hit: new Set(),
-  });
+  // 数増やす系の語 (count) で薙ぎの渦が増える。向きは扇状にずらす。
+  const n = Math.max(1, Math.min(4, Math.round(st.count || 1)));
+  const fan = n === 1 ? 0 : Math.min(1.4, 0.5 * (n - 1));
+  for (let i = 0; i < n; i++) {
+    run.rings.push({
+      x: p.x, y: p.y,
+      spiral: true,
+      turns: 2.2,
+      baseAim: aim + (n === 1 ? 0 : (i / (n - 1) - 0.5) * fan),
+      reach,
+      life, maxLife: life,
+      color: elInfo.color, el,
+      st: { ...st },
+      hit: new Set(),
+    });
+  }
   run.audio.slash();
   // 渦の口火。手元がふくらんでから、鞭が伸びていく。
   run.rings.push({
@@ -440,23 +598,29 @@ function doShot(run, wi, st, aim, boomerang, el, elInfo) {
 function doBomb(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const speed = Math.max(500, st.speed || 200);
-  const b = makeBullet({
-    x: p.x, y: p.y,
-    vx: Math.cos(aim) * speed,
-    vy: Math.sin(aim) * speed,
-    r: 8 * st.size,
-    size: st.size,
-    life: 1.5,
-    pierce: 99,
-    explode: st.explode,
-    burn: st.burn, poison: st.poison, chill: st.chill,
-    knock: st.knock,
-    element: el,
-    color: elInfo.color,
-    kindName: 'bomb',
-  });
-  b.st = st; b.wi = wi;
-  run.bullets.push(b);
+  // 数増やす系の語 (count) で爆弾が扇状に増える。
+  const n = Math.max(1, Math.min(6, Math.round(st.count || 1)));
+  const fan = n === 1 ? 0 : Math.min(0.9, 0.24 * (n - 1));
+  for (let i = 0; i < n; i++) {
+    const a = aim + (n === 1 ? 0 : (i / (n - 1) - 0.5) * fan);
+    const b = makeBullet({
+      x: p.x, y: p.y,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      r: 8 * st.size,
+      size: st.size,
+      life: 1.5,
+      pierce: 99,
+      explode: st.explode,
+      burn: st.burn, poison: st.poison, chill: st.chill,
+      knock: st.knock,
+      element: el,
+      color: elInfo.color,
+      kindName: 'bomb',
+    });
+    b.st = st; b.wi = wi;
+    run.bullets.push(b);
+  }
   // 投げの口火。手元がほんのり明くなって、弾が飛んでいく。
   run.rings.push({
     x: p.x + Math.cos(aim) * 10, y: p.y + Math.sin(aim) * 10,
@@ -473,10 +637,17 @@ function doBomb(run, wi, st, aim, el, elInfo) {
 // 連鎖 (稲光)
 // ─────────────────────────────────────────────────────────────────────────────
 function doChain(run, wi, st, aim, el) {
-  let from = run.player;
+  // 数増やす系の語で連鎖の本数を増やす。
+  const c = Math.max(1, Math.min(3, Math.round(st.count || 1)));
+  for (let k = 0; k < c; k++) chainOnce(run, st, el);
+  run.audio.tone({ freq: 1600, type: 'sawtooth', dur: 0.09, vol: 0.07, slide: 0.35 });
+  run.shake(2);
+}
+
+function chainOnce(run, st, el) {
   const n = Math.max(1, Math.round(st.chain));
   const hit = [];
-  let ex = from.x, ey = from.y;
+  let ex = run.player.x, ey = run.player.y;
 
   for (let i = 0; i < n; i++) {
     const tgt = run.nearestEnemy(ex, ey, hit, 340);
@@ -493,12 +664,9 @@ function doChain(run, wi, st, aim, el) {
       knock: st.knock,
       element: el,
       shock: st.shock,
-      element: el,
     });
     ex = tgt.x; ey = tgt.y;
   }
-  run.audio.tone({ freq: 1600, type: 'sawtooth', dur: 0.09, vol: 0.07, slide: 0.35 });
-  run.shake(2);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -508,13 +676,23 @@ function doBeam(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const len = st.range;
   const wdt = 10 * st.size;
+  // 数増やす系の語 (count) で光線が並んで増える。
+  const n = Math.max(1, Math.min(5, Math.round(st.count || 1)));
+  const gap = 16 * st.size;
+  const beams = [];
+  for (let i = 0; i < n; i++) {
+    const off = n === 1 ? 0 : (i / (n - 1) - 0.5) * (n - 1) * gap;
+    const ox = p.x + Math.cos(aim + Math.PI / 2) * off;
+    const oy = p.y + Math.sin(aim + Math.PI / 2) * off;
+    run.beams.push({
+      x: ox, y: oy, a: aim, len, w: wdt,
+      life: 0.3, maxLife: 0.3,
+      color: elInfo?.color || '#e8a30a',
+      el,
+    });
+    beams.push({ ox, oy });
+  }
   const hit = new Set();
-  run.beams.push({
-    x: p.x, y: p.y, a: aim, len, w: wdt,
-    life: 0.3, maxLife: 0.3,
-    color: elInfo?.color || '#e8a30a',
-    el,
-  });
 
   const dx = Math.cos(aim), dy = Math.sin(aim);
   // 口火。光の出るところが白くはじける。
@@ -527,13 +705,15 @@ function doBeam(run, wi, st, aim, el, elInfo) {
   });
   for (const e of run.enemies) {
     if (e.dead || hit.has(e.uid)) continue;
-    // 線分と円の最近点距離で判定。
-    const rx = e.x - p.x, ry = e.y - p.y;
-    const t = clamp(rx * dx + ry * dy, 0, len);
-    const cxp = p.x + dx * t, cyp = p.y + dy * t;
-    if (dist2(e.x, e.y, cxp, cyp) > (e.r + wdt / 2) ** 2) continue;
-    hit.add(e.uid);
-    run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el });
+    // 並んだ光線のいずれか 1 本でも拾えば当たり。
+    for (const bm of beams) {
+      const t = clamp((e.x - bm.ox) * dx + (e.y - bm.oy) * dy, 0, len);
+      const cxp = bm.ox + dx * t, cyp = bm.oy + dy * t;
+      if (dist2(e.x, e.y, cxp, cyp) > (e.r + wdt / 2) ** 2) continue;
+      hit.add(e.uid);
+      run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el });
+      break;
+    }
   }
   run.audio.tone({ freq: 900, type: 'sine', dur: 0.14, vol: 0.08, slide: 2.2 });
   run.shake(3);
@@ -552,8 +732,19 @@ function doAura(run, wi, st, el) {
     freeze: st.freeze,
     attached: true,
   }));
+  // 数増やす系の語でオーラを重ねる (半径を段階的に広げる)。
+  const n = Math.max(1, Math.min(3, Math.round(st.count || 1)));
+  for (let i = 1; i < n; i++) {
+    run.fields.push(makeField(p.x, p.y, reach * (1 + i * 0.28), st.dmg, {
+      life: 0.5,
+      element: el,
+      burn: st.burn, poison: st.poison, chill: st.chill, shock: st.shock,
+      freeze: st.freeze,
+      attached: true,
+    }));
+  }
   // 少し回復。
-  if (st.regen) run.healPlayer(st.regen * 0.35);
+  if (st.regen) run.healPlayer(st.regen * 0.35 * n);
 }
 
 const rollCrit = (st) => rng() < (st.crit || 0);

@@ -28,17 +28,17 @@ export const ENEMIES = {
   bat: {
     words: ['影'], rank: 1,
     id: 'bat', name: 'コウモリ', ai: 'erratic',
-    hp: 10, speed: 62, dmg: 6, r: 9, xp: 1, color: '#804e97', wing: 0.6,
+    hp: 10, speed: 62, dmg: 5, r: 9, xp: 1, color: '#804e97', wing: 0.6,
   },
   slime: {
     words: ['溶'], rank: 1,
     id: 'slime', name: 'スライム', ai: 'chase',
-    hp: 16, speed: 42, dmg: 7, r: 12, xp: 1, color: '#2ab25a', wobble: 1,
+    hp: 16, speed: 42, dmg: 6, r: 12, xp: 1, color: '#2ab25a', wobble: 1,
   },
   swarm: {
     words: ['裂'], rank: 1,
     id: 'swarm', name: '子虫', ai: 'swarm',
-    hp: 5, speed: 96, dmg: 4, r: 6, xp: 1, color: '#b1a72a',
+    hp: 5, speed: 96, dmg: 3, r: 6, xp: 1, color: '#b1a72a',
   },
 
   // ── そこそこ (2 文字) ────────────────────────────────────────────────

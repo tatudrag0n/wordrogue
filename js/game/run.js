@@ -182,6 +182,8 @@ export class Run {
 
     this.kills = 0;
     this.dmgDealt = 0;
+    /** 武器ごとの与ダメージ。defId → { name, dmg }。 */
+    this.weaponDmg = new Map();
     this.dmgTaken = 0;
     this.shakeAmt = 0;
     this.shakeOn = true;
@@ -2386,10 +2388,10 @@ export class Run {
     });
   }
 
-  spawnEnemyShot(x, y, a, speed, dmg, color) {
+  spawnEnemyShot(x, y, a, speed, dmg, color, r = 8) {
     this.bullets.push(makeBullet({
       x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
-      r: 9, size: 1, life: 5, pierce: 0,
+      r, size: 1, life: 5, pierce: 0,
       dmg: Math.max(1, dmg || 1),
       color: color || '#f88', kindName: 'eshot', enemy: true,
     }));

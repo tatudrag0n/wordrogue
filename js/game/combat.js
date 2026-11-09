@@ -91,6 +91,9 @@ function elementHitFx(run, e, el, crit) {
 export function fireWeapon(run, wi, res) {
   const st = res.stats;
   if (res.heal) st.heal = true;
+  // 結算画面の「武器ごとの与ダメージ」用。発射元の武器を st に刻む。
+  st.wid = wi.def.id;
+  st.wname = wi.def.name;
   const p = run.player;
   // 攻撃の種類は文中の武器語 (基本武器) が決めている (無ければ武器の既定)。
   const kind = res.kind || wi.def.kind;
@@ -688,6 +691,12 @@ export function damage(run, e, st, opt = {}) {
 
   // ボスの装甲。貫通や光線が主力。
   if (e.def.armor && !st.pierce && !st.area) dmg *= 0.7;
+
+  if (st.wid && run.weaponDmg) {
+    const rec = run.weaponDmg.get(st.wid);
+    if (rec) rec.dmg += dmg;
+    else run.weaponDmg.set(st.wid, { name: st.wname || st.wid, dmg });
+  }
 
   run.damageNumbers?.(e.x, e.y, dmg, crit);
   run.onDamaged?.(e, dmg);

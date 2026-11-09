@@ -16,6 +16,12 @@ import {
   PARTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
 } from '../core/save.js';
 
+/** 武器ごとの与ダメージ行。多い順に最大 6 件。 */
+function weaponDmgRows(run) {
+  const list = [...(run.weaponDmg?.values() || [])].sort((a, b) => b.dmg - a.dmg);
+  return list.slice(0, 6).map((rec) => [`与ダメージ・${rec.name}`, fmtNum(rec.dmg)]);
+}
+
 /** 語の効果を 1 行にまとめる (ツールチップ用)。 */
 function fxText(src, label) {
   const parts = [];
@@ -1046,6 +1052,7 @@ export class Menus {
       ['被ダメージ', fmtNum(run.dmgTaken)],
       ['生存時間', `${Math.floor(run.time / 60)}分${Math.floor(run.time % 60)}秒`],
       ['最高スコア', fmtNum(d.bestScore)],
+      ...weaponDmgRows(run),
     ];
     clear(this.resultStats);
     for (const [k, v, big] of rows) {

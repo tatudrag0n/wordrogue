@@ -5,12 +5,12 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.49';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.49';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.50';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.50';
 import { evaluatePart, partConnChoices } from '../game/parts.js';
 import { partEffectRows, partTotalRows } from '../game/stats.js';
 import { GrowPad } from './growpad.js';
-import { Tips } from './tips.js?v=1.49';
+import { Tips } from './tips.js?v=1.50';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
   PARTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,

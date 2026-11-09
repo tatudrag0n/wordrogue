@@ -14,8 +14,8 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, ELEMENT_SHAPE, ELEMENT_KIND, SPECIAL_SHAPE, VERB_SHAPE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.50';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.50';
+import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.51';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.51';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
@@ -310,7 +310,7 @@ export class WeaponInst {
     // 武器語 (刃・銃) や属性語は形を決めるだけ。「貫通する刃」は斬撃ではなく貫通。
     // 語 1 つの品詞ではなく、文の中で熟語になった語幹まで見て型を決める。
     // 特殊武器は頭にした属性の攻撃を使う。通常武器は武器語と動詞の従来ルールを保つ。
-    const elementKind = special ? ELEMENT_KIND[WORDS[tail]?.el] : null;
+    const elementKind = special ? (WORD_KIND[tail] || ELEMENT_KIND[WORDS[tail]?.el]) : null;
     // 2 文字以上の武器語 (鉄球・双剣・分身)。文面に熟語として現れた瞬間に
     // 攻撃の型が変わる。述語の動詞があれば動詞が勝つ (「貫通する鉄球」は貫通)。
     const compHit = compoundWeaponOf(e.text);

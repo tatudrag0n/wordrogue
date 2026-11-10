@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "npx --yes serve -l 8099 .",
-    "test": "node test/all.mjs",
+    "test": "node test/weapon-projectiles.test.mjs && node test/all.mjs",
+    "test:projectiles": "node test/weapon-projectiles.test.mjs",
     "test:words": "node test/words.test.js",
     "test:grammar": "node test/grammar.test.mjs",
     "test:sim": "node test/sim.test.js",

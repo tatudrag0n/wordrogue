@@ -14,8 +14,8 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, VERB_SLASH_STYLE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.56';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.56';
+import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, VERB_SLASH_STYLE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.57';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.57';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
@@ -36,6 +36,7 @@ const isForm = (text) => isShapeWord(text);
 const PHYSICAL_VERB_KINDS = new Set([
   'slash', 'shot', 'pierce', 'bomb', 'chain', 'orbit', 'boomerang', 'whip',
   'thrust', 'smash', 'sweep', 'dual', 'flail', 'helper',
+  'flurry', 'snip', 'grind', 'quake', 'reap',
 ]);
 
 /** 手の属性が武器に与える、状態異常以外の小さな特徴。 */
@@ -365,6 +366,7 @@ export class WeaponInst {
       shape,
       tail,
       special,
+      compound: !!compHit,
       verb,
       verbStyle: verb ? (VERB_SLASH_STYLE[verb] || null) : null,
       title: this.title,

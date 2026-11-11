@@ -1186,8 +1186,8 @@ sec('形と攻撃は文の中の武器語が決める');
   ok(base.shape === 'shot' && base.kind === 'shot', `武器語なし → ${base.shape}/${base.kind}`);
   // 基本武器は単体で形と攻撃を決める。
   for (const [form, shape, kind] of [
-    ['剣', 'blade', 'slash'], ['刃', 'blade', 'slash'],
-    ['杖', 'orb', 'shadow'], ['拳', 'blade', 'slash'],
+    ['剣', 'blade', 'thrust'], ['刃', 'blade', 'slash'],
+    ['杖', 'orb', 'shadow'], ['拳', 'blade', 'dual'],
   ]) {
     const x = res('火', form, '剛');
     ok(x.shape === shape, `「${form}」の形が ${x.shape} (${shape} のはず)`);
@@ -2012,10 +2012,17 @@ sec('基本武器もそれぞれ違う攻撃になる');
   }
   const kinds = new Set(ranged.map(([f]) => kindOf(f).kind));
   ok(kinds.size >= 5, `射撃系の型が重複: ${[...kinds].join(',')}`);
-  // 近接は型こそ slash でも、武器ごとの pattern (3 回に 1 回の変化) が違う。
-  const pat = (id) => WEAPONS[id].pattern || null;
-  ok(pat('claw') === 'cross' && pat('greatblade') === 'spin', '爪・斧の pattern が無い');
-  ok(pat('hammer') === 'spin' && pat('fang') === 'cross' && pat('scissors') === 'cross' && pat('saw') === 'spin',
-    '槌・牙・鋏・鋸に pattern が無い');
-  console.log(`  射撃 ${ranged.length} 種で型 ${kinds.size} / 近接は pattern で分化`);
+  // 近接は武器ごとに攻撃の「仕組み」(型) が違う。描き分けではない。
+  const melee = [
+    ['刃', 'slash'], ['剣', 'thrust'], ['刀', 'sweep'], ['斧', 'smash'], ['槌', 'quake'],
+    ['牙', 'reap'], ['爪', 'flurry'], ['拳', 'dual'], ['鋏', 'snip'], ['鋸', 'grind'],
+  ];
+  const mseen = new Set();
+  for (const [form, kind] of melee) {
+    const x = kindOf(form);
+    ok(x.kind === kind, `近接「${form}」が ${kind} でない: ${x.kind}`);
+    mseen.add(x.kind);
+  }
+  ok(mseen.size === melee.length, `近接の型が重複している: ${[...mseen].join(',')}`);
+  console.log(`  射撃 ${ranged.length} 種で型 ${kinds.size} / 近接 ${melee.length} 種すべて別の仕組み`);
 }

@@ -388,8 +388,8 @@ function familyOf(base, res) {
   }
   if (kind === 'whip') return 'whip';
   if (kind === 'pierce' || kind === 'thrust') return 'thrust';
-  if (kind === 'smash') return 'smash';
-  if (kind === 'sweep' || kind === 'reap') return 'slash';
+  if (kind === 'smash' || kind === 'quake') return 'smash';
+  if (kind === 'sweep') return 'slash';
   if (kind === 'vortex' || kind === 'nova' || kind === 'blaze' || kind === 'venom' || kind === 'void') return 'cast';
   if (kind === 'gale' || kind === 'tide' || kind === 'shard' || kind === 'quake') {
     return base.family === 'thrust' || base.family === 'slash' ? 'ranged' : base.family;
@@ -404,9 +404,9 @@ function familyOf(base, res) {
 
 /** モーションの元になる武器の持ち方。 */
 export function motionKey(wi, res) {
-  // 双剣。文の中で熟語になった二刀は、どの武器の文でも二刀の振り方をする。
+  // 双剣 (文で熟語になった二刀) は二刀の振り方。拳など武器自身の dual は本来の持ち方。
   // 鉄球 (旋回) と分身 (自律) は撃つのではないので、モーションを持たない。
-  if (res?.kind === 'dual') return 'dualblades';
+  if (res?.kind === 'dual' && res?.compound) return 'dualblades';
   const tail = res?.tail;
   if (tail && GLYPH_MOTION[tail]) return GLYPH_MOTION[tail];
   const glyph = wi?.def?.glyph || wi?.def?.name;

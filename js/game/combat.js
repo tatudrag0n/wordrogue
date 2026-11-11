@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.56';
-import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.56';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.56';
+import { ELEMENTS } from '../data/words.js?v=1.57';
+import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.57';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.57';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -168,6 +168,9 @@ export function fireWeapon(run, wi, res) {
     case 'quake': doQuake(run, wi, st, aim, el, elInfo); break;
     case 'shard': doShard(run, wi, st, aim, el, elInfo); break;
     case 'reap': doReap(run, wi, st, aim, el, elInfo); break;
+    case 'flurry': doFlurry(run, wi, st, aim, el, elInfo); break;
+    case 'snip': doSnip(run, wi, st, aim, el, elInfo); break;
+    case 'grind': doGrind(run, wi, st, aim, el, elInfo); break;
     default: break;
   }
 
@@ -370,8 +373,10 @@ function doThrust(run, wi, st, aim, el, elInfo) {
     shape: 'lance', kindName: 'shot',
   });
   b.st = st; b.wi = wi; run.bullets.push(b);
-  // 踏み込みの細い弧。突いた軌道を読ませる。
-  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach * 0.6, arc: 0.5, life: 0.2, maxLife: 0.2, color: elInfo.color, el, thrust: true, hit: new Set() });
+  // 踏み込みの細い弧。突いた軌道を読ませる (モーションがあればその軌跡)。
+  const motion = wi.motion || null;
+  if (motion) syncMotionShape(motion, reach * 0.6, 0.5);
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach * 0.6, arc: 0.5, life: 0.2, maxLife: 0.2, color: elInfo.color, el, thrust: true, motion, hit: new Set() });
   hitSector(run, p.x, p.y, aim, reach * 0.6, 0.5, st, el, run.slashes.at(-1).hit);
   p.vx += Math.cos(aim) * 60; p.vy += Math.sin(aim) * 60;
   run.burst(p.x + Math.cos(aim) * reach * 0.5, p.y + Math.sin(aim) * reach * 0.5, 5, elInfo.color, { a: aim, spread: 0.3, spd: 300, spdMin: 100, life: 0.2, r: 1.6, shape: 'spark', drag: 6 });
@@ -401,7 +406,9 @@ function doSweep(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = st.range * 1.2 * st.size;
   const arc = clamp((st.arc || 1.8) * 1.9, 2.6, 3.6);
-  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, wide: true, hit: new Set() });
+  const motion = wi.motion || null;
+  if (motion) syncMotionShape(motion, reach, arc);
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, wide: true, motion, hit: new Set() });
   const fx = ELEM_FX[el] || ELEM_FX.none;
   run.burst(p.x + Math.cos(aim) * reach * 0.8, p.y + Math.sin(aim) * reach * 0.8, 8, elInfo.color, { a: aim, spread: arc, spd: fx.spd * 1.3, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5 });
   hitSector(run, p.x, p.y, aim, reach, arc, st, el, run.slashes.at(-1).hit);
@@ -549,6 +556,53 @@ function doReap(run, wi, st, aim, el, elInfo) {
   run.burst(p.x + Math.cos(aim) * reach * 0.7, p.y + Math.sin(aim) * reach * 0.7, 7, elInfo.color, { a: aim, spread: arc, spd: fx.spd, spdMin: 60, life: fx.life, r: fx.r, shape: 'ink', drag: 5 });
   hitSector(run, p.x, p.y, aim, reach, arc, st, el, run.slashes.at(-1).hit);
   run.audio.slash();
+}
+
+// 連撃 (爪)。短い引っ掻きを 3 つ連続で叩き込む。1 回の力は軽い。
+function doFlurry(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * st.size;
+  const arc = Math.max(0.9, (st.arc || 1.8) * 0.6);
+  const motion = wi.motion || null;
+  const fx = ELEM_FX[el] || ELEM_FX.none;
+  for (let i = 0; i < 3; i++) {
+    const a = aim + (i - 1) * 0.22;
+    const r = reach * (0.8 + i * 0.12);
+    run.slashes.push({ x: p.x, y: p.y, a, r, arc, life: 0.22, maxLife: 0.22, color: elInfo.color, el, motion, hit: new Set() });
+    hitSector(run, p.x, p.y, a, r, arc, { ...st, dmg: st.dmg * 0.45 }, el, run.slashes.at(-1).hit);
+  }
+  run.burst(p.x + Math.cos(aim) * reach * 0.7, p.y + Math.sin(aim) * reach * 0.7, 6, elInfo.color, { a: aim, spread: arc, spd: fx.spd * 1.2, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5 });
+  run.audio.slash();
+}
+
+// 挟み切り (鋏)。両側から狭い弧で挟み、急所を抜く。会心が高い。
+function doSnip(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * st.size;
+  const arc = 0.7;
+  const motion = wi.motion || null;
+  const st2 = { ...st, crit: Math.min(1, (st.crit || 0) + 0.25) };
+  for (const side of [-1, 1]) {
+    const a = aim + side * 0.5;
+    run.slashes.push({ x: p.x, y: p.y, a, r: reach, arc, life: 0.24, maxLife: 0.24, color: elInfo.color, el, motion, hit: new Set() });
+    hitSector(run, p.x, p.y, a, reach, arc, st2, el, run.slashes.at(-1).hit);
+  }
+  run.burst(p.x + Math.cos(aim) * reach * 0.8, p.y + Math.sin(aim) * reach * 0.8, 6, elInfo.color, { a: aim, spread: 0.6, spd: 260, spdMin: 80, life: 0.2, r: 1.6, shape: 'spark', drag: 6 });
+  run.audio.slash();
+}
+
+// 挽き切り (鋸)。広い弧に持続する挽き傷を残し、触れた敵を削り続ける。
+function doGrind(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.1 * st.size;
+  const arc = clamp((st.arc || 1.8) * 1.4, 2.0, 3.0);
+  const motion = wi.motion || null;
+  if (motion) syncMotionShape(motion, reach, arc);
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.4, maxLife: 0.4, color: elInfo.color, el, wide: true, motion, hit: new Set() });
+  const cx = p.x + Math.cos(aim) * reach * 0.6, cy = p.y + Math.sin(aim) * reach * 0.6;
+  run.fields.push(makeField(cx, cy, reach * 0.55, st.dmg * 0.4, { life: 1.2, element: el, knock: st.knock }));
+  hitSector(run, p.x, p.y, aim, reach, arc, st, el, run.slashes.at(-1).hit);
+  run.audio.tone({ freq: 140, type: 'sawtooth', dur: 0.2, vol: 0.06, slide: 0.6 });
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // 近接

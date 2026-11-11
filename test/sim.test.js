@@ -1187,7 +1187,7 @@ sec('形と攻撃は文の中の武器語が決める');
   // 基本武器は単体で形と攻撃を決める。
   for (const [form, shape, kind] of [
     ['剣', 'blade', 'slash'], ['刃', 'blade', 'slash'],
-    ['杖', 'orb', 'shot'], ['拳', 'blade', 'slash'],
+    ['杖', 'orb', 'shadow'], ['拳', 'blade', 'slash'],
   ]) {
     const x = res('火', form, '剛');
     ok(x.shape === shape, `「${form}」の形が ${x.shape} (${shape} のはず)`);
@@ -1994,4 +1994,28 @@ sec('違う言葉は違う攻撃の型になる (演出の多様化)');
   const cut = kindOf(['斬', 'る'], ['光']);
   ok(cut.kind === 'slash', `「光を斬る」が斬撃でない: ${cut.kind}`);
   console.log(`  動詞 ${verbKinds.length} 型すべて別 / 属性 ${elKinds.length} 型 / 光を斬る=slash`);
+}
+
+sec('基本武器もそれぞれ違う攻撃になる');
+{
+  const r = freshWeapon(1, ['gun']);
+  const wi = r.weapons[0];
+  const kindOf = (form) => { setWords(wi, ['火', form, '剛']); wi._sig = null; return wi.resolve(r.player.stats); };
+  // 射撃系は武器ごとに型と弾の形が違う。
+  const ranged = [
+    ['銃', 'shot', 'shot'], ['杖', 'shadow', 'orb'], ['弓', 'pierce', 'arrow'],
+    ['槍', 'shard', 'shard'], ['矛', 'thrust', 'lance'], ['針', 'shot', 'shard'],
+  ];
+  for (const [form, kind, shape] of ranged) {
+    const x = kindOf(form);
+    ok(x.kind === kind && x.shape === shape, `「${form}」が ${kind}/${shape} でない: ${x.kind}/${x.shape}`);
+  }
+  const kinds = new Set(ranged.map(([f]) => kindOf(f).kind));
+  ok(kinds.size >= 5, `射撃系の型が重複: ${[...kinds].join(',')}`);
+  // 近接は型こそ slash でも、武器ごとの pattern (3 回に 1 回の変化) が違う。
+  const pat = (id) => WEAPONS[id].pattern || null;
+  ok(pat('claw') === 'cross' && pat('greatblade') === 'spin', '爪・斧の pattern が無い');
+  ok(pat('hammer') === 'spin' && pat('fang') === 'cross' && pat('scissors') === 'cross' && pat('saw') === 'spin',
+    '槌・牙・鋏・鋸に pattern が無い');
+  console.log(`  射撃 ${ranged.length} 種で型 ${kinds.size} / 近接は pattern で分化`);
 }

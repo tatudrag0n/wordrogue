@@ -110,9 +110,8 @@ export class GrowPad extends SenPad {
       // 行の余白 (語の後ろ) をタップ = 末尾へ入れる。
       this.bindRowBlank(line, { part: p.id });
 
-      // 端っこに固定される部位名だけが、鍛冶の文の行との違い。
+      // 部位名は行の右端の固定チップ (sen-tail) だけに出す。
       const row = el('div', { class: 'grow-part-row' });
-      row.append(el('span', { class: 'grow-part-name' }, p.name));
       row.append(line);
       row.append(el('span', { class: `grow-part-grade grade-${gradeCls}` }, gradeName));
       row.append(el('span', { class: 'grow-part-lv' },

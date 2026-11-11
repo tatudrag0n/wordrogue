@@ -317,6 +317,13 @@ for (const [w, c] of PART_UNNATURAL) {
   ok(!r.valid, '部位「発電する」が成立した (名詞で閉じる必要がある)');
 }
 {
+  // 受身の連体は部位名にそのまま係る。「鍛錬された右手」「約束された頭」。
+  const r = evaluatePart([{ text: '鍛', conn: null }, { text: '錬', conn: 'された' }]);
+  ok(r.valid, `部位「鍛錬された」が不成文: ${r.reasonText}`);
+  const p = evaluatePart([{ text: '約', conn: null }, { text: '束', conn: 'された' }]);
+  ok(p.valid, `部位「約束された」が不成文: ${p.reasonText}`);
+}
+{
   const r = evaluatePart([{ text: '刃', conn: null }, { text: '剣', conn: null }]);
   ok(!r.valid, '部位「刃剣」が成立した (形の語どうしは隣り合えない)');
 }

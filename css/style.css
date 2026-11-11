@@ -1775,7 +1775,6 @@ body.touch .hud-choice-title { font-size: 1rem; }
   margin-bottom: 8px;
 }
 .grow-part-row { display: flex; align-items: center; gap: 7px; }
-.grow-part-row .grow-part-name { flex: 0 0 auto; min-width: 3.4em; }
 /* 部位の文は 1 行。行のどこへ落としてもその位置に入る。 */
 .grow-part-row .sen-row { flex: 1 1 auto; min-width: 0; }
 .grow-part-row .sen-row.empty { border-style: dashed; background: #f4f7fc; }
@@ -1840,12 +1839,6 @@ body.touch .hud-choice-title { font-size: 1rem; }
 }
 .grow-part.filled { border-left-color: var(--ok); }
 .grow-part:has(.grow-part-note.bad) { border-left-color: var(--ng); background: rgba(214, 60, 48, .05); }
-.grow-part-name {
-  font-size: .78rem;
-  font-weight: 800;
-  letter-spacing: .1em;
-  color: var(--fg-dim);
-}
 .grow-sen { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
 
 .grow-slot {
@@ -2002,7 +1995,6 @@ body.touch .hud-choice-title { font-size: 1rem; }
   gap: 5px;
   margin-bottom: 3px;
 }
-.grow-part-head b { font-size: .95rem; color: var(--word); letter-spacing: .04em; font-weight: 900; }
 .grow-part-grade { font-weight: 700; }
 .grow-part-idiom { color: var(--idiom); font-weight: 700; }
 .grow-part-eff { display: flex; flex-wrap: wrap; gap: 3px; }

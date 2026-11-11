@@ -1009,8 +1009,9 @@ function trailingModifier(segs) {
   const f = hit.form;
   if (f.role === 'case' && f.next === 'noun') return f;
   // 形容の連体 (速い・静かな) と、1 語の動詞の連体 (駆ける) は部位名に係る。
-  // 熟語の「する」(発電する) は単独で名詞を修飾させない — 名詞を置いて閉じる。
-  if (f.role === 'adn' && (f.adj || !hit.compound)) return f;
+  // 熟語の受身 (鍛錬された・凍結された) も「鍛錬された右手」とそのまま係る。
+  // 自動詞の「する」(発電する) だけは単独で名詞を修飾させない — 名詞を置いて閉じる。
+  if (f.role === 'adn' && (f.adj || !hit.compound || f.passive)) return f;
   return null;
 }
 

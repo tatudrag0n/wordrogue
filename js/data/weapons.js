@@ -13,8 +13,8 @@
 // level を上げるほど基礎値が伸びる。文の長さは武器レベルとは無関係で 10 文字まで。
 // ============================================================================
 
-import { WEAPON_WORD_SET } from './words.core.js?v=1.55';
-import { WORDS, weaponHeadKind } from './words.js?v=1.55';
+import { WEAPON_WORD_SET } from './words.core.js?v=1.56';
+import { WORDS, weaponHeadKind } from './words.js?v=1.56';
 
 /**
  * kind の種類と挙動:
@@ -45,7 +45,7 @@ export const WEAPONS = {
     startWord: '電', startWord2: '速', maxLevel: 8, unlock: null,
   },
   arrow: {
-    id: 'arrow', name: '弓', kind: 'shot', glyph: '弓', tail: '弓',
+    id: 'arrow', name: '弓', kind: 'pierce', glyph: '弓', tail: '弓',
     desc: '貫通して飛ぶ。素直に強い。',
     base: { dmg: 8, rate: 1.1, speed: 420, pierce: 2, size: 1, crit: 0.08, homing: 0 },
     grow: { dmg: 2.8, rate: 0.1, pierce: 0.34, speed: 10 },
@@ -123,7 +123,7 @@ export const WEAPONS = {
     startWord: '血', startWord2: '蓮', maxLevel: 8, unlock: { stage: 5 },
   },
   dragon: {
-    id: 'dragon', name: '矛', kind: 'shot', glyph: '矛', tail: '矛',
+    id: 'dragon', name: '矛', kind: 'thrust', glyph: '矛', tail: '矛',
     desc: '長い。遠くを串刺しにする。',
     base: { dmg: 13, rate: 0.85, speed: 460, pierce: 5, size: 1.2, crit: 0.12 },
     grow: { dmg: 4.0, rate: 0.07, pierce: 0.5, speed: 14 },
@@ -145,7 +145,7 @@ export const WEAPONS = {
   },
   // 追加の基本武器。剣・杖・拳も既存の武器語を独立した初期武器として選べる。
   hammer: {
-    id: 'hammer', name: '槌', kind: 'slash', glyph: '槌', tail: '槌',
+    id: 'hammer', name: '槌', kind: 'slash', glyph: '槌', tail: '槌', pattern: 'spin',
     desc: '重い打撃で敵を吹き飛ばす。',
     base: { dmg: 20, rate: 0.52, range: 142, arc: 2.2, area: 16, size: 1.25, knock: 130, crit: 0.05 },
     grow: { dmg: 6.2, rate: 0.045, range: 7, area: 2 },
@@ -159,8 +159,8 @@ export const WEAPONS = {
     startWord: '炎', startWord2: '必', maxLevel: 8, unlock: { stage: 1 },
   },
   staff: {
-    id: 'staff', name: '杖', kind: 'shot', glyph: '杖', tail: '杖',
-    desc: '魔力弾を放つ。貫通して複数の敵を射抜く。',
+    id: 'staff', name: '杖', kind: 'shadow', glyph: '杖', tail: '杖',
+    desc: '敵を追う魔力の玉。貫通して複数の敵を射抜く。',
     base: { dmg: 9, rate: 1.25, speed: 300, pierce: 2, size: 1.15, crit: 0.08 },
     grow: { dmg: 3.1, rate: 0.09, pierce: 0.3, speed: 10 },
     startWord: '光', startWord2: '貫', maxLevel: 8, unlock: { stage: 1 },
@@ -173,8 +173,8 @@ export const WEAPONS = {
     startWord: '血', startWord2: '速', maxLevel: 8, unlock: { stage: 12 },
   },
   flank: {
-    id: 'flank', name: '槍', kind: 'shot', glyph: '槍', tail: '槍',
-    desc: '左右から同時に撃つ。',
+    id: 'flank', name: '槍', kind: 'shard', glyph: '槍', tail: '槍',
+    desc: '鋭い穂先を扇状に投げ、複数を貫く。',
     base: { dmg: 9, rate: 1.3, speed: 340, count: 2, spread: 0.9, size: 1, crit: 0.05 },
     grow: { dmg: 3.0, rate: 0.1, count: 0.24, spread: 0.04 },
     startWord: '風', startWord2: '旋', maxLevel: 8, unlock: { stage: 8 },
@@ -188,7 +188,7 @@ export const WEAPONS = {
   },
   // ── 第二の庭で解放される武器 (第 18 戦・第 19 戦)。──
   fang: {
-    id: 'fang', name: '牙', kind: 'slash', glyph: '牙', tail: '牙',
+    id: 'fang', name: '牙', kind: 'slash', glyph: '牙', tail: '牙', pattern: 'cross',
     desc: '噛み裂く。間合いは狭いが、肉を深く切る。',
     base: { dmg: 13, rate: 1.7, range: 94, arc: 2.4, size: 1, crit: 0.1, knock: 34 },
     grow: { dmg: 4.2, rate: 0.12, range: 5, arc: 0.05 },
@@ -203,14 +203,14 @@ export const WEAPONS = {
   },
   // ── 道具の基本武器。鋏は挟み切る短い二枚刃、鋸は挽き切る wide な刃。──
   scissors: {
-    id: 'scissors', name: '鋏', kind: 'slash', glyph: '鋏', tail: '鋏',
+    id: 'scissors', name: '鋏', kind: 'slash', glyph: '鋏', tail: '鋏', pattern: 'cross',
     desc: '二枚の刃で挟み切る。間合いは短いが、急所を狙う。',
     base: { dmg: 8, rate: 2.2, range: 78, arc: 1.5, size: 0.9, crit: 0.16 },
     grow: { dmg: 2.6, rate: 0.16, range: 3, arc: 0.04 },
     startWord: '鋭', startWord2: '斬', maxLevel: 8, unlock: { stage: 1 },
   },
   saw: {
-    id: 'saw', name: '鋸', kind: 'slash', glyph: '鋸', tail: '鋸',
+    id: 'saw', name: '鋸', kind: 'slash', glyph: '鋸', tail: '鋸', pattern: 'spin',
     desc: '歯を立てて挽き切る。ゆっくりだが、広く深く裂く。',
     base: { dmg: 13, rate: 1.15, range: 122, arc: 2.5, area: 10, size: 1.1, knock: 40, crit: 0.05 },
     grow: { dmg: 4.1, rate: 0.08, range: 6, arc: 0.05, area: 2 },
@@ -233,15 +233,15 @@ export const WEAPON_MAX = 3;
  * **「形態語」という分類は無い。** 形を決めるのは基本武器の 18 語だけ。
  */
 export const FORM_SHAPE = {
-  // 斬撃
+  // 斬撃。型は slash だが武器ごとのモーション (振り方) と pattern で演出が変わる。
   刃: ['blade', 'slash'], 剣: ['blade', 'slash'], 刀: ['blade', 'slash'],
   斧: ['blade', 'slash'], 槌: ['blade', 'slash'], 牙: ['blade', 'slash'], 爪: ['blade', 'slash'],
   拳: ['blade', 'slash'],
   鋏: ['blade', 'slash'], 鋸: ['blade', 'slash'],
-  // 射撃
-  銃: ['shot', 'shot'], 杖: ['orb', 'shot'],
-  弓: ['arrow', 'shot'], 槍: ['arrow', 'shot'], 矛: ['arrow', 'shot'],
-  針: ['shot', 'shot'],
+  // 射撃。武器ごとに弾の形と飛び方が違う。
+  銃: ['shot', 'shot'], 杖: ['orb', 'shadow'],
+  弓: ['arrow', 'pierce'], 槍: ['shard', 'shard'], 矛: ['lance', 'thrust'],
+  針: ['shard', 'shot'],
   // 薙ぎ
   鞭: ['blade', 'whip'], 鎖: ['blade', 'whip'],
 };

@@ -5,9 +5,9 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.54';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.54';
-import { motionPose } from '../game/motions.js?v=1.54';
+import { ELEMENTS } from '../data/words.js?v=1.55';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.55';
+import { motionPose } from '../game/motions.js?v=1.55';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -814,6 +814,23 @@ export class Renderer {
         continue;
       }
       const t = s.life / s.maxLife;
+      // 突きは扇ではなく、一直線の槍の軌跡。
+      if (s.thrust) {
+        g.save();
+        g.translate(s.x, s.y);
+        g.rotate(s.a);
+        g.globalAlpha = t * 0.7;
+        g.fillStyle = s.color;
+        g.beginPath();
+        g.moveTo(s.r, 0); g.lineTo(0, -s.r * 0.08); g.lineTo(-s.r * 0.2, 0); g.lineTo(0, s.r * 0.08);
+        g.closePath(); g.fill();
+        g.globalAlpha = t * 0.8;
+        g.strokeStyle = 'rgba(255,253,247,.9)';
+        g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(0, 0); g.lineTo(s.r, 0); g.stroke();
+        g.restore();
+        continue;
+      }
       const a0 = s.a - s.arc / 2;
       const a1 = s.a + s.arc / 2;
       // 広がる軌跡。外周到内に向けて濃くする。
@@ -840,10 +857,19 @@ export class Renderer {
       g.stroke();
       g.globalAlpha = t * 0.6;
       g.strokeStyle = s.color;
-      g.lineWidth = 4.5;
+      g.lineWidth = s.vstyle === 'heavy' ? 7 : s.wide ? 2.5 : 4.5;
       g.beginPath();
       g.arc(s.x, s.y, rOut * 0.97, a0, a1);
       g.stroke();
+      // 処刑の斬撃は白い閃きを縁に足す。
+      if (s.vstyle === 'exec') {
+        g.globalAlpha = t * 0.7;
+        g.strokeStyle = 'rgba(255,253,247,.95)';
+        g.lineWidth = 1.6;
+        g.beginPath();
+        g.arc(s.x, s.y, rOut * 0.99, a0, a1);
+        g.stroke();
+      }
       // 内側の縁を墨で締める。白い紙の上で刃の厚みが出る。
       g.globalAlpha = t * t * 0.4;
       g.strokeStyle = 'rgba(28, 35, 49, .55)';
@@ -1011,6 +1037,11 @@ export class Renderer {
         this.drawWhipMotion(s, run);
         continue;
       }
+      // 意味ごとの輪。打撃の衝撃星・氷結の六角陣・吸引の収縮渦・血刃の返り帯。
+      if (s.star) { this.drawStarRing(s, run); continue; }
+      if (s.nova) { this.drawNovaRing(s, run); continue; }
+      if (s.inward) { this.drawInwardRing(s, run); continue; }
+      if (s.reap) { this.drawReapRing(s, run); continue; }
       const t = s.life / s.maxLife;
       const el = s.el || 'none';
       const thin = !!s.thin;
@@ -1132,6 +1163,114 @@ export class Renderer {
       }
       g.restore();
     }
+    g.restore();
+  }
+
+  /** 打撃の衝撃星。叩いた一点からひびが放射する。 */
+  drawStarRing(s, run) {
+    const g = this.ctx;
+    const t = s.life / s.maxLife;
+    const p = 1 - t;
+    const r = s.r * (0.5 + p * 0.7);
+    g.save();
+    g.globalAlpha = t * 0.8;
+    g.strokeStyle = s.color;
+    g.lineWidth = 2.5 * t + 1;
+    g.beginPath();
+    g.arc(s.x, s.y, r, 0, TAU);
+    g.stroke();
+    // ひび。8 方向にジグザグの放射線。
+    g.lineWidth = 1.6;
+    g.globalAlpha = t * 0.7;
+    for (let i = 0; i < 8; i++) {
+      const a = i * TAU / 8 + (s.seed || 0);
+      g.beginPath();
+      g.moveTo(s.x + Math.cos(a) * r * 0.2, s.y + Math.sin(a) * r * 0.2);
+      g.lineTo(s.x + Math.cos(a + 0.12) * r * 0.6, s.y + Math.sin(a + 0.12) * r * 0.6);
+      g.lineTo(s.x + Math.cos(a) * r, s.y + Math.sin(a) * r);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  /** 氷結の六角陣。広がりながら縁に氷晶を立てる。 */
+  drawNovaRing(s, run) {
+    const g = this.ctx;
+    const t = s.life / s.maxLife;
+    const p = 1 - t;
+    const r = (s.reach || 100) * p;
+    g.save();
+    g.globalAlpha = t * 0.75;
+    g.strokeStyle = s.color;
+    g.lineWidth = 2.5;
+    g.beginPath();
+    for (let i = 0; i <= 6; i++) {
+      const a = i * TAU / 6 + run.t * 0.3;
+      const x = s.x + Math.cos(a) * r, y = s.y + Math.sin(a) * r;
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.closePath();
+    g.stroke();
+    // 縁の氷晶。
+    g.lineWidth = 1.4;
+    g.globalAlpha = t * 0.6;
+    for (let i = 0; i < 6; i++) {
+      const a = i * TAU / 6 + run.t * 0.3;
+      const x = s.x + Math.cos(a) * r, y = s.y + Math.sin(a) * r;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + Math.cos(a) * 7, y + Math.sin(a) * 7);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  /** 吸引の収縮渦。外周から手元へ巻き込むらせん。 */
+  drawInwardRing(s, run) {
+    const g = this.ctx;
+    const t = s.life / s.maxLife;
+    const p = 1 - t;
+    const reach = s.reach || 100;
+    g.save();
+    g.strokeStyle = s.color;
+    g.lineCap = 'round';
+    const turns = s.turns || 2;
+    for (let arm = 0; arm < 3; arm++) {
+      g.globalAlpha = t * (0.5 - arm * 0.12);
+      g.lineWidth = 2.4 - arm * 0.6;
+      g.beginPath();
+      const steps = 40;
+      for (let k = 0; k <= steps; k++) {
+        const u = k / steps;
+        const rad = reach * (1 - p) * (1 - u * 0.85) + 4;
+        const a = (s.baseAim || 0) + arm * TAU / 3 + u * turns * TAU - run.t * 4;
+        const x = s.x + Math.cos(a) * rad, y = s.y + Math.sin(a) * rad;
+        if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  /** 血刃の返り帯。斬った弧が手元へ戻って吸血する。 */
+  drawReapRing(s, run) {
+    const g = this.ctx;
+    const t = s.life / s.maxLife;
+    const p = 1 - t;
+    const r = (s.reach || 100) * (1 - p * 0.8);
+    g.save();
+    g.strokeStyle = s.color;
+    g.lineCap = 'round';
+    g.globalAlpha = t * 0.6;
+    g.lineWidth = 3 * t + 1;
+    g.beginPath();
+    g.arc(s.x, s.y, r, run.t * 2, run.t * 2 + 2.2);
+    g.stroke();
+    g.globalAlpha = t * 0.35;
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.arc(s.x, s.y, r * 0.8, -run.t * 2, -run.t * 2 + 1.8);
+    g.stroke();
     g.restore();
   }
 
@@ -1837,6 +1976,10 @@ export class Renderer {
     const shape = b.shape || (b.kindName === 'bomb' ? 'bomb' : 'shot');
     const pierce = b.pierce > 0 ? b.pierce : 0;
 
+    // 竜巻と暗黒球は専用の絵。尾も頭もまとめて描く。
+    if (b.kindName === 'gale') { this.drawGaleBullet(g, b, t); return; }
+    if (b.kindName === 'void') { this.drawVoidBullet(g, b, t); return; }
+
     // ── 尾。速度と尾の長さは貫通の数と形とで変わる。
     //    炎と雷は尾を長めに敷く。扇状に広がったときの一体感が出る。
     if (sp > 20 && b.kindName !== 'bomb') {
@@ -1949,6 +2092,48 @@ export class Renderer {
       g.beginPath();
       g.arc(0, -r * 1.5, r * 0.42, 0, TAU);
       g.fill();
+    } else if (shape === 'lance') {
+      // 突き。細長い槍。穂先と石突きのついた一直線。
+      const L = r * 5, W = r * 0.5;
+      g.globalAlpha = 0.35;
+      g.fillStyle = c;
+      g.beginPath();
+      g.moveTo(L * 1.3, 0); g.lineTo(-L, -W * 2.4); g.lineTo(-L * 1.2, 0); g.lineTo(-L, W * 2.4);
+      g.closePath(); g.fill();
+      g.globalAlpha = 1;
+      g.beginPath();
+      g.moveTo(L, 0); g.lineTo(L * 0.4, -W); g.lineTo(-L, -W * 0.5); g.lineTo(-L, W * 0.5); g.lineTo(L * 0.4, W);
+      g.closePath(); g.fill();
+      g.globalAlpha = 0.85; g.fillStyle = '#ffffff';
+      g.beginPath(); g.moveTo(L, 0); g.lineTo(L * 0.45, -W * 0.5); g.lineTo(L * 0.45, W * 0.5); g.closePath(); g.fill();
+    } else if (shape === 'wave') {
+      // 押し波。進む水の壁。三日月の壁頭に泡を立てる。
+      const R = r * 1.6;
+      g.globalAlpha = 0.4; g.fillStyle = c;
+      g.beginPath(); g.arc(0, 0, R * 1.5, -1.2, 1.2); g.lineTo(0, 0); g.closePath(); g.fill();
+      g.globalAlpha = 0.9;
+      g.beginPath(); g.arc(0, 0, R, -1.1, 1.1); g.lineTo(R * 0.2, 0); g.closePath(); g.fill();
+      g.globalAlpha = 0.8; g.fillStyle = '#ffffff';
+      for (let i = 0; i < 3; i++) {
+        const a = -0.8 + i * 0.8;
+        g.beginPath(); g.arc(Math.cos(a) * R, Math.sin(a) * R, r * 0.28, 0, TAU); g.fill();
+      }
+    } else if (shape === 'spike') {
+      // 地走り。地面から隆起する岩の棘。
+      const H = r * 2.2;
+      g.globalAlpha = 0.4; g.fillStyle = c;
+      g.beginPath(); g.moveTo(0, -H * 1.2); g.lineTo(-r * 1.3, 0); g.lineTo(r * 1.3, 0); g.closePath(); g.fill();
+      g.globalAlpha = 1;
+      g.beginPath(); g.moveTo(0, -H); g.lineTo(-r, 0); g.lineTo(r, 0); g.closePath(); g.fill();
+      g.globalAlpha = 0.6; g.fillStyle = '#ffffff';
+      g.beginPath(); g.moveTo(0, -H); g.lineTo(-r * 0.3, -H * 0.3); g.lineTo(0, -H * 0.2); g.closePath(); g.fill();
+    } else if (shape === 'shard') {
+      // 鉄片。細く鋭い金属の針。白い輝きを残す。
+      const L = r * 3.2, W = r * 0.4;
+      g.globalAlpha = 1; g.fillStyle = c;
+      g.beginPath(); g.moveTo(L, 0); g.lineTo(0, -W); g.lineTo(-L, 0); g.lineTo(0, W); g.closePath(); g.fill();
+      g.globalAlpha = 0.8; g.fillStyle = '#ffffff';
+      g.beginPath(); g.moveTo(L * 0.8, 0); g.lineTo(0, -W * 0.4); g.lineTo(-L * 0.4, 0); g.closePath(); g.fill();
     } else {
       // 弾。進行方向に少し伸ばしたカプセル。
       const L = r * 1.7;
@@ -2147,6 +2332,62 @@ export class Renderer {
     g.restore();
   }
 
+
+  /** 竜巻の弾。積み重なる回転弧が前方へ進む。 */
+  drawGaleBullet(g, b, t) {
+    const c = b.color || '#2f9e8f';
+    const r = Math.max(4, b.r);
+    g.save();
+    g.translate(b.x, b.y);
+    g.lineCap = 'round';
+    for (let i = 0; i < 4; i++) {
+      const rr = r * (1 - i * 0.2);
+      const a0 = t * 9 + i * 1.4;
+      g.globalAlpha = 0.65 - i * 0.12;
+      g.strokeStyle = i === 0 ? 'rgba(255,253,247,.9)' : c;
+      g.lineWidth = 2.4 - i * 0.4;
+      g.beginPath();
+      g.ellipse(0, -i * r * 0.35, rr, rr * 0.5, 0, a0, a0 + 4.4);
+      g.stroke();
+    }
+    // 吸い込む埃。
+    g.globalAlpha = 0.4;
+    g.fillStyle = c;
+    for (let i = 0; i < 3; i++) {
+      const a = t * 6 + i * 2.1;
+      g.beginPath();
+      g.arc(Math.cos(a) * r * 1.3, Math.sin(a) * r * 0.7, 1.4, 0, TAU);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  /** 暗黒球。黒い芯と紫のオーラ、 inward の粒。 */
+  drawVoidBullet(g, b, t) {
+    const c = b.color || '#5f3dc4';
+    const r = Math.max(3, b.r);
+    g.save();
+    g.translate(b.x, b.y);
+    g.globalAlpha = 0.35;
+    g.fillStyle = c;
+    g.beginPath(); g.arc(0, 0, r * 2.1, 0, TAU); g.fill();
+    g.globalAlpha = 1;
+    g.fillStyle = '#160a24';
+    g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill();
+    g.globalAlpha = 0.8;
+    g.strokeStyle = c;
+    g.lineWidth = 1.6;
+    g.beginPath(); g.arc(0, 0, r * 1.3, t * 5, t * 5 + 4); g.stroke();
+    // 引き込む粒。
+    g.globalAlpha = 0.5;
+    g.fillStyle = c;
+    for (let i = 0; i < 3; i++) {
+      const a = t * 4 + i * 2.1;
+      const d = r * (2.2 - ((t * 2 + i) % 1) * 1.4);
+      g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, 1.3, 0, TAU); g.fill();
+    }
+    g.restore();
+  }
 
   drawPlayer(run) {
     const g = this.ctx;

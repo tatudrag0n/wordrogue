@@ -14,8 +14,8 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.54';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.54';
+import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, VERB_SLASH_STYLE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.55';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.55';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
@@ -25,6 +25,18 @@ import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
  * 語のカテゴリに「形態」は無く、弾・環・玉 はただの語 (効果)。
  */
 const isForm = (text) => isShapeWord(text);
+
+/**
+ * 物理動作の型。特殊武器 (属性頭) でもこれらだけは動詞が属性の攻撃を上書きする
+ *   「光を斬る」→ 斬撃 / 「風を貫く」→ 貫通。
+ * 属性色の動詞 (燃・焦・凍…) は特殊武器では頭にした属性の攻撃をそのまま使う
+ *   「焔を焦がす光」→ 光線 (燃焼ではない)。
+ * 通常武器では属性色の動詞も型を決める (「燃やす刃」→ 燃焼)。
+ */
+const PHYSICAL_VERB_KINDS = new Set([
+  'slash', 'shot', 'pierce', 'bomb', 'chain', 'orbit', 'boomerang', 'whip',
+  'thrust', 'smash', 'sweep', 'dual', 'flail', 'helper',
+]);
 
 /** 手の属性が武器に与える、状態異常以外の小さな特徴。 */
 const HAND_TRAITS = {
@@ -314,7 +326,9 @@ export class WeaponInst {
     // 2 文字以上の武器語 (鉄球・双剣・分身)。文面に熟語として現れた瞬間に
     // 攻撃の型が変わる。述語の動詞があれば動詞が勝つ (「貫通する鉄球」は貫通)。
     const compHit = compoundWeaponOf(e.text);
-    let kind = verbKindOf(verb) || (compHit ? compHit.kind : null)
+    const rawVerbKind = verbKindOf(verb);
+    const verbKind = special ? (PHYSICAL_VERB_KINDS.has(rawVerbKind) ? rawVerbKind : null) : rawVerbKind;
+    let kind = verbKind || (compHit ? compHit.kind : null)
       || elementKind || (info && info[1]) || this.def.kind;
     // 武器語も属性語も無い文は、頭の熟語 (爆裂・貫通) が何をする文かを決める。
     if (!tail && !verb) {
@@ -351,6 +365,8 @@ export class WeaponInst {
       shape,
       tail,
       special,
+      verb,
+      verbStyle: verb ? (VERB_SLASH_STYLE[verb] || null) : null,
       title: this.title,
       text: this.fullText,
       fullText: e.text,

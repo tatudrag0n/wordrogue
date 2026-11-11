@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.54';
+} from '../data/words.js?v=1.55';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.54';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.55';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.54';
-import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.54';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.54';
+import { WeaponInst } from './weapon.js?v=1.55';
+import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.55';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.55';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -38,6 +38,24 @@ export const PICKUP_STEER = 9;       // 目標速度へ寄る速さ (大きい�
 
 // レベルアップの 3 択。選ばないと時間切れで 1 番目が自動採用される。
 export const WORD_CHOICES = 3;
+
+// 弾が飛んでいるあいだに落とす属性の尾。属性ごとの粒の形。
+// 命中時 (elementHitFx) と同じ形を使って、飛んでいる弾も属性らしく見せる。
+const ELEMENT_TRAIL = {
+  fire:    { shape: 'ember',   life: 0.3,  r: 1.6, grav: -20 },
+  ice:     { shape: 'crystal', life: 0.3,  r: 1.6 },
+  thunder: { shape: 'spark',   life: 0.18, r: 1.3 },
+  poison:  { shape: 'bubble',  life: 0.45, r: 1.8, grav: -24 },
+  light:   { shape: 'spark',   life: 0.24, r: 1.3 },
+  dark:    { shape: 'smoke',   life: 0.4,  r: 2.2 },
+  wind:    { shape: 'gust',    life: 0.28, r: 1.8 },
+  water:   { shape: 'dot',     life: 0.3,  r: 1.5 },
+  nature:  { shape: 'leaf',    life: 0.4,  r: 1.7 },
+  steel:   { shape: 'shard',   life: 0.24, r: 1.5 },
+  blood:   { shape: 'ink',     life: 0.32, r: 1.8 },
+  earth:   { shape: 'shard',   life: 0.3,  r: 1.7 },
+  gold:    { shape: 'spark',   life: 0.26, r: 1.4 },
+};
 export const CHOICE_TIME = 7;         // 選べる秒数
 export const LEXICON_MAX = 30;        // 語彙の容量の上限
 
@@ -1456,6 +1474,7 @@ export class Run {
     this.weaponTick(d);
     this.helperTick(d);
     this.spiralTick(d);
+    this.ringTick(d);
     this.motionTick(d);
     this.enemyTick(d);
     this.bulletTick(d);
@@ -1865,6 +1884,61 @@ export class Run {
   }
 
   /**
+   * 意味ごとの輪 (nova / inward / reap)。spiralTick が鞭の渦を担うのに対し、
+   * こちらは氷結の拡大陣・吸引の収縮渦・血刃の返り帯を担う。
+   * 見た目 (drawRings) と同じ半径進行で当たるので、見えた範囲がそのまま当たる。
+   */
+  ringTick(dt) {
+    for (const s of this.rings) {
+      if (s.life <= 0 || !s.st) continue;
+      const maxLife = s.maxLife || 0.5;
+      const prev = 1 - s.life / maxLife;
+      const now = 1 - Math.max(0, s.life - dt) / maxLife;
+      if (now <= 0) continue;
+      const reach = s.reach || 100;
+      const st = s.st;
+      if (s.nova) {
+        const r0 = reach * prev, r1 = reach * now;
+        for (const e of this.enemies) {
+          if (e.dead || s.hit.has(e.uid)) continue;
+          const d = Math.hypot(e.x - s.x, e.y - s.y);
+          if (d > r1 + e.r || d < r0 - e.r) continue;
+          s.hit.add(e.uid);
+          this.damage(e, st, { crit: this.rand() < (st.crit || 0), element: s.el, chill: st.chill, freeze: st.freeze });
+        }
+      } else if (s.inward) {
+        const r0 = reach * (1 - prev), r1 = reach * (1 - now);
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          const d = Math.hypot(e.x - s.x, e.y - s.y) || 1;
+          if (d < reach) {
+            const pull = 140 * dt;
+            e.x += ((s.x - e.x) / d) * pull;
+            e.y += ((s.y - e.y) / d) * pull;
+          }
+          if (s.hit.has(e.uid)) continue;
+          if (d > r0 + e.r || d < r1 - e.r) continue;
+          s.hit.add(e.uid);
+          this.damage(e, st, { crit: this.rand() < (st.crit || 0), element: s.el });
+        }
+      } else if (s.reap) {
+        const r0 = reach * (1 - prev), r1 = reach * (1 - now);
+        for (const e of this.enemies) {
+          if (e.dead || s.hit.has(e.uid)) continue;
+          const d = Math.hypot(e.x - s.x, e.y - s.y);
+          if (d > r0 + e.r || d < r1 - e.r) continue;
+          s.hit.add(e.uid);
+          this.damage(e, st, { crit: this.rand() < (st.crit || 0), element: s.el });
+        }
+        if (now >= 1 && !s.healed) {
+          s.healed = true;
+          this.healPlayer(Math.max(1, (st.dmg || 0) * (st.lifesteal || 0.05) * 2));
+        }
+      }
+    }
+  }
+
+  /**
    * 分身の数を保つ。文が破れたり武器を外したりしたら、helperTick が霧散させる。
    * @param {object} wi WeaponInst (kind: helper)
    * @param {object} st resolve 済みステータス
@@ -1995,8 +2069,41 @@ export class Run {
       const b = this.bullets[i];
       if (b.dead) { this.bullets.splice(i, 1); continue; }
 
+      // 地走りの棘は delay のあいだ地面に潜み、順に隆起する。
+      if (b.delay > 0) { b.delay -= dt; continue; }
+
       updateBullet(b, ctx, dt);
+      // 暗黒球は消えるときに縮退して引き込む。
+      if (b.dead && b.kindName === 'void') { this.voidImplode(b); }
       if (b.dead) { this.bullets.splice(i, 1); continue; }
+
+      // 竜巻は巻き込んだ敵を引き寄せて刻む。
+      if (b.kindName === 'gale') {
+        b.tickCd = (b.tickCd || 0) - dt;
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          const d = Math.hypot(e.x - b.x, e.y - b.y) || 1;
+          if (d < b.r * 2.4) {
+            const pull = 120 * dt;
+            e.x += ((b.x - e.x) / d) * pull;
+            e.y += ((b.y - e.y) / d) * pull;
+            if (b.tickCd <= 0) {
+              this.damage(e, b.st || { dmg: b.dmg }, { crit: this.rand() < ((b.st || {}).crit || 0), element: b.element });
+            }
+          }
+        }
+        if (b.tickCd <= 0) b.tickCd = 0.25;
+      }
+
+      // 属性の尾。飛んでいるあいだも属性の粒を落としてイメージを強める。
+      if (b.element && b.element !== 'none' && !b.enemy) {
+        b.trailCd = (b.trailCd || 0) - dt;
+        if (b.trailCd <= 0) {
+          b.trailCd = 0.06;
+          const tf = ELEMENT_TRAIL[b.element];
+          if (tf) this.burst(b.x, b.y, 1, b.color, { spd: 20, spdMin: 5, life: tf.life, r: tf.r, shape: tf.shape, drag: 3, grav: tf.grav || 0 });
+        }
+      }
 
       // 壁に当たった弾は消える。爆弾はその場で炸裂する。
       // 軌道を回る刃 (orbit) はプレイヤーの周囲に毎フレーム作り直すので、
@@ -2074,6 +2181,15 @@ export class Run {
       }
       if (b.dead) this.bullets.splice(i, 1);
     }
+  }
+
+  /** 暗黒球の縮退。消える瞬間に周囲を引き込んで潰す。 */
+  voidImplode(b) {
+    const st = b.st || { dmg: b.dmg || 5 };
+    const rad = (b.r * 3 + (st.area || 0)) * (st.size || 1);
+    this.rings.push({ x: b.x, y: b.y, spiral: true, inward: true, turns: 1.6, baseAim: 0, reach: rad, life: 0.35, maxLife: 0.35, color: b.color, el: b.element, st: { ...st }, hit: new Set() });
+    this.burst(b.x, b.y, 10, b.color || '#5f3dc4', { spd: 120, spdMin: 30, life: 0.4, r: 2.4, shape: 'smoke', drag: 4 });
+    this.audio.tone?.({ freq: 160, type: 'sine', dur: 0.2, vol: 0.06, slide: -0.8 });
   }
 
   explode(b, st) {

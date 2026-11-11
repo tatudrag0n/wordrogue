@@ -18,12 +18,12 @@
 import { $, el, clear } from '../core/util.js';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
-} from '../data/words.js?v=1.54';
+} from '../data/words.js?v=1.55';
 import { rankIndex } from '../data/ranks.js';
 import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js';
-import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.54';
+import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.55';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { keyStats } from '../game/weapon.js?v=1.54';
+import { keyStats } from '../game/weapon.js?v=1.55';
 import { SenPad } from './senpad.js';
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);

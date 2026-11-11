@@ -387,7 +387,13 @@ function familyOf(base, res) {
     return base.family === 'ranged' || base.family === 'cast' ? 'slash' : base.family;
   }
   if (kind === 'whip') return 'whip';
-  if (kind === 'pierce') return 'thrust';
+  if (kind === 'pierce' || kind === 'thrust') return 'thrust';
+  if (kind === 'smash') return 'smash';
+  if (kind === 'sweep' || kind === 'reap') return 'slash';
+  if (kind === 'vortex' || kind === 'nova' || kind === 'blaze' || kind === 'venom' || kind === 'void') return 'cast';
+  if (kind === 'gale' || kind === 'tide' || kind === 'shard' || kind === 'quake') {
+    return base.family === 'thrust' || base.family === 'slash' ? 'ranged' : base.family;
+  }
   if (kind === 'shot' || kind === 'chain' || kind === 'beam' || kind === 'bomb') {
     return base.family === 'thrust' || base.family === 'slash' ? 'ranged' : base.family;
   }

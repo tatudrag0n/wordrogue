@@ -1955,3 +1955,43 @@ sec('頭の賢い語で語彙の枠が広がる');
 
   console.log(`  語彙 ${none.lexicon.length} -> 賢い頭 ${wise.lexicon.length} 枠`);
 }
+
+sec('違う言葉は違う攻撃の型になる (演出の多様化)');
+{
+  const r = freshWeapon(1, ['gun']);
+  const wi = r.weapons[0];
+  const kindOf = (...spec) => { setWords(wi, spec); wi._sig = null; return wi.resolve(r.player.stats); };
+  // 動詞ごとの型。同じ「斬撃」に潰れない。
+  const verbKinds = [
+    [['燃', 'やす'], '刃', 'blaze'],
+    [['凍', 'える'], '刃', 'nova'],
+    [['刺', 'す'], '刃', 'thrust'],
+    [['殴', 'る'], '刃', 'smash'],
+    [['刈', 'る'], '刃', 'sweep'],
+    [['吸', 'う'], '刃', 'vortex'],
+    [['吹', 'く'], '刃', 'gale'],
+    [['揺', 'らす'], '刃', 'quake'],
+    [['斬', 'る'], '刃', 'slash'],
+    [['貫', 'く'], '刃', 'pierce'],
+  ];
+  const seen = new Set();
+  for (const [v, tail, want] of verbKinds) {
+    const res = kindOf(v, tail);
+    ok(res.active && res.kind === want, `「${v[0]}${v[1]}${tail}」が ${want} でない: ${res.kind} (${res.reasonText})`);
+    seen.add(res.kind);
+  }
+  ok(seen.size === verbKinds.length, `動詞の型が重複している: ${[...seen].join(',')}`);
+  // 属性ごとの型 (特殊武器)。属性色の動詞では頭にした属性の攻撃を使う。
+  const elKinds = [
+    ['鋼', 'shard'], ['血', 'reap'], ['闇', 'void'], ['氷', 'nova'],
+    ['風', 'gale'], ['水', 'spray'], ['流', 'tide'], ['滝', 'tide'],
+  ];
+  for (const [el, want] of elKinds) {
+    const res = kindOf(['燃', 'やす'], [el]);
+    ok(res.special && res.kind === want, `属性「${el}」が ${want} でない: ${res.kind}`);
+  }
+  // 物理動作の動詞は特殊武器でも属性を上書きする (光を斬る → 斬撃)。
+  const cut = kindOf(['斬', 'る'], ['光']);
+  ok(cut.kind === 'slash', `「光を斬る」が斬撃でない: ${cut.kind}`);
+  console.log(`  動詞 ${verbKinds.length} 型すべて別 / 属性 ${elKinds.length} 型 / 光を斬る=slash`);
+}

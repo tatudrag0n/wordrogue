@@ -7,8 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.54';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.54';
+import { ELEMENTS } from '../data/words.js?v=1.55';
+import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.55';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.55';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -154,6 +155,19 @@ export function fireWeapon(run, wi, res) {
     case 'shadow': doShadow(run, wi, st, aim, el, elInfo); break;
     case 'wave': doWave(run, wi, st, aim, el, elInfo); break;
     case 'meteor': doMeteor(run, wi, st, el, elInfo); break;
+    case 'thrust': doThrust(run, wi, st, aim, el, elInfo); break;
+    case 'smash': doSmash(run, wi, st, aim, el, elInfo); break;
+    case 'sweep': doSweep(run, wi, st, aim, el, elInfo); break;
+    case 'vortex': doVortex(run, wi, st, aim, el, elInfo); break;
+    case 'nova': doNova(run, wi, st, aim, el, elInfo); break;
+    case 'blaze': doBlaze(run, wi, st, aim, el, elInfo); break;
+    case 'venom': doVenom(run, wi, st, aim, el, elInfo); break;
+    case 'gale': doGale(run, wi, st, aim, el, elInfo); break;
+    case 'tide': doTide(run, wi, st, aim, el, elInfo); break;
+    case 'void': doVoid(run, wi, st, aim, el, elInfo); break;
+    case 'quake': doQuake(run, wi, st, aim, el, elInfo); break;
+    case 'shard': doShard(run, wi, st, aim, el, elInfo); break;
+    case 'reap': doReap(run, wi, st, aim, el, elInfo); break;
     default: break;
   }
 
@@ -338,6 +352,204 @@ function doWave(run, wi, st, aim, el, elInfo) {
   });
   run.audio.tone({ freq: 300, type: 'sine', dur: 0.3, vol: 0.07, slide: 1.6 });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 意味ごとの攻撃。違う動詞・属性は違う挙動と違う演出になる。
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 突き。細長い槍で正面を一直線に穿つ。斬撃の扇でも射撃の弾でもない。
+function doThrust(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.5 * st.size;
+  const speed = Math.max(600, st.speed || 400) * 1.4;
+  const b = makeBullet({
+    x: p.x + Math.cos(aim) * 12, y: p.y + Math.sin(aim) * 12,
+    vx: Math.cos(aim) * speed, vy: Math.sin(aim) * speed,
+    r: 4 * st.size, size: st.size, dmg: st.dmg,
+    life: 0.7, pierce: st.pierce + 3, element: el, color: elInfo.color,
+    shape: 'lance', kindName: 'shot',
+  });
+  b.st = st; b.wi = wi; run.bullets.push(b);
+  // 踏み込みの細い弧。突いた軌道を読ませる。
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach * 0.6, arc: 0.5, life: 0.2, maxLife: 0.2, color: elInfo.color, el, thrust: true, hit: new Set() });
+  hitSector(run, p.x, p.y, aim, reach * 0.6, 0.5, st, el, run.slashes.at(-1).hit);
+  p.vx += Math.cos(aim) * 60; p.vy += Math.sin(aim) * 60;
+  run.burst(p.x + Math.cos(aim) * reach * 0.5, p.y + Math.sin(aim) * reach * 0.5, 5, elInfo.color, { a: aim, spread: 0.3, spd: 300, spdMin: 100, life: 0.2, r: 1.6, shape: 'spark', drag: 6 });
+  run.audio.tone({ freq: 700, type: 'triangle', dur: 0.1, vol: 0.06, slide: 1.8 });
+}
+
+// 打撃。前方の一点を叩き割り、衝撃波で吹き飛ばす。
+function doSmash(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 0.8 * st.size;
+  const cx = p.x + Math.cos(aim) * reach, cy = p.y + Math.sin(aim) * reach;
+  const rad = (st.range * 0.55 + (st.area || 0)) * st.size;
+  run.rings.push({ x: cx, y: cy, r: rad, life: 0.3, maxLife: 0.3, color: elInfo.color, el, star: true, hit: new Set() });
+  run.decals.push({ x: cx, y: cy, r: rad * 0.6, color: elInfo.color, life: 2, maxLife: 2, seed: (cx * 0.013 + cy * 0.017) % 1 });
+  const fx = ELEM_FX[el] || ELEM_FX.none;
+  run.burst(cx, cy, 12, elInfo.color, { spd: fx.spd * 1.3, spdMin: 60, life: 0.4, r: fx.r, shape: 'shard', drag: 4 });
+  for (const e of run.enemies) {
+    if (e.dead || dist2(e.x, e.y, cx, cy) > (rad + e.r) ** 2) continue;
+    run.damage(e, st, { crit: rollCrit(st), knock: (st.knock || 0) + 90, element: el });
+  }
+  run.audio.tone({ freq: 120, type: 'square', dur: 0.16, vol: 0.09, slide: 0.5 });
+  run.shake(4);
+}
+
+// 薙ぎ払い。広く薄い三日月で横一帯を刈る。
+function doSweep(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.2 * st.size;
+  const arc = clamp((st.arc || 1.8) * 1.9, 2.6, 3.6);
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, wide: true, hit: new Set() });
+  const fx = ELEM_FX[el] || ELEM_FX.none;
+  run.burst(p.x + Math.cos(aim) * reach * 0.8, p.y + Math.sin(aim) * reach * 0.8, 8, elInfo.color, { a: aim, spread: arc, spd: fx.spd * 1.3, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5 });
+  hitSector(run, p.x, p.y, aim, reach, arc, st, el, run.slashes.at(-1).hit);
+  run.audio.slash();
+}
+
+// 吸引。敵を手元へ引き寄せる inward 渦。
+function doVortex(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.6 * st.size;
+  run.rings.push({ x: p.x, y: p.y, spiral: true, inward: true, turns: 2.4, baseAim: aim, reach, life: 0.6, maxLife: 0.6, color: elInfo.color, el, st: { ...st }, hit: new Set() });
+  run.audio.tone({ freq: 240, type: 'sine', dur: 0.3, vol: 0.06, slide: -0.8 });
+}
+
+// 氷結。広がる六角の凍結陣。触れた敵を凍らせる。
+function doNova(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.5 * st.size;
+  run.rings.push({ x: p.x, y: p.y, nova: true, reach, life: 0.5, maxLife: 0.5, color: elInfo.color, el, st: { ...st, freeze: Math.max(st.freeze || 0, 0.5), chill: Math.max(st.chill || 0, 0.3) }, hit: new Set() });
+  run.burst(p.x, p.y, 12, elInfo.color, { spd: 220, spdMin: 60, life: 0.4, r: 2.2, shape: 'crystal', drag: 4 });
+  run.audio.tone({ freq: 900, type: 'sine', dur: 0.2, vol: 0.06, slide: -1.2 });
+}
+
+// 燃焼。火炎扇 + 地面に残る燃焼フィールド。
+function doBlaze(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.35 * st.size;
+  const arc = Math.min(2.0, 1.15 + (st.area || 0) / 100);
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.38, maxLife: 0.38, color: elInfo.color, el, flame: true, hit: new Set() });
+  const cx = p.x + Math.cos(aim) * reach * 0.6, cy = p.y + Math.sin(aim) * reach * 0.6;
+  run.fields.push(makeField(cx, cy, reach * 0.5, st.dmg * 0.5, { life: 2.2, element: el, burn: Math.max(st.burn || 0, 2) }));
+  run.decals.push({ x: cx, y: cy, r: reach * 0.4, color: elInfo.color, life: 2.4, maxLife: 2.4, seed: (cx * 0.011 + cy * 0.013) % 1 });
+  run.burst(cx, cy, 16, elInfo.color, { a: aim, spread: arc, spd: 160, spdMin: 40, life: 0.5, r: 2.6, shape: 'ember', drag: 2, grav: -30 });
+  for (const e of run.enemies) {
+    if (e.dead || dist2(e.x, e.y, p.x, p.y) > (reach + e.r) ** 2) continue;
+    let d = Math.atan2(e.y - p.y, e.x - p.x) - aim;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    if (Math.abs(d) <= arc / 2) run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el, burn: st.burn });
+  }
+  run.audio.tone({ freq: 180, type: 'sawtooth', dur: 0.2, vol: 0.08, slide: 2.5 });
+  run.shake(1.8);
+}
+
+// 毒霧。敵の 위치에毒の雲を置く (プレイヤーには纏わない)。
+function doVenom(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const tgt = run.nearestEnemy(p.x, p.y);
+  const cx = tgt ? tgt.x : p.x + Math.cos(aim) * st.range;
+  const cy = tgt ? tgt.y : p.y + Math.sin(aim) * st.range;
+  const rad = (st.range * 0.5 + (st.area || 0)) * st.size;
+  run.fields.push(makeField(cx, cy, rad, st.dmg * 0.5, { life: 2.6, element: el, poison: Math.max(st.poison || 0, 2) }));
+  run.burst(cx, cy, 10, elInfo.color, { spd: 90, spdMin: 20, life: 0.7, r: 2.6, shape: 'bubble', drag: 3, grav: -20 });
+  run.audio.tone({ freq: 320, type: 'sine', dur: 0.2, vol: 0.05, slide: -0.6 });
+}
+
+// 竜巻。前方へ進む渦。巻き込んだ敵を引き寄せて刻む。
+function doGale(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const b = makeBullet({
+    x: p.x + Math.cos(aim) * 14, y: p.y + Math.sin(aim) * 14,
+    vx: Math.cos(aim) * 240, vy: Math.sin(aim) * 240,
+    r: 16 * st.size, size: st.size, dmg: st.dmg * 0.5,
+    life: 1.4, pierce: 99, continuous: true, element: el, color: elInfo.color,
+    shape: 'gust', kindName: 'gale',
+  });
+  b.st = st; b.wi = wi; b.tickCd = 0; run.bullets.push(b);
+  run.audio.tone({ freq: 520, type: 'noise', dur: 0.3, vol: 0.06, slide: -0.6 });
+}
+
+// 押し波。広く進む水の壁。敵を押し流す。
+function doTide(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const b = makeBullet({
+    x: p.x + Math.cos(aim) * 14, y: p.y + Math.sin(aim) * 14,
+    vx: Math.cos(aim) * 260, vy: Math.sin(aim) * 260,
+    r: 20 * st.size, size: st.size, dmg: st.dmg,
+    life: 1.2, pierce: 99, knock: (st.knock || 0) + 120, element: el, color: elInfo.color,
+    shape: 'wave', kindName: 'tide',
+  });
+  b.st = st; b.wi = wi; run.bullets.push(b);
+  run.burst(p.x + Math.cos(aim) * 14, p.y + Math.sin(aim) * 14, 8, elInfo.color, { a: aim, spread: 1.2, spd: 180, spdMin: 60, life: 0.3, r: 2, shape: 'dot', drag: 5 });
+  run.audio.tone({ freq: 400, type: 'sine', dur: 0.25, vol: 0.07, slide: -0.8 });
+}
+
+// 暗黒。ゆっくり追う闇の玉。消えるときに縮退して引き込む。
+function doVoid(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const b = makeBullet({
+    x: p.x + Math.cos(aim) * 16, y: p.y + Math.sin(aim) * 16,
+    vx: Math.cos(aim) * 160, vy: Math.sin(aim) * 160,
+    r: 8 * st.size, size: st.size, dmg: st.dmg,
+    life: 1.6, pierce: 99, homing: 0.6, element: el, color: elInfo.color,
+    shape: 'orb', kindName: 'void',
+  });
+  b.st = st; b.wi = wi; run.bullets.push(b);
+  run.audio.tone({ freq: 220, type: 'sine', dur: 0.2, vol: 0.06, slide: -0.5 });
+}
+
+// 地走り。正面へ岩の棘が順に隆起する。
+function doQuake(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const n = 5;
+  for (let i = 0; i < n; i++) {
+    const d = (i + 1) * (st.range * 0.32) * st.size;
+    const b = makeBullet({
+      x: p.x + Math.cos(aim) * d, y: p.y + Math.sin(aim) * d,
+      vx: 0, vy: 0, r: 10 * st.size, size: st.size, dmg: st.dmg * 0.7,
+      life: 0.9, delay: i * 0.07, pierce: 0, element: el, color: elInfo.color,
+      shape: 'spike', kindName: 'spike',
+    });
+    b.st = st; b.wi = wi; run.bullets.push(b);
+  }
+  run.audio.tone({ freq: 90, type: 'square', dur: 0.2, vol: 0.08, slide: 0.4 });
+  run.shake(2.5);
+}
+
+// 鉄片。貫通する金属の針を扇状に放つ。
+function doShard(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const n = Math.max(3, Math.round(st.count || 1) + 2);
+  const spread = Math.max(0.5, st.spread || 0.6);
+  const speed = Math.max(500, st.speed || 300) * 1.2;
+  for (let i = 0; i < n; i++) {
+    const a = aim + (i / (n - 1) - 0.5) * spread;
+    const b = makeBullet({
+      x: p.x + Math.cos(a) * 12, y: p.y + Math.sin(a) * 12,
+      vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+      r: 3 * st.size, size: st.size, dmg: st.dmg * 0.6,
+      life: 1.2, pierce: st.pierce + 2, element: el, color: elInfo.color,
+      shape: 'shard', kindName: 'shot',
+    });
+    b.st = st; b.wi = wi; run.bullets.push(b);
+  }
+  run.audio.shoot();
+}
+
+// 血刃。赤い弧で斬り、返りの帯で吸血する。
+function doReap(run, wi, st, aim, el, elInfo) {
+  const p = run.player;
+  const reach = st.range * 1.2 * st.size;
+  const arc = st.arc || 1.9;
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, reap: true, hit: new Set() });
+  run.rings.push({ x: p.x, y: p.y, reap: true, reach, life: 0.5, maxLife: 0.5, color: elInfo.color, el, st: { ...st, lifesteal: Math.max(st.lifesteal || 0, 0.05) }, hit: new Set() });
+  const fx = ELEM_FX[el] || ELEM_FX.none;
+  run.burst(p.x + Math.cos(aim) * reach * 0.7, p.y + Math.sin(aim) * reach * 0.7, 7, elInfo.color, { a: aim, spread: arc, spd: fx.spd, spdMin: 60, life: fx.life, r: fx.r, shape: 'ink', drag: 5 });
+  hitSector(run, p.x, p.y, aim, reach, arc, st, el, run.slashes.at(-1).hit);
+  run.audio.slash();
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // 近接
 // ─────────────────────────────────────────────────────────────────────────────
@@ -391,6 +603,15 @@ function doSlash(run, wi, st, aim, el, elInfo) {
     arc = Math.PI * 2;
     reach *= 1.06;
   }
+  // 動詞ごとの振り方。同じ斬撃でも言葉が違えば軌跡と当たり方が変わる。
+  const vstyle = wi._res?.verbStyle || null;
+  let dmgMul = 1;
+  if (vstyle === 'cross') extra = aim + Math.PI;
+  else if (vstyle === 'heavy') { reach *= 1.15; dmgMul = 1.1; }
+  else if (vstyle === 'wide') { arc = Math.min(3.4, arc * 1.5); }
+  else if (vstyle === 'exec') { dmgMul = 1.12; }
+  else if (vstyle === 'flurry') { dmgMul = 0.55; }
+  const vst = dmgMul !== 1 ? { ...pst, dmg: pst.dmg * dmgMul, knock: (pst.knock || 0) + (vstyle === 'heavy' ? 60 : 0) } : pst;
   // 旋回攻撃の輪。回った範囲を読ませる。
   if (patKey === 'spin') {
     run.rings.push({
@@ -413,12 +634,14 @@ function doSlash(run, wi, st, aim, el, elInfo) {
       color: elInfo.color,
       el,
       motion: m,
+      vstyle,
       hit: hitOwn ? new Set() : null,
     });
     return run.slashes.at(-1);
   };
   // 数増やす系の語 (count) で斬撃が扇状に増える。幅は arc を基準に少し広げるだけ。
-  const n = Math.max(1, Math.min(6, Math.round(st.count || 1)));
+  // 刻 (flurry) は短い連撃を 3 つ。
+  const n = vstyle === 'flurry' ? 3 : Math.max(1, Math.min(6, Math.round(st.count || 1)));
   const fan = n === 1 ? 0 : Math.min(arc * 0.6, 0.22 * (n - 1));
   const slashes = [];
   for (let i = 0; i < n; i++) {
@@ -431,7 +654,7 @@ function doSlash(run, wi, st, aim, el, elInfo) {
     a: aim2, spread: Math.min(Math.PI, arc) * 0.9, spd: fx.spd * 1.4, spdMin: fx.spd * 0.4,
     life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
   });
-  for (const s of slashes) hitSector(run, p.x, p.y, s.a, reach, arc, pst, el, s.hit);
+  for (const s of slashes) hitSector(run, p.x, p.y, s.a, reach, arc, vst, el, s.hit);
   if (extra != null) {
     // 反対側。同じ軌道の鏡写し。モーションは角度だけ裏返す。
     const back = motion ? { ...motion, baseAim: extra } : null;
@@ -440,7 +663,7 @@ function doSlash(run, wi, st, aim, el, elInfo) {
       a: extra, spread: Math.min(Math.PI, arc) * 0.9, spd: fx.spd * 1.4, spdMin: fx.spd * 0.4,
       life: fx.life, r: fx.r, shape: fx.shape, drag: 5,
     });
-    hitSector(run, p.x, p.y, extra, reach, arc, pst, el, sb.hit);
+    hitSector(run, p.x, p.y, extra, reach, arc, vst, el, sb.hit);
   }
 }
 

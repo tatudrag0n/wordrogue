@@ -13,8 +13,8 @@
 // level を上げるほど基礎値が伸びる。文の長さは武器レベルとは無関係で 10 文字まで。
 // ============================================================================
 
-import { WEAPON_WORD_SET } from './words.core.js?v=1.54';
-import { WORDS, weaponHeadKind } from './words.js?v=1.54';
+import { WEAPON_WORD_SET } from './words.core.js?v=1.55';
+import { WORDS, weaponHeadKind } from './words.js?v=1.55';
 
 /**
  * kind の種類と挙動:
@@ -268,14 +268,35 @@ export const SPECIAL_SHAPE = {
  * ここに無い動詞は、属性の既定の型 (炎なら爆弾、光なら光線) のまま。
  */
 export const VERB_SHAPE = {
-  斬: 'slash', 裂: 'slash', 潰: 'slash', 殴: 'slash', 叩: 'slash',
-  刻: 'slash', 絶: 'slash', 終: 'slash', 葬: 'slash', 屠: 'slash',
-  討: 'slash', 戮: 'slash', 刈: 'slash', 祓: 'slash',
+  斬: 'slash', 裂: 'slash', 潰: 'slash', 刻: 'slash', 絶: 'slash',
+  終: 'slash', 葬: 'slash', 屠: 'slash', 討: 'slash', 戮: 'slash', 祓: 'slash',
   射: 'shot', 撃: 'shot', 散: 'shot',
-  貫: 'pierce', 刺: 'pierce', 穿: 'pierce',
-  爆: 'bomb', 破: 'bomb', 炸: 'bomb', 砕: 'bomb',
+  貫: 'pierce',
+  爆: 'bomb', 炸: 'bomb',
   響: 'chain',
   舞: 'orbit',
+  // ── 意味ごとの攻撃。違う動詞は違う型・違う演出になる。──
+  刺: 'thrust', 穿: 'thrust', 突: 'thrust',
+  殴: 'smash', 叩: 'smash', 砕: 'smash', 破: 'smash', 壊: 'smash',
+  薙: 'sweep', 刈: 'sweep', 掃: 'sweep',
+  吸: 'vortex', 旋: 'vortex', 回: 'vortex',
+  凍: 'nova', 冷: 'nova',
+  燃: 'blaze', 焼: 'blaze', 焦: 'blaze',
+  蝕: 'venom', 侵: 'venom',
+  吹: 'gale',
+  流: 'tide', 滝: 'tide',
+  噛: 'reap',
+  揺: 'quake', 震: 'quake',
+};
+
+/**
+ * 斬撃 (slash) の中でも動詞ごとに振り方を変える。
+ * 同じ「斬撃」でも 裂=十字 / 刻=連撃 / 葬=重い / 絶=処刑 / 祓=wide で
+ * 軌跡と当たり方が変わり、違う言葉が同じ演出にならない。
+ */
+export const VERB_SLASH_STYLE = {
+  裂: 'cross', 刻: 'flurry', 葬: 'heavy', 屠: 'heavy', 戮: 'heavy',
+  絶: 'exec', 終: 'exec', 祓: 'wide', 討: 'wave', 潰: 'heavy',
 };
 
 /**
@@ -321,13 +342,16 @@ export const ELEMENT_SHAPE = {
  */
 export const ELEMENT_KIND = {
   fire: 'flame', water: 'spray', thunder: 'bolt', earth: 'meteor',
-  dark: 'shadow', wind: 'gust',
+  dark: 'void', wind: 'gale', ice: 'nova', poison: 'venom',
+  nature: 'venom', steel: 'shard', gold: 'shard', blood: 'reap',
 };
 
 /** 単語ごとの攻撃の型上書き。属性の既定と違う振る舞いをさせる語。 */
 export const WORD_KIND = {
   雨: 'rain',
   波: 'wave',
+  流: 'tide',
+  滝: 'tide',
 };
 
 /** 攻撃の型から描画の形を引くときの既定値。 */
@@ -338,6 +362,9 @@ export const KIND_SHAPE = {
   flame: 'orb', spray: 'dot', gust: 'gust', bolt: 'arrow',
   rain: 'dot', shadow: 'orb', wave: 'orb', meteor: 'bomb',
   flail: 'ball', dual: 'blade', helper: 'spirit',
+  thrust: 'lance', smash: 'blade', sweep: 'blade', vortex: 'orb',
+  nova: 'orb', blaze: 'orb', venom: 'orb', gale: 'gust', tide: 'wave',
+  void: 'orb', quake: 'bomb', shard: 'shard', reap: 'blade',
 };
 
 /**
@@ -414,6 +441,9 @@ export const KIND_LABEL = {
   rain: '雨降らせ', shadow: '暗黒球', wave: '波動', meteor: '隕石',
   boomerang: '還り刃', pierce: '貫通', none: '',
   flail: '鉄球', dual: '双剣', helper: '分身',
+  thrust: '突き', smash: '打撃', sweep: '薙ぎ払い', vortex: '吸引',
+  nova: '氷結', blaze: '燃焼', venom: '毒霧', gale: '竜巻', tide: '押し波',
+  void: '暗黒', quake: '地走り', shard: '鉄片', reap: '血刃',
 };
 
 /** 武器レベルに応じた基礎値を計算する。末尾語 (tail) の効果は文の側で加わる。 */

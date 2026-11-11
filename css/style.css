@@ -983,7 +983,7 @@ body.touch .hud-choice-title { font-size: 1rem; }
   background: #eef2f9;
   min-height: 30px;
 }
-.sen-item { position: relative; display: inline-flex; align-items: center; gap: 0; }
+.sen-item { position: relative; display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; }
 .sen-word {
   position: relative;
   min-width: 34px; min-height: 30px;
@@ -996,6 +996,7 @@ body.touch .hud-choice-title { font-size: 1rem; }
   box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 1px 3px rgba(23, 43, 84, 0.06);
   font-size: 0.92rem;
   font-weight: 700;
+  white-space: nowrap;
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
@@ -1054,6 +1055,7 @@ body.touch .hud-choice-title { font-size: 1rem; }
   color: #2457d6;
   font-size: .72rem;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
@@ -1777,6 +1779,13 @@ body.touch .hud-choice-title { font-size: 1rem; }
 .grow-part-row { display: flex; align-items: center; gap: 7px; }
 /* 部位の文は 1 行。行のどこへ落としてもその位置に入る。 */
 .grow-part-row .sen-row { flex: 1 1 auto; min-width: 0; }
+/* 狭い画面では文の行を全幅にし、grade・文字数・空にする は 2 段目へ。
+   文が圧縮されて接続詞や末尾チップが折り返すのを防ぐ。 */
+@media (max-width: 640px) {
+  .grow-part-row { flex-wrap: wrap; }
+  .grow-part-row .sen-row { flex: 1 1 100%; }
+  .grow-part-lv { margin-left: auto; }
+}
 .grow-part-row .sen-row.empty { border-style: dashed; background: #f4f7fc; }
 .grow-part-placeholder { font-size: .74rem; color: var(--fg-mute); }
 .grow-part-lv { flex: 0 0 auto; font-size: .7rem; color: var(--fg-mute); font-variant-numeric: tabular-nums; }

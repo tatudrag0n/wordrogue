@@ -1820,7 +1820,7 @@ sec('部位強化は 1 文。接続詞が使える');
     const loose = resolvePlayerStats(save.partEntries());
     const withRegen = evaluatePart([{ text: '癒', conn: null }]);
     ok(withRegen.valid, '1 語の部位が不成文になっている');
-    ok(loose.partRows.some((x) => x.text === '妙な骨' && x.gain > 1),
+    ok(loose.partRows.some((x) => x.text === '妙な骨胸' && x.gain > 1),
       `部位の文の力が乗らない: ${JSON.stringify(loose.partRows)}`);
     ok(loose.partBroken.length === 0, `不成文の部位が出た: ${JSON.stringify(loose.partBroken)}`);
   }

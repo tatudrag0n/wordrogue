@@ -322,6 +322,15 @@ for (const [w, c] of PART_UNNATURAL) {
   ok(r.valid, `部位「鍛錬された」が不成文: ${r.reasonText}`);
   const p = evaluatePart([{ text: '約', conn: null }, { text: '束', conn: 'された' }]);
   ok(p.valid, `部位「約束された」が不成文: ${p.reasonText}`);
+  // HUD などの表示は部位名まで含めた全文 (鍛錬された地 + 頭)。
+  const rows = resolvePlayerStats([
+    { id: 'head', name: '頭', words: [{ text: '鍛' }, { text: '錬', conn: 'された' }, { text: '地' }] },
+    { id: 'rhnd', name: '右手', words: [{ text: '鍛' }, { text: '錬', conn: 'された' }] },
+  ]);
+  const head = rows.partRows.find((x) => x.id === 'head');
+  const rhnd = rows.partRows.find((x) => x.id === 'rhnd');
+  ok(head?.text === '鍛錬された地頭', `頭の全文が部位名を欠く: ${head?.text}`);
+  ok(rhnd?.text === '鍛錬された右手', `右手の全文が部位名を欠く: ${rhnd?.text}`);
 }
 {
   const r = evaluatePart([{ text: '刃', conn: null }, { text: '剣', conn: null }]);

@@ -5,9 +5,9 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.53';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.53';
-import { motionPose } from '../game/motions.js?v=1.53';
+import { ELEMENTS } from '../data/words.js?v=1.54';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.54';
+import { motionPose } from '../game/motions.js?v=1.54';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */

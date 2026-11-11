@@ -77,7 +77,7 @@ const q = (sel, root = dom.doc) => [...root.querySelectorAll(sel)];
 const partsBox = () => q('#growParts .grow-part');
 const nameOf = (id) => PARTS.find((p) => p.id === id).name;
 /** 部位のコマ (毎回選び直す — 再描画でノードが入れ替わる) */
-const boxOf = (id) => partsBox().find((b) => b.querySelector('.grow-part-name').textContent === nameOf(id));
+const boxOf = (id) => partsBox().find((b) => b.dataset.part === id);
 const rowOf = (id) => boxOf(id).querySelector('.sen-row');
 const chipsOf = (id) => q('.sen-word:not(.sen-tail)', boxOf(id));
 const wordsBox = () => q('#growWords .pword');
@@ -172,6 +172,12 @@ sec('7 部位が縦に並び、どの部位も 10 文字の 1 文');
   ok(/所持 \d+ 語/.test(dom.doc.getElementById('growWordsNote').textContent), '所持語の説明が出ない');
   // 部位名は文の右端に固定チップ (鍛冶の末尾語と同じ) で付く。
   ok(q('.sen-word.sen-tail', parts[0]).length === 1, '部位名の固定チップが無い');
+  // 左端のラベルと注記の文面見出しは廃止。右端のチップだけが部位名を示す。
+  for (const b of parts) {
+    ok(!b.querySelector('.grow-part-name'), `左端の部位ラベルが残っている: ${b.dataset.part}`);
+    ok(q('.sen-word.sen-tail', b)[0]?.textContent === nameOf(b.dataset.part),
+      `末尾チップが部位名でない: ${b.dataset.part}`);
+  }
   console.log(`  部位 ${parts.length} / 上限 ${PART_MAX_LEN} 文字 / 所持語 ${wordsBox().length} (制限なし) / 末尾チップあり`);
 }
 
@@ -185,6 +191,7 @@ sec('所持語をタップして選び、部位の行をタップで置く。行
   ok(save.partRaw('head')[0]?.text === '妙', `行のタップで入らない: ${JSON.stringify(save.partRaw('head'))}`);
   ok(chipsOf('head').length === 1, '語のチップが出ない');
   ok(/1 \/ 10 文字/.test(boxOf('head').textContent), '文字数が増えない');
+  ok(!boxOf('head').querySelector('.grow-part-head b'), '注記に文面の見出しが残っている');
   ok(!dom.doc.getElementById('btnGrowUndo').disabled, '戻すが押せない');
 
   // 語のチップをタップ → 接続詞が 1 つ進む (その語の送り仮名だけ)。

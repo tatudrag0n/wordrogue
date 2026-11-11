@@ -14,7 +14,8 @@ import { STAGES } from '../js/data/stages.js';
 const CHROME = process.env.CHROME_PATH
   || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL_ = process.env.GAME_URL || 'http://localhost:8099/index.html';
-const PORT = 9222;
+// 9222 が別の開発ツールに取られている環境では CDP_PORT で逃がす。
+const PORT = Number(process.env.CDP_PORT || 9222);
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ok   ' + m); } else { fail++; console.log('  FAIL ' + m); } };
@@ -1675,7 +1676,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
     app.menus.show('grow');
     app.menus.renderGrow();
     const live = () => [...document.querySelectorAll('#growParts .grow-part')]
-      .find(p => p.querySelector('.grow-part-name').textContent === '頭');
+      .find(p => p.dataset.part === 'head');
     const open = () => {
       if (!document.querySelector('.conn-picker')) live().querySelector('.sen-conn').click();
       return [...document.querySelectorAll('.conn-picker .conn-pick')];
@@ -1692,6 +1693,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
       note: note ? note.textContent.trim() : '',
       conn: (app.save.partRaw('head') || []).filter(Boolean)[0].conn,
       words: document.querySelectorAll('#growWords .pword').length,
+      coll: app.save.collection.filter(t => t).length,
       noteEl: document.getElementById('growWordsNote').textContent,
       totalRows: document.querySelectorAll('#growTotal .eff').length,
       wordEff: document.querySelectorAll('#growWords .pword-eff').length,
@@ -1709,7 +1711,7 @@ sec('部位強化はメニューで設定し、戦闘に効く');
   ok(conn.totalRows > 0, '部位の合計に効果が出ていない');
   ok(conn.wordEff > 0, '所持語に効きの表示が無い');
   // 所持語は制限なし。持っている語ぜんぶ (コレクションと同じ数)。
-  ok(conn.words === app.save.collection.filter(t => t).length,
+  ok(conn.words === conn.coll,
     `所持語がぜんぶ出ていない: ${conn.words}`);
   ok(/所持 \d+ 語/.test(conn.noteEl), `所持語の説明が出ない: ${conn.noteEl}`);
   console.log(`    接続詞 ${conn.labels.join(' ')} → ${conn.conn} / 所持語 ${conn.words} / ${conn.limit}`);

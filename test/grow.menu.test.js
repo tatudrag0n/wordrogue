@@ -326,7 +326,7 @@ sec('部位の文は能力に乗り、不成文は何も乗せない');
   ok(rows.partCount === 3, `部位の語を数えていない: ${rows.partCount}`);
   ok(rows.partRows.length === 2, `文の行が ${rows.partRows.length} 件`);
   const chst = rows.partRows.find((r) => r.name === '胸');
-  ok(chst && chst.text === '癒骨' && chst.gain > 1, `2 語の文の力が乗らない: ${JSON.stringify(chst)}`);
+  ok(chst && chst.text === '癒骨胸' && chst.gain > 1, `2 語の文の力が乗らない: ${JSON.stringify(chst)}`);
   const one = rows.partRows.find((r) => r.name === '頭');
   ok(one && Math.abs(one.gain - 1) < 0.001, `1 語の倍率が ${one?.gain}`);
   console.log(`  胸「${chst.text}」 ×${chst.gain.toFixed(2)} / 頭「${one.text}」 ×${one.gain.toFixed(2)}`);

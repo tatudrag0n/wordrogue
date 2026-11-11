@@ -27,10 +27,10 @@
 
 import {
   WORDS, ELEMENTS, CONNECTOR_SET, CONNECTORS,
-} from '../data/words.js?v=1.53';
+} from '../data/words.js?v=1.54';
 import { clamp } from '../core/util.js';
 import { evaluatePart, normPartEntries } from './parts.js';
-import { rankMul } from '../data/ranks.js?v=1.53';
+import { rankMul } from '../data/ranks.js?v=1.54';
 
 /** 素の能力。 */
 export const BASE_PLAYER = {
@@ -315,7 +315,8 @@ export function resolvePlayerStats(parts, opt = {}) {
     s.partPowerBonus += Math.max(0, p.power - 1);
     s.partCount += used;
     s.partRows.push({
-      name, id, text: p.text, grade: p.ev.grade, gradeName: p.gradeInfo?.name || '',
+      // 表示は部位名まで含めた全文 (「鍛錬された地」+ 頭 = 鍛錬された地頭)。
+      name, id, text: p.text + name, grade: p.ev.grade, gradeName: p.gradeInfo?.name || '',
       power: p.power, gain, idiom: p.idiom?.name || null,
       /** 語・接続詞から来た効果があったか (0 なら表示用の語)。 */
       effects: used,

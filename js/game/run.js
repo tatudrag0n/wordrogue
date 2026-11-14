@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.61';
+} from '../data/words.js?v=1.62';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.61';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.62';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.61';
-import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.61';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.61';
+import { WeaponInst } from './weapon.js?v=1.62';
+import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.62';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.62';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -204,7 +204,12 @@ export class Run {
     this.weaponDmg = new Map();
     this.dmgTaken = 0;
     this.shakeAmt = 0;
-    this.shakeOn = true;
+    this.shakeOn = false;      // 画面振動は既定 OFF (うっとおしい/光過敏配慮)
+    this.reduceFlash = true;   // 点滅・強い光を抑える (光過敏/てんかん配慮) 既定 ON
+    this.reducedMotion = false; // OS の「視差効果を減らす」
+    this.fxScale = 1;          // 粒子量の倍率 (reducedMotion で下げる)
+    this._fxSeed = 0x9E3779B9; // 演出専用乱数の種
+    this._lastFlash = -1;
     this.showDamage = true;
     /** 連斬。2.4 秒以内に倒すと繋がる。HUD が脈打つ。 */
     this.combo = 0;
@@ -895,9 +900,20 @@ export class Run {
       this.save.save?.();
     }
   }
-  shake(v) { if (this.shakeOn) this.shakeAmt = Math.min(26, this.shakeAmt + v); }
+  shake(v) { if (this.shakeOn && !this.reducedMotion) this.shakeAmt = Math.min(26, this.shakeAmt + v); }
+
+  /** 画面全体の一瞬の色。光過敏配慮: 頻度を毎秒 2 回以下に絞り、寿命も短く。 */
+  flash(color, life) {
+    if (this.reduceFlash) {
+      if (this.time - this._lastFlash < 0.5) return;
+      life = Math.min(life, 0.25);
+    }
+    this._lastFlash = this.time;
+    this.screenFlash = { color, life, maxLife: life };
+  }
 
   burst(x, y, n, color, o = {}) {
+    n = Math.round(n * (this.fxScale ?? 1));
     if (!(n > 0)) return;
     const spd = o.spd ?? 160;
     const spdMin = o.spdMin ?? spd * 0.25;
@@ -905,19 +921,27 @@ export class Run {
     const r = o.r ?? 3.2;
     const rMax = o.rMax ?? r * 1.4;
     for (let i = 0; i < n; i++) {
-      const a = o.a != null ? o.a + (Math.random() - 0.5) * (o.spread ?? 0.8) : Math.random() * Math.PI * 2;
-      const s = spdMin + Math.random() * (spd - spdMin);
-      const l = life * (0.6 + Math.random() * 0.8);
+      const a = o.a != null ? o.a + (this._fxRand() - 0.5) * (o.spread ?? 0.8) : this._fxRand() * Math.PI * 2;
+      const s = spdMin + this._fxRand() * (spd - spdMin);
+      const l = life * (0.6 + this._fxRand() * 0.8);
       this.particles.push({
         x, y,
         vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-        r: r + Math.random() * (rMax - r),
+        r: r + this._fxRand() * (rMax - r),
         life: l, maxLife: l,
         color, grav: o.grav || 0, drag: o.drag ?? 3.2,
         shape: o.shape || 'dot',
       });
     }
     if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
+  }
+
+  /** 演出専用の乱数。 gameplay / くじの Math.random 系列を汚さない。 */
+  _fxRand() {
+    this._fxSeed = (this._fxSeed + 0x6D2B79F5) | 0;
+    let t = Math.imul(this._fxSeed ^ (this._fxSeed >>> 15), 1 | this._fxSeed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
 
   damageNumbers(x, y, v, crit) {
@@ -1202,7 +1226,7 @@ export class Run {
     if (!e) return null;
     this.midBoss = e;
     this.audio.bossWarn?.();
-    this.screenFlash = { color: '#c9971f', life: 0.32, maxLife: 0.32 };
+    this.flash('#c9971f', 0.32);
     this.pushHint(`中ボス ${e.def.name} が来る — 倒すと宝箱`);
     this.shake(8);
     return e;
@@ -1216,7 +1240,7 @@ export class Run {
     this.boss = e;
     this.audio.boss();
     this.audio.bossWarn?.();
-    this.screenFlash = { color: '#b8332b', life: 0.55, maxLife: 0.55 };
+    this.flash('#b8332b', 0.55);
     this.pushHint(`${e.def.name} が来る`);
     this.shake(16);
   }
@@ -1232,14 +1256,17 @@ export class Run {
       x: p.x, y: p.y, r: 42, life: 0.35, maxLife: 0.35,
       color: '#e8b425', hit: new Set(),
     });
-    this.burst(p.x, p.y, 26, '#e8b425', {
-      spd: 240, spdMin: 40, life: 0.7, r: 2.2, shape: 'spark', drag: 4.2,
+    this.burst(p.x, p.y, 34, '#e8b425', {
+      spd: 300, spdMin: 40, life: 0.8, r: 2.4, shape: 'spark', drag: 4.2,
     });
-    this.burst(p.x, p.y, 10, '#fdf6dd', {
-      spd: 180, spdMin: 20, life: 0.5, r: 2.6, shape: 'dot', drag: 5,
+    this.burst(p.x, p.y, 14, '#fdf6dd', {
+      spd: 200, spdMin: 20, life: 0.6, r: 2.8, shape: 'dot', drag: 5,
     });
-    this.screenFlash = { color: '#f1d488', life: 0.34, maxLife: 0.34 };
-    this.shake(3);
+    // 上昇する光の粒。レベルアップの高揚を形にする。
+    this.burst(p.x, p.y, 12, '#f6d878', {
+      spd: 120, spdMin: 40, life: 0.9, r: 2.0, shape: 'dot', drag: 2.5, grav: -140,
+    });
+    this.flash('#f1d488', 0.34);
   }
 
   killEnemy(e, st) {
@@ -1264,17 +1291,21 @@ export class Run {
       seed: (e.x * 0.021 + e.y * 0.013) % 1,
     });
     if (this.decals.length > 48) this.decals.shift();
-    this.burst(e.x, e.y, e.boss ? 42 : Math.min(20, 8 + Math.round(e.r)), e.def.color, {
-      spd: e.boss ? 340 : 210,
-      life: e.boss ? 0.9 : 0.55,
-      r: e.boss ? 5 : 3.2,
+    this.burst(e.x, e.y, e.boss ? 52 : Math.min(26, 12 + Math.round(e.r)), e.def.color, {
+      spd: e.boss ? 360 : 240,
+      life: e.boss ? 0.9 : 0.6,
+      r: e.boss ? 5 : 3.4,
       shape: 'ink',
       drag: 2.8,
     });
     // 墨の粒に混ぜる火花。色が飛ぶので「倒した」手応えが出る。
-    this.burst(e.x, e.y, e.boss ? 18 : 5, '#f0c25a', {
-      spd: e.boss ? 380 : 250, spdMin: 80,
-      life: e.boss ? 0.55 : 0.3, r: 1.7, shape: 'spark', drag: 5,
+    this.burst(e.x, e.y, e.boss ? 22 : 8, '#f0c25a', {
+      spd: e.boss ? 400 : 280, spdMin: 80,
+      life: e.boss ? 0.55 : 0.34, r: 1.8, shape: 'spark', drag: 5,
+    });
+    // 抜けていく魂の粒。上昇して消えるので「倒した」と読める。
+    this.burst(e.x, e.y, e.boss ? 10 : 4, '#fffdf7', {
+      spd: 90, spdMin: 30, life: 0.7, r: 2.0, shape: 'dot', drag: 2.5, grav: -160,
     });
     // 撃破の輪。連斬が続くほど大きく広がる。
     this.rings.push({
@@ -1282,8 +1313,10 @@ export class Run {
       life: 0.32, maxLife: 0.32,
       color: e.def.color || '#d39a35', hit: new Set(), thin: true,
     });
-    // 連斬の手応え。一瞬だけ世界がゆっくりになる。
-    if (this.combo >= 3) this.slowmo = Math.max(this.slowmo, 0.045);
+    // 連斬の手応え。一瞬だけ世界がゆっくりになる (ボスはより長く)。
+    // 毎撃ではなく連斬/ボスに絞る — 常時 slowmo は出現演出のタイミングをずらす。
+    if (e.boss) this.slowmo = Math.max(this.slowmo, 0.06);
+    if (this.combo >= 3) this.slowmo = Math.max(this.slowmo, 0.05);
     if (e.boss) {
       this.rings.push({
         x: e.x, y: e.y, r: 180, life: 0.7, maxLife: 0.7,

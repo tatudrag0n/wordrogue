@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.61';
-import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.61';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.61';
+import { ELEMENTS } from '../data/words.js?v=1.62';
+import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.62';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.62';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -1107,6 +1107,11 @@ export function damage(run, e, st, opt = {}) {
   const hitEl = opt.element || st.el || 'none';
   elementHitFx(run, e, hitEl, !!crit);
   run?.audio?.elemHit?.(hitEl);
+  // 会心の手応え。白い弾ける輪と火花で「効いた」を出す (点滅ではなく形)。
+  if (crit && run) {
+    run.rings?.push({ x: e.x, y: e.y, r: e.r * 1.9, life: 0.2, maxLife: 0.2, color: '#fffdf7', hit: new Set(), thin: true });
+    run.burst?.(e.x, e.y, 6, '#fffdf7', { spd: 260, spdMin: 90, life: 0.25, r: 1.6, shape: 'spark', drag: 6 });
+  }
 
   // 手の部位に属性語があると、接触する近接武器 (斬撃・薙ぎ) がその属性を纏う。
   // 武器側に属性が無いときだけ。手の属性は部位強化が由来。

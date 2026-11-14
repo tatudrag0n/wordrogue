@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord, DRAWABLE_ALL } from '../data/words.js?v=1.61';
+import { WORDS, drawWord, DRAWABLE_ALL } from '../data/words.js?v=1.62';
 import { CONNECTORS, canConnect } from '../data/words.connect.js';
 import {
   RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
-} from '../data/ranks.js?v=1.61';
+} from '../data/ranks.js?v=1.62';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -29,7 +29,7 @@ const DEFAULTS = {
   starterRev: 0,       // 初期セットの改訂番号。古いセーブを 1 度だけ入れ替える
   deck: null,          // 戦闘に持ち込む言葉デッキ (語の text の配列)
   parts: {},           // 部位強化 { partId: [{ t, c }] }
-  settings: { volume: 0.5, screenShake: true, showDamage: true },
+  settings: { volume: 0.5, screenShake: false, reduceFlash: true, showDamage: true },
   seenIntro: false,
   guide: 0,            // 初回の操作ガイド。0 = まだ見ていない
   // タブごとの短い説明を見たか。初めて開いたときだけ案内を出し、

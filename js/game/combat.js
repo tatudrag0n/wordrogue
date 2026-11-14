@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.60';
-import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.60';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.60';
+import { ELEMENTS } from '../data/words.js?v=1.61';
+import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.61';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.61';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -93,8 +93,9 @@ export function fireWeapon(run, wi, res) {
   const st = res.stats;
   if (res.heal) st.heal = true;
   // 結算画面の「武器ごとの与ダメージ」用。発射元の武器を st に刻む。
-  st.wid = wi.def.id;
-  st.wname = wi.def.name;
+  // 名前は文面フルネーム (業火を斬る刃 など)。基本武器名だけだとどれか分からない。
+  st.wid = wi.uid;
+  st.wname = wi.title;
   const p = run.player;
   // 攻撃の種類は文中の武器語 (基本武器) が決めている (無ければ武器の既定)。
   const kind = res.kind || wi.def.kind;

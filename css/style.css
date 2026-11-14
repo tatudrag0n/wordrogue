@@ -3391,9 +3391,10 @@ html, body {
 /* ═══ 結果: 武器別ダメージ / ランキング / 共有 ═══════════════════════════ */
 .result-weapons { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 5px; }
 .rw-title { font-size: .78rem; font-weight: 800; color: var(--fg-dim); letter-spacing: .06em; }
-.rw-row { display: grid; grid-template-columns: minmax(64px, 110px) 1fr auto; align-items: center; gap: 8px; }
-.rw-name { font-size: .78rem; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rw-bar { height: 8px; border-radius: 999px; background: rgba(43, 92, 184, .12); overflow: hidden; }
+.rw-row { display: flex; flex-direction: column; gap: 3px; }
+.rw-name { font-size: .8rem; font-weight: 700; color: var(--ink); line-height: 1.35; word-break: break-all; }
+.rw-line { display: flex; align-items: center; gap: 8px; }
+.rw-bar { flex: 1; height: 8px; border-radius: 999px; background: rgba(43, 92, 184, .12); overflow: hidden; }
 .rw-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #e8a30a); }
 .rw-dmg { font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--fg-dim); }
 .result-rank { margin: 6px 0; font-size: .82rem; font-weight: 800; color: var(--accent); min-height: 1.2em; }

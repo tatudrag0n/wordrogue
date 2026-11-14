@@ -5,12 +5,12 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.60';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.60';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.61';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.61';
 import { evaluatePart, partConnChoices } from '../game/parts.js';
 import { partEffectRows, partTotalRows } from '../game/stats.js';
 import { GrowPad } from './growpad.js';
-import { Tips } from './tips.js?v=1.60';
+import { Tips } from './tips.js?v=1.61';
 import { fetchLeaderboard } from '../core/net.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
@@ -1100,9 +1100,10 @@ export class Menus {
     for (const rec of list) {
       const pct = Math.max(2, Math.round((rec.dmg / max) * 100));
       this.resultWeapons.append(el('div', { class: 'rw-row' },
-        el('span', { class: 'rw-name' }, rec.name),
-        el('span', { class: 'rw-bar' }, el('i', { style: { width: pct + '%' } })),
-        el('b', { class: 'rw-dmg' }, fmtNum(rec.dmg))));
+        el('span', { class: 'rw-name', title: rec.name }, rec.name),
+        el('span', { class: 'rw-line' },
+          el('span', { class: 'rw-bar' }, el('i', { style: { width: pct + '%' } })),
+          el('b', { class: 'rw-dmg' }, fmtNum(rec.dmg)))));
     }
   }
 

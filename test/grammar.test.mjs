@@ -1021,3 +1021,21 @@ sec('連用修飾・目的語・述語の全順序テンプレート');
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);
+
+sec('二文字動詞 (突撃など) に する/した が付く');
+{
+  const { canConnect, connectorsAfter } = await import('../js/data/words.connect.js');
+  ok(canConnect({ text: '撃' }, 'する', ['突']), '突撃 に する が付かない');
+  ok(canConnect({ text: '撃' }, 'した', ['突']), '突撃 に した が付かない');
+  const opts = connectorsAfter(['突', '撃']);
+  ok(opts.includes('する') && opts.includes('した'), `突撃の候補に する/した が無い: ${opts.join(',')}`);
+  for (const conn of ['する', 'した']) {
+    const r = evaluate([makeWord('突'), makeWord('撃'), makeWord(conn), makeWord('刃')], { minContent: 2 });
+    ok(r.valid && r.predicated, `突撃${conn}刃 が成立しない: ${r.reasonText}`);
+  }
+  // 他の二文字動詞も する が付く。
+  for (const [a, b] of [['斬', '撃'], ['打', '撃'], ['連', '射'], ['吸', '引']]) {
+    ok(canConnect({ text: b }, 'する', [a]), `${a}${b} に する が付かない`);
+  }
+  console.log('  突撃する/した・斬撃/打撃/連射/吸引 + する が成立');
+}

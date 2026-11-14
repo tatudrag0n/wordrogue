@@ -590,26 +590,21 @@ const RAW_EXT_FORM = `
 孔     modifier  -  dmg+3  pierce+3
 器     modifier  -  dmg+4  count+1
 園     modifier  -  dmg+2  area+10
-壷     modifier  -  dmg+5  area+10
 宮     modifier  -  dmg+3  armor+2
 宿     modifier  -  dmg+2  regen+0.5
 尾     modifier  -  dmg+3  speed+20
 巣     modifier  -  dmg+2  count+2
 幕     modifier  -  dmg+2  area+10  shield+10
 庭     modifier  -  dmg+2  area+10
-廬     modifier  -  dmg+2  armor+2
 房     modifier  -  dmg+2  area+8
 手     modifier  -  dmg+4  rate+0.3
 指     modifier  -  dmg+2  crit+0.03  pierce+1
 掌     modifier  -  dmg+3  knock+35
 斗     modifier  -  dmg+4  size+0.20
-朶     modifier  -  dmg+2  count+2
-杆     modifier  -  dmg+3  range+30
 束     modifier  -  dmg+3  count+2
 棺     modifier  -  dmg+5  lifesteal+0.003
 殿     modifier  -  dmg+3  armor+3
 牛     modifier  -  dmg+7  knock+40
-犀     modifier  -  dmg+6  pierce+4
 犬     modifier  -  dmg+4  speed+30
 狼     modifier  -  dmg+6  crit+0.05
 獅     modifier  -  dmg+7  knock+35
@@ -617,25 +612,16 @@ const RAW_EXT_FORM = `
 虎     modifier  -  dmg+7  crit+0.05  knock+30
 蚊     modifier  -  dmg+1  count+2  speed+30
 蛇     modifier  -  dmg+4  poison+3
-蝦     modifier  -  dmg+3  armor+2
 螺     modifier  -  dmg+4  orbit+1
-蟇     modifier  -  dmg+5  poison+2
 袖     modifier  -  dmg+2  speed+20
-裹     modifier  -  dmg+3  pierce+2
 製     modifier  -  dmg+3  armor+1
-褥     modifier  -  dmg+2  regen+0.5
 象     modifier  -  dmg+7  knock+45
 車     modifier  -  dmg+6  knock+30
-釭     modifier  -  dmg+3  burn+2
-鉾     modifier  -  dmg+9  pierce+4
 鎌     modifier  -  dmg+6  arc+0.7  count+1
-鎗     modifier  -  dmg+8  pierce+3
 鎚     modifier  -  dmg+13  knock+40
 鏡     modifier  -  dmg+4  reflect+0.6
 門     modifier  -  dmg+4  armor+2  area+8
 雀     modifier  -  dmg+2  speed+50  count+1
-靫     modifier  -  dmg+3  count+2  speed+20
-頤     modifier  -  dmg+2  armor+1
 頭     modifier  -  dmg+4  crit+0.04
 顔     modifier  -  dmg+3  armor+1
 魚     modifier  -  dmg+3  speed+30  count+1
@@ -646,7 +632,6 @@ const RAW_EXT_FORM = `
 翼     modifier  -  dmg+3  speed+50
 砲     modifier  -  dmg+8  explode+34  count+1
 符     modifier  -  dmg+3  count+2  homing+0.15
-箍     modifier  -  dmg+2  shield+14
 箱     modifier  -  dmg+3  shield+14
 籠     modifier  -  dmg+4  area+12
 蓋     modifier  -  dmg+2  shield+16  armor+1
@@ -680,20 +665,13 @@ const RAW_EXT_MODIFIER = `
 世     modifier  -  area+12
 中     modifier  -  crit+0.06
 丸     modifier  -  size+0.20
-乖     modifier  -  dmg+5  crit+0.05
 乙     modifier  -  crit+0.05
 人     modifier  -  count+1  dmg+2
 代     modifier  -  count+1  dmg+2
 伏     modifier  -  crit+0.08  homing+0.20
-伽     modifier  -  regen+0.5
 体     modifier  -  size+0.20  armor+1
-侘     modifier  -  regen+0.6  armor+1
-倣     modifier  -  dmg+3
-倶     modifier  -  count+2
-傀     modifier  -  count+2  homing+0.30
 傷     modifier  -  dmg+5
 僕     modifier  -  dmg+3  count+1
-儡     modifier  -  count+2
 元     modifier  -  dmg+4
 兎     modifier  -  speed+60
 全     modifier  -  dmg+2  area+10  count+1
@@ -707,16 +685,12 @@ const RAW_EXT_MODIFIER = `
 勝     modifier  -  dmg+4  crit+0.04
 北     modifier  -  armor+2  dmg+2
 博     modifier  -  dmg+3  count+1
-卦     modifier  -  homing+0.30
 危     modifier  -  crit+0.12
 厨     modifier  -  dmg+3
-叉     modifier  -  count+2  pierce+2
 双     modifier  -  count+2
-叢     modifier  -  count+4
 名     modifier  -  atkMul+0.05
 和     modifier  -  armor+2  regen+0.5
 唯     modifier  -  crit+0.04
-嘘     modifier  -  crit+0.06
 太     modifier  -  size+0.30  dmg+2
 女     modifier  -  regen+0.8
 如     modifier  -  count+1  speed+10
@@ -729,7 +703,6 @@ const RAW_EXT_MODIFIER = `
 常     modifier  -  dmg+2  armor+2
 平     modifier  -  armor+2  speed+10
 底     modifier  -  dmg+3
-彌     modifier  -  dmg+4
 徒     modifier  -  speed+30  count+1
 御     modifier  -  armor+3
 怒     modifier  -  dmg+6
@@ -738,12 +711,12 @@ const RAW_EXT_MODIFIER = `
 想     modifier  -  homing+0.40
 意     modifier  -  crit+0.06  rate+0.2
 愛     modifier  -  regen+0.8  lifesteal+0.002
-愧     modifier  -  regen+0.3
 慈     modifier  -  regen+1.2
-慚     modifier  -  dmg+2
 憂     modifier  -  poison+2  dmg+2
 憤     modifier  -  dmg+7
 我     modifier  -  atkMul+0.08
+侘     modifier  -  regen+0.6  armor+1
+倣     modifier  -  dmg+3
 戒     modifier  -  armor+3
 文     modifier  -  atkMul+0.05  dmg+2
 族     modifier  -  count+3
@@ -771,7 +744,6 @@ const RAW_EXT_MODIFIER = `
 理     modifier  -  pierce+3
 界     modifier  -  area+14
 異     modifier  -  crit+0.08
-疵     modifier  -  dmg+4
 痛     modifier  -  dmg+5
 相     modifier  -  dmg+3
 空     modifier  -  pierce+3  speed+20
@@ -780,9 +752,7 @@ const RAW_EXT_MODIFIER = `
 紋     modifier  -  dmg+2  crit+0.03
 細     modifier  -  speed+30  crit+0.02
 罪     modifier  -  dmg+5
-翳     modifier  -  crit+0.05  homing+0.15
 者     modifier  -  count+2
-耶     modifier  -  crit+0.03
 胎     modifier  -  count+2
 胞     modifier  -  count+2
 腸     modifier  -  regen+0.6
@@ -794,12 +764,10 @@ const RAW_EXT_MODIFIER = `
 莫     modifier  -  dmg+4
 蔵     modifier  -  regen+0.5
 薄     modifier  -  dmg+2  speed+20
-蘊     modifier  -  dmg+4
 術     modifier  -  count+1  dmg+2
 裏     modifier  -  crit+0.06  dmg+3
 証     modifier  -  dmg+3
 賊     modifier  -  dmg+4
-贋     modifier  -  dmg+3
 超     modifier  -  dmg+6  speed+30
 身     modifier  -  speed+20  armor+1
 軍     modifier  -  count+3
@@ -817,22 +785,17 @@ const RAW_EXT_MODIFIER = `
 面     modifier  -  armor+2  area+6
 音     modifier  -  chain+3
 韻     modifier  -  chain+4
-頓     modifier  -  dmg+4
 `;
 
 const RAW_EXT_VERB = `
 分     verb  -  count+2  split+2
 切     verb  -  dmg+5  arc+0.6
-刳     verb  -  dmg+4  pierce+6
 動     verb  -  speed+50
 化     verb  -  dmg+2  count+1
 吟     verb  -  dmg+3  chain+2
 吹     verb  -  dmg+2  knock+40
 呈     verb  -  dmg+2  area+4
-哭     verb  -  dmg+3
-啜     verb  -  regen+0.6  lifesteal+0.002
 在     verb  -  armor+2
-坐     verb  -  dmg+3  size+0.20
 垂     verb  -  dmg+2  area+8
 壊     verb  -  dmg+6  explode+20
 変     verb  -  dmg+3  count+1
@@ -844,7 +807,6 @@ const RAW_EXT_VERB = `
 崩     verb  -  dmg+5  explode+18  knock+40
 嵌     verb  -  dmg+3  pierce+3
 干     verb  -  dmg+3
-廻     verb  -  dmg+3  orbit+1
 弁     verb  -  dmg+2  pierce+2
 従     verb  -  homing+0.30
 成     verb  -  dmg+3
@@ -866,33 +828,24 @@ const RAW_EXT_VERB = `
 残     verb  -  dmg+3
 毀     verb  -  dmg+5  explode+16
 消     verb  -  dmg+4
-游     verb  -  speed+45  homing+0.20
 犯     verb  -  dmg+4
 猟     verb  -  dmg+4  crit+0.03
 生     verb  -  regen+0.8
 盗     verb  -  dmg+3  magnet+0.30
 知     verb  -  crit+0.06
 移     verb  -  speed+30
-繚     verb  -  orbit+1
-聚     verb  -  count+3
 脱     verb  -  speed+30
 落     verb  -  dmg+4  knock+30
-蕩     verb  -  dmg+3  area+10
 衝     verb  -  dmg+6  pierce+3
 見     verb  -  crit+0.05
-誅     verb  -  dmg+7  crit+0.05
 賜     verb  -  dmg+2  atkMul+0.04
 走     verb  -  speed+60
-躇     verb  -  dmg+2
-躊     verb  -  dmg+2
 躍     verb  -  speed+45
 転     verb  -  orbit+1
 追     verb  -  homing+0.40
 逐     verb  -  speed+40
 造     verb  -  dmg+3
-遁     verb  -  speed+50
 遊     verb  -  speed+40
-遡     verb  -  speed+30
 避     verb  -  speed+35
 酌     verb  -  regen+0.6
 閉     verb  -  dmg+3

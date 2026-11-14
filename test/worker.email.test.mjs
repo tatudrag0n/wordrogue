@@ -294,5 +294,32 @@ const BUG = {
   ok(!!toml.match(/\[\[send_email\]\][\s\S]*?name\s*=\s*"EMAIL"/), 'send_email バインディング名は EMAIL');
 }
 
+// ── 13. ランキング (score / leaderboard) ────────────────────────────────
+{
+  const env = makeEnv();
+  const post = (body) => worker.fetch(new Request('https://api.example.com/api/score', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }), env, {});
+  const good = await post({ stage: 1, score: 12345, dmg: 999, kills: 10, level: 5, cleared: true, name: 'テスト', weapons: [{ name: '刃', dmg: 999 }] });
+  ok(good.status === 201, `score 提出が 201 でない: ${good.status}`);
+  const gj = await good.json();
+  ok(gj.ok && gj.rank >= 1, `score 提出の応答が不正: ${JSON.stringify(gj)}`);
+
+  const bad = await post({ score: 100 }); // stage 無し
+  ok(bad.status === 400, `stage 無しは 400: ${bad.status}`);
+
+  const limited = makeEnv({ DB: makeDb({ ipCount: 1 }) });
+  const lr = await worker.fetch(new Request('https://api.example.com/api/score', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.7' },
+    body: JSON.stringify({ stage: 1, score: 1 }),
+  }), limited, {});
+  ok(lr.status === 429, `レート制限が 429 でない: ${lr.status}`);
+
+  const lb = await worker.fetch(new Request('https://api.example.com/api/leaderboard?stage=1&limit=5'), env, {});
+  const lbj = await lb.json();
+  ok(lb.status === 200 && lbj.ok && Array.isArray(lbj.rows), `leaderboard 応答が不正: ${lb.status}`);
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

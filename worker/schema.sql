@@ -30,3 +30,22 @@ CREATE TABLE IF NOT EXISTS donations (
 CREATE INDEX IF NOT EXISTS idx_donations_status ON donations(status);
 CREATE INDEX IF NOT EXISTS idx_donations_created ON donations(created_at);
 CREATE INDEX IF NOT EXISTS idx_donations_ip ON donations(ip_hash);
+
+-- ランキング (スコア提出)
+CREATE TABLE IF NOT EXISTS scores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL DEFAULT '名無し',
+  stage INTEGER NOT NULL,
+  score INTEGER NOT NULL,
+  dmg INTEGER NOT NULL DEFAULT 0,
+  kills INTEGER NOT NULL DEFAULT 0,
+  level INTEGER NOT NULL DEFAULT 1,
+  cleared INTEGER NOT NULL DEFAULT 1,
+  weapons TEXT,
+  ip_hash TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_scores_stage_score ON scores(stage, score DESC);
+CREATE INDEX IF NOT EXISTS idx_scores_score ON scores(score DESC);
+CREATE INDEX IF NOT EXISTS idx_scores_ip ON scores(ip_hash);

@@ -5,22 +5,17 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.59';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.59';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.60';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.60';
 import { evaluatePart, partConnChoices } from '../game/parts.js';
 import { partEffectRows, partTotalRows } from '../game/stats.js';
 import { GrowPad } from './growpad.js';
-import { Tips } from './tips.js?v=1.59';
+import { Tips } from './tips.js?v=1.60';
+import { fetchLeaderboard } from '../core/net.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
   PARTS, DECK_MIN, DECK_MAX, GACHA_COST, GACHA_REFUND,
 } from '../core/save.js';
-
-/** 武器ごとの与ダメージ行。多い順に最大 6 件。 */
-function weaponDmgRows(run) {
-  const list = [...(run.weaponDmg?.values() || [])].sort((a, b) => b.dmg - a.dmg);
-  return list.slice(0, 6).map((rec) => [`与ダメージ・${rec.name}`, fmtNum(rec.dmg)]);
-}
 
 /** 語の効果を 1 行にまとめる (ツールチップ用)。 */
 function fxText(src, label) {
@@ -53,6 +48,14 @@ export class Menus {
     this.resultTitle = $('#resultTitle');
     this.resultSub = $('#resultSub');
     this.resultNext = $('#resultNext');
+    this.resultWeapons = $('#resultWeapons');
+    this.resultRank = $('#resultRank');
+    this.rank = $('#rank');
+    this.rankTabs = $('#rankTabs');
+    this.rankStage = $('#rankStage');
+    this.rankName = $('#rankName');
+    this.rankList = $('#rankList');
+    this.rankNote = $('#rankNote');
     this.howto = $('#howto');
     this.settings = $('#settings');
     this.dict = $('#dict');
@@ -222,6 +225,17 @@ export class Menus {
       (this._resultHasNext ? this.cb.onNextStage : this.cb.onNext)?.();
     });
 
+    // ── 共有 / ランキング ──
+    $('#btnShareX')?.addEventListener('click', () => { tap(); this.shareResult('x'); });
+    $('#btnShareCopy')?.addEventListener('click', () => { tap(); this.shareResult('copy'); });
+    $('#btnShareNative')?.addEventListener('click', () => { tap(); this.shareResult('native'); });
+    $('#btnRank')?.addEventListener('click', () => { tap(); this.show('rank'); });
+    this.rankName?.addEventListener('change', () => {
+      this.save.data.playerName = this.rankName.value.trim().slice(0, 20);
+      this.save.save();
+    });
+    this.rankStage?.addEventListener('change', () => this.renderRank());
+
     this.loadoutGo.addEventListener('click', () => { tap(); this.cb.onStart?.(this.picked.slice()); });
 
     // ── チュートリアル ──
@@ -246,7 +260,7 @@ export class Menus {
   hideAll() {
     this.closeGacha();
     this.tips?.close();
-    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'grow', 'words']) {
+    for (const k of ['title', 'stages', 'loadout', 'result', 'howto', 'settings', 'dict', 'grow', 'words', 'rank']) {
       if (this[k]) this[k].hidden = true;
     }
     // #tutorial は DOM ごと無い環境があるので、存在するときだけ伏せる。
@@ -289,6 +303,7 @@ export class Menus {
     if (name === 'grow') { this.growPad.reset(); this.renderGrow(); }
     if (name === 'words') this.renderWords();
     if (name === 'tutorial') this.renderTutorial();
+    if (name === 'rank') this.renderRank();
     // 初めて開いたタブだけ、短い説明を重ねる。
     this.tips.maybe(name);
   }
@@ -304,7 +319,7 @@ export class Menus {
     if (this.tips?.isOpen()) { this.tips.close(); return true; }
     if (this.gachaVeil && !this.gachaVeil.hidden) { this.closeGacha(); return true; }
     if (this.tutorial && !this.tutorial.hidden) { this.closeTutorial(); return true; }
-    for (const name of ['howto', 'settings', 'grow', 'words']) {
+    for (const name of ['howto', 'settings', 'grow', 'words', 'rank']) {
       if (!this[name].hidden) { this.closeTab(name); return true; }
     }
     if (!this.dict.hidden) { this.cb.onCloseDict?.(); return true; }
@@ -1032,8 +1047,10 @@ export class Menus {
   }
 
   // ── 結算 ────────────────────────────────────────────────────────────────
-  showResult({ cleared, run, save, isLast, ink = 0 }) {
+  showResult({ cleared, run, save, isLast, ink = 0, rec = null, localRank = 0 }) {
     const st = run.stage;
+    this._lastRec = rec;
+    this._lastCleared = cleared;
     this.resultTitle.textContent = cleared ? 'ステージクリア' : '力尽きた';
     this.resultTitle.style.color = cleared ? 'var(--accent)' : 'var(--ng)';
     this.resultSub.textContent = cleared
@@ -1050,7 +1067,6 @@ export class Menus {
       ['被ダメージ', fmtNum(run.dmgTaken)],
       ['生存時間', `${Math.floor(run.time / 60)}分${Math.floor(run.time % 60)}秒`],
       ['最高スコア', fmtNum(d.bestScore)],
-      ...weaponDmgRows(run),
     ];
     clear(this.resultStats);
     for (const [k, v, big] of rows) {
@@ -1058,12 +1074,151 @@ export class Menus {
         el('span', {}, k), el('b', {}, v)));
     }
 
+    this.renderResultWeapons(run);
+    this.setResultRank(null, localRank);
+    // 共有ボタン。Web Share が使える端末だけ「共有」も出す。
+    const native = $('#btnShareNative');
+    if (native) native.hidden = !(navigator.share && navigator.canShare);
+
     const hasNext = cleared && !isLast && st.id < STAGES.length;
     this._resultHasNext = hasNext;
     this.resultNext.hidden = false;
     this.resultNext.textContent = hasNext ? '次のステージへ' : 'ホームへ';
     this.hideAll();
     this.result.hidden = false;
+  }
+
+  /** 武器別与ダメージをバー付きで強調表示。 */
+  renderResultWeapons(run) {
+    if (!this.resultWeapons) return;
+    clear(this.resultWeapons);
+    const list = [...(run.weaponDmg?.values() || [])].sort((a, b) => b.dmg - a.dmg).slice(0, 6);
+    if (!list.length) { this.resultWeapons.hidden = true; return; }
+    this.resultWeapons.hidden = false;
+    this.resultWeapons.append(el('div', { class: 'rw-title' }, '武器別与ダメージ'));
+    const max = Math.max(1, list[0].dmg);
+    for (const rec of list) {
+      const pct = Math.max(2, Math.round((rec.dmg / max) * 100));
+      this.resultWeapons.append(el('div', { class: 'rw-row' },
+        el('span', { class: 'rw-name' }, rec.name),
+        el('span', { class: 'rw-bar' }, el('i', { style: { width: pct + '%' } })),
+        el('b', { class: 'rw-dmg' }, fmtNum(rec.dmg))));
+    }
+  }
+
+  /** ローカル/グローバル順位を表示。global は非同期で届いたら差し替え。 */
+  setResultRank(global, local) {
+    if (!this.resultRank) return;
+    this._localRank = local || this._localRank || 0;
+    clear(this.resultRank);
+    const parts = [];
+    if (this._localRank) parts.push(`ローカル ${this._localRank} 位`);
+    if (global) parts.push(`世界 ${global} 位`);
+    this.resultRank.textContent = parts.length ? `ランキング: ${parts.join(' / ')}` : '';
+  }
+
+  /** 共有文面を作って X / コピー / Web Share へ。 */
+  shareText() {
+    const r = this._lastRec;
+    if (!r) return '';
+    const top = r.weapons && r.weapons[0] ? r.weapons[0].name : '';
+    const head = this._lastCleared ? `第${r.stage}戦クリア` : `第${r.stage}戦挑戦`;
+    return [
+      `ワードローグ ${head}！`,
+      `スコア ${fmtNum(r.score)} / 与ダメ ${fmtNum(r.dmg)} / 討伐 ${fmtNum(r.kills)} / Lv${r.level}`,
+      top ? `主力「${top}」` : '',
+      '#Wordrogue',
+      'https://tatudrag0n.github.io/wordrogue/',
+    ].filter(Boolean).join('\n');
+  }
+
+  async shareResult(mode) {
+    const text = this.shareText();
+    if (!text) return;
+    if (mode === 'native' && navigator.share) {
+      try { await navigator.share({ text }); } catch {}
+      return;
+    }
+    if (mode === 'x') {
+      const url = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text);
+      window.open(url, '_blank', 'noopener');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      this.toast('共有文面をコピーした');
+    } catch {
+      window.prompt('コピーして共有してください', text);
+    }
+  }
+
+  /** 短い通知を画面下に一時表示。 */
+  toast(msg) {
+    let t = this._toastEl;
+    if (!t) {
+      t = this._toastEl = el('div', { class: 'menu-toast' });
+      document.body.append(t);
+    }
+    t.textContent = msg;
+    t.classList.add('on');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => t.classList.remove('on'), 1800);
+  }
+
+  // ── ランキング ──────────────────────────────────────────────────────────
+  async renderRank() {
+    if (!this.rankList) return;
+    this.rankTab = this.rankTab || 'global';
+    this.rankStageSel = this.rankStageSel || 0;
+    // タブ (世界 / ローカル)。
+    clear(this.rankTabs);
+    for (const [key, label] of [['global', '世界'], ['local', 'ローカル']]) {
+      const b = el('button', { class: 'rank-tab' + (this.rankTab === key ? ' on' : ''), type: 'button' }, label);
+      b.addEventListener('click', () => { this.rankTab = key; this.renderRank(); });
+      this.rankTabs.append(b);
+    }
+    // ステージ選択 (0 = 全部)。
+    if (this.rankStage && !this.rankStage.options.length) {
+      this.rankStage.append(el('option', { value: '0' }, '全ステージ'));
+      for (const s of STAGES) this.rankStage.append(el('option', { value: String(s.id) }, `第${s.id}戦`));
+      this.rankStage.value = String(this.rankStageSel);
+    }
+    this.rankStageSel = Number(this.rankStage?.value || 0);
+    if (this.rankName) this.rankName.value = this.save.data.playerName || '';
+
+    clear(this.rankList);
+    this.rankNote.textContent = '';
+    if (this.rankTab === 'local') {
+      let rows = this.save.getRecords();
+      if (this.rankStageSel) rows = rows.filter((r) => r.stage === this.rankStageSel);
+      this.fillRankRows(rows);
+      this.rankNote.textContent = 'この端末の記録 (上位 10 件)。';
+      return;
+    }
+    this.rankList.append(el('div', { class: 'rank-loading' }, '読み込み中…'));
+    const rows = await fetchLeaderboard({ stage: this.rankStageSel, limit: 30 });
+    clear(this.rankList);
+    if (!rows.length) {
+      this.rankList.append(el('div', { class: 'rank-loading' }, 'まだ記録がない。最初の一人になろう。'));
+      return;
+    }
+    this.fillRankRows(rows);
+    this.rankNote.textContent = '世界の記録 (スコア順)。クリア時に自動で送信される。';
+  }
+
+  fillRankRows(rows) {
+    if (!rows.length) {
+      this.rankList.append(el('div', { class: 'rank-loading' }, '記録がない。'));
+      return;
+    }
+    rows.forEach((r, i) => {
+      this.rankList.append(el('div', { class: 'rank-row' + (i < 3 ? ' top' : '') },
+        el('span', { class: 'rank-pos' }, String(i + 1)),
+        el('span', { class: 'rank-name' }, r.name || '名無し'),
+        el('span', { class: 'rank-stage' }, `第${r.stage}戦`),
+        el('b', { class: 'rank-score' }, fmtNum(r.score)),
+        el('span', { class: 'rank-dmg' }, `与${fmtNum(r.dmg)}`)));
+    });
   }
 
   // ── 辞書 ────────────────────────────────────────────────────────────────

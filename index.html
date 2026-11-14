@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.59">
+<link rel="stylesheet" href="css/style.css?v=1.60">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -267,6 +267,7 @@
         <button class="btn" id="btnGrow">強化</button>
         <button class="btn" id="btnWords">書庫</button>
         <button class="btn" id="btnDict">辞書</button>
+        <button class="btn" id="btnRank">ランキング</button>
         <button class="btn" id="btnSettings">設定</button>
         <a class="btn" href="feedback.html" style="text-decoration:none;display:inline-block">フィードバック</a>
         <a class="btn btn-donate" href="donate.html" style="text-decoration:none;display:inline-block">支援する</a>
@@ -280,7 +281,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.59</div>
+      <div class="title-version">Ver. 1.60</div>
     </div>
   </div>
 
@@ -318,11 +319,38 @@
         <p class="panel-sub" id="resultSub"></p>
       </header>
       <div class="result-stats" id="resultStats"></div>
+      <div class="result-weapons" id="resultWeapons"></div>
+      <div class="result-rank" id="resultRank"></div>
+      <div class="result-share">
+        <button class="btn" id="btnShareX" type="button">X で共有</button>
+        <button class="btn" id="btnShareCopy" type="button">コピー</button>
+        <button class="btn" id="btnShareNative" type="button" hidden>共有</button>
+      </div>
       <footer class="panel-foot">
         <button class="btn" id="resultRetry">もう一度</button>
         <button class="btn" id="resultStages">ステージ選択</button>
         <button class="btn btn-primary" id="resultNext">次のステージ</button>
       </footer>
+    </div>
+  </div>
+
+  <!-- ═══ ランキング ═════════════════════════════════════════════════════ -->
+  <div id="rank" class="layer screen" hidden>
+    <div class="panel panel-rank">
+      <header class="panel-head">
+        <h2>ランキング</h2>
+        <button class="btn btn-close" data-close="rank">✕</button>
+      </header>
+      <div class="rank-tools">
+        <div class="rank-tabs" id="rankTabs"></div>
+        <select id="rankStage" class="rank-stage" aria-label="ステージ"></select>
+      </div>
+      <div class="rank-name">
+        <label for="rankName">表示名</label>
+        <input id="rankName" maxlength="20" placeholder="名無し" />
+      </div>
+      <div class="rank-list" id="rankList"></div>
+      <p class="muted rank-note" id="rankNote"></p>
     </div>
   </div>
 
@@ -1038,6 +1066,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.59"></script>
+<script type="module" src="js/main.js?v=1.60"></script>
 </body>
 </html>

@@ -2,18 +2,19 @@
 // ワードローグ — 起動とメインループ
 // ============================================================================
 
-import { $, clamp } from './core/util.js?v=1.59';
-import { Input } from './core/input.js?v=1.59';
-import { Audio } from './core/audio.js?v=1.59';
-import { Save } from './core/save.js?v=1.59';
-import { Run } from './game/run.js?v=1.59';
-import { Renderer } from './ui/render.js?v=1.59';
-import { Hud } from './ui/hud.js?v=1.59';
-import { Forge } from './ui/forge.js?v=1.59';
-import { Menus } from './ui/menus.js?v=1.59';
+import { $, clamp } from './core/util.js?v=1.60';
+import { Input } from './core/input.js?v=1.60';
+import { Audio } from './core/audio.js?v=1.60';
+import { Save } from './core/save.js?v=1.60';
+import { submitScore } from './core/net.js?v=1.60';
+import { Run } from './game/run.js?v=1.60';
+import { Renderer } from './ui/render.js?v=1.60';
+import { Hud } from './ui/hud.js?v=1.60';
+import { Forge } from './ui/forge.js?v=1.60';
+import { Menus } from './ui/menus.js?v=1.60';
 
-import { STAGES } from './data/stages.js?v=1.59';
-import { WORDS, makeWord, CONNECTOR_SET, segment } from './data/words.js?v=1.59';
+import { STAGES } from './data/stages.js?v=1.60';
+import { WORDS, makeWord, CONNECTOR_SET, segment } from './data/words.js?v=1.60';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態
@@ -345,6 +346,22 @@ function onRunEnd(cleared) {
   });
   app.lastInk = ink;
 
+  // ランキング用の記録。武器別ダメージも一緒に残す。
+  const weapons = [...(app.run.weaponDmg?.values() || [])]
+    .sort((a, b) => b.dmg - a.dmg).slice(0, 6)
+    .map((w) => ({ name: w.name, dmg: Math.round(w.dmg) }));
+  const rec = {
+    name: app.save.data.playerName || '名無し',
+    stage: app.run.stage.id, score: Math.round(app.run.score),
+    dmg: Math.round(app.run.dmgDealt || 0), kills: app.run.kills,
+    level: app.run.player.level, cleared, weapons,
+  };
+  const localRank = app.save.addRecord(rec);
+  // グローバルランキングへは非同期・失敗しても気にしない。
+  submitScore(rec).then((r) => {
+    if (r && r.ok) app.menus.setResultRank?.(r.rank, localRank);
+  });
+
   app.mode = 'result';
   // 戦闘を離れるので BGM も止める。結果画面は静かに読ませる。
   app.audio.bgmStop?.();
@@ -354,6 +371,7 @@ function onRunEnd(cleared) {
     save: app.save,
     ink,
     isLast: app.run.stage.id >= STAGES.length,
+    rec, localRank,
   });
 }
 

@@ -3424,3 +3424,4 @@ html, body {
 /* ═══ トースト ═════════════════════════════════════════════════════════ */
 .menu-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(8px); background: rgba(28, 35, 49, .92); color: #fffdf7; padding: 8px 16px; border-radius: 999px; font-size: .82rem; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 99; }
 .menu-toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+.set-note { font-size: .72rem; color: var(--fg-dim); line-height: 1.5; margin: 2px 0 6px; }

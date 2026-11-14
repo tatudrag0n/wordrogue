@@ -5,12 +5,12 @@
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.61';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.61';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.62';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.62';
 import { evaluatePart, partConnChoices } from '../game/parts.js';
 import { partEffectRows, partTotalRows } from '../game/stats.js';
 import { GrowPad } from './growpad.js';
-import { Tips } from './tips.js?v=1.61';
+import { Tips } from './tips.js?v=1.62';
 import { fetchLeaderboard } from '../core/net.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
@@ -1337,11 +1337,13 @@ export class Menus {
     const vol = $('#setVolume');
     const volVal = $('#setVolumeVal');
     const shake = $('#setShake');
+    const rf = $('#setReduceFlash');
     const dmg = $('#setDamage');
 
     vol.value = String(Math.round(s.volume * 100));
     volVal.textContent = String(Math.round(s.volume * 100));
-    shake.checked = s.screenShake !== false;
+    shake.checked = s.screenShake === true;
+    if (rf) rf.checked = s.reduceFlash !== false;
     dmg.checked = s.showDamage !== false;
 
     vol.oninput = () => {
@@ -1351,6 +1353,7 @@ export class Menus {
       this.save.setSetting('volume', v / 100);
     };
     shake.onchange = () => this.save.setSetting('screenShake', shake.checked);
+    if (rf) rf.onchange = () => this.save.setSetting('reduceFlash', rf.checked);
     dmg.onchange = () => this.save.setSetting('showDamage', dmg.checked);
 
     const wipe = $('#btnWipe');

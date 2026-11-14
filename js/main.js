@@ -2,19 +2,19 @@
 // ワードローグ — 起動とメインループ
 // ============================================================================
 
-import { $, clamp } from './core/util.js?v=1.61';
-import { Input } from './core/input.js?v=1.61';
-import { Audio } from './core/audio.js?v=1.61';
-import { Save } from './core/save.js?v=1.61';
-import { submitScore } from './core/net.js?v=1.61';
-import { Run } from './game/run.js?v=1.61';
-import { Renderer } from './ui/render.js?v=1.61';
-import { Hud } from './ui/hud.js?v=1.61';
-import { Forge } from './ui/forge.js?v=1.61';
-import { Menus } from './ui/menus.js?v=1.61';
+import { $, clamp } from './core/util.js?v=1.62';
+import { Input } from './core/input.js?v=1.62';
+import { Audio } from './core/audio.js?v=1.62';
+import { Save } from './core/save.js?v=1.62';
+import { submitScore } from './core/net.js?v=1.62';
+import { Run } from './game/run.js?v=1.62';
+import { Renderer } from './ui/render.js?v=1.62';
+import { Hud } from './ui/hud.js?v=1.62';
+import { Forge } from './ui/forge.js?v=1.62';
+import { Menus } from './ui/menus.js?v=1.62';
 
-import { STAGES } from './data/stages.js?v=1.61';
-import { WORDS, makeWord, CONNECTOR_SET, segment } from './data/words.js?v=1.61';
+import { STAGES } from './data/stages.js?v=1.62';
+import { WORDS, makeWord, CONNECTOR_SET, segment } from './data/words.js?v=1.62';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態
@@ -271,8 +271,7 @@ function startRun(weaponIds) {
     deckWords: app.save.deck,
     partEntries: app.save.partEntries(),
   });
-  run.shakeOn = app.save.setting('screenShake') !== false;
-  run.showDamage = app.save.setting('showDamage') !== false;
+  applyAccessibility(run);
   run.viewR = app.renderer.viewR;
 
   run.onDeath = () => onRunEnd(false);
@@ -323,6 +322,19 @@ function startRun(weaponIds) {
     if (res && !res.active) app.audio.broken();
     else app.audio.phrase();
   };
+}
+
+// 光過敏 (てんかん) / 視差効果への配慮。OS の「視差効果を減らす」を尊重し、
+// 画面振動は既定 OFF・点滅抑制は既定 ON。設定で個別に上書きできる。
+const REDUCED_MQ = (typeof window !== 'undefined' && window.matchMedia)
+  ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+function applyAccessibility(run) {
+  const reduced = !!(REDUCED_MQ && REDUCED_MQ.matches);
+  run.reducedMotion = reduced;
+  run.shakeOn = !reduced && app.save.setting('screenShake') === true;
+  run.reduceFlash = reduced || app.save.setting('reduceFlash') !== false;
+  run.fxScale = reduced ? 0.5 : 1;
+  run.showDamage = app.save.setting('showDamage') !== false;
 }
 
 function onRunEnd(cleared) {
@@ -665,6 +677,7 @@ function step(now) {
     }
     if (guard >= 5) app.acc = 0;
 
+    applyAccessibility(run);
     app.renderer.draw(run, app.input.stickState());
     app.hud.update(run, (wi) => {
       if (app.mode === 'play') toggleForge();

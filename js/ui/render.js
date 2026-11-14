@@ -5,9 +5,9 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.61';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.61';
-import { motionPose } from '../game/motions.js?v=1.61';
+import { ELEMENTS } from '../data/words.js?v=1.62';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.62';
+import { motionPose } from '../game/motions.js?v=1.62';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -121,9 +121,11 @@ export class Renderer {
     const f = run.screenFlash;
     if (!f || f.life <= 0) return;
     const t = Math.max(0, f.life / (f.maxLife || 1));
+    // 光過敏配慮: 点滅抑制時は全体の色被りをさらに薄く。
+    const k = run.reduceFlash ? 0.45 : 1;
     const g = this.ctx;
     g.save();
-    g.globalAlpha = 0.16 * t;
+    g.globalAlpha = 0.16 * t * k;
     g.fillStyle = f.color;
     g.fillRect(0, 0, this.w, this.h);
     const rg = g.createRadialGradient(
@@ -133,7 +135,7 @@ export class Renderer {
     rg.addColorStop(0, 'rgba(255, 253, 247, .5)');
     rg.addColorStop(0.65, 'rgba(255, 253, 247, 0)');
     rg.addColorStop(1, 'rgba(28, 35, 49, .05)');
-    g.globalAlpha = 0.22 * t;
+    g.globalAlpha = 0.22 * t * k;
     g.fillStyle = rg;
     g.fillRect(0, 0, this.w, this.h);
     g.restore();
@@ -1600,7 +1602,8 @@ export class Renderer {
         g.restore();
       }
 
-      const col = e.flash > 0.05 ? '#ffffff' : e.def.color;
+      // 光過敏配慮: 点滅抑制時は真っ白でなく紙色の明るいトーンに留める。
+      const col = e.flash > 0.05 ? (run.reduceFlash ? '#efe6d8' : '#ffffff') : e.def.color;
       // 紙地に輪郭。塗りだけでは明るい地で溶ける。
       g.strokeStyle = 'rgba(28, 35, 49, .5)';
       g.lineWidth = 1.7;
@@ -1608,12 +1611,12 @@ export class Renderer {
       g.save();
       // 被弾の瞬間は小さく跳ねる。当たった手応えを形にする。
       const fl = clamp(e.flash || 0, 0, 1);
-      const jit = fl * 1.6;
+      const jit = fl * (run.reduceFlash ? 0.8 : 1.6);
       g.translate(
         e.x + Math.sin(run.t * 72 + e.uid) * jit,
         e.y + Math.cos(run.t * 61 + e.uid) * jit,
       );
-      g.scale(1 + fl * 0.09, 1 + fl * 0.09);
+      g.scale(1 + fl * 0.13, 1 + fl * 0.13);
 
       switch (e.def.ai) {
         case 'shooter':
@@ -2493,8 +2496,10 @@ export class Renderer {
     g.save();
     g.globalAlpha = blink ? 0.4 : 1;
     // 歩くと上下に小さく弾み、ダッシュでは進行方向へ伸びる。
+    // 攻撃の瞬間はわずかに膨らんで「振った」勢いを出す (点滅ではなく形)。
     const bobY = Math.sin(p.anim * 11) * 1.2 * moveK;
-    const stretch = 1 + moveK * 0.08 + (p.dashing ? 0.08 : 0);
+    const castK = clamp((p.castFlash || 0) / 0.18, 0, 1);
+    const stretch = 1 + moveK * 0.08 + (p.dashing ? 0.08 : 0) + castK * 0.06;
     g.translate(p.x, p.y + bobY);
     g.rotate(face);
     g.scale(stretch, 1 / stretch * (1 - moveK * 0.02));

@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { STAGES } from '../data/stages.js';
-import { WORDS, drawWord, DRAWABLE_ALL } from '../data/words.js?v=1.59';
+import { WORDS, drawWord, DRAWABLE_ALL } from '../data/words.js?v=1.60';
 import { CONNECTORS, canConnect } from '../data/words.connect.js';
 import {
   RANKS, RANK_MAX, setRanks, rankIndex, rankOf, nextRankName,
-} from '../data/ranks.js?v=1.59';
+} from '../data/ranks.js?v=1.60';
 
 const KEY = 'wordrogue.save.v1';
 
@@ -18,6 +18,8 @@ const DEFAULTS = {
   clearedStages: [],   // クリア済みステージ ID
   unlockedWeapons: ['sword', 'gun'],
   bestScore: 0,
+  records: [],         // ローカルランキング (スコア上位 10 件)
+  playerName: '',      // ランキング表示名
   totalKills: 0,
   totalRuns: 0,
   totalBroken: 0,     // 文を崩した敵の累計
@@ -230,6 +232,26 @@ export class Save {
     if (ink) this.data.ink = Math.max(0, (this.data.ink || 0) + ink);
     this.save();
   }
+
+  /** ローカルランキングに 1 件追加 (スコア上位 10 件を保持)。順位を返す。 */
+  addRecord(rec) {
+    const d = this.data;
+    if (!Array.isArray(d.records)) d.records = [];
+    const entry = {
+      name: String(rec.name || '名無し').slice(0, 20),
+      stage: rec.stage | 0, score: rec.score | 0, dmg: rec.dmg | 0,
+      kills: rec.kills | 0, level: rec.level | 0, cleared: rec.cleared ? 1 : 0,
+      weapons: Array.isArray(rec.weapons) ? rec.weapons.slice(0, 6) : [],
+      at: Date.now(),
+    };
+    d.records.push(entry);
+    d.records.sort((a, b) => b.score - a.score);
+    d.records = d.records.slice(0, 10);
+    this.save();
+    return d.records.indexOf(entry) + 1;
+  }
+
+  getRecords() { return Array.isArray(this.data.records) ? this.data.records : []; }
 
   // ── 所持語・デッキ・部位強化 (プレイヤー強化) ──────────────────────────
   /** 旧セーブに所持語が無ければ初期セットを付与し、壊れた値を直す。 */

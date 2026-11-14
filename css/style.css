@@ -3387,3 +3387,39 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ═══ 結果: 武器別ダメージ / ランキング / 共有 ═══════════════════════════ */
+.result-weapons { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 5px; }
+.rw-title { font-size: .78rem; font-weight: 800; color: var(--fg-dim); letter-spacing: .06em; }
+.rw-row { display: grid; grid-template-columns: minmax(64px, 110px) 1fr auto; align-items: center; gap: 8px; }
+.rw-name { font-size: .78rem; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-bar { height: 8px; border-radius: 999px; background: rgba(43, 92, 184, .12); overflow: hidden; }
+.rw-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #e8a30a); }
+.rw-dmg { font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--fg-dim); }
+.result-rank { margin: 6px 0; font-size: .82rem; font-weight: 800; color: var(--accent); min-height: 1.2em; }
+.result-share { display: flex; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
+
+/* ═══ ランキング画面 ═══════════════════════════════════════════════════ */
+.panel-rank { width: min(560px, 100%); }
+.rank-tools { display: flex; align-items: center; gap: 10px; margin: 8px 0; flex-wrap: wrap; }
+.rank-tabs { display: flex; gap: 6px; }
+.rank-tab { padding: 4px 14px; border: 1px solid var(--line-2); border-radius: 999px; background: #fff; font-size: .8rem; font-weight: 700; color: var(--fg-dim); cursor: pointer; }
+.rank-tab.on { border-color: var(--accent); color: var(--accent); background: rgba(224, 72, 45, .08); }
+.rank-stage { padding: 4px 8px; border: 1px solid var(--line-2); border-radius: 8px; background: #fff; font-size: .8rem; }
+.rank-name { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: .8rem; color: var(--fg-dim); }
+.rank-name input { flex: 0 1 180px; padding: 4px 8px; border: 1px solid var(--line-2); border-radius: 8px; font-size: .85rem; }
+.rank-list { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; margin: 8px 0; }
+.rank-row { display: grid; grid-template-columns: 28px 1fr auto auto auto; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: .8rem; }
+.rank-row.top { border-color: #e8a30a; background: rgba(232, 163, 10, .08); }
+.rank-pos { font-weight: 900; color: var(--fg-dim); text-align: center; }
+.rank-row.top .rank-pos { color: #b3620f; }
+.rank-name { font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-stage { color: var(--fg-dim); font-size: .72rem; }
+.rank-score { font-variant-numeric: tabular-nums; color: var(--accent); }
+.rank-dmg { color: var(--fg-dim); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.rank-loading { padding: 16px; text-align: center; color: var(--fg-dim); font-size: .85rem; }
+.rank-note { font-size: .72rem; margin: 4px 0 0; }
+
+/* ═══ トースト ═════════════════════════════════════════════════════════ */
+.menu-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(8px); background: rgba(28, 35, 49, .92); color: #fffdf7; padding: 8px 16px; border-radius: 999px; font-size: .82rem; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 99; }
+.menu-toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }

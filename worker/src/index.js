@@ -547,6 +547,71 @@ function safeParse(s) {
   try { return JSON.parse(s); } catch (e) { return s; }
 }
 
+// ── ランキング ────────────────────────────────────────────────────────────
+
+const int = (v, min, max, dflt) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return dflt;
+  return Math.max(min, Math.min(max, Math.round(n)));
+};
+
+async function handleScore(request, env, origin) {
+  let body;
+  try { body = await request.json(); } catch (e) {
+    return json({ ok: false, error: "invalid_json" }, 400, origin, env);
+  }
+  if (!body || typeof body !== "object") return json({ ok: false, error: "invalid_body" }, 400, origin, env);
+  // ハニーポット。
+  if (typeof body.hp === "string" && body.hp.trim() !== "") return json({ ok: true, id: 0 }, 201, origin, env);
+
+  const stage = int(body.stage, 1, 99, 0);
+  const score = int(body.score, 0, 1e9, -1);
+  if (!stage || score < 0) return json({ ok: false, error: "invalid_score" }, 400, origin, env);
+  const dmg = int(body.dmg, 0, 1e9, 0);
+  const kills = int(body.kills, 0, 1e6, 0);
+  const level = int(body.level, 1, 999, 1);
+  const cleared = body.cleared ? 1 : 0;
+  const name = String(body.name || "名無し").trim().slice(0, 20) || "名無し";
+
+  let weapons = [];
+  if (Array.isArray(body.weapons)) {
+    weapons = body.weapons.slice(0, 6).map((w) => ({
+      name: String(w && w.name || "").slice(0, 40),
+      dmg: int(w && w.dmg, 0, 1e9, 0),
+    })).filter((w) => w.name);
+  }
+
+  const ipHash = hashIp(clientIp(request));
+  if (ipHash) {
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS c FROM scores WHERE ip_hash = ? AND created_at > datetime('now','-10 seconds')"
+    ).bind(ipHash).first();
+    if (recent && recent.c >= 1) return json({ ok: false, error: "rate_limited" }, 429, origin, env);
+  }
+
+  const result = await env.DB.prepare(
+    "INSERT INTO scores (name, stage, score, dmg, kills, level, cleared, weapons, ip_hash) VALUES (?,?,?,?,?,?,?,?,?)"
+  ).bind(name, stage, score, dmg, kills, level, cleared, JSON.stringify(weapons), ipHash).run();
+  const id = result && result.meta && result.meta.last_row_id;
+
+  const rankRow = await env.DB.prepare("SELECT COUNT(*) AS c FROM scores WHERE score > ?").bind(score).first();
+  return json({ ok: true, id, rank: (rankRow ? rankRow.c : 0) + 1 }, 201, origin, env);
+}
+
+async function handleLeaderboard(request, env, origin) {
+  const url = new URL(request.url);
+  const stage = int(url.searchParams.get("stage"), 1, 99, 0);
+  const limit = int(url.searchParams.get("limit"), 1, 100, 20);
+  const rows = stage
+    ? await env.DB.prepare(
+        "SELECT name, stage, score, dmg, kills, level, cleared, created_at FROM scores WHERE stage = ? ORDER BY score DESC LIMIT ?"
+      ).bind(stage, limit).all()
+    : await env.DB.prepare(
+        "SELECT name, stage, score, dmg, kills, level, cleared, created_at FROM scores ORDER BY score DESC LIMIT ?"
+      ).bind(limit).all();
+  return json({ ok: true, rows: (rows && rows.results) || [] }, 200, origin, env);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -575,6 +640,12 @@ export default {
     }
     if (url.pathname === "/api/donations" && request.method === "GET") {
       return handleDonationsList(request, env, origin);
+    }
+    if (url.pathname === "/api/score" && request.method === "POST") {
+      return handleScore(request, env, origin);
+    }
+    if (url.pathname === "/api/leaderboard" && request.method === "GET") {
+      return handleLeaderboard(request, env, origin);
     }
 
     return json({ ok: false, error: "not_found" }, 404, origin, env);

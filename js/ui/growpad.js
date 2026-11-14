@@ -12,7 +12,7 @@
 // ============================================================================
 
 import { el, clear } from '../core/util.js';
-import { WORDS, CATEGORIES } from '../data/words.js?v=1.58';
+import { WORDS, CATEGORIES } from '../data/words.js?v=1.59';
 import { PART_MAX_LEN, PARTS } from '../core/save.js';
 import { makePartSentence, evaluatePart } from '../game/parts.js';
 import {
@@ -255,13 +255,13 @@ export class GrowPad extends SenPad {
       if (where) node.append(el('i', {
         class: 'pword-where', title: `意味が効く部位: ${where}`,
       }, where));
-      // ランクの印。頭文字 1 字を語の色で。
+      // ランクの印。文字でなく色ドットで示す (名前はツールチップ)。
       const rank = save.rankOf(t);
       if (rank && save.rankIndex(t) > 0) {
         node.append(el('span', {
-          class: 'pword-rank', style: { color: rank.color },
+          class: 'pword-rank', style: { backgroundColor: rank.color },
           title: `ランク ${rank.name}`,
-        }, rank.name.slice(0, 1)));
+        }, ''));
       }
       const place = { kind: 'pool', index: i };
       this.makeDraggable(node, place, () => this.onPoolTap(t));

@@ -3334,14 +3334,15 @@ html, body {
 #deckWords .pword:disabled { opacity: .55; cursor: default; transform: none; }
 .pword.in { background: var(--accent); border-color: var(--accent); color: #fff7f3; }
 .pword.in:hover { background: var(--accent); border-color: var(--accent); color: #fff7f3; }
+/* レアリティは文字でなく色ドットで示す (backgroundColor をインラインで指定)。 */
 .pword-rank {
   position: absolute;
-  left: 2px;
-  top: 1px;
-  font-family: var(--mono);
-  font-size: .58rem;
-  font-weight: 700;
-  opacity: .92;
+  left: 3px;
+  top: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .7);
   pointer-events: none;
 }
 .grow-words-empty { color: var(--fg-dim); font-size: .85rem; padding: 8px 2px; }

@@ -18,12 +18,12 @@
 import { $, el, clear } from '../core/util.js';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
-} from '../data/words.js?v=1.58';
+} from '../data/words.js?v=1.59';
 import { rankIndex } from '../data/ranks.js';
 import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js';
-import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.58';
+import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.59';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { keyStats } from '../game/weapon.js?v=1.58';
+import { keyStats } from '../game/weapon.js?v=1.59';
 import { SenPad } from './senpad.js';
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
@@ -635,14 +635,14 @@ export class Forge extends SenPad {
       }, el('span', {}, w.text));
       const n = counts.get(w.text);
       if (n > 1) node.append(el('span', { class: 'pword-n' }, `×${n}`));
-      // ランクの印。頭文字 1 字を語の色で。
+      // ランクの印。文字でなく色ドットで示す (名前はツールチップ)。
       const rk = rankIndex(w.text);
       if (rk > 0) {
         const RANK_COLORS = ['#6b7383', '#12a58a', '#2f7fc4', '#8b5cf6', '#d9a406'];
         node.append(el('span', {
-          class: 'pword-rank', style: { color: RANK_COLORS[Math.min(RANK_COLORS.length - 1, rk)] },
+          class: 'pword-rank', style: { backgroundColor: RANK_COLORS[Math.min(RANK_COLORS.length - 1, rk)] },
           title: `ランク ${rk}`,
-        }, '●'));
+        }, ''));
       }
       const place = { kind: 'lexicon', index: i };
       this.makeDropTarget(node, place);

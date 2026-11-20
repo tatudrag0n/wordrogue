@@ -2545,6 +2545,7 @@ html, body {
 .tut-step.is-on { display: block; }
 .tut-step h3 { margin: 0 0 8px; font-size: 1.02rem; }
 .tut-step p { margin: 0 0 10px; font-size: .92rem; line-height: 1.75; }
+.tut-step .story-quote { margin: 12px 0; padding: 8px 14px; border-left: 2px solid var(--accent); color: var(--fg); font-size: 1.05rem; font-weight: 700; }
 .tut-step .k {
   font-family: var(--mono);
   font-size: .84em;

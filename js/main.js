@@ -2,19 +2,19 @@
 // ワードローグ — 起動とメインループ
 // ============================================================================
 
-import { $, clamp } from './core/util.js?v=1.62';
-import { Input } from './core/input.js?v=1.62';
-import { Audio } from './core/audio.js?v=1.62';
-import { Save } from './core/save.js?v=1.62';
-import { submitScore } from './core/net.js?v=1.62';
-import { Run } from './game/run.js?v=1.62';
-import { Renderer } from './ui/render.js?v=1.62';
-import { Hud } from './ui/hud.js?v=1.62';
-import { Forge } from './ui/forge.js?v=1.62';
-import { Menus } from './ui/menus.js?v=1.62';
+import { $, clamp } from './core/util.js?v=1.63';
+import { Input } from './core/input.js?v=1.63';
+import { Audio } from './core/audio.js?v=1.63';
+import { Save } from './core/save.js?v=1.63';
+import { submitScore } from './core/net.js?v=1.63';
+import { Run } from './game/run.js?v=1.63';
+import { Renderer } from './ui/render.js?v=1.63';
+import { Hud } from './ui/hud.js?v=1.63';
+import { Forge } from './ui/forge.js?v=1.63';
+import { Menus } from './ui/menus.js?v=1.63';
 
-import { STAGES } from './data/stages.js?v=1.62';
-import { WORDS, makeWord, CONNECTOR_SET, segment } from './data/words.js?v=1.62';
+import { STAGES } from './data/stages.js?v=1.63';
+import { WORDS, makeWord, CONNECTOR_SET, segment } from './data/words.js?v=1.63';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 状態

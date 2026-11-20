@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.62">
+<link rel="stylesheet" href="css/style.css?v=1.63">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -281,7 +281,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.62</div>
+      <div class="title-version">Ver. 1.63</div>
     </div>
   </div>
 
@@ -761,11 +761,22 @@
     <div class="panel panel-tutorial">
       <header class="panel-head">
         <h2>チュートリアル</h2>
-        <span class="muted" id="tutStep">1 / 6</span>
+        <span class="muted" id="tutStep">1 / 7</span>
         <button class="btn btn-close" data-close="tutorial" title="とじる">✕</button>
       </header>
       <div class="tut-steps">
         <section class="tut-step is-on" data-step="0">
+          <h3>プロローグ — 言葉を奪う者</h3>
+          <p>
+          言葉を現実にするチカラを持った兄弟がいた。世界はそのチカラを狙い、二人の家族を人質にとった。
+          助けようとする弟を、兄は制止した。やがて二人はそれぞれの道へ進み、弟が家族の死を知ったのは、それからすぐのことだった。
+          </p>
+          <blockquote class="story-quote">「僕は世界から言葉を奪う」</blockquote>
+          <p>
+          その日から、言葉が消えていった。兄として、彼を止めなければならない。
+          </p>
+        </section>
+        <section class="tut-step" data-step="1">
           <h3>1. 言葉を並べて、武器にする</h3>
           <p>
           戦闘中に <span class="k">Q</span>（スマホは右下の <strong>語</strong> ボタン）で<strong>言葉鍛冶</strong>を開く。
@@ -773,7 +784,7 @@
           武器は<strong>自動で攻撃</strong>する。敵の頭の上の「敵の文」をこちらの文で崩していこう。
           </p>
         </section>
-        <section class="tut-step" data-step="1">
+        <section class="tut-step" data-step="2">
           <h3>2. 語を置く — タップでもドラッグでも</h3>
           <p>
           <strong>語彙の語をタップ</strong> → 入れたい<strong>文の語か余白をタップ</strong>で置ける。
@@ -781,7 +792,7 @@
           <strong>語彙の箱へドラッグ</strong>すると語彙へ戻る。文は <strong>10 文字まで</strong>。
           </p>
         </section>
-        <section class="tut-step" data-step="2">
+        <section class="tut-step" data-step="3">
           <h3>3. 接続詞は長押しで一覧</h3>
           <p>
           文の中の<strong>語を押したままにする（長押し）</strong>と、その語に付けられる<strong>接続詞の一覧</strong>が出る。
@@ -792,7 +803,7 @@
           一覧に並ぶ。末尾の 1 字の活用 (<code>約束す</code> <code>反射る</code>) は出ない。
           </p>
         </section>
-        <section class="tut-step" data-step="3">
+        <section class="tut-step" data-step="4">
           <h3>4. よい文ほど強い</h3>
           <p>
           <strong>日本語として成立する文</strong>だけが武器になる。属性で始まって 格を挟み 述語で締めるほど<strong>文の力</strong>が上がり、
@@ -800,7 +811,7 @@
           クリアで <strong>言玉</strong> が手に入る。タイトルの<strong>強化</strong>で部位に語を入れ、<strong>言葉くじ</strong>で語を増やして次のステージへ。
           </p>
         </section>
-        <section class="tut-step" data-step="4">
+        <section class="tut-step" data-step="5">
           <h3>5. 強化 — 部位に語を入れる</h3>
           <p>
           タイトルの<strong>強化</strong>では、7 つの部位それぞれに <strong>10 文字までの文</strong>を組める。
@@ -809,7 +820,7 @@
           何がどれだけ変わるかは部位の下に出る。入れ替えは<strong>「戻す」</strong>で取り消せる。
           </p>
         </section>
-        <section class="tut-step" data-step="5">
+        <section class="tut-step" data-step="6">
           <h3>6. 書庫 — 語を増やして、持ち込む</h3>
           <p>
           <strong>言葉くじ</strong>は言玉を払って語を 1 つ引く。同じ語を引くと<strong>ランク</strong>が上がり、効果が伸びる。
@@ -1071,6 +1082,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.62"></script>
+<script type="module" src="js/main.js?v=1.63"></script>
 </body>
 </html>

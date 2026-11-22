@@ -675,6 +675,7 @@ let failed = 0;
 failed += await run('test/words.test.js');
 failed += await run('test/grammar.test.mjs');
 failed += await run('test/sim.test.js');
+failed += await run('test/quality.test.js');
 failed += await run('test/motion.test.js');
 failed += await run('test/render.test.js');
 failed += await run('test/meaning.test.js');

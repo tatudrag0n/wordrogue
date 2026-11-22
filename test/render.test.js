@@ -206,5 +206,34 @@ sec('武器固有の描画 (居合・鋸・鋏・射撃/詠唱モーション) �
   console.log(`  固有描画: ${[...called].join(' ')}`);
 }
 
+sec('適応品質と静的レイヤー (1.66)');
+{
+  const renderer = new Renderer(canvas);
+  ok(renderer.qualityLevel === 0, `初期段階 (デスクトップ) は 0: ${renderer.qualityLevel}`);
+  // 20fps が続くと段階が 1 ずつ下がる。
+  for (let round = 0; round < 3; round++) {
+    for (let i = 0; i < 20; i++) renderer.noteFrame(1 / 20);
+  }
+  ok(renderer.qualityLevel === 3, `低 FPS で最軽量まで落ちる: ${renderer.qualityLevel}`);
+  ok(renderer.decor === 'off', '最軽量では装飾 off');
+  const pose = { ghosts: [{ rel: 0, alpha: 1 }, { rel: 1, alpha: 1 }, { rel: 2, alpha: 1 }] };
+  ok(renderer.ghostList(pose).length === 0, 'off では残像を出さない');
+  renderer.qualityLevel = 2;
+  ok(renderer.ghostList(pose).length === 1, 'reduced では残像は 1 つに間引く');
+  renderer.qualityLevel = 0;
+  ok(renderer.ghostList(pose).length === 3, 'full では残像を全部出す');
+  // 影スプライト: Canvas を作れない環境では null で、フォールバック描画も落ちない。
+  ok(renderer.shadowSprite() === null, 'テスト環境では影スプライトは null (フォールバック)');
+  let threw = null;
+  try { renderer.drawSoftShadow(ctx, 10, 10, 20, 8, 0.5); } catch (e) { threw = e; }
+  ok(!threw, `柔らかい影のフォールバックで例外: ${threw && threw.message}`);
+  // 静的レイヤー: 作れない環境では _static.canvas が null で毎フレーム描画に落ちる。
+  const run = makeRun();
+  renderer.draw(run, null);
+  ok(renderer._static && renderer._static.canvas === null, '静的レイヤーはフォールバック状態');
+  ok(renderer.drawErrorCount === 0, `描画の例外 ${renderer.drawErrorCount} 件`);
+  console.log(`  品質段階 0→3 / 装飾ゲート / 静的レイヤーのフォールバックを確認`);
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

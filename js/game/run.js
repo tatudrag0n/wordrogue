@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.65';
+} from '../data/words.js?v=1.66';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.65';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.66';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.65';
-import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.65';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.65';
+import { WeaponInst } from './weapon.js?v=1.66';
+import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.66';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.66';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -208,6 +208,7 @@ export class Run {
     this.reduceFlash = true;   // 点滅・強い光を抑える (光過敏/てんかん配慮) 既定 ON
     this.reducedMotion = false; // OS の「視差効果を減らす」
     this.fxScale = 1;          // 粒子量の倍率 (reducedMotion で下げる)
+    this.particleCap = 500;    // 粒の上限。適応品質 (js/core/quality.js) が段階で下げる
     this._fxSeed = 0x9E3779B9; // 演出専用乱数の種
     this._lastFlash = -1;
     this.showDamage = true;
@@ -938,7 +939,7 @@ export class Run {
         shape: 'glyph', char: ch, rot: off * 0.06,
       });
     });
-    if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
+    this.trimParticles();
     this.burst(p.x, p.y, idiom ? 26 : 16, idiom ? '#e8b425' : '#f0c25a', {
       spd: idiom ? 300 : 220, spdMin: 40, life: 0.6, r: 2, shape: 'spark', drag: 4,
     });
@@ -964,6 +965,16 @@ export class Run {
     wi._fxPhrase = phrase;
   }
 
+  /** 粒の上限を超えたら古いものから捨てる。splice の詰め替えを避け、配列をインプレースで詰める。 */
+  trimParticles() {
+    const cap = this.particleCap ?? 500;
+    const over = this.particles.length - cap;
+    if (over > 0) {
+      this.particles.copyWithin(0, over);
+      this.particles.length = cap;
+    }
+  }
+
   burst(x, y, n, color, o = {}) {
     n = Math.round(n * (this.fxScale ?? 1));
     if (!(n > 0)) return;
@@ -987,7 +998,7 @@ export class Run {
         rot: (this._fxRand() - 0.5) * 0.6,
       });
     }
-    if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
+    this.trimParticles();
   }
 
   /** 演出専用の乱数。 gameplay / くじの Math.random 系列を汚さない。 */
@@ -2562,17 +2573,23 @@ export class Run {
     // 拾うのが途切れたら音程を戻す。
     this._xpStreakT = Math.max(0, this._xpStreakT - this._lastDt);
     if (this._xpStreakT <= 0) this._xpStreak = 0;
-    // 粒子 (burst) の移動と寿命。
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const q = this.particles[i];
-      q.life -= this._lastDt;
-      q.x += q.vx * this._lastDt;
-      q.y += q.vy * this._lastDt;
-      q.vy += (q.grav || 0) * this._lastDt;
-      const drag = Math.pow(0.06, (q.drag ?? 3.2) * this._lastDt);
-      q.vx *= drag;
-      q.vy *= drag;
-      if (q.life <= 0) this.particles.splice(i, 1);
+    // 粒子 (burst) の移動と寿命。死んだ粒は splice せずインプレースに詰める
+    // (毎フレームの配列コピーを無くし、スマホの GC 負担を減らす)。
+    {
+      let w = 0;
+      for (let i = 0; i < this.particles.length; i++) {
+        const q = this.particles[i];
+        q.life -= this._lastDt;
+        if (q.life <= 0) continue;
+        q.x += q.vx * this._lastDt;
+        q.y += q.vy * this._lastDt;
+        q.vy += (q.grav || 0) * this._lastDt;
+        const drag = Math.pow(0.06, (q.drag ?? 3.2) * this._lastDt);
+        q.vx *= drag;
+        q.vy *= drag;
+        this.particles[w++] = q;
+      }
+      this.particles.length = w;
     }
     for (let i = this.dmgTexts.length - 1; i >= 0; i--) {
       const t = this.dmgTexts[i];
@@ -2589,7 +2606,13 @@ export class Run {
       if (this.banner.life <= 0) this.banner = null;
     }
     for (const fx of this.bossBursts || []) fx.life = Math.max(0, fx.life - dt);
-    this.bossBursts = (this.bossBursts || []).filter((fx) => fx.life > 0);
+    if (this.bossBursts) {
+      let w = 0;
+      for (let i = 0; i < this.bossBursts.length; i++) {
+        if (this.bossBursts[i].life > 0) this.bossBursts[w++] = this.bossBursts[i];
+      }
+      this.bossBursts.length = w;
+    }
     if (this.bossVictoryPending && !this.bossBursts.length) {
       this.bossVictoryPending = false;
       this.finish(true);

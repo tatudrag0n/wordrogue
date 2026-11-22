@@ -5,9 +5,12 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.65';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.65';
-import { motionPose } from '../game/motions.js?v=1.65';
+import { ELEMENTS } from '../data/words.js?v=1.66';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.66';
+import { motionPose } from '../game/motions.js?v=1.66';
+import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.66';
+
+const NO_GHOSTS = [];
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -19,11 +22,128 @@ export class Renderer {
     this.h = 0;
     this.camX = 0;
     this.camY = 0;
+    // 適応品質。タッチ/小画面では初期段階を抑え、FPS が落ちたら段階を下げる。
+    const coarse = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+      ? window.matchMedia('(pointer: coarse)').matches
+      : (typeof window !== 'undefined' && 'ontouchstart' in window);
+    this.qualityLevel = initialQuality({
+      touch: coarse,
+      smallScreen: (typeof window !== 'undefined' && (window.innerWidth || 9999) <= 820),
+    });
+    this._qualityFloor = this.qualityLevel; // 初期段階より上 (重い側) には戻さない
+    this._fpsAcc = 0;
+    this._fpsFrames = 0;
+    this._static = null;      // 静的レイヤー (地面+庭+壁) の事前描画
+    this._shadowSprite = undefined;
+    this._glowSprites = new Map();
     this.resize();
   }
 
+  /** 描画品質の段階 (0=最高 .. 3=最軽量)。 */
+  get quality() { return this.qualityLevel; }
+
+  /** 装飾レベル ('full' | 'reduced' | 'off')。配慮フラグとは独立。 */
+  get decor() { return decorFor(this.qualityLevel); }
+
+  /**
+   * 実フレーム時間を FPS 計測に渡す (main ループから呼ぶ)。
+   * 約 0.75 秒ごとに平均 FPS を出し、段階を 1 つだけ動かす。
+   */
+  noteFrame(dt) {
+    if (!(dt > 0) || !Number.isFinite(dt)) return;
+    this._fpsAcc += dt;
+    this._fpsFrames++;
+    if (this._fpsAcc < 0.75 || this._fpsFrames < 8) return;
+    const fps = this._fpsFrames / this._fpsAcc;
+    this._fpsAcc = 0;
+    this._fpsFrames = 0;
+    const next = Math.max(this._qualityFloor, decideQuality(this.qualityLevel, fps));
+    if (next !== this.qualityLevel) {
+      this.qualityLevel = next;
+      this._static = null;
+      this.resize();
+    }
+  }
+
+  /** 残像 (ゴースト) の表示リスト。品質が下がったら間引く/止める。 */
+  ghostList(pose) {
+    const ghosts = pose.ghosts || NO_GHOSTS;
+    const d = this.decor;
+    if (d === 'off') return NO_GHOSTS;
+    if (d === 'reduced') return ghosts.length > 1 ? ghosts.slice(0, 1) : ghosts;
+    return ghosts;
+  }
+
+  _makeCanvas(w, h) {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+    try {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      return c;
+    } catch { return null; }
+  }
+
+  /** 足元の柔らかい影スプライト (放射グラデーションを 1 度だけ焼く)。 */
+  shadowSprite() {
+    if (this._shadowSprite !== undefined) return this._shadowSprite;
+    const c = this._makeCanvas(96, 96);
+    if (c) {
+      const x = c.getContext('2d');
+      if (x) {
+        const rg = x.createRadialGradient(48, 48, 2, 48, 48, 46);
+        rg.addColorStop(0, 'rgba(18,22,30,0.55)');
+        rg.addColorStop(0.55, 'rgba(18,22,30,0.26)');
+        rg.addColorStop(1, 'rgba(18,22,30,0)');
+        x.fillStyle = rg;
+        x.fillRect(0, 0, 96, 96);
+      }
+    }
+    this._shadowSprite = c;
+    return c;
+  }
+
+  /** 色付きの光スプライト (色ごとに 1 度だけ焼く)。 */
+  glowSprite(color) {
+    if (this._glowSprites.has(color)) return this._glowSprites.get(color);
+    const c = this._makeCanvas(64, 64);
+    if (c) {
+      const x = c.getContext('2d');
+      if (x) {
+        const rg = x.createRadialGradient(32, 32, 1, 32, 32, 30);
+        rg.addColorStop(0, 'rgba(255,253,247,0.9)');
+        rg.addColorStop(0.35, color);
+        rg.addColorStop(1, 'rgba(0,0,0,0)');
+        x.globalAlpha = 0.85;
+        x.fillStyle = rg;
+        x.fillRect(0, 0, 64, 64);
+      }
+    }
+    if (this._glowSprites.size > 16) this._glowSprites.clear();
+    this._glowSprites.set(color, c);
+    return c;
+  }
+
+  /** 柔らかい楕円の影をスプライトで描く (shadowBlur は使わない)。 */
+  drawSoftShadow(g, x, y, rx, ry, alpha) {
+    const s = this.shadowSprite();
+    if (!s) {
+      g.save();
+      g.globalAlpha = alpha * 0.5;
+      g.fillStyle = '#1c2331';
+      g.beginPath();
+      g.ellipse(x, y, rx, ry, 0, 0, TAU);
+      g.fill();
+      g.restore();
+      return;
+    }
+    g.save();
+    g.globalAlpha = alpha;
+    g.drawImage(s, x - rx, y - ry, rx * 2, ry * 2);
+    g.restore();
+  }
+
   resize() {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = effectiveDpr(this.qualityLevel, window.devicePixelRatio || 1);
     const w = this.cv.clientWidth || window.innerWidth;
     const h = this.cv.clientHeight || window.innerHeight;
     this.dpr = dpr;
@@ -32,6 +152,36 @@ export class Renderer {
     this.cv.width = Math.round(w * dpr);
     this.cv.height = Math.round(h * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // サイズ依存のグラデーションキャッシュは作り直す。
+    this._flashGrad = null;
+    this._vignetteGrad = null;
+  }
+
+  /** 画面フラッシュ用の放射グラデーション (サイズが同じ間は再利用)。 */
+  flashGradient() {
+    if (this._flashGrad) return this._flashGrad;
+    const rg = this.ctx.createRadialGradient(
+      this.w / 2, this.h / 2, 0, this.w / 2, this.h / 2, this.viewR,
+    );
+    rg.addColorStop(0, 'rgba(255, 253, 247, .5)');
+    rg.addColorStop(0.65, 'rgba(255, 253, 247, 0)');
+    rg.addColorStop(1, 'rgba(28, 35, 49, .05)');
+    this._flashGrad = rg;
+    return rg;
+  }
+
+  /** 画面端のビネット (中立色) グラデーション (再利用)。 */
+  vignetteGradient() {
+    if (this._vignetteGrad) return this._vignetteGrad;
+    const rg = this.ctx.createRadialGradient(
+      this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.36,
+      this.w / 2, this.h / 2, this.viewR,
+    );
+    rg.addColorStop(0, 'rgba(24,18,10,0)');
+    rg.addColorStop(0.78, 'rgba(24,18,10,0.05)');
+    rg.addColorStop(1, 'rgba(24,18,10,0.26)');
+    this._vignetteGrad = rg;
+    return rg;
   }
 
   /** 画面中心から端までの距離。湧き位置の計算に使う。 */
@@ -52,6 +202,7 @@ export class Renderer {
    */
   draw(run, stick) {
     const g = this.ctx;
+    run.particleCap = particleCapFor(this.qualityLevel);
 
     // カメラ (画面シェイク込み)。
     // 基準のカメラは少しだけ遅れて追う。動いた瞬間の「重さ」が出て、
@@ -84,7 +235,7 @@ export class Renderer {
     g.rect(-a.w / 2 - WALL, -a.h / 2 - WALL, a.w + WALL * 2, a.h + WALL * 2);
     g.clip();
 
-    this.step('ground', () => this.drawGround(run));
+    this.step('ground', () => this.drawStaticGround(run));
     this.step('decals', () => this.drawDecals(run));
     this.step('field', () => this.drawField(run));
     this.step('corpses', () => this.drawCorpses(run));
@@ -108,10 +259,10 @@ export class Renderer {
     g.restore();
 
     this.step('screen-flash', () => this.drawScreenFlash(run));
-    this.step('grain', () => this.drawGrain(run));
+    if (this.decor === 'full') this.step('grain', () => this.drawGrain(run));
     this.step('vignette', () => this.drawVignette(run));
     this.step('banner', () => this.drawBanner(run));
-    this.step('motes', () => this.drawMotes(run));
+    if (this.decor === 'full') this.step('motes', () => this.drawMotes(run));
     this.step('stick', () => this.drawStickUI(stick));
   }
 
@@ -130,15 +281,8 @@ export class Renderer {
     g.globalAlpha = 0.16 * t * k;
     g.fillStyle = f.color;
     g.fillRect(0, 0, this.w, this.h);
-    const rg = g.createRadialGradient(
-      this.w / 2, this.h / 2, 0,
-      this.w / 2, this.h / 2, this.viewR,
-    );
-    rg.addColorStop(0, 'rgba(255, 253, 247, .5)');
-    rg.addColorStop(0.65, 'rgba(255, 253, 247, 0)');
-    rg.addColorStop(1, 'rgba(28, 35, 49, .05)');
     g.globalAlpha = 0.22 * t * k;
-    g.fillStyle = rg;
+    g.fillStyle = this.flashGradient();
     g.fillRect(0, 0, this.w, this.h);
     g.restore();
   }
@@ -211,6 +355,58 @@ export class Renderer {
   // ───────────────────────────────────────────────────────────────────────────
   // 背景
   // ───────────────────────────────────────────────────────────────────────────
+  /**
+   * 静的レイヤー (地面+庭+壁) をステージ開始時に 1 度だけオフスクリーンへ焼き、
+   * 毎フレームは drawImage で転送する。ステージ/品質が変わったら作り直す。
+   * オフスクリーンを作れない環境では従来どおり毎フレーム描く。
+   */
+  drawStaticGround(run) {
+    const g = this.ctx;
+    const a = stageArena(run);
+    const key = `${run.stage.id}:${a.w}x${a.h}:${this.dpr}`;
+    if (!this._static || this._static.key !== key) {
+      this._static = this._buildStatic(run, a, key) || { key, canvas: null };
+    }
+    const s = this._static;
+    if (!s.canvas) { this.drawGround(run); return; }
+    g.drawImage(s.canvas, s.x, s.y, s.w, s.h);
+  }
+
+  _buildStatic(run, a, key) {
+    const pad = WALL + 16;
+    const w = a.w + pad * 2, h = a.h + pad * 2;
+    // 焼き込み解像度は実効 DPR に合わせるが、巨大ステージでも上限を付ける。
+    const scale = Math.min(this.dpr, 1.5);
+    const cv = this._makeCanvas(Math.round(w * scale), Math.round(h * scale));
+    if (!cv) return null;
+    const sg = cv.getContext('2d');
+    if (!sg) return null;
+    const saved = {
+      ctx: this.ctx, camX: this.camX, camY: this.camY, w: this.w, h: this.h,
+      camBX: this._camBX, camBY: this._camBY, garden: this._garden,
+    };
+    try {
+      this.ctx = sg;
+      sg.setTransform(scale, 0, 0, scale, -(-a.w / 2 - pad) * scale, -(-a.h / 2 - pad) * scale);
+      // drawGround はカメラ視界ぶんを描くので、視界を庭全体に広げて焼く。
+      this.camX = -a.w / 2 - pad;
+      this.camY = -a.h / 2 - pad;
+      this.w = w;
+      this.h = h;
+      this._camBX = this.camX;
+      this._camBY = this.camY;
+      this.drawGround(run);
+    } catch {
+      return null;
+    } finally {
+      this.ctx = saved.ctx; this.camX = saved.camX; this.camY = saved.camY;
+      this.w = saved.w; this.h = saved.h;
+      this._camBX = saved.camBX; this._camBY = saved.camBY;
+      this._garden = saved.garden;
+    }
+    return { key, canvas: cv, x: -a.w / 2 - pad, y: -a.h / 2 - pad, w, h };
+  }
+
   drawGround(run) {
     const g = this.ctx;
     const st = run.stage;
@@ -272,6 +468,39 @@ export class Renderer {
           g.restore();
         }
       }
+    }
+
+    // 地面の質感 (静的レイヤーに焼かれるので、少し手間をかけても毎フレームは重くならない)。
+    // 大きな色のムラで「一枚の地」感を出し、細かい砂粒で紙の目を消す。
+    {
+      const patches = 7;
+      for (let i = 0; i < patches; i++) {
+        const px = x0 + hash01(st.id * 3.3 + i * 11.7) * a.w;
+        const py = y0 + hash01(st.id * 5.1 + i * 7.9) * a.h;
+        const pr = 180 + hash01(st.id + i * 13.3) * 320;
+        g.save();
+        g.globalAlpha = 0.05 + hash01(i * 3.7) * 0.04;
+        g.fillStyle = i % 2 ? (st.accent || '#3f6b3a') : '#fff8e6';
+        g.beginPath();
+        g.ellipse(px, py, pr, pr * 0.62, hash01(i * 9.1) * TAU, 0, TAU);
+        g.fill();
+        g.restore();
+      }
+      g.save();
+      g.fillStyle = 'rgba(60, 46, 24, .10)';
+      const cell = 150;
+      for (let cx = Math.floor(x0 / cell); cx * cell < x1; cx++) {
+        for (let cy = Math.floor(y0 / cell); cy * cell < y1; cy++) {
+          for (let k = 0; k < 5; k++) {
+            const sx = cx * cell + hash01(cx * 12.9 + cy * 78.2 + k * 5.5) * cell;
+            const sy = cy * cell + hash01(cx * 39.4 + cy * 11.3 + k * 9.2) * cell;
+            g.beginPath();
+            g.arc(sx, sy, 0.8 + hash01(k * 3.1 + cx) * 1.1, 0, TAU);
+            g.fill();
+          }
+        }
+      }
+      g.restore();
     }
 
     // 庭の意匠。畝・花・木・池・石・垣・砂・灯籠・骨・石畳を床に描く。
@@ -366,6 +595,23 @@ export class Renderer {
       g.globalAlpha = 1;
     }
 
+    // 壁の継ぎ目。一定間隔の縦の刻みで、帯に素材感と尺度感を出す。
+    g.save();
+    g.globalAlpha = 0.20;
+    g.strokeStyle = 'rgba(10, 8, 5, .8)';
+    g.lineWidth = 1.4;
+    g.beginPath();
+    for (let x = x0 + 128; x < x0 + a.w - 8; x += 128) {
+      g.moveTo(x, y0 - WALL * 0.7); g.lineTo(x, y0 + WALL * 0.7);
+      g.moveTo(x, y0 + a.h - WALL * 0.7); g.lineTo(x, y0 + a.h + WALL * 0.7);
+    }
+    for (let y = y0 + 128; y < y0 + a.h - 8; y += 128) {
+      g.moveTo(x0 - WALL * 0.7, y); g.lineTo(x0 + WALL * 0.7, y);
+      g.moveTo(x0 + a.w - WALL * 0.7, y); g.lineTo(x0 + a.w + WALL * 0.7, y);
+    }
+    g.stroke();
+    g.restore();
+
     // 壁の内側に沿って一本、明るい縁。床と壁の境をはっきりさせる。
     g.strokeStyle = 'rgba(255, 250, 236, .3)';
     g.lineWidth = 2;
@@ -418,6 +664,11 @@ export class Renderer {
           g.beginPath();
           for (let i = -2; i <= 2; i++) { g.moveTo(-46, i * 15); g.lineTo(46, i * 15); }
           g.stroke();
+          // 畝の肩の照り。溝と畝の立体感を出す。
+          g.strokeStyle = pale; g.globalAlpha = 0.28; g.lineWidth = 1.6;
+          g.beginPath();
+          for (let i = -2; i <= 2; i++) { g.moveTo(-46, i * 15 - 3); g.lineTo(46, i * 15 - 3); }
+          g.stroke();
           break;
         }
         case 'flower': { // 花。小さな点の群れ。
@@ -442,6 +693,13 @@ export class Renderer {
           g.globalAlpha = 0.3;
           g.fillStyle = pale;
           g.beginPath(); g.arc(-9, -9, 14, 0, TAU); g.fill();
+          // 樹冠の重なり。もう一枚、小さく濃い葉群をずらして乗せる。
+          g.globalAlpha = 0.34;
+          g.fillStyle = deep;
+          g.beginPath(); g.arc(13, 7, 17 + r2 * 6, 0, TAU); g.fill();
+          g.globalAlpha = 0.22;
+          g.fillStyle = pale;
+          g.beginPath(); g.arc(9, 2, 7, 0, TAU); g.fill();
           break;
         }
         case 'bamboo': { // 竹。縦の筋と節。
@@ -495,6 +753,9 @@ export class Renderer {
           g.globalAlpha = 0.35; g.strokeStyle = '#eaf6ff'; g.lineWidth = 2;
           g.beginPath(); g.ellipse(0, 0, 44, 30, 0, 0, TAU); g.stroke();
           g.beginPath(); g.ellipse(0, 0, 22, 15, 0, 0, TAU); g.stroke();
+          // 水面の照り。左上に薄い白を置いて「水」として読ませる。
+          g.globalAlpha = 0.20; g.fillStyle = '#ffffff';
+          g.beginPath(); g.ellipse(-22, -16, 30, 12, -0.4, 0, TAU); g.fill();
           break;
         }
         case 'tiles': { // 石畳。四角い石を敷く。
@@ -549,11 +810,16 @@ export class Renderer {
       const y = (y0 * this.h - run.t * (8 + i % 7) + this.h * 4) % this.h;
       const pulse = 0.3 + (Math.sin(run.t * 2.1 + phase) + 1) * 0.28;
       const r = 1 + (i % 3) * 0.55;
+      const col = run.boss ? '#f0a34b' : '#d4a94e';
+      const spr = this.glowSprite(col);
       g.save();
+      if (spr) {
+        g.globalAlpha = pulse * 0.8;
+        const gr = r * 5;
+        g.drawImage(spr, x - gr, y - gr, gr * 2, gr * 2);
+      }
       g.globalAlpha = pulse;
-      g.fillStyle = run.boss ? '#f0a34b' : '#d4a94e';
-      g.shadowColor = g.fillStyle;
-      g.shadowBlur = 9;
+      g.fillStyle = col;
       g.beginPath();
       g.arc(x, y, r, 0, TAU);
       g.fill();
@@ -563,6 +829,11 @@ export class Renderer {
 
   drawVignette(run) {
     const g = this.ctx;
+    // 一枚絵感を出す中立ビネット。グラデーションは再利用する。
+    g.save();
+    g.fillStyle = this.vignetteGradient();
+    g.fillRect(0, 0, this.w, this.h);
+    g.restore();
     const p = run.player;
     // 残り時間の少なさで赤く染める。
     const left = run.stage.time - run.time;
@@ -1326,7 +1597,8 @@ export class Renderer {
       const ang = Math.atan2(p.vy, p.vx);
       // 火花と粒は光として、墨・破片・葉は紙に乗った色として描く。
       g.globalCompositeOperation = (shape === 'spark' || shape === 'dot') ? 'lighter' : 'source-over';
-      g.globalAlpha = t * 0.9;
+      // 加算の粒は彩度が浮きやすいので少しだけ落とし、ステージ色調に馴染ませる。
+      g.globalAlpha = t * 0.78;
       g.fillStyle = p.color;
 
       if (shape === 'spark') {
@@ -1602,11 +1874,8 @@ export class Renderer {
       const a = (e.alpha ?? 1) * clamp(e.spawned, 0, 1) * (e.burrowed ? 0.25 : 1);
       g.globalAlpha = a;
 
-      // 足元の影。紙の上に個体が「置かれている」ことを示す。
-      g.fillStyle = 'rgba(28, 35, 49, .14)';
-      g.beginPath();
-      g.ellipse(e.x, e.y + e.r * 0.86, e.r * 0.95, e.r * 0.3, 0, 0, TAU);
-      g.fill();
+      // 足元の影 (事前描画スプライト)。紙の上に個体が「置かれている」ことを示す。
+      this.drawSoftShadow(g, e.x, e.y + e.r * 0.86, e.r * 1.05, e.r * 0.38, 0.5 * a);
 
       // 出現中は外へ広がる破線の輪。湧いたことが一目で分かる。
       if (e.spawned < 1) {
@@ -1656,8 +1925,9 @@ export class Renderer {
       // 光過敏配慮: 点滅抑制時は真っ白でなく紙色の明るいトーンに留める。
       const col = e.flash > 0.05 ? (run.reduceFlash ? '#efe6d8' : '#ffffff') : e.def.color;
       // 紙地に輪郭。塗りだけでは明るい地で溶ける。
-      g.strokeStyle = 'rgba(28, 35, 49, .5)';
-      g.lineWidth = 1.7;
+      // 輪郭は敵の大きさで太さを変え、小さい敵でも地に溶けないようにする。
+      g.strokeStyle = 'rgba(24, 29, 41, .62)';
+      g.lineWidth = e.r >= 26 ? 2.3 : 1.8;
       g.lineJoin = 'round';
       g.save();
       // 被弾の瞬間は小さく跳ねる。当たった手応えを形にする。
@@ -2450,13 +2720,8 @@ export class Renderer {
     const moveK = clamp(speed / 280, 0, 1);
     const face = p.faceVis ?? p.face;
 
-    // 足元の影。紙に落ちる影で、自機が「置かれている」ことを示す。
-    g.save();
-    g.fillStyle = 'rgba(28, 35, 49, .16)';
-    g.beginPath();
-    g.ellipse(p.x + moveK * 3, p.y + p.r * 0.92, p.r * 0.95, p.r * 0.32, 0, 0, TAU);
-    g.fill();
-    g.restore();
+    // 足元の影 (事前描画スプライト)。紙に落ちる影で、自機が「置かれている」ことを示す。
+    this.drawSoftShadow(g, p.x + moveK * 3, p.y + p.r * 0.92, p.r * 1.05, p.r * 0.4, 0.55);
 
     // 手の属性のオーラ。炎の右手なら、自機のまわりがうっすらその色になる。
     const handEl = p.stats?.handElement;
@@ -2464,12 +2729,21 @@ export class Renderer {
       const c = ELEMENTS[handEl].color;
       g.save();
       g.globalAlpha = 0.1 + 0.05 * Math.sin(run.t * 3.2);
-      const rg = g.createRadialGradient(p.x, p.y, p.r * 0.5, p.x, p.y, p.r + 15);
-      rg.addColorStop(0, c);
-      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      // グラデーションは色ごとに 1 度だけ作って再利用する (中心は原点に置き translate で合わせる)。
+      if (!this._auraGrads) this._auraGrads = new Map();
+      let rg = this._auraGrads.get(c);
+      if (!rg) {
+        rg = g.createRadialGradient(0, 0, 6, 0, 0, 40);
+        rg.addColorStop(0, c);
+        rg.addColorStop(1, 'rgba(0,0,0,0)');
+        if (this._auraGrads.size > 12) this._auraGrads.clear();
+        this._auraGrads.set(c, rg);
+      }
+      g.translate(p.x, p.y);
+      g.scale((p.r + 15) / 40, (p.r + 15) / 40);
       g.fillStyle = rg;
       g.beginPath();
-      g.arc(p.x, p.y, p.r + 15, 0, TAU);
+      g.arc(0, 0, 40, 0, TAU);
       g.fill();
       g.restore();
     }
@@ -3234,7 +3508,7 @@ export class Renderer {
     if (family === 'thrust') {
       // 突き。角度を振らず、前へ伸びる線で見せる。
       // 槍・矛は残像の線を遅れて重ねる (速い一線ほど残像が長い)。
-      for (const gh of (pose.ghosts || [])) {
+      for (const gh of this.ghostList(pose)) {
         const ga = m.baseAim + gh.rel;
         g.globalAlpha = gh.alpha * 0.5 * fade;
         g.strokeStyle = color;
@@ -3291,12 +3565,12 @@ export class Renderer {
 
     // 残像 (ゴースト)。打撃の少し前の角度を薄く重ね、速さと重さを出す。
     if (style !== 'wave') {
-      for (const gh of (pose.ghosts || [])) {
+      for (const gh of this.ghostList(pose)) {
         const ga = m.baseAim + gh.rel;
         this.bandArc(s.x, s.y, reach * 0.97, ga - 0.05 * dir, ga + 0.02 * dir, 0.8, color, gh.alpha * fade);
       }
       // 速度線。刃先の後ろに、進行と逆向きの短い白線を 3 本。
-      if (pose.phase === 'strike' && pose.speed > 0.6) {
+      if (this.decor !== 'off' && pose.phase === 'strike' && pose.speed > 0.6) {
         g.globalAlpha = 0.4 * fade * clamp(pose.speed / 3, 0, 1);
         g.strokeStyle = 'rgba(255, 253, 247, .9)';
         g.lineWidth = 1.1;
@@ -3529,7 +3803,7 @@ export class Renderer {
       g.arc(s.x, s.y, reach * 0.99, m.baseAim + m.from, head, head < m.baseAim + m.from);
       g.stroke();
       // 遅れて届く残像。閃光より少し内側を、細く追う。
-      for (const gh of (pose.ghosts || [])) {
+      for (const gh of this.ghostList(pose)) {
         const ga = m.baseAim + gh.rel;
         g.globalAlpha = gh.alpha * fade;
         g.strokeStyle = 'rgba(255, 253, 247, .8)';
@@ -4136,9 +4410,9 @@ export class Renderer {
           // 球。回転に合わせてくるりと向きが変わる。
           g.save();
           g.translate(ball.x, ball.y);
+          const gs1 = this.glowSprite(color);
+          if (gs1) { g.globalAlpha = 0.55; g.drawImage(gs1, -17, -17, 34, 34); g.globalAlpha = 1; }
           g.rotate((ball.a || 0) + run.t * 4);
-          g.shadowColor = color;
-          g.shadowBlur = 6;
           this.drawWeaponGlyph(g, glyph, 1.2, color, 0.95);
           g.restore();
         }
@@ -4156,10 +4430,10 @@ export class Renderer {
           const orbitScale = Math.sin(run.t * 7 + k) * 0.08;
           g.save();
           g.translate(p.x + Math.cos(a) * radius, p.y + Math.sin(a) * radius);
+          const gs2 = this.glowSprite(color);
+          if (gs2) { g.globalAlpha = 0.5; g.drawImage(gs2, -15, -15, 30, 30); g.globalAlpha = 1; }
           g.rotate(a + run.t * 5.5);
           g.scale(0.95 + orbitScale, 0.95 + orbitScale);
-          g.shadowColor = color;
-          g.shadowBlur = 5;
           this.drawWeaponGlyph(g, glyph, 0.9 + reachK * 0.5, color, 0.9);
           g.restore();
         }

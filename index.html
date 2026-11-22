@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.65">
+<link rel="stylesheet" href="css/style.css?v=1.66">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -273,7 +273,6 @@
           <p class="title-group-label">情報</p>
           <div class="title-group-btns">
             <button class="btn" id="btnHowto">遊び方</button>
-            <button class="btn" id="btnPrologue" data-prologue>プロローグ映像</button>
             <button class="btn" id="btnTutorial">チュートリアル</button>
             <button class="btn" id="btnDict">辞書</button>
             <button class="btn" id="btnRank">ランキング</button>
@@ -297,7 +296,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.65</div>
+      <div class="title-version">Ver. 1.66</div>
     </div>
   </div>
 
@@ -790,26 +789,6 @@
   </div>
 
 
-  <!-- ═══ プロローグ映像 ═════════════════════════════════════════════════ -->
-  <div id="prologue" class="layer screen" hidden>
-    <div class="panel panel-prologue">
-      <header class="panel-head">
-        <h2>プロローグ — 言葉を奪う者</h2>
-        <button class="btn btn-close" data-close="prologue" title="とじる">✕</button>
-      </header>
-      <video id="prologueVideo" class="prologue-video" controls playsinline preload="none"
-        src="assets/motion/prologue.mp4" poster="assets/og.png">
-        お使いの環境では映像を再生できません。下の文章でプロローグを読めます。
-      </video>
-      <details class="prologue-fallback">
-        <summary>文章で読む（映像が再生できないとき）</summary>
-        <p>言葉を現実にするチカラを持った兄弟がいた。世界はそのチカラを狙い、二人の家族を人質にとった。
-        助けようとする弟を、兄は制止した。やがて二人はそれぞれの道へ進み、弟が家族の死を知ったのは、それからすぐのことだった。</p>
-        <blockquote class="story-quote">「僕は世界から言葉を奪う」</blockquote>
-        <p>その日から、言葉が消えていった。兄として、彼を止めなければならない。</p>
-      </details>
-    </div>
-  </div>
 
   <!-- ═══ チュートリアル ═════════════════════════════════════════════════ -->
   <div id="tutorial" class="layer screen" hidden>
@@ -830,7 +809,6 @@
           <p>
           その日から、言葉が消えていった。兄として、彼を止めなければならない。
           </p>
-          <p><button class="btn" type="button" data-prologue>映像で見る（プロローグ映像）</button></p>
         </section>
         <section class="tut-step" data-step="1">
           <h3>1. 言葉を並べて、武器にする</h3>
@@ -1138,6 +1116,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.65"></script>
+<script type="module" src="js/main.js?v=1.66"></script>
 </body>
 </html>

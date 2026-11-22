@@ -5,9 +5,9 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.64';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.64';
-import { motionPose } from '../game/motions.js?v=1.64';
+import { ELEMENTS } from '../data/words.js?v=1.65';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.65';
+import { motionPose } from '../game/motions.js?v=1.65';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -100,6 +100,7 @@ export class Renderer {
     this.step('wind', () => this.drawWind(run));
     this.step('player', () => this.drawPlayer(run));
     this.step('weapon-spirits', () => this.drawWeaponSpirits(run));
+    this.step('motion-casters', () => this.drawMotionCasters(run));
     this.step('helpers', () => this.drawHelpers(run));
     this.step('lightnings', () => this.drawLightnings(run));
     this.step('texts', () => this.drawDamageTexts(run));
@@ -3232,6 +3233,17 @@ export class Renderer {
 
     if (family === 'thrust') {
       // 突き。角度を振らず、前へ伸びる線で見せる。
+      // 槍・矛は残像の線を遅れて重ねる (速い一線ほど残像が長い)。
+      for (const gh of (pose.ghosts || [])) {
+        const ga = m.baseAim + gh.rel;
+        g.globalAlpha = gh.alpha * 0.5 * fade;
+        g.strokeStyle = color;
+        g.lineWidth = 1.4;
+        g.beginPath();
+        g.moveTo(s.x + Math.cos(ga) * reach * 0.3, s.y + Math.sin(ga) * reach * 0.3);
+        g.lineTo(s.x + Math.cos(ga) * reach * 0.94, s.y + Math.sin(ga) * reach * 0.94);
+        g.stroke();
+      }
       const ext = clamp(pose.extension, 0.4, 1.1);
       const r0 = reach * 0.3 * ext;
       const r1 = reach * ext;
@@ -3277,6 +3289,27 @@ export class Renderer {
       }
     }
 
+    // 残像 (ゴースト)。打撃の少し前の角度を薄く重ね、速さと重さを出す。
+    if (style !== 'wave') {
+      for (const gh of (pose.ghosts || [])) {
+        const ga = m.baseAim + gh.rel;
+        this.bandArc(s.x, s.y, reach * 0.97, ga - 0.05 * dir, ga + 0.02 * dir, 0.8, color, gh.alpha * fade);
+      }
+      // 速度線。刃先の後ろに、進行と逆向きの短い白線を 3 本。
+      if (pose.phase === 'strike' && pose.speed > 0.6) {
+        g.globalAlpha = 0.4 * fade * clamp(pose.speed / 3, 0, 1);
+        g.strokeStyle = 'rgba(255, 253, 247, .9)';
+        g.lineWidth = 1.1;
+        for (let i = 0; i < 3; i++) {
+          const rr = reach * (0.55 + i * 0.17);
+          const a0 = head - dir * (0.1 + pose.speed * 0.05);
+          g.beginPath();
+          g.arc(s.x, s.y, rr, Math.min(a0, head), Math.max(a0, head), dir < 0);
+          g.stroke();
+        }
+      }
+    }
+
     if (style === 'wave') {
       this.drawWaveTrail(g, s, m, pose, reach, arc, color, fade);
     } else if (style === 'sweep') {
@@ -3302,16 +3335,53 @@ export class Renderer {
       g.stroke();
     }
 
-    // 槌・大剣は地面を打つ。着弾の輪を足す (扇の内側に置く)。
+    // 槌・大剣・斧は地面を打つ。着弾の輪 + 亀裂 + 土煙 (扇の内側に置く)。
+    // 亀裂の形は攻撃回数 (seq) から決定的に作る。乱数は使わない。
     if ((style === 'smash') && pose.impact > 0.02) {
+      const cx = s.x + Math.cos(m.baseAim) * reach * 0.62;
+      const cy = s.y + Math.sin(m.baseAim) * reach * 0.62;
+      const grow = 1.5 - pose.impact;
       g.globalAlpha = pose.impact * 0.5;
       g.strokeStyle = 'rgba(120, 92, 48, .8)';
       g.lineWidth = 1.5 + pose.impact * 2;
       g.beginPath();
-      g.ellipse(s.x + Math.cos(m.baseAim) * reach * 0.62,
-        s.y + Math.sin(m.baseAim) * reach * 0.62,
-        reach * 0.17 * (1.5 - pose.impact), reach * 0.075 * (1.5 - pose.impact), m.baseAim, 0, TAU);
+      g.ellipse(cx, cy, reach * 0.17 * grow, reach * 0.075 * grow, m.baseAim, 0, TAU);
       g.stroke();
+      if (m.sig === 'quake-ring') {
+        // 槌は二重の衝撃波。外側の輪が遅れて広がる。
+        g.globalAlpha = pose.impact * 0.32;
+        g.beginPath();
+        g.ellipse(cx, cy, reach * 0.3 * grow, reach * 0.13 * grow, m.baseAim, 0, TAU);
+        g.stroke();
+      }
+      // 亀裂。着弾点から 3 方向へ、節のある折れ線 (seq で形が変わる)。
+      g.globalAlpha = pose.impact * 0.65;
+      g.strokeStyle = 'rgba(46, 36, 22, .85)';
+      g.lineWidth = 1.3;
+      const seed = (m.seq || 1) * 0.6180339887;
+      for (let c = 0; c < 3; c++) {
+        const ca = m.baseAim + (c - 1) * 0.55 + Math.sin(seed * (c + 3)) * 0.2;
+        const cl = reach * (0.16 + 0.07 * ((seed * (c + 7)) % 1)) * grow;
+        g.beginPath();
+        g.moveTo(cx, cy);
+        for (let k = 1; k <= 3; k++) {
+          const f = k / 3;
+          const off = Math.sin(seed * (c * 3 + k) * 5.3) * 0.14;
+          g.lineTo(cx + Math.cos(ca + off) * cl * f, cy + Math.sin(ca + off) * cl * f);
+        }
+        g.stroke();
+      }
+      // 土煙。着弾点のまわりに、重力で落ちる前の丸い粒。
+      g.globalAlpha = pose.impact * 0.4;
+      g.fillStyle = 'rgba(150, 122, 78, .8)';
+      for (let i = 0; i < 5; i++) {
+        const aa = m.baseAim + Math.sin(seed * (i + 11)) * 1.1;
+        const rr = reach * 0.1 * grow + i * 2;
+        g.beginPath();
+        g.arc(cx + Math.cos(aa) * rr, cy + Math.sin(aa) * rr * 0.6 - (1 - pose.impact) * 4,
+          1.4 + (i % 3), 0, TAU);
+        g.fill();
+      }
     }
 
     // 属性の名残。軌跡の縁に小さな粒を散らす (扇の内側)。
@@ -3401,6 +3471,8 @@ export class Renderer {
    * 尾は薄く、刃先ほど濃い帯で、通り過ぎた範囲をそのまま見せる。
    */
   drawSweepTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade) {
+    if (m.key === 'tachi') { this.drawIaiTrail(g, s, m, pose, reach, color, fade); return; }
+    if (m.key === 'saw') { this.drawSawTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade); return; }
     const wK = 1.3;
     // 薙いだ面。刃が通った角度のあいだだけ、薄く色を敷く。
     if (Math.abs(head - aFrom) > 1e-4) {
@@ -3437,10 +3509,156 @@ export class Renderer {
   }
 
   /**
+   * 刀 (居合)。構えでは鞘元が光るだけ。抜いた瞬間は一本の細い閃光と
+   * 遅れて届く残像だけが残り、振り抜けでは刃が鞘へ戻る (pose 側で角度が戻る)。
+   */
+  drawIaiTrail(g, s, m, pose, reach, color, fade) {
+    const head = pose.angle;
+    if (pose.phase === 'strike') {
+      // 閃光: 扇の端から端までを、白の芯 1 本で貫く。
+      g.globalAlpha = 0.95 * fade;
+      g.strokeStyle = 'rgba(255, 253, 247, .97)';
+      g.lineWidth = 2.6;
+      g.beginPath();
+      g.arc(s.x, s.y, reach * 0.99, m.baseAim + m.from, head, head < m.baseAim + m.from);
+      g.stroke();
+      g.globalAlpha = 0.5 * fade;
+      g.strokeStyle = color;
+      g.lineWidth = 5.2;
+      g.beginPath();
+      g.arc(s.x, s.y, reach * 0.99, m.baseAim + m.from, head, head < m.baseAim + m.from);
+      g.stroke();
+      // 遅れて届く残像。閃光より少し内側を、細く追う。
+      for (const gh of (pose.ghosts || [])) {
+        const ga = m.baseAim + gh.rel;
+        g.globalAlpha = gh.alpha * fade;
+        g.strokeStyle = 'rgba(255, 253, 247, .8)';
+        g.lineWidth = 1.2;
+        g.beginPath();
+        g.arc(s.x, s.y, reach * 0.9, m.baseAim + m.from, ga, ga < m.baseAim + m.from);
+        g.stroke();
+      }
+    } else if (pose.phase === 'follow' || pose.phase === 'recover') {
+      // 納刀: 戻る刃の細い跡と、鞘元で小さく光る「カチッ」。
+      this.bandArc(s.x, s.y, reach * 0.92, head, m.baseAim + m.from * 0.88, 0.4, color, 0.4 * fade);
+      if (pose.phase === 'recover' && pose.phaseT > 0.55) {
+        g.globalAlpha = (pose.phaseT - 0.55) * 1.4 * fade;
+        g.fillStyle = '#fffdf7';
+        g.beginPath();
+        g.arc(s.x + Math.cos(m.baseAim + m.rest) * reach * 0.18,
+          s.y + Math.sin(m.baseAim + m.rest) * reach * 0.18, 2, 0, TAU);
+        g.fill();
+      }
+    }
+  }
+
+  /**
+   * 鋸 (押し引き)。刃の角度が往復する (pose.sawQ) のに合わせ、
+   * 歯の刻みを付けた帯と、挽くたびに出る火花を描く。
+   */
+  drawSawTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade) {
+    this.taperArc(s.x, s.y, reach * 0.99, aFrom, head, 1.15, color, 0.9 * fade, 9);
+    // 歯の刻み。帯の外周に沿って短い刻みを並べる (鋸だけの意匠)。
+    g.globalAlpha = 0.55 * fade;
+    g.strokeStyle = 'rgba(28, 35, 49, .7)';
+    g.lineWidth = 1;
+    const span = head - aFrom;
+    for (let i = 0; i <= 10; i++) {
+      const aa = aFrom + span * (i / 10);
+      g.beginPath();
+      g.moveTo(s.x + Math.cos(aa) * reach * 0.93, s.y + Math.sin(aa) * reach * 0.93);
+      g.lineTo(s.x + Math.cos(aa) * reach * 1.0, s.y + Math.sin(aa) * reach * 1.0);
+      g.stroke();
+    }
+    // 往復の折り返しで火花。sawQ の山 (往復の端) でだけ散る。
+    const turn = Math.abs(Math.sin((pose.sawQ || 0) * (m.strokes || 3) * Math.PI * 2));
+    if ((pose.phase === 'strike' || pose.phase === 'follow') && turn > 0.92) {
+      g.globalAlpha = 0.8 * fade;
+      g.fillStyle = '#ffd98a';
+      for (let i = 0; i < 4; i++) {
+        const aa = head - dir * i * 0.05;
+        g.beginPath();
+        g.arc(s.x + Math.cos(aa) * reach * 0.97, s.y + Math.sin(aa) * reach * 0.97, 1.3, 0, TAU);
+        g.fill();
+      }
+    }
+  }
+
+  /**
+   * 鋏 (二段挟み)。要を中心に二枚の刃が開き、一段目で途中まで、
+   * 間を置いて二段目で閉じ切る。閉じた点で火花。
+   */
+  drawSnipTrail(g, s, m, pose, reach, color, fade) {
+    const open = pose.open || 0;
+    const mid = m.baseAim;
+    const spread = (m.arc / 2) * 0.55 * open + 0.03;
+    for (const sgn of [-1, 1]) {
+      const aa = mid + sgn * spread;
+      this.bandArc(s.x, s.y, reach * 0.96, mid, aa, 0.5, color, 0.85 * fade);
+      g.globalAlpha = 0.8 * fade;
+      g.strokeStyle = 'rgba(255, 253, 247, .9)';
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.moveTo(s.x + Math.cos(aa) * reach * 0.2, s.y + Math.sin(aa) * reach * 0.2);
+      g.lineTo(s.x + Math.cos(aa) * reach * 0.97, s.y + Math.sin(aa) * reach * 0.97);
+      g.stroke();
+    }
+    // 要 (軸) の丸。
+    g.globalAlpha = 0.9 * fade;
+    g.fillStyle = 'rgba(28, 35, 49, .9)';
+    g.beginPath();
+    g.arc(s.x + Math.cos(mid) * reach * 0.2, s.y + Math.sin(mid) * reach * 0.2, 2.4, 0, TAU);
+    g.fill();
+    // 閉じ切った瞬間の火花。二段目が閉じた直後 (impact) だけ。
+    if (pose.impact > 0.25 && open < 0.12) {
+      g.globalAlpha = pose.impact * fade;
+      g.fillStyle = '#ffd98a';
+      for (let i = 0; i < 5; i++) {
+        const aa = mid + (i - 2) * 0.16;
+        g.beginPath();
+        g.arc(s.x + Math.cos(aa) * reach * 0.99, s.y + Math.sin(aa) * reach * 0.99, 1.5, 0, TAU);
+        g.fill();
+      }
+    }
+  }
+
+  /**
+   * 牙 (噛みつき)。上下の顎の弧が、開いてから一気に閉じる (pose.jaw)。
+   */
+  drawBiteTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade) {
+    const jaw = pose.jaw || 0;
+    const gap = 0.1 + jaw * (m.arc / 2) * 0.6;
+    for (const sgn of [-1, 1]) {
+      const mid = m.baseAim + sgn * gap * 0.4;
+      this.bandArc(s.x, s.y, reach * (0.8 + 0.18 * (1 - jaw)), mid - sgn * gap, mid + sgn * gap * 0.4, 0.6, color, 0.85 * fade);
+      // 牙の棘。顎の弧に沿って 3 本。
+      g.globalAlpha = 0.85 * fade;
+      g.fillStyle = 'rgba(255, 253, 247, .95)';
+      for (let i = 0; i < 3; i++) {
+        const aa = mid + (i - 1) * gap * 0.5;
+        const rr = reach * (0.82 + 0.16 * (1 - jaw));
+        g.beginPath();
+        g.arc(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 1.7, 0, TAU);
+        g.fill();
+      }
+    }
+    // 噛み切った瞬間、閉じた顎の先で小さく弾ける。
+    if (pose.impact > 0.3 && jaw < 0.1) {
+      g.globalAlpha = pose.impact * 0.7 * fade;
+      g.fillStyle = color;
+      g.beginPath();
+      g.arc(s.x + Math.cos(m.baseAim) * reach * 0.95, s.y + Math.sin(m.baseAim) * reach * 0.95, 3, 0, TAU);
+      g.fill();
+    }
+  }
+
+  /**
    * 標準の弧 (style: arc / claw / smash / punch / bite)。
    * 振り始めから刃先までを削って描く。
    */
   drawArcTrail(g, s, m, pose, reach, color, aFrom, head, dir, style, family, fade) {
+    if (m.key === 'shears') { this.drawSnipTrail(g, s, m, pose, reach, color, fade); return; }
+    if (m.key === 'fang') { this.drawBiteTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade); return; }
     const passes = family === 'claw' ? Math.max(1, m.passes) : 1;
     const wK = family === 'claw' ? 0.34
       : family === 'punch' || family === 'bite' ? 0.55
@@ -3458,10 +3676,14 @@ export class Renderer {
       g.closePath();
       g.fill();
     }
-    // 爪は 3 本。鉤爪の間隔を空けて、通った跡を並べる。
+    // 爪は 3 本。鉤爪の間隔を空け、時間差 (pose.pulses) で 1 本ずつ走らせる。
     for (let p = 0; p < passes; p++) {
       const lag = p * 0.13;
-      const h = head - dir * lag;
+      const pulse = pose.pulses && pose.pulses[p] != null ? pose.pulses[p] : 1;
+      if (family === 'claw' && pulse <= 0.02) continue;
+      const h = family === 'claw'
+        ? aFrom + (head - aFrom) * pulse - dir * lag * pulse
+        : head - dir * lag;
       const tail = heavy
         ? Math.abs(h - aFrom)
         : Math.min(0.62 + (family === 'claw' ? 0.3 : 0.12), Math.abs(h - aFrom));
@@ -3495,6 +3717,21 @@ export class Renderer {
       g.beginPath();
       g.arc(s.x + Math.cos(a) * tipR, s.y + Math.sin(a) * tipR, 1.8 + pose.flash * 2.2, 0, TAU);
       g.fill();
+    }
+    // 拳の連打ラッシュ。残像の拳 (丸い衝撃) が時間差で前方へ重なる。
+    if (family === 'punch') {
+      for (let k = 0; k < (pose.pulses || []).length; k++) {
+        const pk = pose.pulses[k];
+        if (pk <= 0.02) continue;
+        const aa = m.baseAim + (k - 1.5) * 0.09;
+        const rr = reach * (0.45 + 0.5 * pk);
+        g.globalAlpha = (0.25 + 0.45 * pk) * fade;
+        g.strokeStyle = k % 2 ? color : 'rgba(255, 253, 247, .9)';
+        g.lineWidth = 1.6;
+        g.beginPath();
+        g.arc(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 3 + pk * 3.5, 0, TAU);
+        g.stroke();
+      }
     }
   }
 
@@ -3597,6 +3834,7 @@ export class Renderer {
     const a0 = m.baseAim + m.from;
     const reach = Math.max(28, s.r * (0.72 + 0.28 * Math.min(1, sweep / 5)));
     const link = m.key === 'chain';
+    // 鎖はリンクごとに波打つ位相をずらし、鞭は先端で弾ける (pose.crack)。
 
     const point = (f) => {
       const aa = a0 + dir * sweep * f;
@@ -3627,24 +3865,47 @@ export class Renderer {
       }
 
       if (link) {
-        g.globalAlpha = 0.75 * fade;
+        // 鎖のリンク。1 つごとに位相のずれた波打ちを乗せ、金属の連なりで見せる。
+        g.globalAlpha = 0.8 * fade;
         g.strokeStyle = 'rgba(28, 35, 49, .85)';
         g.lineWidth = 1;
-        for (let i = 2; i <= 16; i += 2) {
-          const pt = point(i / 18);
+        for (let i = 1; i <= 17; i++) {
+          const f = i / 18;
+          const pt = point(f);
+          const wob = Math.sin(f * 12.6 - sweep * 2.2) * 2.2 * f;
+          const nx = Math.cos(pt.a + Math.PI / 2), ny = Math.sin(pt.a + Math.PI / 2);
           g.beginPath();
-          g.ellipse(pt.x, pt.y, 2.4, 1.2, pt.a, 0, TAU);
+          g.ellipse(pt.x + nx * wob, pt.y + ny * wob, 2.6, 1.3, pt.a + (i % 2 ? 0.5 : -0.5), 0, TAU);
           g.stroke();
         }
+        // 先端の錘。
+        const tipW = point(1);
+        g.globalAlpha = 0.9 * fade;
+        g.fillStyle = 'rgba(28, 35, 49, .9)';
+        g.beginPath();
+        g.arc(tipW.x, tipW.y, 3.2, 0, TAU);
+        g.fill();
       }
 
-      // 鞭先。
+      // 鞭先。鞭は届いた瞬間に先端が弾ける (crack) — 小さな衝撃の十字。
       const tip = point(1);
       g.globalAlpha = 0.75 * fade;
       g.fillStyle = '#fffdf7';
       g.beginPath();
       g.arc(tip.x, tip.y, 2.1 + pose.flash * 1.4, 0, TAU);
       g.fill();
+      if (!link && pose.crack > 0.05) {
+        g.globalAlpha = pose.crack * 0.8 * fade;
+        g.strokeStyle = 'rgba(255, 253, 247, .95)';
+        g.lineWidth = 1.3;
+        for (let i = 0; i < 4; i++) {
+          const aa = (i / 4) * TAU + 0.4;
+          g.beginPath();
+          g.moveTo(tip.x + Math.cos(aa) * 3, tip.y + Math.sin(aa) * 3);
+          g.lineTo(tip.x + Math.cos(aa) * (6 + pose.crack * 6), tip.y + Math.sin(aa) * (6 + pose.crack * 6));
+          g.stroke();
+        }
+      }
       g.restore();
     }
 
@@ -3659,6 +3920,180 @@ export class Renderer {
       g.arc(s.x, s.y, reach, a0, a0 + dir * sweep, dir < 0);
       g.stroke();
       g.setLineDash([]);
+      g.restore();
+    }
+  }
+
+  /**
+   * 射撃・詠唱のモーション (wi.motion)。弾そのものは drawBullets が描くので、
+   * ここは「撃つ側」の動きだけ: 銃のマズルフラッシュ・反動・薬莢、弓の引きと
+   * 弦の震え、針の連続突き、杖の詠唱サークル、玉の集気と放出。
+   * すべてプレイヤー中心・間合い (m.reach) の内側で完結する。
+   */
+  drawMotionCasters(run) {
+    const g = this.ctx;
+    const p = run.player;
+    for (const wi of run.weapons) {
+      const m = wi.motion;
+      if (!m || (m.family !== 'ranged' && m.family !== 'cast')) continue;
+      const pose = motionPose(m);
+      if (!pose) continue;
+      const color = m.color || '#d4a94e';
+      const aim = m.baseAim;
+      const reach = Math.max(24, m.reach || 60);
+      const fade = pose.phase === 'recover' ? 1 - pose.phaseT * 0.6 : 1;
+      g.save();
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      if (m.key === 'gun') {
+        // マズルフラッシュ: 打撃の瞬間だけ、筒先に十字の閃光。
+        const mx = p.x + Math.cos(aim) * (p.r + 10), my = p.y + Math.sin(aim) * (p.r + 10);
+        if (pose.impact > 0.04) {
+          g.globalAlpha = pose.impact * fade;
+          g.strokeStyle = 'rgba(255, 240, 190, .95)';
+          g.lineWidth = 2;
+          for (let i = 0; i < 4; i++) {
+            const aa = aim + i * (Math.PI / 2) + 0.35;
+            const len = 5 + pose.impact * 9 + (pose.recoilK || 0);
+            g.beginPath();
+            g.moveTo(mx, my);
+            g.lineTo(mx + Math.cos(aa) * len, my + Math.sin(aa) * len);
+            g.stroke();
+          }
+          g.fillStyle = '#fffdf7';
+          g.beginPath();
+          g.arc(mx, my, 2.4 + pose.impact * 2, 0, TAU);
+          g.fill();
+        }
+        // 薬莢: 横へ 1 つだけ弾け、決定的な放物線で落ちる (seq と経過で決まる)。
+        if (pose.phase === 'follow' || pose.phase === 'recover') {
+          const q = clamp(pose.t * 1.4 - 0.5, 0, 1);
+          if (q > 0) {
+            const side = aim + Math.PI / 2;
+            const ex = p.x + Math.cos(side) * (6 + q * 14) + Math.cos(aim) * -pose.recoilK * 0.4;
+            const ey = p.y + Math.sin(side) * (6 + q * 14) - Math.sin(q * Math.PI) * 7 + q * q * 9;
+            g.save();
+            g.translate(ex, ey);
+            g.rotate((m.seq || 1) * 1.7 + q * 5);
+            g.globalAlpha = 0.85 * (1 - q * 0.5) * fade;
+            g.fillStyle = '#c9971f';
+            g.fillRect(-2.2, -1, 4.4, 2);
+            g.restore();
+          }
+        }
+        // 反動: 照準と逆向きの短い残像線。
+        if (pose.recoilK > 0.5) {
+          g.globalAlpha = 0.4 * fade;
+          g.strokeStyle = color;
+          g.lineWidth = 1.4;
+          g.beginPath();
+          g.moveTo(p.x - Math.cos(aim) * (p.r + 2), p.y - Math.sin(aim) * (p.r + 2));
+          g.lineTo(p.x - Math.cos(aim) * (p.r + 2 + pose.recoilK), p.y - Math.sin(aim) * (p.r + 2 + pose.recoilK));
+          g.stroke();
+        }
+      } else if (m.key === 'bow') {
+        // 弓: 引くほど弦がたわみ、放った直後は弦が震える。
+        const bx = p.x + Math.cos(aim) * reach * 0.3, by = p.y + Math.sin(aim) * reach * 0.3;
+        const perp = aim + Math.PI / 2;
+        const halfLen = Math.min(20, reach * 0.22);
+        const drawK = pose.phase === 'windup' ? pose.phaseT : 1;
+        const vib = pose.phase === 'follow' || pose.phase === 'recover'
+          ? Math.sin(pose.t * 46) * 3.2 * pose.impact : 0;
+        const pull = pose.phase === 'windup' ? drawK * 7 : vib;
+        g.globalAlpha = 0.9 * fade;
+        g.strokeStyle = 'rgba(90, 62, 32, .95)';
+        g.lineWidth = 2.4;
+        g.beginPath();
+        g.arc(bx, by, halfLen, aim - 1.25, aim + 1.25);
+        g.stroke();
+        // 弦: 両端から引き点 (または震え点) へ。
+        const px2 = bx - Math.cos(aim) * pull, py2 = by - Math.sin(aim) * pull;
+        g.globalAlpha = 0.85 * fade;
+        g.strokeStyle = 'rgba(255, 253, 247, .9)';
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(bx + Math.cos(perp) * halfLen, by + Math.sin(perp) * halfLen);
+        g.lineTo(px2, py2);
+        g.lineTo(bx - Math.cos(perp) * halfLen, by - Math.sin(perp) * halfLen);
+        g.stroke();
+        // 放たれた矢の残光: 照準へ細い一線と、遅れた薄い一線。
+        if (pose.phase !== 'windup') {
+          for (const [off, al, lw] of [[0, 0.75, 1.8], [0.05, 0.3, 1.1]]) {
+            const aa = aim + off;
+            g.globalAlpha = al * fade * (0.4 + pose.impact);
+            g.strokeStyle = off ? color : 'rgba(255, 253, 247, .95)';
+            g.lineWidth = lw;
+            g.beginPath();
+            g.moveTo(p.x + Math.cos(aa) * reach * 0.3, p.y + Math.sin(aa) * reach * 0.3);
+            g.lineTo(p.x + Math.cos(aa) * reach * 0.98, p.y + Math.sin(aa) * reach * 0.98);
+            g.stroke();
+          }
+        }
+      } else if (m.key === 'needle') {
+        // 針: 高速の連続突き。pose.pulses の発ごとに短い一線が伸びる。
+        for (let k = 0; k < (pose.pulses || []).length; k++) {
+          const pk = pose.pulses[k];
+          if (pk <= 0.02) continue;
+          const aa = aim + (k - 1) * 0.055;
+          const r1 = reach * (0.35 + 0.6 * pk);
+          g.globalAlpha = (0.35 + 0.55 * pk) * fade;
+          g.strokeStyle = k === (pose.pulses.length - 1) ? 'rgba(255, 253, 247, .95)' : color;
+          g.lineWidth = 1.5;
+          g.beginPath();
+          g.moveTo(p.x + Math.cos(aa) * reach * 0.3, p.y + Math.sin(aa) * reach * 0.3);
+          g.lineTo(p.x + Math.cos(aa) * r1, p.y + Math.sin(aa) * r1);
+          g.stroke();
+          g.globalAlpha = 0.8 * pk * fade;
+          g.fillStyle = '#fffdf7';
+          g.beginPath();
+          g.arc(p.x + Math.cos(aa) * r1, p.y + Math.sin(aa) * r1, 1.5, 0, TAU);
+          g.fill();
+        }
+      } else if (m.key === 'staff' || m.key === 'orb') {
+        // 詠唱: 足元 (玉は手元) にサークルが広がり、打撃で放出の輪になる。
+        const cx = m.key === 'orb' ? p.x + Math.cos(aim) * reach * 0.3 : p.x;
+        const cy = m.key === 'orb' ? p.y + Math.sin(aim) * reach * 0.3 : p.y;
+        const baseR = m.key === 'orb' ? 6 + pose.circleK * 10 : (p.r + 5) + pose.circleK * Math.min(26, reach * 0.3);
+        const rot = (m.seq || 1) * 0.7 + pose.t * 2.4;
+        g.globalAlpha = (0.25 + 0.55 * pose.circleK) * fade;
+        g.strokeStyle = color;
+        g.lineWidth = 1.6;
+        for (const [rr, a0, a1] of [[baseR, rot, rot + 2.2], [baseR, rot + Math.PI, rot + Math.PI + 2.2], [baseR * 0.66, -rot, -rot + 1.6]]) {
+          g.beginPath();
+          g.arc(cx, cy, Math.max(3, rr), a0, a1);
+          g.stroke();
+        }
+        // サークルの刻み (文字の代わりの小さな印)。
+        g.fillStyle = color;
+        for (let i = 0; i < 4; i++) {
+          const aa = rot + i * (TAU / 4);
+          g.globalAlpha = (0.3 + 0.5 * pose.circleK) * fade;
+          g.beginPath();
+          g.arc(cx + Math.cos(aa) * baseR, cy + Math.sin(aa) * baseR, 1.6, 0, TAU);
+          g.fill();
+        }
+        if (m.key === 'orb' && pose.phase === 'windup') {
+          // 集気: 玉が吸い込むように膨らむ芯。
+          g.globalAlpha = 0.8 * fade;
+          g.fillStyle = 'rgba(255, 253, 247, .95)';
+          g.beginPath();
+          g.arc(cx, cy, 1.5 + pose.circleK * 3, 0, TAU);
+          g.fill();
+        }
+        // 放出: 打撃の瞬間、サークルから外へ細い放射。
+        if (pose.impact > 0.1) {
+          g.globalAlpha = pose.impact * 0.6 * fade;
+          g.strokeStyle = 'rgba(255, 253, 247, .9)';
+          g.lineWidth = 1.2;
+          for (let i = 0; i < 6; i++) {
+            const aa = rot + i * (TAU / 6);
+            g.beginPath();
+            g.moveTo(cx + Math.cos(aa) * baseR, cy + Math.sin(aa) * baseR);
+            g.lineTo(cx + Math.cos(aa) * (baseR + 5 + pose.impact * 8), cy + Math.sin(aa) * (baseR + 5 + pose.impact * 8));
+            g.stroke();
+          }
+        }
+      }
       g.restore();
     }
   }

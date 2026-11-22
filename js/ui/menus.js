@@ -6,12 +6,12 @@ import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
 import { storyFor, chapterFor, EPILOGUE } from '../data/story.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.64';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.64';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.65';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.65';
 import { evaluatePart, partConnChoices } from '../game/parts.js';
 import { partEffectRows, partTotalRows } from '../game/stats.js';
 import { GrowPad } from './growpad.js';
-import { Tips } from './tips.js?v=1.64';
+import { Tips } from './tips.js?v=1.65';
 import { fetchLeaderboard } from '../core/net.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
@@ -122,6 +122,8 @@ export class Menus {
     this._storyDone = null;
     this._storyStage = 1;
     this._storyReadonly = false;
+    this.prologue = $('#prologue');
+    this.prologueVideo = $('#prologueVideo');
     this.tutorial = $('#tutorial');
     this.tutStepEl = this.tutorial ? $('#tutStep') : null;
     this.tutSteps = this.tutorial ? [...this.tutorial.querySelectorAll('.tut-step')] : [];
@@ -254,6 +256,9 @@ export class Menus {
 
     // ── チュートリアル ──
     $('#btnTutorial')?.addEventListener('click', () => { tap(); this.show('tutorial'); });
+    for (const b of document.querySelectorAll('[data-prologue]')) {
+      b.addEventListener('click', () => { tap(); this.show('prologue'); });
+    }
     $('#tutNext')?.addEventListener('click', () => {
       tap();
       if (this.tutIdx >= this.tutSteps.length - 1) this.closeTutorial();
@@ -280,11 +285,13 @@ export class Menus {
     // #tutorial は DOM ごと無い環境があるので、存在するときだけ伏せる。
     if (this.tutorial) this.tutorial.hidden = true;
     if (this.story) this.story.hidden = true;
+    if (this.prologue) { this.prologue.hidden = true; this.prologueVideo?.pause?.(); }
   }
 
   /** 辞書を閉じる。ゲーム中は main.js 側で時間を戻す。 */
   hide(name) {
     if (name === 'grow') this.closeGacha();
+    if (name === 'prologue') this.prologueVideo?.pause?.();
     // そのタブの説明を重ねているなら、タブを閉じるときに一緒に閉じる。
     if (this.tips?.isOpen() && this.tips.key === name) this.tips.close();
     const wasOpen = this[name] && !this[name].hidden;
@@ -302,9 +309,10 @@ export class Menus {
 
   show(name) {
     // タブ系 (遊び方/書庫/辞書/設定) を開くときは、下に見えている画面を覚える。
-    if (['howto', 'dict', 'settings', 'grow', 'words', 'tutorial'].includes(name)) {
+    if (['howto', 'dict', 'settings', 'grow', 'words', 'tutorial', 'prologue'].includes(name)) {
       const base = ['title', 'stages', 'loadout', 'result']
-        .find((k) => !this[k].hidden);
+        .find((k) => !this[k].hidden)
+        || (this.tutorial && !this.tutorial.hidden ? 'tutorial' : null);
       this._tabFrom = base || null;
     } else {
       this._tabFrom = null;
@@ -331,6 +339,7 @@ export class Menus {
   }
 
   back() {
+    if (this.prologue && !this.prologue.hidden) { this.closeTab('prologue'); return true; }
     if (this.story && !this.story.hidden) { this.closeStory(this._storyReadonly); return true; }
     if (this.tips?.isOpen()) { this.tips.close(); return true; }
     if (this.gachaVeil && !this.gachaVeil.hidden) { this.closeGacha(); return true; }

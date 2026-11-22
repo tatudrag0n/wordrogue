@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.64';
+} from '../data/words.js?v=1.65';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.64';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.65';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.64';
-import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.64';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.64';
+import { WeaponInst } from './weapon.js?v=1.65';
+import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.65';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.65';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -1853,9 +1853,52 @@ export class Run {
   motionTick(dt) {
     for (const wi of this.weapons) {
       if (!wi.motion) continue;
+      const prev = wi.motion.elapsed || 0;
       const alive = advanceWeaponMotion(wi.motion, dt);
+      // 打撃の瞬間を跨いだら、武器種ごとの着弾の手応えを 1 回だけ出す。
+      if (isImpactFrame(wi.motion, prev, wi.motion.elapsed)) this.motionImpactFx(wi, wi.motion);
       if (!alive) wi.motion = null;
     }
+  }
+
+  /**
+   * 打撃瞬間の小さな着弾エフェクト (見た目と粒子だけ。当たり判定・威力は不変)。
+   * 位置は打撃ポーズの刃先。配慮フラグ: reducedMotion では出さず、
+   * reduceFlash では粒の数を半分にする。shake は既定 OFF のまま触らない。
+   */
+  motionImpactFx(wi, m) {
+    if (this.reducedMotion) return;
+    const pose = motionPose({ ...m, elapsed: m.impactAt });
+    if (!pose) return;
+    const p = this.player;
+    const ang = m.family === 'thrust' || m.family === 'ranged' || m.family === 'cast'
+      ? m.baseAim : pose.angle;
+    const distK = m.style === 'smash' ? 0.62 : 0.88;
+    const x = p.x + Math.cos(ang) * m.reach * distK;
+    const y = p.y + Math.sin(ang) * m.reach * distK;
+    let n = 6, color = m.color || '#d4a94e', o = { spd: 190, spdMin: 50, life: 0.32, r: 1.7, shape: 'spark', drag: 5 };
+    if (m.sig === 'smash-crack' || m.sig === 'smash-chop' || m.sig === 'quake-ring') {
+      n = 11; color = '#b09a6a'; o = { spd: 170, spdMin: 40, life: 0.45, r: 2.6, shape: 'smoke', drag: 3.5 };
+      this.burst(x, y, 5, '#8a6f42', { spd: 240, spdMin: 70, life: 0.3, r: 1.8, shape: 'shard', drag: 4 });
+    } else if (m.sig === 'saw-push-pull' || m.sig === 'snip-two-stage') {
+      n = 9; color = '#ffd98a';
+    } else if (m.sig === 'needle-rapid') {
+      n = 5; o = { ...o, spd: 260, life: 0.22 };
+    } else if (m.sig === 'punch-rush') {
+      n = 8; o = { ...o, shape: 'dot', spd: 230 };
+    } else if (m.sig === 'claw-stagger' || m.sig === 'bite-snap') {
+      n = 7; o = { ...o, a: ang, spread: 0.9 };
+    } else if (m.sig === 'gun-recoil-shell') {
+      n = 4; color = '#d8d8d8'; o = { spd: 70, spdMin: 20, life: 0.4, r: 2.4, shape: 'smoke', drag: 2.5 };
+    } else if (m.sig === 'cast-circle' || m.sig === 'orb-charge') {
+      n = 8; o = { ...o, shape: 'dot', spd: 150 };
+    } else if (m.sig === 'whip-crack' || m.sig === 'chain-link-wave') {
+      n = 6; color = '#fff3c9';
+    } else if (m.sig === 'iai-flash') {
+      n = 4; color = '#e8ecf2'; o = { ...o, spd: 150, life: 0.25 };
+    }
+    if (this.reduceFlash) n = Math.max(2, Math.round(n / 2));
+    this.burst(x, y, n, color, o);
   }
 
   /** 軌道刃。生存する体数を保つ。 */

@@ -3460,6 +3460,10 @@ html, body {
 }
 .stage-read:hover { background: rgba(224,72,45,.14); }
 .panel-story { width: min(620px, 100%); }
+.panel-prologue { width: min(860px, 100%); }
+.prologue-video { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; display: block; }
+.prologue-fallback { margin-top: 12px; }
+.prologue-fallback summary { cursor: pointer; }
 .story-body { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 .story-line {
   margin: 0; font-size: 1rem; line-height: 1.9; color: var(--fg-dim);

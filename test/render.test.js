@@ -173,5 +173,38 @@ sec('武器の絵は真上から見た形 (銃は銃身の軸で上下対称)');
   console.log('  銃・鋏は銃身/軸を挟んで対称 / 鋸は歯が片側 (真上から見た形)');
 }
 
+
+sec('武器固有の描画 (居合・鋸・鋏・射撃/詠唱モーション) が呼ばれる');
+{
+  const renderer = new Renderer(canvas);
+  const called = new Set();
+  for (const name of ['drawIaiTrail', 'drawSawTrail', 'drawSnipTrail', 'drawMotionCasters']) {
+    const orig = Renderer.prototype[name];
+    Renderer.prototype[name] = function patched(...args) { called.add(name); return orig.apply(this, args); };
+  }
+  const run = new Run({
+    stageId: 3, audio, save: { d: {} }, rng: makeRng(4242), lexiconSize: 12,
+    weaponIds: ['tachi'],
+  });
+  run.weapons.length = 0;
+  for (const id of ['tachi', 'saw', 'scissors', 'gun', 'staff']) {
+    const wi = new WeaponInst(id, 2);
+    if (wi.def.tail) wi.sentence.push(makeWord(wi.def.tail));
+    run.weapons.push(wi);
+  }
+  run.spawnEnemy('slime', { x: run.player.x + 60, y: run.player.y });
+  run.enemies.forEach((e) => { e.spawned = 1; e.hp = 1e9; });
+  for (let i = 0; i < 60 * 6; i++) {
+    run.update(1 / 60, { ax: 0, ay: 0, moving: false, angle: 0 });
+    renderer.draw(run, null);
+  }
+  ok(renderer.drawErrorCount === 0, `描画の例外 ${renderer.drawErrorCount} 件`);
+  ok(called.has('drawIaiTrail'), '刀の居合が描かれていない');
+  ok(called.has('drawSawTrail'), '鋸の押し引きが描かれていない');
+  ok(called.has('drawSnipTrail'), '鋏の二段挟みが描かれていない');
+  ok(called.has('drawMotionCasters'), '射撃/詠唱モーションが描かれていない');
+  console.log(`  固有描画: ${[...called].join(' ')}`);
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

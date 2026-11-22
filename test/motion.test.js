@@ -16,7 +16,7 @@ import { makeRng } from '../js/core/util.js';
 import { BASE_PLAYER } from '../js/game/stats.js';
 import {
   WEAPON_MOTIONS, GLYPH_MOTION, motionKey, motionWindup, motionLead, motionDuration,
-  startWeaponMotion, motionPose, weaponStyle, syncMotionShape,
+  startWeaponMotion, motionPose, weaponStyle, syncMotionShape, swingCurve,
 } from '../js/game/motions.js';
 import { attackShape } from '../js/game/combat.js';
 
@@ -266,6 +266,92 @@ sec('扇が変われば、モーションも同じ扇に合わせ直す');
   const p = motionPose({ ...m, elapsed: m.impactAt + 1e-4 });
   ok(Math.abs(p.angleRel) <= 0.6 + 1e-9, `合わせ直した扇からはみ出した: ${p.angleRel}`);
   console.log(`  扇 ${before.toFixed(2)} → 1.20 / 間合い 300`);
+}
+
+
+sec('武器ごとに signature と軌跡が違う (1.65 の差別化)');
+{
+  const sigs = Object.entries(WEAPON_MOTIONS).map(([k, pr]) => [k, pr.sig]);
+  ok(sigs.every(([, sg]) => !!sg), `sig の無いモーション: ${sigs.filter(([, sg]) => !sg).map(([k]) => k).join(' ')}`);
+  ok(new Set(sigs.map(([, sg]) => sg)).size === sigs.length, 'sig が重複している');
+  // 軌跡ベクトル (角度・伸び・固有量) が武器ごとに一致しないこと。
+  // 持ち方 (key) ごとに、実際にその key へ届く語と kind で作る。
+  // axe プロファイルは語からは greatblade に寄せられる予備形なので軌跡照合からは除く。
+  const SPEC = {
+    sword: ['刃', 'slash'], tachi: ['刀', 'sweep'], longsword: ['剣', 'thrust'],
+    greatblade: ['斧', 'smash'], hammer: ['槌', 'quake'], claw: ['爪', 'flurry'],
+    fang: ['牙', 'reap'], fist: ['拳', 'dual'], spear: ['槍', 'shard'],
+    gun: ['銃', 'shot'], needle: ['針', 'shot'], bow: ['弓', 'pierce'],
+    staff: ['杖', 'shadow'], chain: ['鎖', 'whip'], whip: ['鞭', 'whip'],
+    throw: ['還', 'boomerang'], orb: ['玉', 'shot'], shears: ['鋏', 'snip'],
+    saw: ['鋸', 'grind'], blade: [null, 'slash'], dualblades: [null, 'dual'],
+  };
+  const vecs = new Map();
+  const dup = [];
+  for (const [key, [glyph, kind]] of Object.entries(SPEC)) {
+    const wi = { motionSeq: 0 };
+    const res = { kind, compound: key === 'dualblades', shape: 'blade', stats: { range: 100, arc: 1.8, size: 1, rate: 1.5 }, tail: glyph, elementInfo: { color: '#d4a94e' } };
+    const m = startWeaponMotion(wi, res, 0.2, { interval: 10 });
+    if (m.key !== key) { dup.push(`${key} を作ったつもりが ${m.key}`); continue; }
+    const v = [];
+    for (const f of [0.15, 0.35, 0.5, 0.62, 0.8, 0.95]) {
+      m.elapsed = f * m.duration;
+      const pp = motionPose(m);
+      v.push(pp.angleRel.toFixed(3), pp.extension.toFixed(3), pp.fly.toFixed(2),
+        (pp.open || 0).toFixed(2), (pp.jaw || 0).toFixed(2), (pp.sawQ || 0).toFixed(2),
+        (pp.pulses || []).map((x) => x.toFixed(1)).join(','), String((pp.ghosts || []).length));
+      for (const gh of (pp.ghosts || [])) {
+        if (!finite(gh.rel) || !finite(gh.alpha)) dup.push(`${key}:残像が非有限`);
+        if (pp.phase !== 'windup' && Math.abs(gh.rel) > m.arc / 2 + 1e-9) dup.push(`${key}:残像が扇の外`);
+      }
+    }
+    const key2 = v.join('|');
+    if (vecs.has(key2)) dup.push(`${key} と ${vecs.get(key2)} の軌跡が一致`);
+    vecs.set(key2, key);
+  }
+  ok(dup.length === 0, `軌跡の重複/異常: ${dup.join(' ')}`);
+  console.log(`  ${vecs.size} 種の軌跡がすべて異なる / sig ${new Set(sigs.map(([, x]) => x)).size} 種`);
+}
+
+sec('anticipation・ヒットストップ保持・武器固有の時間変化');
+{
+  const mk = (id) => {
+    const wi = new WeaponInst(id);
+    const res = wi.resolve({ ...BASE_PLAYER });
+    return startWeaponMotion(wi, res, 0, { interval: 10 });
+  };
+  // 刀: 予備動作の中ほどで、振る方向と逆へ余分に引いている。
+  const mt = mk('tachi');
+  mt.elapsed = (mt.windup / 2);
+  const pt = motionPose(mt);
+  const noDip = -1.0 + (mt.from - -1.0) * 0.5; // easeInOut(0.5)=0.5 の素の位置
+  ok(pt.angleRel < noDip - 0.04, `刀の anticipation が無い: ${pt.angleRel} vs ${noDip}`);
+  // 槌: 打撃直後は姿勢が凍る (held) が、局面は follow のまま順序が崩れない。
+  const mh = mk('hammer');
+  mh.elapsed = mh.impactAt + mh.duration * 0.03;
+  const ph = motionPose(mh);
+  ok(ph.held === true && ph.phase === 'follow', `槌の保持が効いていない: held=${ph.held} phase=${ph.phase}`);
+  ok(Math.abs(ph.angleRel - mh.to) < 1e-6, `保持中に角度が動いた: ${ph.angleRel} != ${mh.to}`);
+  // 鋸: 打撃中の角度が往復する (単調でない)。
+  const ms = mk('saw');
+  const angs = [];
+  for (let i = 0; i <= 24; i++) { ms.elapsed = ms.windup + (ms.followAt - ms.windup) * (i / 24); angs.push(motionPose(ms).angleRel); }
+  let turns = 0;
+  for (let i = 2; i < angs.length; i++) if (Math.sign(angs[i] - angs[i - 1]) !== Math.sign(angs[i - 1] - angs[i - 2])) turns++;
+  ok(turns >= 2, `鋸の往復が無い: 方向転換 ${turns}`);
+  // 鋏: 開きが二段で閉じる (途中で止まる)。
+  const mc = mk('scissors');
+  const openAt = (f) => { mc.elapsed = mc.duration * f; return motionPose(mc).open; };
+  const oMid = openAt(0.42); // 打撃局面の 55% 付近 = 二段目の「間」
+  ok(oMid > 0.3 && oMid < 0.5, `鋏の二段目の間が無い: open=${oMid}`);
+  // 針: 連続突きが時間差で進む。
+  const mn = mk('needle');
+  mn.elapsed = mn.windup + (mn.impactAt - mn.windup) * 0.4;
+  const pn = motionPose(mn);
+  ok(pn.pulses.length === 3 && pn.pulses[0] > pn.pulses[2], `針の連続突きが時間差でない: ${pn.pulses}`);
+  // 加速曲線: 重い武器は序盤が遅く、軽い武器は序盤が速い。
+  ok(swingCurve({ curve: 'heavy' }, 0.3) < swingCurve({ curve: 'snap' }, 0.3), '重さで加速曲線が変わっていない');
+  console.log('  anticipation / held / 鋸の往復 / 鋏の二段 / 針の時間差 / 加速曲線を確認');
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

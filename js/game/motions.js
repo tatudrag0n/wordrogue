@@ -21,6 +21,22 @@ const smooth = (t) => t * t * (3 - 2 * t);
 const easeOut = (t) => 1 - (1 - t) ** 3;
 const easeIn = (t) => t * t;
 const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+const easeOutExpo = (t) => (t >= 1 ? 1 : 1 - (1 - t) ** 5);
+const easeInCubic = (t) => t * t * t;
+const easeSnap = (t) => 1 - (1 - t) ** 4;
+/** 打撃の加速曲線。武器の signature ごとに「重さ」の出方が違う。
+ *  heavy … ゆっくり入り、最後に加速して落ちる (斧・槌)
+ *  snap  … 最初の一瞬でほぼ行き切る (鋏・牙・針・拳・銃)
+ *  saw   … 等速。押し引きの往復は pose 側で付ける (鋸)
+ *  expo  … 速く走って、抜けで少し緩む (既定) */
+export function swingCurve(m, t) {
+  const x = clamp(t, 0, 1);
+  if (!m) return easeOutExpo(x);
+  if (m.curve === 'heavy') return easeInCubic(x);
+  if (m.curve === 'snap') return easeSnap(x);
+  if (m.curve === 'saw') return x;
+  return easeOutExpo(x);
+}
 const wrapAngle = (a) => {
   while (a > Math.PI) a -= TAU;
   while (a < -Math.PI) a += TAU;
@@ -47,6 +63,7 @@ export const WEAPON_MOTIONS = {
   // ── 刃: 斬撃が飛ぶ。刃から離れた三日月が、扇の外周 (間合い) まで走る。──
   sword: {
     style: 'wave', family: 'slash', duration: 0.50, windup: 0.34, impact: 0.54, follow: 0.80,
+    sig: 'wave-crescent', curve: 'expo', antic: 0.18, hold: 0.04, ghosts: 2,
     rest: -0.55, lunge: 5, weight: 0.7,
     variants: [
       { id: 'kesa', from: -1.00, to: 1.00, curve: 0.07, label: '袈裟の斬撃波' },
@@ -57,6 +74,7 @@ export const WEAPON_MOTIONS = {
   // ── 刀: 左右に斬る。扇の端から端まで振り抜く。──
   tachi: {
     style: 'sweep', family: 'slash', duration: 0.74, windup: 0.40, impact: 0.58, follow: 0.84,
+    sig: 'iai-flash', curve: 'expo', antic: 0.30, hold: 0.09, ghosts: 1,
     rest: -1.00, lunge: 10, weight: 1.25,
     variants: [
       { id: 'migi', from: -1.00, to: 1.00, curve: 0.10, label: '右薙ぎ' },
@@ -67,6 +85,7 @@ export const WEAPON_MOTIONS = {
   // ── 剣: 前方に斬る。正面から大きく外れない、短い斬り込み。──
   longsword: {
     style: 'forward', family: 'slash', duration: 0.58, windup: 0.36, impact: 0.57, follow: 0.82,
+    sig: 'forward-thrust-mix', curve: 'snap', antic: 0.22, hold: 0.05, ghosts: 2,
     rest: -0.40, lunge: 8, weight: 0.9,
     variants: [
       { id: 'shomen', from: -1.00, to: 1.00, curve: 0.04, label: '正面斬り' },
@@ -76,6 +95,7 @@ export const WEAPON_MOTIONS = {
   },
   greatblade: {
     style: 'smash', family: 'smash', duration: 0.92, windup: 0.54, impact: 0.68, follow: 0.88,
+    sig: 'smash-crack', curve: 'heavy', antic: 0.34, hold: 0.10, ghosts: 1,
     rest: -1.1, lunge: 17, weight: 1.8,
     variants: [
       { id: 'onigiri', from: -1.00, to: 1.00, curve: 0.12, label: '鬼斬り' },
@@ -85,6 +105,7 @@ export const WEAPON_MOTIONS = {
   },
   hammer: {
     style: 'smash', family: 'smash', duration: 1.00, windup: 0.62, impact: 0.72, follow: 0.90,
+    sig: 'quake-ring', curve: 'heavy', antic: 0.38, hold: 0.12, ghosts: 1,
     rest: -1.4, lunge: 13, weight: 2.2, ground: true,
     variants: [
       { id: 'tettsui', from: -1.00, to: 1.00, curve: 0.10, label: '鉄槌' },
@@ -94,6 +115,7 @@ export const WEAPON_MOTIONS = {
   },
   axe: {
     style: 'smash', family: 'smash', duration: 0.82, windup: 0.47, impact: 0.64, follow: 0.86,
+    sig: 'smash-chop', curve: 'heavy', antic: 0.30, hold: 0.09, ghosts: 1,
     rest: -1.0, lunge: 12, weight: 1.5,
     variants: [
       { id: 'hagane', from: -1.00, to: 1.00, curve: 0.10, label: '鋼断ち' },
@@ -102,6 +124,7 @@ export const WEAPON_MOTIONS = {
   },
   claw: {
     style: 'claw', family: 'claw', duration: 0.38, windup: 0.22, impact: 0.48, follow: 0.76,
+    sig: 'claw-stagger', curve: 'snap', antic: 0.12, hold: 0.02, ghosts: 2, stagger: 0.16,
     rest: -0.8, lunge: 9, weight: 0.5, passes: 3,
     variants: [
       { id: 'hikisaki', from: -1.00, to: 1.00, curve: 0.10, label: '引っ掻き' },
@@ -111,6 +134,7 @@ export const WEAPON_MOTIONS = {
   },
   fang: {
     style: 'bite', family: 'bite', duration: 0.42, windup: 0.48, impact: 0.56, follow: 0.76,
+    sig: 'bite-snap', curve: 'snap', antic: 0.26, hold: 0.08, ghosts: 1,
     rest: -0.35, lunge: 15, weight: 0.8,
     variants: [
       { id: 'kamitsuki', from: -1.00, to: 1.00, curve: 0.05, label: '噛みつき' },
@@ -119,6 +143,7 @@ export const WEAPON_MOTIONS = {
   },
   fist: {
     style: 'punch', family: 'punch', duration: 0.30, windup: 0.42, impact: 0.48, follow: 0.72,
+    sig: 'punch-rush', curve: 'snap', antic: 0.10, hold: 0.02, ghosts: 3, pulses: 4,
     rest: -0.35, lunge: 14, weight: 0.55,
     variants: [
       { id: 'zuki', from: -1.00, to: 1.00, curve: 0.04, label: '正拳' },
@@ -128,6 +153,7 @@ export const WEAPON_MOTIONS = {
   },
   spear: {
     style: 'thrust', family: 'thrust', duration: 0.44, windup: 0.46, impact: 0.48, follow: 0.72,
+    sig: 'thrust-ghostline', curve: 'expo', antic: 0.20, hold: 0.05, ghosts: 3,
     rest: -0.15, lunge: 18, weight: 0.8,
     variants: [
       { id: 'tsuki', from: 0.02, to: -0.02, curve: 0, label: '直突き' },
@@ -137,6 +163,7 @@ export const WEAPON_MOTIONS = {
   },
   gun: {
     style: 'ranged', family: 'ranged', duration: 0.28, windup: 0.26, impact: 0.32, follow: 0.62,
+    sig: 'gun-recoil-shell', curve: 'snap', antic: 0.05, hold: 0.03, ghosts: 0,
     rest: -0.08, lunge: -5, weight: 0.25, recoil: 9,
     variants: [
       { id: 'hip', from: -0.03, to: 0.03, curve: 0, label: '腰溜め射撃' },
@@ -146,6 +173,7 @@ export const WEAPON_MOTIONS = {
   },
   needle: {
     style: 'ranged', family: 'ranged', duration: 0.22, windup: 0.18, impact: 0.26, follow: 0.58,
+    sig: 'needle-rapid', curve: 'snap', antic: 0.06, hold: 0.01, ghosts: 2, pulses: 3,
     rest: -0.04, lunge: -3, weight: 0.15, recoil: 4,
     variants: [
       { id: 'flick', from: -0.08, to: 0.07, curve: 0, label: '指弾' },
@@ -154,6 +182,7 @@ export const WEAPON_MOTIONS = {
   },
   bow: {
     style: 'ranged', family: 'ranged', duration: 0.40, windup: 0.54, impact: 0.58, follow: 0.78,
+    sig: 'bow-draw-release', curve: 'snap', antic: 0.28, hold: 0.04, ghosts: 1,
     rest: -0.18, lunge: -4, weight: 0.3, draw: true,
     variants: [
       { id: 'hyakubu', from: -0.04, to: 0.04, curve: 0, label: '百歩穿ち' },
@@ -162,6 +191,7 @@ export const WEAPON_MOTIONS = {
   },
   staff: {
     style: 'cast', family: 'cast', duration: 0.56, windup: 0.52, impact: 0.57, follow: 0.8,
+    sig: 'cast-circle', curve: 'expo', antic: 0.15, hold: 0.05, ghosts: 1,
     rest: -0.5, lunge: 0, weight: 0.35, glow: true,
     variants: [
       { id: 'jin', from: -0.30, to: 0.10, curve: 0.06, label: '陣を描く' },
@@ -170,6 +200,7 @@ export const WEAPON_MOTIONS = {
   },
   chain: {
     style: 'whip', family: 'whip', duration: 0.62, windup: 0.40, impact: 0.58, follow: 0.84,
+    sig: 'chain-link-wave', curve: 'snap', antic: 0.20, hold: 0.04, ghosts: 2,
     rest: -1.1, lunge: 0, weight: 1.0, coil: 2,
     variants: [
       { id: 'uchi', from: -1.00, to: 1.00, curve: 0.20, label: '鎖打ち' },
@@ -179,6 +210,7 @@ export const WEAPON_MOTIONS = {
   },
   whip: {
     style: 'whip', family: 'whip', duration: 0.54, windup: 0.34, impact: 0.53, follow: 0.82,
+    sig: 'whip-crack', curve: 'expo', antic: 0.22, hold: 0.03, ghosts: 2,
     rest: -1.0, lunge: 0, weight: 0.7, coil: 1,
     variants: [
       { id: 'shippu', from: -1.00, to: 1.00, curve: 0.18, label: '疾風打ち' },
@@ -188,6 +220,7 @@ export const WEAPON_MOTIONS = {
   },
   throw: {
     style: 'throw', family: 'throw', duration: 0.58, windup: 0.38, impact: 0.53, follow: 0.86,
+    sig: 'throw-spin', curve: 'expo', antic: 0.18, hold: 0.03, ghosts: 2,
     rest: -0.8, lunge: 0, weight: 0.6, spin: true,
     variants: [
       { id: 'souten', from: -0.80, to: 0.65, curve: 0.10, label: '双転' },
@@ -196,6 +229,7 @@ export const WEAPON_MOTIONS = {
   },
   orb: {
     style: 'cast', family: 'cast', duration: 0.54, windup: 0.52, impact: 0.57, follow: 0.82,
+    sig: 'orb-charge', curve: 'expo', antic: 0.12, hold: 0.06, ghosts: 1,
     rest: -0.35, lunge: 0, weight: 0.2, glow: true,
     variants: [
       { id: 'shu', from: -0.15, to: 0.15, curve: 0.04, label: '集気' },
@@ -205,6 +239,7 @@ export const WEAPON_MOTIONS = {
   // ── 鋏: 二枚の刃で挟む。短い予備動作から、まっすぐ閉じる。──
   shears: {
     style: 'arc', family: 'slash', duration: 0.34, windup: 0.30, impact: 0.52, follow: 0.78,
+    sig: 'snip-two-stage', curve: 'snap', antic: 0.08, hold: 0.07, ghosts: 1, snapAt: 0.45,
     rest: -0.32, lunge: 6, weight: 0.45,
     variants: [
       { id: 'hasami', from: -1.00, to: 1.00, curve: 0.04, label: '挟み切り' },
@@ -215,6 +250,7 @@ export const WEAPON_MOTIONS = {
   // ── 鋸: 押し引きで挽く。ゆっくり大きく薙ぐ。──
   saw: {
     style: 'sweep', family: 'slash', duration: 0.72, windup: 0.42, impact: 0.58, follow: 0.86,
+    sig: 'saw-push-pull', curve: 'saw', antic: 0.16, hold: 0.03, ghosts: 1, strokes: 3,
     rest: -0.95, lunge: 11, weight: 1.35,
     variants: [
       { id: 'hikikiri', from: -1.00, to: 1.00, curve: 0.09, label: '引き切り' },
@@ -224,6 +260,7 @@ export const WEAPON_MOTIONS = {
   },
   blade: {
     style: 'arc', family: 'slash', duration: 0.52, windup: 0.36, impact: 0.55, follow: 0.82,
+    sig: 'arc-basic', curve: 'expo', antic: 0.18, hold: 0.04, ghosts: 2,
     rest: -0.6, lunge: 7, weight: 0.8,
     variants: [
       { id: 'basic', from: -1.00, to: 1.00, curve: 0.06, label: '斬り下ろし' },
@@ -234,6 +271,7 @@ export const WEAPON_MOTIONS = {
   // ── 双剣: 二刀の速い斬撃波。左右交互に飛ぶ。 ──
   dualblades: {
     style: 'wave', family: 'slash', duration: 0.40, windup: 0.30, impact: 0.50, follow: 0.78,
+    sig: 'dual-alternate', curve: 'expo', antic: 0.14, hold: 0.03, ghosts: 2,
     rest: -0.5, lunge: 6, weight: 0.6,
     variants: [
       { id: 'migi', from: -1.00, to: 1.00, curve: 0.05, label: '右の一刀' },
@@ -307,6 +345,15 @@ export function startWeaponMotion(wi, res, aim, opt = {}) {
     passes: base.passes || 1,
     coil: base.coil || 0,
     recoil: base.recoil || 0,
+    sig: base.sig || base.style || 'arc-basic',
+    curve: base.curve || 'expo',
+    antic: base.antic || 0,
+    holdF: base.hold || 0,
+    ghostsN: base.ghosts || 0,
+    pulses: base.pulses || 0,
+    strokes: base.strokes || 0,
+    stagger: base.stagger || 0,
+    snapAt: base.snapAt || 0.45,
     glow: !!base.glow,
     ground: !!base.ground,
     spin: !!base.spin,
@@ -458,32 +505,61 @@ export function motionPose(m, dt = 0) {
   let phase = 'windup';
   let phaseT = 0;
   let swing = 0;
+  let held = false;
+  // 打撃の直後、ほんの一瞬だけ姿勢を止める (ヒットストップ的な「溜め」)。
+  // 局面名は follow のまま phaseT=0 で凍るので、局面の順序は崩れない。
+  const holdEnd = Math.min(f - 0.01, i + (m.holdF || 0));
   if (t >= f) {
     phase = 'recover';
     phaseT = smooth(clamp((t - f) / (1 - f), 0, 1));
+  } else if (t >= i && t < holdEnd) {
+    phase = 'follow';
+    phaseT = 0;
+    swing = 1;
+    held = true;
   } else if (t >= i) {
     phase = 'follow';
-    phaseT = smooth(clamp((t - i) / (f - i), 0, 1));
+    phaseT = smooth(clamp((t - holdEnd) / Math.max(1e-3, f - holdEnd), 0, 1));
     swing = 1;
   } else if (t >= w) {
     phase = 'strike';
     phaseT = clamp((t - w) / (i - w), 0, 1);
-    swing = easeOut(phaseT);
+    swing = swingCurve(m, phaseT);
   } else {
     phase = 'windup';
     phaseT = clamp(t / w, 0, 1);
   }
 
   // 振りかぶりはゆっくり、打撃は速く。戻りは少し遅れて余韻を残す。
+  // anticipation: 振り始めに、振る方向と逆へ少しだけ余分に引く。
   const wu = phase === 'windup' ? easeInOut(phaseT) : 1;
   const follow = phase === 'follow' || phase === 'recover' ? phaseT : 0;
-  const angleRel = phase === 'windup'
-    ? lerp(m.rest, m.from, wu)
-    : phase === 'strike'
-      ? lerp(m.from, m.to, swing)
-      : phase === 'follow'
-        ? lerp(m.to, m.to + (m.to - m.from) * 0.12, follow)
-        : lerp(m.to + (m.to - m.from) * 0.12, m.rest, phaseT);
+  const dirS = Math.sign(m.to - m.from) || 1;
+  const anticDip = phase === 'windup'
+    ? -dirS * (m.antic || 0) * (m.halfArc || 0) * Math.sin(wu * Math.PI) : 0;
+  let angleRel;
+  if (m.sig === 'iai-flash') {
+    // 居合: 抜いたら、振り抜けで鞘へ戻る方向へ引く (行きっぱなしにしない)。
+    angleRel = phase === 'windup' ? lerp(m.rest, m.from, wu)
+      : phase === 'strike' ? lerp(m.from, m.to, swing)
+        : phase === 'follow' ? lerp(m.to, m.from * 0.88, easeOut(phaseT))
+          : lerp(m.from * 0.88, m.rest, phaseT);
+  } else {
+    angleRel = phase === 'windup'
+      ? lerp(m.rest, m.from, wu)
+      : phase === 'strike'
+        ? lerp(m.from, m.to, swing)
+        : phase === 'follow'
+          ? lerp(m.to, m.to + (m.to - m.from) * 0.12, follow)
+          : lerp(m.to + (m.to - m.from) * 0.12, m.rest, phaseT);
+  }
+  if (phase === 'windup') angleRel += anticDip;
+  // 鋸: 打撃〜振り抜けで押し引きの往復を重ねる。等速の往復が「挽く」動きになる。
+  let sawQ = 0;
+  if (m.strokes > 0 && (phase === 'strike' || phase === 'follow')) {
+    sawQ = clamp((t - w) / Math.max(1e-3, f - w), 0, 1);
+    angleRel += Math.sin(sawQ * m.strokes * Math.PI * 2) * 0.13 * (m.halfArc || 0) * (1 - sawQ * 0.45);
+  }
   // 刃が扇の外へ出ないようにする。振り抜けの余韻も、当たる範囲の内側で止める。
   const half = m.halfArc || (m.arc > 0.02 ? m.arc / 2 : 0);
   const bow = m.curve * Math.sin(clamp(t, 0, 1) * Math.PI);
@@ -529,6 +605,54 @@ export function motionPose(m, dt = 0) {
   const flight = clamp((t - windT) / Math.max(1e-3, followT - windT), 0, 1);
   const fly = phase === 'windup' ? 0 : 0.15 + 0.85 * easeOut(flight);
 
+  // ── 武器種ごとの固有量 (すべて決定的・有限・扇の内側) ──
+  // 残像: 打撃の少し前の角度を、薄く遅れて並べる。
+  const ghosts = [];
+  const gN = m.ghostsN || 0;
+  if (gN > 0 && phase !== 'windup') {
+    for (let k = 1; k <= gN; k++) {
+      const lagPt = phase === 'strike' ? clamp(phaseT - k * 0.16, 0, 1) : 1;
+      let gRel = lerp(m.from, m.to, swingCurve(m, lagPt)) + bow;
+      if (half > 0) gRel = clamp(gRel, -half, half);
+      const gAlpha = (1 - k / (gN + 1)) * (phase === 'strike' ? 0.5 : 0.5 * (1 - phaseT * 0.7));
+      ghosts.push({ rel: gRel, alpha: clamp(gAlpha, 0, 1) });
+    }
+  }
+  // 打撃の速さ (速度線の長さに使う)。打撃局面での swing の傾き。
+  const speed = phase === 'strike'
+    ? clamp((swingCurve(m, phaseT) - swingCurve(m, Math.max(0, phaseT - 0.1))) / 0.1, 0, 4) : 0;
+  // 連続動作 (針の連続突き・拳の連打・爪の時間差)。各発の進み具合。
+  const pulseN = m.pulses || (m.sig === 'claw-stagger' ? (m.passes || 3) : 0);
+  const pulses = [];
+  for (let k = 0; k < pulseN; k++) {
+    const stag = m.sig === 'claw-stagger' ? (m.stagger || 0.16) * k : k * 0.22;
+    const raw = phase === 'windup' ? 0
+      : phase === 'strike' ? clamp(phaseT * 1.6 - stag, 0, 1) : 1;
+    pulses.push(easeSnap(raw));
+  }
+  // 鋏の開き (open) と牙の顎 (jaw)。どちらも 0=閉 / 1=開。
+  let open = 0;
+  if (m.sig === 'snip-two-stage') {
+    if (phase === 'windup') open = lerp(0.3, 1, wu);
+    else if (phase === 'strike') {
+      const sa = m.snapAt || 0.45;
+      open = phaseT < sa ? 1 - 0.62 * easeOut(phaseT / sa)
+        : phaseT < sa + 0.18 ? 0.38
+          : 1 - (0.62 + 0.38 * easeOut(clamp((phaseT - sa - 0.18) / Math.max(1e-3, 1 - sa - 0.18), 0, 1)));
+    } else open = phase === 'follow' ? 0.04 : lerp(0.04, 0.3, phaseT);
+  }
+  let jaw = 0;
+  if (m.sig === 'bite-snap') {
+    jaw = phase === 'windup' ? lerp(0.2, 1, wu)
+      : phase === 'strike' ? 1 - easeSnap(phaseT)
+        : phase === 'follow' ? 0.03 : lerp(0.03, 0.2, phaseT);
+  }
+  // 詠唱サークルの広がり (杖・玉) と、銃の反動、鞭先の弾け。
+  const circleK = phase === 'windup' ? wu : phase === 'strike' ? 1 : 1 - phaseT * 0.6;
+  const recoilK = (m.recoil || 0) * impact;
+  const crack = m.sig === 'whip-crack' && phase !== 'windup'
+    ? clamp((swing - 0.82) / 0.18, 0, 1) * (phase === 'strike' ? 1 : 1 - phaseT) : 0;
+
   return {
     t, u, phase, phaseT, swing, follow,
     angle, angleRel: rel, extension, lunge, half,
@@ -540,6 +664,8 @@ export function motionPose(m, dt = 0) {
     flight, fly,
     tipX: Math.cos(angle) * m.reach * extension,
     tipY: Math.sin(angle) * m.reach * extension,
+    held, ghosts, speed, pulses, open, jaw, circleK, recoilK, crack, sawQ,
+    sig: m.sig || '',
   };
 }
 
@@ -567,6 +693,8 @@ export function weaponStyle(glyph, shape) {
     key,
     family: base?.family || 'slash',
     style: base?.style || 'arc',
+    sig: base?.sig || base?.style || 'arc',
+    curve: base?.curve || 'expo',
     variants: base?.variants.length || 0,
   };
 }

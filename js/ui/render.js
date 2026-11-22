@@ -5,10 +5,10 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.66';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.66';
-import { motionPose } from '../game/motions.js?v=1.66';
-import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.66';
+import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.67';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.67';
+import { motionPose } from '../game/motions.js?v=1.67';
+import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.67';
 
 const NO_GHOSTS = [];
 
@@ -142,6 +142,335 @@ export class Renderer {
     g.restore();
   }
 
+  // ── 属性パレットと属性の形 (1.67) ─────────────────────────────────────
+  // 属性は単色ベタではなく「芯が明るく、外が濃い」3 層で描く。
+  // 副属性がある文では、芯と縁に副属性の色が混ざる (blendElementPalette)。
+  // パレットは (主|副) の組でキャッシュし、毎フレーム生成しない。
+
+  /** 属性パレット (主+副の複合込み)。結果はキャッシュする。 */
+  palFor(el, sub) {
+    if (!this._palCache) this._palCache = new Map();
+    const key = `${el || 'none'}|${sub || ''}`;
+    let pal = this._palCache.get(key);
+    if (!pal) {
+      pal = blendElementPalette(el || 'none', sub || null);
+      if (this._palCache.size > 40) this._palCache.clear();
+      this._palCache.set(key, pal);
+    }
+    return pal;
+  }
+
+  /** 属性装飾の層数。適応品質と連動: full=3層 / reduced=2層 / off=1層。 */
+  elLayers() {
+    const d = this.decor;
+    return d === 'full' ? 3 : d === 'reduced' ? 2 : 1;
+  }
+
+  /** 属性装飾の個数。品質が下がったら間引く (最低 1)。 */
+  elCount(base) {
+    const d = this.decor;
+    if (d === 'full') return base;
+    if (d === 'reduced') return Math.max(1, Math.ceil(base * 0.6));
+    return Math.max(1, Math.ceil(base * 0.35));
+  }
+
+  /** 点滅の強さ。reduceFlash では明度の振れ幅を抑える (描画側の共通係数)。 */
+  get flashK() { return this._flashK == null ? 1 : this._flashK; }
+
+  /**
+   * 炎の舌のパス。基点 (x,y) から ang 方向へ len 伸び、幅 wid。
+   * sway は横方向への揺れ (位相は呼び出し側が t と uid から決定的に作る)。
+   */
+  flamePath(g, x, y, len, wid, ang, sway) {
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const px = -sa, py = ca;
+    const tipX = x + ca * len + px * sway, tipY = y + sa * len + py * sway;
+    g.beginPath();
+    g.moveTo(x + px * wid, y + py * wid);
+    g.quadraticCurveTo(x + ca * len * 0.45 + px * wid * 0.7 + px * sway * 0.4,
+      y + sa * len * 0.45 + py * wid * 0.7 + py * sway * 0.4, tipX, tipY);
+    g.quadraticCurveTo(x + ca * len * 0.45 - px * wid * 0.7 + px * sway * 0.4,
+      y + sa * len * 0.45 - py * wid * 0.7 + py * sway * 0.4, x - px * wid, y - py * wid);
+    g.closePath();
+  }
+
+  /** 層状の炎。外 (outer) → 体 (mid) → 芯 (core) の 3 枚の舌を重ねる。 */
+  drawFlame(g, x, y, len, wid, ang, pal, alpha, sway = 0) {
+    const layers = this.elLayers();
+    g.save();
+    g.globalAlpha = alpha * 0.85;
+    g.fillStyle = pal.outer;
+    this.flamePath(g, x, y, len, wid, ang, sway);
+    g.fill();
+    if (layers >= 2) {
+      g.globalAlpha = alpha * 0.95;
+      g.fillStyle = pal.mid;
+      this.flamePath(g, x + Math.cos(ang) * len * 0.08, y + Math.sin(ang) * len * 0.08,
+        len * 0.72, wid * 0.62, ang, sway * 0.7);
+      g.fill();
+    }
+    if (layers >= 3) {
+      g.globalAlpha = alpha;
+      g.fillStyle = pal.core;
+      this.flamePath(g, x + Math.cos(ang) * len * 0.14, y + Math.sin(ang) * len * 0.14,
+        len * 0.44, wid * 0.34, ang, sway * 0.45);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  /** ギザギザの稲妻パス。seed で形が決定的に決まる (乱数は使わない)。 */
+  boltPoints(x0, y0, x1, y1, seed, jag = 0.16, seg = 5) {
+    const pts = [[x0, y0]];
+    const dx = x1 - x0, dy = y1 - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    for (let i = 1; i < seg; i++) {
+      const f = i / seg;
+      const off = Math.sin(seed * 12.9898 + i * 78.233) * len * jag * (i % 2 ? 1 : -0.6);
+      pts.push([x0 + dx * f + nx * off, y0 + dy * f + ny * off]);
+    }
+    pts.push([x1, y1]);
+    return pts;
+  }
+
+  /** 稲妻を 3 層 (外の滲み→体の黄→白い芯) で描く。 */
+  strokeBolt(g, x0, y0, x1, y1, pal, alpha, seed, width = 2) {
+    const pts = this.boltPoints(x0, y0, x1, y1, seed);
+    const layers = this.elLayers();
+    const trace = () => {
+      g.beginPath();
+      g.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+    };
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    trace();
+    g.globalAlpha = alpha * 0.35;
+    g.strokeStyle = pal.outer;
+    g.lineWidth = width * 3.2;
+    g.stroke();
+    if (layers >= 2) {
+      trace();
+      g.globalAlpha = alpha * 0.9;
+      g.strokeStyle = pal.mid;
+      g.lineWidth = width * 1.5;
+      g.stroke();
+    }
+    if (layers >= 3) {
+      trace();
+      g.globalAlpha = alpha;
+      g.strokeStyle = pal.core;
+      g.lineWidth = Math.max(0.8, width * 0.6);
+      g.stroke();
+    }
+    g.restore();
+    return pts;
+  }
+
+  /** 角張った氷の結晶片。外→体→芯の層で描く三角柱。 */
+  drawCrystal(g, x, y, len, wid, ang, pal, alpha) {
+    const layers = this.elLayers();
+    g.save();
+    g.translate(x, y);
+    g.rotate(ang);
+    g.globalAlpha = alpha * 0.9;
+    g.fillStyle = pal.outer;
+    g.beginPath();
+    g.moveTo(len, 0); g.lineTo(0, -wid); g.lineTo(-len * 0.55, 0); g.lineTo(0, wid);
+    g.closePath();
+    g.fill();
+    if (layers >= 2) {
+      g.globalAlpha = alpha;
+      g.fillStyle = pal.mid;
+      g.beginPath();
+      g.moveTo(len * 0.78, 0); g.lineTo(0, -wid * 0.6); g.lineTo(-len * 0.4, 0); g.lineTo(0, wid * 0.6);
+      g.closePath();
+      g.fill();
+    }
+    if (layers >= 3) {
+      g.globalAlpha = alpha;
+      g.fillStyle = pal.core;
+      g.beginPath();
+      g.moveTo(len * 0.55, 0); g.lineTo(len * 0.05, -wid * 0.3); g.lineTo(len * 0.05, wid * 0.3);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+  }
+
+  /** 十字のきらめき (光・金の共通言語)。4 本の光条 + 中心の芯。 */
+  drawCrossSparkle(g, x, y, r, pal, alpha, rot = 0) {
+    g.save();
+    g.translate(x, y);
+    g.rotate(rot);
+    g.globalAlpha = alpha * 0.85;
+    g.strokeStyle = pal.mid;
+    g.lineWidth = Math.max(1, r * 0.22);
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-r, 0); g.lineTo(r, 0);
+    g.moveTo(0, -r); g.lineTo(0, r);
+    g.stroke();
+    if (this.elLayers() >= 3) {
+      g.globalAlpha = alpha;
+      g.fillStyle = pal.core;
+      g.beginPath();
+      g.moveTo(r * 0.5, 0); g.lineTo(0, -r * 0.18); g.lineTo(-r * 0.5, 0); g.lineTo(0, r * 0.18);
+      g.closePath();
+      g.fill();
+      g.beginPath();
+      g.arc(0, 0, Math.max(0.8, r * 0.16), 0, TAU);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  /** 雫のパス (水・血の共通言語)。基点から ang 方向が尖る。 */
+  drawDrop(g, x, y, len, wid, ang, pal, alpha) {
+    const layers = this.elLayers();
+    g.save();
+    g.translate(x, y);
+    g.rotate(ang);
+    g.globalAlpha = alpha * 0.9;
+    g.fillStyle = pal.outer;
+    g.beginPath();
+    g.moveTo(len, 0);
+    g.quadraticCurveTo(0, -wid, -len * 0.7, 0);
+    g.quadraticCurveTo(0, wid, len, 0);
+    g.fill();
+    if (layers >= 2) {
+      g.globalAlpha = alpha;
+      g.fillStyle = pal.mid;
+      g.beginPath();
+      g.moveTo(len * 0.72, 0);
+      g.quadraticCurveTo(0, -wid * 0.62, -len * 0.5, 0);
+      g.quadraticCurveTo(0, wid * 0.62, len * 0.72, 0);
+      g.fill();
+    }
+    if (layers >= 3) {
+      g.globalAlpha = alpha * 0.95;
+      g.fillStyle = pal.core;
+      g.beginPath();
+      g.arc(len * 0.18, -wid * 0.22, Math.max(0.7, wid * 0.2), 0, TAU);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  /**
+   * 属性の小さな象徴を 1 つ描く (斬撃の刃先・詠唱の手元などの共通部品)。
+   * el ごとに形が違う: 炎=舌、氷=結晶、雷=稲妻、光=十字、毒=泡、闇=渦、
+   * 土=岩片、風=弧、草=葉、鉄=閃光、水=雫、血=雫、金=十字。
+   */
+  drawElementAccent(g, x, y, r, ang, pal, T, seed, alpha) {
+    const el = pal.el;
+    g.save();
+    switch (el) {
+      case 'fire': {
+        const sway = Math.sin(T * 11 + seed * 7) * r * 0.35;
+        this.drawFlame(g, x, y, r * 2.4, r * 0.8, ang, pal, alpha, sway);
+        break;
+      }
+      case 'ice':
+        this.drawCrystal(g, x, y, r * 1.9, r * 0.62, ang, pal, alpha);
+        break;
+      case 'thunder': {
+        const fk = 0.65 + 0.35 * Math.sin(T * 34 + seed * 9) * this.flashK;
+        this.strokeBolt(g, x, y, x + Math.cos(ang) * r * 2.2, y + Math.sin(ang) * r * 2.2,
+          pal, alpha * fk, seed, Math.max(1, r * 0.4));
+        break;
+      }
+      case 'light':
+        this.drawCrossSparkle(g, x, y, r * 1.5, pal, alpha, T * 0.7 + seed);
+        break;
+      case 'gold':
+        this.drawCrossSparkle(g, x, y, r * 1.2, pal, alpha, seed);
+        break;
+      case 'poison': {
+        g.globalAlpha = alpha * 0.8;
+        g.strokeStyle = pal.mid;
+        g.lineWidth = 1.1;
+        g.beginPath(); g.arc(x, y, r * 0.8, 0, TAU); g.stroke();
+        g.globalAlpha = alpha * 0.6;
+        g.fillStyle = pal.core;
+        g.beginPath(); g.arc(x - r * 0.25, y - r * 0.25, r * 0.22, 0, TAU); g.fill();
+        break;
+      }
+      case 'dark': {
+        g.globalAlpha = alpha * 0.55;
+        g.strokeStyle = pal.mid;
+        g.lineWidth = Math.max(1.2, r * 0.4);
+        g.beginPath(); g.arc(x, y, r * 1.1, T * 3 + seed, T * 3 + seed + 4.2); g.stroke();
+        g.globalAlpha = alpha * 0.8;
+        g.fillStyle = pal.outer;
+        g.beginPath(); g.arc(x, y, r * 0.55, 0, TAU); g.fill();
+        break;
+      }
+      case 'earth': {
+        g.globalAlpha = alpha * 0.95;
+        g.fillStyle = pal.mid;
+        g.beginPath();
+        g.moveTo(x + r, y + r * 0.3); g.lineTo(x + r * 0.2, y - r * 0.8);
+        g.lineTo(x - r * 0.8, y - r * 0.2); g.lineTo(x - r * 0.4, y + r * 0.8);
+        g.closePath(); g.fill();
+        g.fillStyle = pal.core;
+        g.beginPath();
+        g.moveTo(x + r * 0.4, y - r * 0.1); g.lineTo(x + r * 0.1, y - r * 0.55); g.lineTo(x - r * 0.3, y - r * 0.05);
+        g.closePath(); g.fill();
+        break;
+      }
+      case 'wind': {
+        g.globalAlpha = alpha * 0.8;
+        g.strokeStyle = pal.mid;
+        g.lineWidth = Math.max(1, r * 0.34);
+        g.beginPath(); g.arc(x, y, r * 1.15, ang - 2.3, ang - 0.7); g.stroke();
+        g.strokeStyle = pal.core;
+        g.beginPath(); g.arc(x, y, r * 0.8, ang - 2.1, ang - 0.9); g.stroke();
+        break;
+      }
+      case 'nature': {
+        g.globalAlpha = alpha * 0.9;
+        g.fillStyle = pal.mid;
+        g.save();
+        g.translate(x, y);
+        g.rotate(ang + Math.sin(T * 6 + seed) * 0.4);
+        g.beginPath(); g.ellipse(0, 0, r * 1.25, r * 0.5, 0, 0, TAU); g.fill();
+        g.strokeStyle = pal.core;
+        g.lineWidth = 0.9;
+        g.beginPath(); g.moveTo(-r, 0); g.lineTo(r, 0); g.stroke();
+        g.restore();
+        break;
+      }
+      case 'steel': {
+        g.globalAlpha = alpha;
+        g.strokeStyle = pal.core;
+        g.lineWidth = Math.max(1, r * 0.3);
+        g.beginPath();
+        g.moveTo(x - Math.cos(ang) * r * 1.3, y - Math.sin(ang) * r * 1.3);
+        g.lineTo(x + Math.cos(ang) * r * 1.3, y + Math.sin(ang) * r * 1.3);
+        g.stroke();
+        g.strokeStyle = pal.mid;
+        g.lineWidth = Math.max(0.8, r * 0.18);
+        g.beginPath();
+        g.moveTo(x - Math.cos(ang + 1.57) * r * 0.7, y - Math.sin(ang + 1.57) * r * 0.7);
+        g.lineTo(x + Math.cos(ang + 1.57) * r * 0.7, y + Math.sin(ang + 1.57) * r * 0.7);
+        g.stroke();
+        break;
+      }
+      case 'water':
+        this.drawDrop(g, x, y, r * 1.5, r * 0.85, ang, pal, alpha);
+        break;
+      case 'blood':
+        this.drawDrop(g, x, y, r * 1.5, r * 0.8, ang + Math.PI / 2, pal, alpha);
+        break;
+      default:
+        break;
+    }
+    g.restore();
+  }
+
   resize() {
     const dpr = effectiveDpr(this.qualityLevel, window.devicePixelRatio || 1);
     const w = this.cv.clientWidth || window.innerWidth;
@@ -203,6 +532,8 @@ export class Renderer {
   draw(run, stick) {
     const g = this.ctx;
     run.particleCap = particleCapFor(this.qualityLevel);
+    // 属性の点滅 (雷など) の振れ幅。光過敏配慮を描画ヘルパー全体で共有する。
+    this._flashK = run.reduceFlash ? 0.3 : 1;
 
     // カメラ (画面シェイク込み)。
     // 基準のカメラは少しだけ遅れて追う。動いた瞬間の「重さ」が出て、
@@ -998,27 +1329,52 @@ export class Renderer {
 
   drawFields(run) {
     const g = this.ctx;
+    const T = run.t;
     for (const f of run.fields) {
       const t = f.life / f.maxLife;
-      const a = t * 0.34;
-      g.globalAlpha = a;
-      const rg = g.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
-      rg.addColorStop(0, f.color);
-      rg.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = rg;
+      const el = f.el || 'none';
+      const pal = this.palFor(el, f.elSub || null);
+      // 内側の滲みは事前生成のグロースプライト (色ごとにキャッシュ) で描く。
+      // 毎フレームのグラデーション生成はしない。
+      const spr = this.glowSprite(pal.outer);
+      if (spr) {
+        g.save();
+        g.globalAlpha = t * 0.4;
+        g.drawImage(spr, f.x - f.r, f.y - f.r, f.r * 2, f.r * 2);
+        g.restore();
+      } else {
+        g.globalAlpha = t * 0.3;
+        g.fillStyle = pal.outer;
+        g.beginPath();
+        g.arc(f.x, f.y, f.r, 0, TAU);
+        g.fill();
+      }
+
+      g.globalAlpha = t * 0.35;
+      g.fillStyle = pal.mid;
       g.beginPath();
-      g.arc(f.x, f.y, f.r, 0, TAU);
+      g.arc(f.x, f.y, f.r * 0.55, 0, TAU);
       g.fill();
 
       g.globalAlpha = t * 0.7;
-      g.strokeStyle = f.color;
+      g.strokeStyle = pal.mid;
       g.lineWidth = 2;
       g.beginPath();
       g.arc(f.x, f.y, f.r * (1 - t * 0.25), 0, TAU);
       g.stroke();
 
+      if (this.elLayers() >= 3) {
+        g.globalAlpha = t * 0.55;
+        g.strokeStyle = pal.core;
+        g.lineWidth = 1;
+        g.beginPath();
+        g.arc(f.x, f.y, f.r * (1 - t * 0.25) - 3, 0, TAU);
+        g.stroke();
+      }
+
       // 内側をゆっくり回る破線。ただの円ではなく「術の輪」に見せる。
       g.globalAlpha = t * 0.42;
+      g.strokeStyle = pal.mid;
       g.lineWidth = 1.4;
       g.setLineDash([Math.max(2, f.r * 0.09), Math.max(4, f.r * 0.13)]);
       g.lineDashOffset = (f.life || 0) * 40;
@@ -1026,6 +1382,73 @@ export class Renderer {
       g.arc(f.x, f.y, f.r * (1 - t * 0.25) * 0.72, 0, TAU);
       g.stroke();
       g.setLineDash([]);
+
+      // 属性別の内側ディテール。炎は舌、毒は泡、研磨は火花、氷は結晶…。
+      const rr = f.r * (1 - t * 0.25);
+      if (el === 'fire') {
+        const n = this.elCount(6);
+        for (let i = 0; i < n; i++) {
+          const aa = (i / Math.max(1, n)) * TAU + T * 0.7;
+          const x = f.x + Math.cos(aa) * rr * 0.88, y = f.y + Math.sin(aa) * rr * 0.88;
+          this.drawFlame(g, x, y, Math.min(16, f.r * 0.22), Math.min(6, f.r * 0.08),
+            aa + Math.PI / 2 + Math.sin(T * 3 + i) * 0.3, pal, t * 0.8,
+            Math.sin(T * 12 + i * 2.2) * 2);
+        }
+      } else if (el === 'poison') {
+        const n = this.elCount(5);
+        for (let i = 0; i < n; i++) {
+          const ph = (T * 0.7 + i / Math.max(1, n) + (f.x % 3) * 0.07) % 1;
+          const bx = f.x + Math.sin(f.x * 0.1 + i * 2.3) * rr * 0.7;
+          const by = f.y + rr * 0.6 - ph * rr * 1.2;
+          g.globalAlpha = t * 0.55 * (1 - ph * 0.5);
+          g.strokeStyle = pal.mid;
+          g.lineWidth = 1;
+          g.beginPath(); g.arc(bx, by, 2 + ph * 2.4, 0, TAU); g.stroke();
+          g.globalAlpha = t * 0.4 * (1 - ph * 0.5);
+          g.fillStyle = pal.core;
+          g.beginPath(); g.arc(bx - 0.8, by - 0.8, 0.8, 0, TAU); g.fill();
+        }
+      } else if (el === 'steel') {
+        // 研磨の輪は火花が内側を走る。
+        g.strokeStyle = pal.core;
+        g.lineWidth = 1.2;
+        for (let i = 0; i < this.elCount(4); i++) {
+          const aa = T * 2.4 + i * 1.57;
+          g.globalAlpha = t * 0.7;
+          g.beginPath();
+          g.moveTo(f.x + Math.cos(aa) * rr * 0.6, f.y + Math.sin(aa) * rr * 0.6);
+          g.lineTo(f.x + Math.cos(aa + 0.25) * rr * 0.92, f.y + Math.sin(aa + 0.25) * rr * 0.92);
+          g.stroke();
+        }
+      } else if (el === 'ice') {
+        const n = this.elCount(5);
+        for (let i = 0; i < n; i++) {
+          const aa = (i / Math.max(1, n)) * TAU + T * 0.3;
+          this.drawCrystal(g, f.x + Math.cos(aa) * rr * 0.8, f.y + Math.sin(aa) * rr * 0.8,
+            Math.min(9, f.r * 0.14), Math.min(3.4, f.r * 0.05), aa + 0.6, pal, t * 0.75);
+        }
+      } else if (el === 'light') {
+        const n = this.elCount(4);
+        for (let i = 0; i < n; i++) {
+          const aa = (i / Math.max(1, n)) * TAU + T * 0.5;
+          this.drawCrossSparkle(g, f.x + Math.cos(aa) * rr * 0.75, f.y + Math.sin(aa) * rr * 0.75,
+            Math.min(8, f.r * 0.12), pal, t * 0.8, T + i);
+        }
+      } else if (el === 'dark') {
+        g.globalAlpha = t * 0.4;
+        g.strokeStyle = pal.mid;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(f.x, f.y, rr * 0.55, -T * 0.9, -T * 0.9 + 4.2);
+        g.stroke();
+      } else if (el === 'water') {
+        g.globalAlpha = t * 0.5;
+        g.strokeStyle = pal.core;
+        g.lineWidth = 1;
+        g.beginPath();
+        g.arc(f.x, f.y, rr * (0.45 + 0.1 * Math.sin(T * 2)), 0, TAU);
+        g.stroke();
+      }
     }
     g.globalAlpha = 1;
   }
@@ -1190,21 +1613,25 @@ export class Renderer {
       g.arc(s.x, s.y, rIn, a0, a1);
       g.stroke();
 
-      // ── 属性の刃。同じ扇形でも、風は風の弧、炎は火の粉を纏う。 ──
+      // ── 属性の刃 (1.67)。同じ扇でも属性ごとに形が違う。3 層パレットで描き、
+      //    副属性がある場合は芯と縁に副の色が混ざる (palFor のブレンド)。
       const el = s.el || 'none';
+      const pal = this.palFor(el, s.elSub || s.st?.elSub || null);
+      const T = run.t;
+      const nA = this.elCount(5);
       if (el === 'wind') {
         for (let i = 0; i < 3; i++) {
           const rr = rOut * (0.98 - i * 0.17);
-          const off = Math.sin(t * 9 + i * 1.7) * 0.05;
+          const off = Math.sin(T * 9 + i * 1.7) * 0.05;
           g.globalAlpha = t * (0.5 - i * 0.12);
-          g.strokeStyle = i === 0 ? 'rgba(255, 253, 247, .92)' : s.color;
+          g.strokeStyle = i === 0 ? pal.core : pal.mid;
           g.lineWidth = 2.2 - i * 0.55;
           g.beginPath();
           g.arc(s.x, s.y, rr, a0 + off + i * 0.06, a1 + off + i * 0.06);
           g.stroke();
         }
-        // 刃先から抜ける風の筋。
         g.globalAlpha = t * 0.4;
+        g.strokeStyle = pal.outer;
         for (let i = 0; i < 2; i++) {
           const aa = a1 - i * 0.12;
           g.beginPath();
@@ -1216,23 +1643,22 @@ export class Renderer {
           g.stroke();
         }
       } else if (el === 'fire') {
-        g.fillStyle = s.color;
-        for (let i = 0; i < 6; i++) {
-          const aa = a0 + (a1 - a0) * (i / 5);
-          const rr = rOut * (0.9 + 0.08 * Math.sin(t * 20 + i));
-          g.globalAlpha = t * (0.45 + 0.25 * Math.sin(t * 17 + i * 2));
-          g.beginPath();
-          g.arc(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 1.6 + (i % 2), 0, TAU);
-          g.fill();
+        // 刃先に沿って層状の炎の舌が立つ。火炎扇 (flame) は内側を炎の筋が走る。
+        for (let i = 0; i < nA; i++) {
+          const f = nA === 1 ? 0.5 : i / (nA - 1);
+          const aa = a0 + (a1 - a0) * f;
+          const rr = rOut * 0.97;
+          const x = s.x + Math.cos(aa) * rr, y = s.y + Math.sin(aa) * rr;
+          const sway = Math.sin(T * 15 + i * 2.3 + s.x * 0.01) * rOut * 0.03;
+          this.drawFlame(g, x, y, rOut * 0.16, rOut * 0.05, aa, pal, t * 0.85, sway);
         }
         if (s.flame) {
-          // 火炎放射は刃先の火花ではなく、扇の内側を走る炎の筋で見せる。
           for (let i = 0; i < 9; i++) {
             const f = (i + 0.5) / 9;
             const aa = a0 + (a1 - a0) * f;
-            const end = rOut * (0.58 + 0.32 * Math.sin(t * 18 + i * 2.3));
+            const end = rOut * (0.58 + 0.32 * Math.sin(T * 18 + i * 2.3));
             g.globalAlpha = t * 0.55;
-            g.strokeStyle = i % 2 ? '#fff1a8' : s.color;
+            g.strokeStyle = i % 2 ? pal.core : pal.mid;
             g.lineWidth = 2 + (i % 3);
             g.beginPath();
             g.moveTo(s.x + Math.cos(aa) * rIn, s.y + Math.sin(aa) * rIn);
@@ -1240,95 +1666,148 @@ export class Renderer {
               s.x + Math.cos(aa - 0.04) * end, s.y + Math.sin(aa - 0.04) * end);
             g.stroke();
           }
+          // 根元のグロー。
+          const spr = this.glowSprite(pal.outer);
+          if (spr && this.elLayers() >= 2) {
+            const gx = s.x + Math.cos(s.a) * rOut * 0.4, gy = s.y + Math.sin(s.a) * rOut * 0.4;
+            const gr = rOut * 0.55;
+            g.save();
+            g.globalAlpha = t * 0.4;
+            g.drawImage(spr, gx - gr, gy - gr, gr * 2, gr * 2);
+            g.restore();
+          }
         }
       } else if (el === 'ice') {
-        g.strokeStyle = s.color;
-        g.lineWidth = 1.2;
-        for (let i = 0; i < 4; i++) {
-          const aa = a0 + (a1 - a0) * (i + 0.5) / 4;
+        for (let i = 0; i < nA; i++) {
+          const f = nA === 1 ? 0.5 : i / (nA - 1);
+          const aa = a0 + (a1 - a0) * f;
           const rr = rOut * 0.96;
-          const x = s.x + Math.cos(aa) * rr, y = s.y + Math.sin(aa) * rr;
-          g.globalAlpha = t * 0.55;
-          g.beginPath();
-          g.moveTo(x + Math.cos(aa) * 6, y + Math.sin(aa) * 6);
-          g.lineTo(x + Math.cos(aa + 2.2) * 3, y + Math.sin(aa + 2.2) * 3);
-          g.lineTo(x + Math.cos(aa - 2.2) * 3, y + Math.sin(aa - 2.2) * 3);
-          g.closePath();
-          g.stroke();
+          this.drawCrystal(g, s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr,
+            rOut * 0.11, rOut * 0.035, aa, pal, t * 0.8);
         }
       } else if (el === 'thunder') {
-        g.strokeStyle = s.color;
-        g.lineWidth = 1.6;
-        g.globalAlpha = t * 0.7;
-        g.beginPath();
-        const n = 10;
-        for (let i = 0; i <= n; i++) {
-          const aa = a0 + (a1 - a0) * i / n;
-          const rr = rOut * (0.96 + Math.sin(i * 4.7 + t * 30) * 0.035);
-          const x = s.x + Math.cos(aa) * rr, y = s.y + Math.sin(aa) * rr;
-          if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
-        }
-        g.stroke();
+        // 扇の外周をギザギザの稲妻が走る (二重描き)。点滅は flashK で抑制。
+        const fk = 0.65 + 0.35 * Math.sin(T * 30) * this.flashK;
+        const midA = (a0 + a1) / 2;
+        this.strokeBolt(g,
+          s.x + Math.cos(a0) * rOut * 0.97, s.y + Math.sin(a0) * rOut * 0.97,
+          s.x + Math.cos(midA) * rOut * 1.01, s.y + Math.sin(midA) * rOut * 1.01,
+          pal, t * 0.85 * fk, s.x * 0.013 + s.y * 0.007, 1.6);
+        this.strokeBolt(g,
+          s.x + Math.cos(midA) * rOut * 1.01, s.y + Math.sin(midA) * rOut * 1.01,
+          s.x + Math.cos(a1) * rOut * 0.97, s.y + Math.sin(a1) * rOut * 0.97,
+          pal, t * 0.85 * fk, s.x * 0.017 + 3.7, 1.6);
       } else if (el === 'light') {
-        g.strokeStyle = s.color;
-        g.lineWidth = 1;
-        for (let i = 0; i < 5; i++) {
-          const aa = a0 + (a1 - a0) * (i + 0.5) / 5;
-          g.globalAlpha = t * 0.45;
+        for (let i = 0; i < nA; i++) {
+          const f = nA === 1 ? 0.5 : i / (nA - 1);
+          const aa = a0 + (a1 - a0) * f;
+          g.globalAlpha = t * 0.55;
+          g.strokeStyle = pal.mid;
+          g.lineWidth = 1.2;
           g.beginPath();
           g.moveTo(s.x + Math.cos(aa) * rOut * 0.98, s.y + Math.sin(aa) * rOut * 0.98);
-          g.lineTo(s.x + Math.cos(aa) * rOut * 1.12, s.y + Math.sin(aa) * rOut * 1.12);
+          g.lineTo(s.x + Math.cos(aa) * rOut * 1.14, s.y + Math.sin(aa) * rOut * 1.14);
           g.stroke();
+          if (i % 2 === 0) {
+            this.drawCrossSparkle(g, s.x + Math.cos(aa) * rOut * 1.05, s.y + Math.sin(aa) * rOut * 1.05,
+              rOut * 0.05, pal, t * 0.8, T * 0.8 + i);
+          }
         }
       } else if (el === 'dark') {
         g.globalAlpha = t * 0.35;
-        g.strokeStyle = s.color;
-        g.lineWidth = 5 * t;
+        g.strokeStyle = pal.outer;
+        g.lineWidth = 6 * t;
         g.beginPath();
         g.arc(s.x, s.y, rOut * 0.9, a0 + 0.08, a1 + 0.08);
         g.stroke();
+        g.globalAlpha = t * 0.5;
+        g.strokeStyle = pal.mid;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(s.x, s.y, rOut * 0.97, a0 + Math.sin(T * 3) * 0.03, a1 - 0.05);
+        g.stroke();
+      } else if (el === 'poison') {
+        for (let i = 0; i < nA; i++) {
+          const f = nA === 1 ? 0.5 : i / (nA - 1);
+          const aa = a0 + (a1 - a0) * f;
+          const rr = rOut * (0.9 + 0.07 * Math.sin(T * 6 + i * 2.1));
+          const x = s.x + Math.cos(aa) * rr, y = s.y + Math.sin(aa) * rr;
+          g.globalAlpha = t * 0.55;
+          g.strokeStyle = pal.mid;
+          g.lineWidth = 1;
+          g.beginPath(); g.arc(x, y, 2 + (i % 3), 0, TAU); g.stroke();
+          g.globalAlpha = t * 0.4;
+          g.fillStyle = pal.core;
+          g.beginPath(); g.arc(x - 0.8, y - 0.8, 0.8, 0, TAU); g.fill();
+        }
+        // 刃の下縁から毒が滴る。
+        this.drawDrop(g, s.x + Math.cos(s.a) * rOut * 0.7, s.y + Math.sin(s.a) * rOut * 0.7 + 3,
+          rOut * 0.07, rOut * 0.03, Math.PI / 2, pal, t * 0.75);
       } else if (el === 'water') {
-        g.globalAlpha = t * 0.4;
-        g.strokeStyle = s.color;
-        g.lineWidth = 1;
+        g.globalAlpha = t * 0.45;
+        g.strokeStyle = pal.mid;
+        g.lineWidth = 1.4;
         for (let i = 0; i < 2; i++) {
           g.beginPath();
           g.arc(s.x, s.y, rOut * (0.86 + i * 0.13), a0 + 0.06, a1 - 0.06);
           g.stroke();
         }
+        for (let i = 0; i < this.elCount(3); i++) {
+          const f = (i + 0.5) / 3;
+          const aa = a0 + (a1 - a0) * f;
+          this.drawDrop(g, s.x + Math.cos(aa) * rOut * 1.0, s.y + Math.sin(aa) * rOut * 1.0,
+            rOut * 0.08, rOut * 0.035, aa, pal, t * 0.8);
+        }
       } else if (el === 'nature') {
-        g.fillStyle = s.color;
-        for (let i = 0; i < 4; i++) {
-          const aa = a0 + (a1 - a0) * (i + 0.5) / 4;
+        for (let i = 0; i < nA; i++) {
+          const f = nA === 1 ? 0.5 : i / (nA - 1);
+          const aa = a0 + (a1 - a0) * f;
           const rr = rOut * 0.94;
-          g.globalAlpha = t * 0.5;
           g.save();
           g.translate(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr);
-          g.rotate(aa + Math.sin(t * 7 + i) * 0.6);
+          g.rotate(aa + Math.sin(T * 7 + i) * 0.6);
+          g.globalAlpha = t * 0.6;
+          g.fillStyle = i % 2 ? pal.outer : pal.mid;
           g.beginPath();
-          g.ellipse(0, 0, 4, 1.6, 0, 0, TAU);
+          g.ellipse(0, 0, rOut * 0.055, rOut * 0.02, 0, 0, TAU);
           g.fill();
           g.restore();
         }
-      } else if (el === 'earth' || el === 'steel' || el === 'gold') {
-        g.fillStyle = s.color;
-        for (let i = 0; i < 5; i++) {
-          const aa = a0 + (a1 - a0) * (i + 0.5) / 5;
-          g.globalAlpha = t * 0.35;
-          g.fillRect(
-            s.x + Math.cos(aa) * rOut * 1.02, s.y + Math.sin(aa) * rOut * 1.02,
-            1.6, 3.2,
-          );
+      } else if (el === 'earth') {
+        for (let i = 0; i < nA; i++) {
+          const f = nA === 1 ? 0.5 : i / (nA - 1);
+          const aa = a0 + (a1 - a0) * f;
+          this.drawElementAccent(g, s.x + Math.cos(aa) * rOut * 1.0, s.y + Math.sin(aa) * rOut * 1.0,
+            rOut * 0.045, aa, pal, T, i + s.x * 0.01, t * 0.8);
+        }
+      } else if (el === 'steel') {
+        g.strokeStyle = pal.core;
+        g.lineCap = 'round';
+        for (let i = 0; i < this.elCount(3); i++) {
+          const f = (i + 0.5) / 3;
+          const aa = a0 + (a1 - a0) * f;
+          g.globalAlpha = t * 0.7;
+          g.lineWidth = 1.3;
+          g.beginPath();
+          g.moveTo(s.x + Math.cos(aa) * rOut * 0.82, s.y + Math.sin(aa) * rOut * 0.82);
+          g.lineTo(s.x + Math.cos(aa) * rOut * 1.12, s.y + Math.sin(aa) * rOut * 1.12);
+          g.stroke();
+        }
+      } else if (el === 'gold') {
+        for (let i = 0; i < this.elCount(4); i++) {
+          const f = (i + 0.5) / 4;
+          const aa = a0 + (a1 - a0) * f;
+          const tw = 0.5 + 0.5 * Math.sin(T * 10 + i * 2.2);
+          this.drawCrossSparkle(g, s.x + Math.cos(aa) * rOut * 1.02, s.y + Math.sin(aa) * rOut * 1.02,
+            rOut * 0.045 * (0.7 + tw * 0.5), pal, t * (0.4 + 0.5 * tw), i);
         }
       } else if (el === 'blood') {
-        g.fillStyle = s.color;
-        for (let i = 0; i < 3; i++) {
-          const aa = a0 + (a1 - a0) * (i + 0.5) / 3;
+        for (let i = 0; i < this.elCount(3); i++) {
+          const f = (i + 0.5) / 3;
+          const aa = a0 + (a1 - a0) * f;
           const rr = rOut * 1.01;
-          g.globalAlpha = t * 0.4;
-          g.beginPath();
-          g.ellipse(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 1.5, 3.5, aa, 0, TAU);
-          g.fill();
+          this.drawDrop(g, s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr,
+            rOut * 0.07, rOut * 0.03, Math.PI / 2, pal, t * 0.75);
         }
       }
     }
@@ -1396,14 +1875,18 @@ export class Renderer {
         g.setLineDash([]);
       }
 
-      // ── 属性の輪。風は弧がほどけ、炎は縁で火の粉が舞う。 ──
+      // ── 属性の輪 (1.67)。輪の上にも属性固有の形を載せ、3 層で描く。
+      //    副属性がある場合、芯と縁の色に副が混ざる。
       const rr = s.r * (1.04 - t * 0.12);
+      const pal = this.palFor(el, s.elSub || s.st?.elSub || null);
+      const T = run.t;
+      const ta = Math.max(0, t - 0.1);
       if (el === 'wind') {
-        g.strokeStyle = 'rgba(255, 253, 247, .8)';
+        g.strokeStyle = pal.core;
         g.lineWidth = 1.4;
         for (let i = 0; i < 3; i++) {
-          const a0 = run.t * (1.2 + i * 0.4) + i * 2.3;
-          g.globalAlpha = (t - 0.1) * 0.4;
+          const a0 = T * (1.2 + i * 0.4) + i * 2.3;
+          g.globalAlpha = ta * 0.4;
           g.beginPath();
           g.arc(s.x, s.y, rr * (0.9 + i * 0.06), a0, a0 + 0.9 + i * 0.2);
           g.stroke();
@@ -1411,67 +1894,139 @@ export class Renderer {
           g.arc(s.x, s.y, rr * (0.9 + i * 0.06) + 5, a0 + 0.2, a0 + 0.7);
           g.stroke();
         }
+        g.globalAlpha = ta * 0.35;
+        g.strokeStyle = pal.outer;
+        g.beginPath();
+        g.arc(s.x, s.y, rr * 1.02, T * 1.6 + 1, T * 1.6 + 4.4);
+        g.stroke();
       } else if (el === 'fire') {
-        g.fillStyle = s.color;
-        for (let i = 0; i < 7; i++) {
-          const aa = run.t * 1.1 + i * TAU / 7;
-          g.globalAlpha = (t - 0.1) * (0.4 + 0.2 * Math.sin(run.t * 15 + i));
-          g.beginPath();
-          g.arc(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 1.4 + (i % 2), 0, TAU);
-          g.fill();
+        const n = this.elCount(7);
+        for (let i = 0; i < n; i++) {
+          const aa = T * 1.1 + i * TAU / Math.max(1, n);
+          const x = s.x + Math.cos(aa) * rr, y = s.y + Math.sin(aa) * rr;
+          this.drawFlame(g, x, y, 8, 3, aa, pal, ta * 0.8, Math.sin(T * 14 + i * 2.1) * 1.8);
         }
       } else if (el === 'ice') {
-        g.strokeStyle = s.color;
-        g.lineWidth = 1.2;
-        for (let i = 0; i < 6; i++) {
-          const aa = i * TAU / 6 + 0.2;
+        const n = this.elCount(6);
+        for (let i = 0; i < n; i++) {
+          const aa = i * TAU / Math.max(1, n) + 0.2;
           const x = s.x + Math.cos(aa) * rr, y = s.y + Math.sin(aa) * rr;
-          g.globalAlpha = (t - 0.1) * 0.55;
-          g.beginPath();
-          g.moveTo(x, y);
-          g.lineTo(x + Math.cos(aa) * 5, y + Math.sin(aa) * 5);
-          g.stroke();
+          this.drawCrystal(g, x, y, 4.6, 1.7, aa, pal, ta * 0.8);
         }
       } else if (el === 'thunder') {
-        g.strokeStyle = s.color;
-        g.lineWidth = 1.3;
-        for (let i = 0; i < 3; i++) {
-          const a0 = i * 2.1 + run.t * 3;
-          g.globalAlpha = (t - 0.1) * 0.55;
-          g.beginPath();
-          for (let k = 0; k < 4; k++) {
-            const aa = a0 + k * 0.09;
-            const rad = rr + (k % 2 ? 5 : -2);
-            const x = s.x + Math.cos(aa) * rad, y = s.y + Math.sin(aa) * rad;
-            if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
+        const fk = 0.65 + 0.35 * Math.sin(T * 26 + s.x) * this.flashK;
+        for (let i = 0; i < this.elCount(3); i++) {
+          const a0 = i * 2.1 + T * 3;
+          g.globalAlpha = ta * 0.6 * fk;
+          g.lineWidth = 1.3;
+          for (const [col, rad0] of [[pal.outer, 1], [pal.core, 0]]) {
+            g.strokeStyle = col;
+            g.beginPath();
+            for (let k = 0; k < 4; k++) {
+              const aa = a0 + k * 0.09;
+              const rad = rr + (k % 2 ? 5 : -2) + rad0 * 0;
+              const x = s.x + Math.cos(aa) * rad, y = s.y + Math.sin(aa) * rad;
+              if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
+            }
+            g.stroke();
+            if (this.elLayers() < 3) break;
           }
-          g.stroke();
         }
       } else if (el === 'light') {
-        g.strokeStyle = s.color;
-        g.lineWidth = 1;
-        for (let i = 0; i < 8; i++) {
-          const aa = i * TAU / 8 + run.t * 0.4;
-          g.globalAlpha = (t - 0.1) * 0.4;
+        for (let i = 0; i < this.elCount(8); i++) {
+          const aa = i * TAU / 8 + T * 0.4;
+          g.globalAlpha = ta * 0.4;
+          g.strokeStyle = pal.mid;
+          g.lineWidth = 1;
           g.beginPath();
           g.moveTo(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr);
           g.lineTo(s.x + Math.cos(aa) * (rr + 7), s.y + Math.sin(aa) * (rr + 7));
           g.stroke();
+          if (i % 2 === 0) {
+            this.drawCrossSparkle(g, s.x + Math.cos(aa) * (rr + 4), s.y + Math.sin(aa) * (rr + 4),
+              3.6, pal, ta * 0.8, T + i);
+          }
         }
       } else if (el === 'water') {
-        g.strokeStyle = s.color;
+        g.strokeStyle = pal.mid;
         g.lineWidth = 1;
-        g.globalAlpha = (t - 0.1) * 0.4;
+        g.globalAlpha = ta * 0.45;
         g.beginPath();
         g.arc(s.x, s.y, rr + 5 + (1 - t) * 12, 0, TAU);
         g.stroke();
+        for (let i = 0; i < this.elCount(3); i++) {
+          const aa = i * TAU / 3 + T * 0.7;
+          this.drawDrop(g, s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 4.6, 2.2, aa, pal, ta * 0.85);
+        }
       } else if (el === 'dark') {
-        g.strokeStyle = 'rgba(28, 35, 49, .5)';
+        g.strokeStyle = pal.outer;
         g.lineWidth = 5 * t;
-        g.globalAlpha = (t - 0.1) * 0.3;
+        g.globalAlpha = ta * 0.35;
         g.beginPath();
         g.arc(s.x + 3, s.y - 2, rr, 0, TAU);
         g.stroke();
+        g.strokeStyle = pal.mid;
+        g.lineWidth = 1.6;
+        g.globalAlpha = ta * 0.5;
+        g.beginPath();
+        g.arc(s.x, s.y, rr * 0.92, -T * 0.8, -T * 0.8 + 4);
+        g.stroke();
+      } else if (el === 'poison') {
+        for (let i = 0; i < this.elCount(4); i++) {
+          const aa = i * TAU / 4 + T * 0.5;
+          const x = s.x + Math.cos(aa) * rr, y = s.y + Math.sin(aa) * rr - Math.sin(T * 3 + i * 1.9) * 2;
+          g.globalAlpha = ta * 0.6;
+          g.strokeStyle = pal.mid;
+          g.lineWidth = 1;
+          g.beginPath(); g.arc(x, y, 2.2 + (i % 2), 0, TAU); g.stroke();
+          g.globalAlpha = ta * 0.45;
+          g.fillStyle = pal.core;
+          g.beginPath(); g.arc(x - 0.7, y - 0.7, 0.7, 0, TAU); g.fill();
+        }
+      } else if (el === 'nature') {
+        for (let i = 0; i < this.elCount(5); i++) {
+          const aa = i * TAU / 5 + T * 0.6;
+          g.save();
+          g.translate(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr);
+          g.rotate(aa + Math.sin(T * 6 + i) * 0.5);
+          g.globalAlpha = ta * 0.65;
+          g.fillStyle = i % 2 ? pal.outer : pal.mid;
+          g.beginPath(); g.ellipse(0, 0, 4.4, 1.7, 0, 0, TAU); g.fill();
+          g.restore();
+        }
+      } else if (el === 'earth') {
+        for (let i = 0; i < this.elCount(4); i++) {
+          const aa = i * TAU / 4 + T * 0.25;
+          this.drawElementAccent(g, s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr,
+            3.2, aa, pal, T, i + s.x * 0.01, ta * 0.85);
+        }
+      } else if (el === 'steel') {
+        g.globalAlpha = ta * 0.7;
+        g.strokeStyle = pal.core;
+        g.lineWidth = 1.2;
+        for (let i = 0; i < this.elCount(4); i++) {
+          const aa = i * TAU / 4 + T * 0.8;
+          g.beginPath();
+          g.moveTo(s.x + Math.cos(aa) * rr * 0.92, s.y + Math.sin(aa) * rr * 0.92);
+          g.lineTo(s.x + Math.cos(aa) * rr * 1.1, s.y + Math.sin(aa) * rr * 1.1);
+          g.stroke();
+        }
+      } else if (el === 'gold') {
+        for (let i = 0; i < this.elCount(4); i++) {
+          const aa = i * TAU / 4 - T * 0.4;
+          const tw = 0.5 + 0.5 * Math.sin(T * 9 + i * 2.3);
+          g.globalAlpha = ta * (0.3 + 0.4 * tw);
+          g.fillStyle = pal.mid;
+          g.beginPath(); g.arc(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 2, 0, TAU); g.fill();
+          this.drawCrossSparkle(g, s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr,
+            3.4, pal, ta * (0.3 + 0.5 * tw), i);
+        }
+      } else if (el === 'blood') {
+        for (let i = 0; i < this.elCount(4); i++) {
+          const aa = i * TAU / 4 + T * 0.3;
+          this.drawDrop(g, s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr + 2,
+            4.4, 2.1, Math.PI / 2, pal, ta * 0.8);
+        }
       }
       g.restore();
     }
@@ -1595,6 +2150,8 @@ export class Renderer {
       const r = Math.max(0.5, p.r * (0.6 + t * 0.4));
       const shape = p.shape || 'dot';
       const ang = Math.atan2(p.vy, p.vx);
+      // 属性つきの粒は 3 層パレットで形を描き直す (色だけの粒にしない)。
+      const ppal = p.el ? this.palFor(p.el, p.elSub || null) : null;
       // 火花と粒は光として、墨・破片・葉は紙に乗った色として描く。
       g.globalCompositeOperation = (shape === 'spark' || shape === 'dot') ? 'lighter' : 'source-over';
       // 加算の粒は彩度が浮きやすいので少しだけ落とし、ステージ色調に馴染ませる。
@@ -1604,7 +2161,20 @@ export class Renderer {
       if (shape === 'spark') {
         const sp = Math.hypot(p.vx, p.vy);
         const len = clamp(sp * 0.045, 3, 24);
-        g.strokeStyle = p.color;
+        if (ppal && this.elLayers() >= 2) {
+          // 火花は外 (outer) の太い線 + 芯 (core) の細い線の二重描き。
+          g.strokeStyle = ppal.outer;
+          g.lineWidth = Math.max(1.6, r * 1.5);
+          g.globalAlpha = t * 0.45;
+          g.beginPath();
+          g.moveTo(p.x, p.y);
+          g.lineTo(p.x - Math.cos(ang) * len, p.y - Math.sin(ang) * len);
+          g.stroke();
+          g.strokeStyle = ppal.core;
+          g.globalAlpha = t * 0.9;
+        } else {
+          g.strokeStyle = p.color;
+        }
         g.lineWidth = Math.max(1, r * 0.9);
         g.beginPath();
         g.moveTo(p.x, p.y);
@@ -1626,23 +2196,43 @@ export class Renderer {
         g.save();
         g.translate(p.x, p.y);
         g.rotate((p.rot || 0) + (p.life || 0) * 1.6);
+        if (ppal) g.fillStyle = ppal.outer;
         g.beginPath();
         g.ellipse(0, 0, r * 1.15, r * (0.5 + 0.3 * Math.abs(Math.sin(p.x * 0.05 + p.life * 9))), 0, 0, TAU);
         g.fill();
+        if (ppal && this.elLayers() >= 2) {
+          // 闇の煙は内側に紫の渦を残す。
+          g.globalAlpha = t * 0.5;
+          g.strokeStyle = ppal.mid;
+          g.lineWidth = Math.max(0.8, r * 0.3);
+          g.beginPath();
+          g.arc(0, 0, r * 0.6, (p.life || 0) * 3, (p.life || 0) * 3 + 3.8);
+          g.stroke();
+        }
         g.restore();
       } else if (shape === 'leaf') {
         g.save();
         g.translate(p.x, p.y);
         g.rotate(ang + Math.sin((p.life || 0) * 6 + p.x * 0.02) * 0.7);
+        if (ppal) g.fillStyle = ppal.mid;
         g.beginPath();
         g.ellipse(0, 0, r * 1.5, r * 0.55, 0, 0, TAU);
         g.fill();
+        if (ppal && this.elLayers() >= 3) {
+          g.globalAlpha = t * 0.7;
+          g.strokeStyle = ppal.core;
+          g.lineWidth = 0.8;
+          g.beginPath();
+          g.moveTo(-r * 1.3, 0);
+          g.lineTo(r * 1.3, 0);
+          g.stroke();
+        }
         g.restore();
       } else if (shape === 'gust') {
-        // 風の弧。進行方向へしなる短い曲線。
+        // 風の弧。進行方向へしなる短い曲線。属性つきは芯の色で二重に引く。
         const sway = Math.sin((p.life || 0) * 14 + p.x * 0.03) * r * 1.2;
         g.globalAlpha = t * 0.65;
-        g.strokeStyle = p.color;
+        g.strokeStyle = ppal ? ppal.mid : p.color;
         g.lineWidth = Math.max(1, r * 0.7);
         g.beginPath();
         g.moveTo(p.x - Math.cos(ang) * 6, p.y - Math.sin(ang) * 6);
@@ -1651,42 +2241,65 @@ export class Renderer {
           p.x + Math.cos(ang) * 7, p.y + Math.sin(ang) * 7,
         );
         g.stroke();
+        if (ppal && this.elLayers() >= 3) {
+          g.globalAlpha = t * 0.5;
+          g.strokeStyle = ppal.core;
+          g.lineWidth = Math.max(0.8, r * 0.4);
+          g.beginPath();
+          g.moveTo(p.x - Math.cos(ang) * 4, p.y - Math.sin(ang) * 4);
+          g.quadraticCurveTo(
+            p.x + Math.cos(ang + 1.57) * sway * 0.7, p.y + Math.sin(ang + 1.57) * sway * 0.7,
+            p.x + Math.cos(ang) * 5, p.y + Math.sin(ang) * 5,
+          );
+          g.stroke();
+        }
       } else if (shape === 'bubble') {
         g.globalAlpha = t * 0.65;
-        g.strokeStyle = p.color;
+        g.strokeStyle = ppal ? ppal.mid : p.color;
         g.lineWidth = 1;
         g.beginPath();
         g.arc(p.x, p.y, r, 0, TAU);
         g.stroke();
-        g.globalAlpha = t * 0.4;
+        g.globalAlpha = t * 0.45;
         g.beginPath();
         g.arc(p.x - r * 0.3, p.y - r * 0.3, r * 0.28, 0, TAU);
-        g.fillStyle = p.color;
+        g.fillStyle = ppal ? ppal.core : p.color;
         g.fill();
       } else if (shape === 'crystal') {
-        g.save();
-        g.translate(p.x, p.y);
-        g.rotate(ang + (p.life || 0) * 2.5);
-        g.beginPath();
-        g.moveTo(r * 1.5, 0);
-        g.lineTo(0, -r * 0.7);
-        g.lineTo(-r * 1.5, 0);
-        g.lineTo(0, r * 0.7);
-        g.closePath();
-        g.fill();
-        g.restore();
+        if (ppal) {
+          this.drawCrystal(g, p.x, p.y, r * 1.6, r * 0.75, ang + (p.life || 0) * 2.5, ppal, t * 0.9);
+        } else {
+          g.save();
+          g.translate(p.x, p.y);
+          g.rotate(ang + (p.life || 0) * 2.5);
+          g.beginPath();
+          g.moveTo(r * 1.5, 0);
+          g.lineTo(0, -r * 0.7);
+          g.lineTo(-r * 1.5, 0);
+          g.lineTo(0, r * 0.7);
+          g.closePath();
+          g.fill();
+          g.restore();
+        }
       } else if (shape === 'ember') {
-        g.globalAlpha = t * (0.6 + 0.3 * Math.sin(p.x * 0.1 + (p.life || 0) * 20));
-        g.beginPath();
-        g.arc(p.x, p.y, r, 0, TAU);
-        g.fill();
-        g.globalAlpha = t * 0.4;
-        g.strokeStyle = p.color;
-        g.lineWidth = 1;
-        g.beginPath();
-        g.moveTo(p.x, p.y);
-        g.lineTo(p.x - p.vx * 0.02, p.y - p.vy * 0.02);
-        g.stroke();
+        if (ppal) {
+          // 火の粉は小さな層状の炎として描く (丸い点にしない)。
+          const flick = 0.75 + 0.25 * Math.sin(p.x * 0.1 + (p.life || 0) * 20);
+          this.drawFlame(g, p.x, p.y + r * 0.6, r * 2.1 * flick, r * 0.85, -Math.PI / 2,
+            ppal, t * 0.9, Math.sin((p.life || 0) * 12 + p.x * 0.05) * r * 0.3);
+        } else {
+          g.globalAlpha = t * (0.6 + 0.3 * Math.sin(p.x * 0.1 + (p.life || 0) * 20));
+          g.beginPath();
+          g.arc(p.x, p.y, r, 0, TAU);
+          g.fill();
+          g.globalAlpha = t * 0.4;
+          g.strokeStyle = p.color;
+          g.lineWidth = 1;
+          g.beginPath();
+          g.moveTo(p.x, p.y);
+          g.lineTo(p.x - p.vx * 0.02, p.y - p.vy * 0.02);
+          g.stroke();
+        }
       } else if (shape === 'glyph') {
         g.save();
         g.translate(p.x, p.y);
@@ -1700,10 +2313,38 @@ export class Renderer {
         g.fillText(p.char || '', 0, 0);
         g.restore();
       } else if (shape === 'smoke') {
+        if (ppal) g.fillStyle = ppal.outer;
         g.globalAlpha = t * 0.32;
         g.beginPath();
         g.ellipse(p.x, p.y, r * (1.8 - t * 0.6), r * (1.2 - t * 0.3), ang, 0, TAU);
         g.fill();
+        if (ppal && this.elLayers() >= 2) {
+          g.globalAlpha = t * 0.4;
+          g.strokeStyle = ppal.mid;
+          g.lineWidth = Math.max(0.8, r * 0.25);
+          g.beginPath();
+          g.arc(p.x, p.y, r * 0.8, (p.life || 0) * 2.5, (p.life || 0) * 2.5 + 3.6);
+          g.stroke();
+        }
+      } else if (ppal) {
+        // 属性つきの丸粒も 3 層 (縁→体→芯) で描く。
+        g.globalAlpha = t * 0.4;
+        g.fillStyle = ppal.outer;
+        g.beginPath();
+        g.arc(p.x, p.y, r * 1.5, 0, TAU);
+        g.fill();
+        g.globalAlpha = t * 0.8;
+        g.fillStyle = ppal.mid;
+        g.beginPath();
+        g.arc(p.x, p.y, r, 0, TAU);
+        g.fill();
+        if (this.elLayers() >= 3) {
+          g.globalAlpha = t * 0.9;
+          g.fillStyle = ppal.core;
+          g.beginPath();
+          g.arc(p.x - r * 0.25, p.y - r * 0.25, r * 0.4, 0, TAU);
+          g.fill();
+        }
       } else {
         g.beginPath();
         g.arc(p.x, p.y, r, 0, TAU);
@@ -2102,56 +2743,77 @@ export class Renderer {
     g.globalAlpha = a;
 
     if (e.burn > 0) {
-      const n = 3;
+      // 燃焼は足元から立つ層状の炎 (弾・斬撃と同じ炎の言語)。
+      const pal = this.palFor('fire');
+      const n = this.elCount(4);
+      const baseY = e.y + e.r * 0.75;
       for (let i = 0; i < n; i++) {
-        const ph = t * 9 + i * 2.1 + e.uid;
-        const x = e.x + Math.sin(ph) * e.r * 0.55 * (i - 1);
-        const y = e.y - e.r * (0.55 + i * 0.12) - Math.abs(Math.sin(ph)) * e.r * 0.35;
-        const h = e.r * (0.45 + 0.2 * Math.sin(ph * 1.3));
-        g.globalAlpha = a * (0.34 - i * 0.06);
-        g.fillStyle = i === 0 ? '#d9480f' : '#e8762a';
+        const fx = e.x + Math.sin(e.uid * 3.1 + i * 1.93) * e.r * 0.75;
+        const sway = Math.sin(t * 13 + i * 2.1 + e.uid) * e.r * 0.16;
+        this.drawFlame(g, fx, baseY, e.r * (0.85 + (i % 3) * 0.22), e.r * 0.3,
+          -Math.PI / 2, pal, a * 0.85, sway);
+      }
+      g.save();
+      g.fillStyle = pal.core;
+      for (let i = 0; i < this.elCount(3); i++) {
+        const ph = (t * 1.3 + i / 3 + (e.uid % 5) * 0.11) % 1;
+        g.globalAlpha = a * 0.7 * (1 - ph);
         g.beginPath();
-        g.moveTo(x, y + h * 0.4);
-        g.quadraticCurveTo(x - e.r * 0.28, y, x, y - h * 0.6);
-        g.quadraticCurveTo(x + e.r * 0.3, y, x, y + h * 0.4);
+        g.arc(e.x + Math.sin(e.uid * 2 + i * 2.4) * e.r * 0.6, baseY - ph * e.r * 1.7,
+          1.6 * (1 - ph * 0.5), 0, TAU);
         g.fill();
       }
+      g.restore();
     }
 
     if (e.poison > 0) {
-      for (let i = 0; i < 3; i++) {
-        const ph = t * 1.7 + i * 2.3 + e.uid;
-        const rise = (ph % 1) * e.r * 1.6;
-        const x = e.x + Math.sin(ph * 2.1) * e.r * 0.6;
-        const y = e.y + e.r * 0.2 - rise;
-        g.globalAlpha = a * (0.32 * (1 - rise / (e.r * 1.7)));
-        g.strokeStyle = '#3f7d24';
+      // 毒は上昇する泡と足元の緑の霧。
+      const pal = this.palFor('poison');
+      g.globalAlpha = a * 0.3;
+      g.fillStyle = pal.outer;
+      g.beginPath();
+      g.ellipse(e.x, e.y + e.r * 0.8, e.r * 1.05, e.r * 0.38, 0, 0, TAU);
+      g.fill();
+      const n = this.elCount(4);
+      for (let i = 0; i < n; i++) {
+        const ph = (t * 0.8 + i / Math.max(1, n) + (e.uid % 4) * 0.13) % 1;
+        const bx = e.x + Math.sin(e.uid * 1.7 + i * 2.3) * e.r * 0.8;
+        const by = e.y + e.r * 0.6 - ph * e.r * 1.5;
+        g.globalAlpha = a * 0.6 * (1 - ph * 0.5);
+        g.strokeStyle = pal.mid;
         g.lineWidth = 1;
-        g.beginPath();
-        g.arc(x, y, 1.6 + i * 0.5, 0, TAU);
-        g.stroke();
+        g.beginPath(); g.arc(bx, by, 2 + ph * 2.2, 0, TAU); g.stroke();
+        g.globalAlpha = a * 0.45 * (1 - ph * 0.5);
+        g.fillStyle = pal.core;
+        g.beginPath(); g.arc(bx - 0.8, by - 0.8, 0.8, 0, TAU); g.fill();
       }
     }
 
     if (e.chill > 0) {
-      for (let i = 0; i < 4; i++) {
+      // 冷気は霜の膜 + 角張った結晶。
+      const pal = this.palFor('ice');
+      g.globalAlpha = a * 0.26;
+      g.fillStyle = pal.mid;
+      g.beginPath();
+      g.ellipse(e.x, e.y, e.r * 1.12, e.r * 1.05, 0, 0, TAU);
+      g.fill();
+      for (let i = 0; i < this.elCount(4); i++) {
         const ang = t * 0.6 + i * TAU / 4 + e.uid;
-        const x = e.x + Math.cos(ang) * e.r * 0.8;
-        const y = e.y + Math.sin(ang) * e.r * 0.8;
-        g.globalAlpha = a * (0.25 + 0.12 * Math.sin(t * 3 + i));
-        g.strokeStyle = '#1b6ca8';
-        g.lineWidth = 1;
-        g.beginPath();
-        g.moveTo(x - 2.2, y); g.lineTo(x + 2.2, y);
-        g.moveTo(x, y - 2.2); g.lineTo(x, y + 2.2);
-        g.stroke();
+        const x = e.x + Math.cos(ang) * e.r * 0.92;
+        const y = e.y + Math.sin(ang) * e.r * 0.92;
+        this.drawCrystal(g, x, y, e.r * 0.28, e.r * 0.1, ang + 0.5, pal, a * 0.7);
+      }
+      if (this.elLayers() >= 3) {
+        this.drawCrossSparkle(g, e.x + e.r * 0.5, e.y - e.r * 0.6, e.r * 0.2, pal,
+          a * (0.4 + 0.25 * Math.sin(t * 6 + e.uid)), t);
       }
     }
 
     if (e.freeze > 0) {
-      g.globalAlpha = a * 0.38;
-      g.strokeStyle = '#155e94';
-      g.lineWidth = 1.6;
+      // 凍結は氷の膜 (淡シアン) + 外周の結晶。輪郭だけだった旧描画から層化。
+      const pal = this.palFor('ice');
+      g.globalAlpha = a * 0.3;
+      g.fillStyle = pal.outer;
       g.beginPath();
       const n = 8;
       for (let i = 0; i <= n; i++) {
@@ -2162,26 +2824,31 @@ export class Renderer {
         if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
       }
       g.closePath();
-      g.stroke();
-      g.globalAlpha = a * 0.18;
-      g.fillStyle = '#a5d8ff';
       g.fill();
+      g.globalAlpha = a * 0.35;
+      g.fillStyle = pal.mid;
+      g.beginPath();
+      g.ellipse(e.x, e.y, e.r * 1.02, e.r * 0.95, 0, 0, TAU);
+      g.fill();
+      for (let i = 0; i < this.elCount(3); i++) {
+        const ang = i * 2.1 + e.uid;
+        this.drawCrystal(g, e.x + Math.cos(ang) * e.r * 0.9, e.y + Math.sin(ang) * e.r * 0.85,
+          e.r * 0.34, e.r * 0.12, ang + 0.6, pal, a * 0.85);
+      }
     }
 
     if (e.stun > 0) {
-      g.globalAlpha = a * (0.45 + 0.25 * Math.sin(t * 30));
-      g.strokeStyle = '#b8860b';
-      g.lineWidth = 1.2;
-      g.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const ang = t * 7 + i * 1.3 + e.uid;
-        const r0 = e.r * 1.05, r1 = e.r * 1.35;
-        const x0 = e.x + Math.cos(ang) * r0, y0 = e.y + Math.sin(ang) * r0;
-        const x1 = e.x + Math.cos(ang + 0.3) * r1, y1 = e.y + Math.sin(ang + 0.3) * r1;
-        if (i === 0) g.moveTo(x0, y0); else g.lineTo(x0, y0);
-        g.lineTo(x1, y1);
+      // 感電/気絶は小稲妻がバチバチ走る。点滅は flashK で抑制する。
+      const pal = this.palFor('thunder');
+      const fk = 0.6 + 0.4 * Math.sin(t * 30 + e.uid * 2) * this.flashK;
+      const n = this.elCount(4);
+      for (let i = 0; i < n; i++) {
+        const ang = Math.floor(t * 7) * 0.7 + i * 1.6 + e.uid;
+        const x0 = e.x + Math.cos(ang) * e.r * 0.8, y0 = e.y + Math.sin(ang) * e.r * 0.8;
+        this.strokeBolt(g, x0, y0,
+          x0 + Math.cos(ang + 0.4) * e.r * 0.6, y0 + Math.sin(ang + 0.4) * e.r * 0.6,
+          pal, a * 0.8 * fk, e.uid * 0.31 + Math.floor(t * 7) + i * 5, 1.1);
       }
-      g.stroke();
     }
 
     if (e.broken) {
@@ -2292,59 +2959,82 @@ export class Renderer {
    */
 
   drawProjectile(g, b, t, detail) {
-    const c = b.color || '#6b7383';
     const el = b.element || 'none';
+    const pal = this.palFor(el, b.elSub || b.st?.elSub || null);
+    const c = el === 'none' ? (b.color || '#6b7383') : pal.mid;
     const r = Math.max(2, b.r);
     const sp = Math.hypot(b.vx, b.vy);
     const ang = sp > 1 ? Math.atan2(b.vy, b.vx) : 0;
     const shape = b.shape || (b.kindName === 'bomb' ? 'bomb' : 'shot');
     const pierce = b.pierce > 0 ? b.pierce : 0;
+    const layers = this.elLayers();
 
     // 竜巻と暗黒球は専用の絵。尾も頭もまとめて描く。
     if (b.kindName === 'gale') { this.drawGaleBullet(g, b, t); return; }
     if (b.kindName === 'void') { this.drawVoidBullet(g, b, t); return; }
 
-    // ── 尾。速度と尾の長さは貫通の数と形とで変わる。
-    //    炎と雷は尾を長めに敷く。扇状に広がったときの一体感が出る。
+    // ── 尾。3 層 (縁の滲み→体の色→芯) で引き、属性で形を変える。
+    //    炎は尾そのものが層状の炎の舌になる。
     if (sp > 20 && b.kindName !== 'bomb') {
       const wild = (el === 'fire' || el === 'thunder') ? 1.9
         : (el === 'poison' || el === 'blood' || el === 'nature') ? 1.3 : 1;
       const len = r * (shape === 'arrow' ? 7 : 3.4) * wild
         * (1 + pierce * 0.4) * (1 + (b.size - 1) * 0.5);
-      g.save();
-      g.translate(b.x, b.y);
-      g.rotate(ang);
-      g.globalAlpha = 0.5;
-      g.fillStyle = c;
-      g.beginPath();
-      g.moveTo(r * 0.8, 0);
-      g.lineTo(0, -r * 0.95);
-      g.lineTo(-len, 0);
-      g.lineTo(0, r * 0.95);
-      g.closePath();
-      g.fill();
-      g.globalAlpha = 0.22;
-      g.beginPath();
-      g.moveTo(r * 0.6, 0);
-      g.lineTo(0, -r * 1.7);
-      g.lineTo(-len * 1.25, 0);
-      g.lineTo(0, r * 1.7);
-      g.closePath();
-      g.fill();
-      g.restore();
+      if (el === 'fire') {
+        const n = this.elCount(3);
+        for (let i = 0; i < n; i++) {
+          const sway = Math.sin(t * 16 + b.uid * 1.3 + i * 2.2) * r * 0.55;
+          const bx = b.x - Math.cos(ang) * r * (0.4 + i * 0.75);
+          const by = b.y - Math.sin(ang) * r * (0.4 + i * 0.75);
+          this.drawFlame(g, bx, by, r * (2.6 - i * 0.5), r * (0.85 - i * 0.14),
+            ang + Math.PI, pal, 0.75 - i * 0.16, sway);
+        }
+      } else {
+        g.save();
+        g.translate(b.x, b.y);
+        g.rotate(ang);
+        g.globalAlpha = 0.2;
+        g.fillStyle = pal.outer;
+        g.beginPath();
+        g.moveTo(r * 0.6, 0);
+        g.lineTo(0, -r * 1.7);
+        g.lineTo(-len * 1.25, 0);
+        g.lineTo(0, r * 1.7);
+        g.closePath();
+        g.fill();
+        g.globalAlpha = 0.5;
+        g.fillStyle = pal.mid;
+        g.beginPath();
+        g.moveTo(r * 0.8, 0);
+        g.lineTo(0, -r * 0.95);
+        g.lineTo(-len, 0);
+        g.lineTo(0, r * 0.95);
+        g.closePath();
+        g.fill();
+        if (layers >= 3) {
+          g.globalAlpha = 0.75;
+          g.fillStyle = pal.core;
+          g.beginPath();
+          g.moveTo(r * 0.7, 0);
+          g.lineTo(0, -r * 0.4);
+          g.lineTo(-len * 0.62, 0);
+          g.lineTo(0, r * 0.4);
+          g.closePath();
+          g.fill();
+        }
+        g.restore();
+      }
     }
 
-    // ── 頭部。形状で絵を替える。──
+    // ── 頭部。形状で絵を替える。体の色は pal.mid、照りは pal.core。──
     g.save();
     g.translate(b.x, b.y);
     g.rotate(ang);
 
     if (shape === 'arrow') {
-      // 矢。細長く、先に返しがある。白い芯は小さくして属性の色を残す。
       const L = r * 3.6, W = r * 0.95;
-      // 外側のglow。
       g.globalAlpha = 0.3;
-      g.fillStyle = c;
+      g.fillStyle = pal.outer;
       g.beginPath();
       g.moveTo(L * 1.5, 0);
       g.lineTo(-L * 0.9, -W * 2.1);
@@ -2352,8 +3042,8 @@ export class Renderer {
       g.lineTo(-L * 0.9, W * 2.1);
       g.closePath();
       g.fill();
-      // 弾体。
       g.globalAlpha = 1;
+      g.fillStyle = c;
       g.beginPath();
       g.moveTo(L, 0);
       g.lineTo(L * 0.15, -W);
@@ -2363,9 +3053,8 @@ export class Renderer {
       g.lineTo(L * 0.15, W);
       g.closePath();
       g.fill();
-      // 芯。属性の色が失われすぎないように、先端だけを白くする。
-      g.globalAlpha = 0.75;
-      g.fillStyle = '#ffffff';
+      g.globalAlpha = 0.8;
+      g.fillStyle = pal.core;
       g.beginPath();
       g.moveTo(L * 0.95, 0);
       g.lineTo(L * 0.3, -W * 0.42);
@@ -2384,25 +3073,36 @@ export class Renderer {
       g.lineTo(0, W);
       g.closePath();
       g.fill();
+      if (layers >= 3) {
+        g.globalAlpha = 0.7;
+        g.fillStyle = pal.core;
+        g.beginPath();
+        g.moveTo(L * 0.8, 0);
+        g.lineTo(0, -W * 0.4);
+        g.lineTo(-L * 0.5, 0);
+        g.lineTo(0, W * 0.4);
+        g.closePath();
+        g.fill();
+      }
     } else if (shape === 'orb') {
-      g.globalAlpha = 0.5;
-      g.fillStyle = c;
+      g.globalAlpha = 0.45;
+      g.fillStyle = pal.outer;
       g.beginPath();
       g.arc(0, 0, r * 1.9, 0, TAU);
       g.fill();
       g.globalAlpha = 1;
+      g.fillStyle = c;
       g.beginPath();
       g.arc(0, 0, r, 0, TAU);
       g.fill();
-      g.globalAlpha = 0.85;
-      g.fillStyle = '#ffffff';
+      g.globalAlpha = 0.9;
+      g.fillStyle = pal.core;
       g.beginPath();
       g.arc(-r * 0.25, -r * 0.25, r * 0.42, 0, TAU);
       g.fill();
     } else if (shape === 'bomb') {
-      // 爆弾。暗い球と導火線の火花。
       g.globalAlpha = 0.4;
-      g.fillStyle = c;
+      g.fillStyle = pal.outer;
       g.beginPath();
       g.arc(0, 0, r * 2, 0, TAU);
       g.fill();
@@ -2411,69 +3111,64 @@ export class Renderer {
       g.beginPath();
       g.arc(0, 0, r, 0, TAU);
       g.fill();
-      g.globalAlpha = 0.95;
-      g.fillStyle = c;
-      g.beginPath();
-      g.arc(0, -r * 1.5, r * 0.42, 0, TAU);
-      g.fill();
+      // 導火線の火花は炎の言語で (層状の小さな舌)。
+      g.rotate(-ang);
+      this.drawFlame(g, 0, -r * 1.35, r * 1.15, r * 0.5, -Math.PI / 2, this.palFor('fire'), 0.95,
+        Math.sin(t * 18 + b.uid) * r * 0.2);
     } else if (shape === 'lance') {
-      // 突き。細長い槍。穂先と石突きのついた一直線。
       const L = r * 5, W = r * 0.5;
       g.globalAlpha = 0.35;
-      g.fillStyle = c;
+      g.fillStyle = pal.outer;
       g.beginPath();
       g.moveTo(L * 1.3, 0); g.lineTo(-L, -W * 2.4); g.lineTo(-L * 1.2, 0); g.lineTo(-L, W * 2.4);
       g.closePath(); g.fill();
       g.globalAlpha = 1;
+      g.fillStyle = c;
       g.beginPath();
       g.moveTo(L, 0); g.lineTo(L * 0.4, -W); g.lineTo(-L, -W * 0.5); g.lineTo(-L, W * 0.5); g.lineTo(L * 0.4, W);
       g.closePath(); g.fill();
-      g.globalAlpha = 0.85; g.fillStyle = '#ffffff';
+      g.globalAlpha = 0.9; g.fillStyle = pal.core;
       g.beginPath(); g.moveTo(L, 0); g.lineTo(L * 0.45, -W * 0.5); g.lineTo(L * 0.45, W * 0.5); g.closePath(); g.fill();
     } else if (shape === 'wave') {
-      // 押し波。進む水の壁。三日月の壁頭に泡を立てる。
       const R = r * 1.6;
-      g.globalAlpha = 0.4; g.fillStyle = c;
+      g.globalAlpha = 0.4; g.fillStyle = pal.outer;
       g.beginPath(); g.arc(0, 0, R * 1.5, -1.2, 1.2); g.lineTo(0, 0); g.closePath(); g.fill();
-      g.globalAlpha = 0.9;
+      g.globalAlpha = 0.9; g.fillStyle = c;
       g.beginPath(); g.arc(0, 0, R, -1.1, 1.1); g.lineTo(R * 0.2, 0); g.closePath(); g.fill();
-      g.globalAlpha = 0.8; g.fillStyle = '#ffffff';
+      g.globalAlpha = 0.85; g.fillStyle = pal.core;
       for (let i = 0; i < 3; i++) {
         const a = -0.8 + i * 0.8;
         g.beginPath(); g.arc(Math.cos(a) * R, Math.sin(a) * R, r * 0.28, 0, TAU); g.fill();
       }
     } else if (shape === 'spike') {
-      // 地走り。地面から隆起する岩の棘。
       const H = r * 2.2;
-      g.globalAlpha = 0.4; g.fillStyle = c;
+      g.globalAlpha = 0.4; g.fillStyle = pal.outer;
       g.beginPath(); g.moveTo(0, -H * 1.2); g.lineTo(-r * 1.3, 0); g.lineTo(r * 1.3, 0); g.closePath(); g.fill();
-      g.globalAlpha = 1;
+      g.globalAlpha = 1; g.fillStyle = c;
       g.beginPath(); g.moveTo(0, -H); g.lineTo(-r, 0); g.lineTo(r, 0); g.closePath(); g.fill();
-      g.globalAlpha = 0.6; g.fillStyle = '#ffffff';
+      g.globalAlpha = 0.7; g.fillStyle = pal.core;
       g.beginPath(); g.moveTo(0, -H); g.lineTo(-r * 0.3, -H * 0.3); g.lineTo(0, -H * 0.2); g.closePath(); g.fill();
     } else if (shape === 'shard') {
-      // 鉄片。細く鋭い金属の針。白い輝きを残す。
       const L = r * 3.2, W = r * 0.4;
       g.globalAlpha = 1; g.fillStyle = c;
       g.beginPath(); g.moveTo(L, 0); g.lineTo(0, -W); g.lineTo(-L, 0); g.lineTo(0, W); g.closePath(); g.fill();
-      g.globalAlpha = 0.8; g.fillStyle = '#ffffff';
+      g.globalAlpha = 0.85; g.fillStyle = pal.core;
       g.beginPath(); g.moveTo(L * 0.8, 0); g.lineTo(0, -W * 0.4); g.lineTo(-L * 0.4, 0); g.closePath(); g.fill();
     } else {
-      // 弾。進行方向に少し伸ばしたカプセル。
       const L = r * 1.7;
       g.globalAlpha = 0.4;
-      g.fillStyle = c;
+      g.fillStyle = pal.outer;
       g.beginPath();
       g.ellipse(0, 0, L * 1.5, r * 1.9, 0, 0, TAU);
       g.fill();
       g.globalAlpha = 1;
+      g.fillStyle = c;
       g.beginPath();
       g.ellipse(0, 0, L, r, 0, 0, TAU);
       g.fill();
       if (detail) {
-        // 芯は小さく。属性の色が残るようにする。
-        g.globalAlpha = 0.55;
-        g.fillStyle = '#ffffff';
+        g.globalAlpha = 0.6;
+        g.fillStyle = pal.core;
         g.beginPath();
         g.ellipse(L * 0.25, 0, r * 0.5, r * 0.44, 0, 0, TAU);
         g.fill();
@@ -2483,183 +3178,306 @@ export class Renderer {
 
     if (!detail) return;
 
-    // ── 属性ごとの効果。炎の舌・氷片・稲光など。──
-    g.save();
-    g.globalAlpha = 0.9;
-    g.strokeStyle = c;
-    g.lineCap = 'round';
+    // ── 属性ごとの効果。全属性が固有の「形」を持ち、3 層で描く。
+    //    副属性がある場合、芯 (pal.core) と縁 (pal.edge) に副の色が混ざる。
     switch (el) {
       case 'fire': {
-        // 炎。 进行方向の後ろで 3 本の舌が揺れる。
-        g.fillStyle = c;
-        for (let i = 0; i < 3; i++) {
-          const w = 0.9 + Math.sin(t * 22 + i * 2.1 + b.uid) * 0.35;
-          const d = r * (1.5 + i * 1.15);
-          g.globalAlpha = 0.5 - i * 0.13;
+        // 根元のグロー + 上昇する火の粉 (火は弾の後ろでも上へ逃げる)。
+        const spr = this.glowSprite(pal.outer);
+        if (spr && layers >= 2) {
+          g.save();
+          g.globalAlpha = 0.5;
+          const gr = r * 3.4;
+          g.drawImage(spr, b.x - gr, b.y - gr, gr * 2, gr * 2);
+          g.restore();
+        }
+        g.save();
+        g.fillStyle = pal.core;
+        const n = this.elCount(3);
+        for (let i = 0; i < n; i++) {
+          const ph = (t * 1.4 + i / n + (b.uid % 7) * 0.13) % 1;
+          const ex = b.x - Math.cos(ang) * r * (0.4 + ph * 1.7) + Math.sin(t * 9 + i * 2.4 + b.uid) * r * 0.4;
+          const ey = b.y - Math.sin(ang) * r * (0.4 + ph * 1.7) - ph * r * 1.6;
+          g.globalAlpha = 0.75 * (1 - ph);
           g.beginPath();
-          g.moveTo(b.x + Math.cos(ang) * r * 0.4, b.y + Math.sin(ang) * r * 0.4);
-          g.lineTo(b.x - Math.cos(ang) * d + Math.cos(ang + 1.57) * r * w,
-                   b.y - Math.sin(ang) * d + Math.sin(ang + 1.57) * r * w);
-          g.lineTo(b.x - Math.cos(ang) * d * 1.25, b.y - Math.sin(ang) * d * 1.25);
-          g.lineTo(b.x - Math.cos(ang) * d - Math.cos(ang + 1.57) * r * w,
-                   b.y - Math.sin(ang) * d - Math.sin(ang + 1.57) * r * w);
-          g.closePath();
+          g.arc(ex, ey, r * 0.3 * (1 - ph * 0.5), 0, TAU);
           g.fill();
         }
+        g.restore();
         break;
       }
       case 'ice': {
-        g.lineWidth = 1.6;
-        for (let i = 0; i < 2; i++) {
-          const a = ang + 1.57 + (i ? 0.5 : -0.5);
-          const d = r * 1.5;
-          g.globalAlpha = 0.7;
-          g.beginPath();
-          g.moveTo(b.x - Math.cos(ang) * r, b.y - Math.sin(ang) * r);
-          g.lineTo(b.x - Math.cos(ang) * d + Math.cos(a) * r * 1.1,
-                   b.y - Math.sin(ang) * d + Math.sin(a) * r * 1.1);
-          g.stroke();
+        const n = this.elCount(3);
+        for (let i = 0; i < n; i++) {
+          const d = r * (1.1 + i * 0.85);
+          const off = Math.sin(b.uid * 2.1 + i * 1.9) * r * 0.5;
+          const x = b.x - Math.cos(ang) * d - Math.sin(ang) * off;
+          const y = b.y - Math.sin(ang) * d + Math.cos(ang) * off;
+          this.drawCrystal(g, x, y, r * (1.15 - i * 0.18), r * 0.42, ang + Math.PI + (i - 1) * 0.35, pal, 0.8 - i * 0.18);
+        }
+        if (layers >= 3) {
+          this.drawCrossSparkle(g, b.x + Math.cos(ang) * r * 0.8, b.y + Math.sin(ang) * r * 0.8,
+            r * 0.75, pal, 0.55 + 0.3 * Math.sin(t * 7 + b.uid), t * 1.5);
         }
         break;
       }
       case 'thunder': {
-        g.lineWidth = 1.4;
-        g.globalAlpha = 0.85;
-        g.beginPath();
-        g.moveTo(b.x - Math.cos(ang) * r * 1.2, b.y - Math.sin(ang) * r * 1.2);
-        const j = (n) => (Math.sin(t * 40 + b.uid * 1.7 + n) * 0.5) * r * 0.9;
-        g.lineTo(b.x - Math.cos(ang) * r * 2.4 + j(0), b.y - Math.sin(ang) * r * 2.4 + j(1));
-        g.lineTo(b.x - Math.cos(ang) * r * 3.6 + j(2), b.y - Math.sin(ang) * r * 3.6 + j(3));
-        g.stroke();
+        const fk = 0.6 + 0.4 * Math.sin(t * 40 + b.uid * 1.7) * this.flashK;
+        this.strokeBolt(g, b.x, b.y,
+          b.x - Math.cos(ang) * r * 3.6, b.y - Math.sin(ang) * r * 3.6,
+          pal, 0.9 * fk, b.uid * 0.37 + Math.floor(t * 9), Math.max(1, r * 0.4));
+        if (layers >= 2) {
+          // 分岐する小弧。
+          const bx = b.x - Math.cos(ang) * r * 1.7, by = b.y - Math.sin(ang) * r * 1.7;
+          this.strokeBolt(g, bx, by,
+            bx - Math.cos(ang - 0.7) * r * 1.5, by - Math.sin(ang - 0.7) * r * 1.5,
+            pal, 0.55 * fk, b.uid * 0.91 + Math.floor(t * 9), Math.max(0.7, r * 0.25));
+        }
         break;
       }
       case 'poison': {
-        g.fillStyle = c;
-        g.globalAlpha = 0.5;
-        g.beginPath();
-        g.arc(b.x - Math.cos(ang) * r * 1.8, b.y - Math.sin(ang) * r * 1.8 + r * 0.4,
-              r * 0.5 + Math.sin(t * 9) * r * 0.12, 0, TAU);
-        g.fill();
+        // 上昇する泡 (3 つ、位相は uid で決定的) と、下へ垂れる滴。
+        g.save();
+        const n = this.elCount(3);
+        for (let i = 0; i < n; i++) {
+          const ph = (t * 0.9 + i / n + (b.uid % 5) * 0.17) % 1;
+          const x = b.x - Math.cos(ang) * r * (0.8 + ph * 1.8) + Math.sin(t * 6 + i * 2.2) * r * 0.3;
+          const y = b.y - Math.sin(ang) * r * (0.8 + ph * 1.8) - ph * r * 1.1;
+          g.globalAlpha = 0.65 * (1 - ph * 0.6);
+          g.strokeStyle = pal.mid;
+          g.lineWidth = 1;
+          g.beginPath(); g.arc(x, y, r * (0.3 + ph * 0.25), 0, TAU); g.stroke();
+          g.globalAlpha = 0.5 * (1 - ph * 0.6);
+          g.fillStyle = pal.core;
+          g.beginPath(); g.arc(x - r * 0.12, y - r * 0.12, r * 0.1, 0, TAU); g.fill();
+        }
+        g.restore();
+        this.drawDrop(g, b.x - Math.cos(ang) * r * 0.9, b.y - Math.sin(ang) * r * 0.9 + r * 0.7,
+          r * 0.95, r * 0.5, Math.PI / 2, pal, 0.7);
         break;
       }
       case 'light': {
+        // 放射状の光条 + 十字のきらめき + 白金のハロー。
+        g.save();
+        g.strokeStyle = pal.mid;
+        g.lineCap = 'round';
+        const n = this.elCount(4);
+        for (let i = 0; i < n; i++) {
+          const a = (i / Math.max(1, n)) * TAU + t * 1.2 + b.uid;
+          g.globalAlpha = 0.5;
+          g.lineWidth = 1.1;
+          g.beginPath();
+          g.moveTo(b.x + Math.cos(a) * r * 1.5, b.y + Math.sin(a) * r * 1.5);
+          g.lineTo(b.x + Math.cos(a) * r * 2.3, b.y + Math.sin(a) * r * 2.3);
+          g.stroke();
+        }
         g.globalAlpha = 0.4;
-        g.beginPath();
-        g.arc(b.x, b.y, r * 2.4, 0, TAU);
-        g.stroke();
+        g.strokeStyle = pal.outer;
+        g.lineWidth = 1;
+        g.beginPath(); g.arc(b.x, b.y, r * 2.35, 0, TAU); g.stroke();
+        g.restore();
+        this.drawCrossSparkle(g, b.x, b.y, r * 1.05, pal, 0.85, t * 2 + b.uid);
+        if (pal.sub) {
+          // 副属性の縁。主の形の外周に副の色の小さな象徴を 1 つ置く。
+          this.drawElementAccent(g, b.x - Math.cos(ang) * r * 1.9, b.y - Math.sin(ang) * r * 1.9,
+            r * 0.62, ang, this.palFor(pal.sub), t, b.uid, 0.8);
+        }
         break;
       }
       case 'dark': {
-        g.globalAlpha = 0.5;
-        g.fillStyle = c;
-        g.beginPath();
-        g.ellipse(b.x - Math.cos(ang) * r * 1.6, b.y - Math.sin(ang) * r * 1.6,
-                  r * 1.5, r * 0.85, ang, 0, TAU);
-        g.fill();
+        // 紫黒の煙の渦。外は濃い紫、芯は黒、縁に淡い紫の wisps。
+        g.save();
+        for (let i = 0; i < this.elCount(2); i++) {
+          const d = r * (1.2 + i * 0.9);
+          const x = b.x - Math.cos(ang) * d, y = b.y - Math.sin(ang) * d;
+          g.globalAlpha = 0.4 - i * 0.12;
+          g.fillStyle = pal.outer;
+          g.beginPath(); g.ellipse(x, y, r * (1.25 - i * 0.25), r * 0.8, ang, 0, TAU); g.fill();
+          g.globalAlpha = 0.5 - i * 0.14;
+          g.strokeStyle = pal.mid;
+          g.lineWidth = 1.2;
+          g.beginPath(); g.arc(x, y, r * (0.95 - i * 0.2), t * 4 + i * 2 + b.uid, t * 4 + i * 2 + b.uid + 3.6); g.stroke();
+        }
+        g.restore();
         break;
       }
       case 'wind': {
-        // 風。尾をまっすぐ引かず、進行方向へしなる弧を重ねる。
-        // 渦・風切り・舞い上がる埃の 3 つで「風の弾」に見せる。
         const perp = ang + Math.PI / 2;
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < this.elCount(3); i++) {
           const ph = t * 13 + i * 1.9 + b.uid * 0.7;
           const off = Math.sin(ph) * r * (0.7 + i * 0.5);
           const back = r * (1.4 + i * 1.5);
           const x = b.x - Math.cos(ang) * back + Math.cos(perp) * off;
           const y = b.y - Math.sin(ang) * back + Math.sin(perp) * off;
-          g.globalAlpha = 0.4 - i * 0.08;
-          g.strokeStyle = i === 0 ? 'rgba(255, 253, 247, .95)' : c;
+          g.save();
+          g.globalAlpha = 0.45 - i * 0.09;
+          g.strokeStyle = i === 0 ? pal.core : pal.mid;
           g.lineWidth = Math.max(0.8, 2.2 - i * 0.5);
+          g.lineCap = 'round';
           g.beginPath();
           g.arc(x, y, r * (0.9 + i * 0.35), ang - 2.2, ang - 1.1);
           g.stroke();
+          g.restore();
         }
-        // 先端の渦。
+        g.save();
         g.globalAlpha = 0.55;
-        g.strokeStyle = c;
-        g.lineWidth = 1.2;
+        g.strokeStyle = pal.outer;
+        g.lineWidth = 1.1;
         g.beginPath();
         g.arc(b.x + Math.cos(ang) * r * 0.6, b.y + Math.sin(ang) * r * 0.6,
           r * 1.3, t * 8, t * 8 + 3.4);
         g.stroke();
-        g.beginPath();
-        g.arc(b.x + Math.cos(ang) * r * 0.6, b.y + Math.sin(ang) * r * 0.6,
-          r * 1.7, t * 8 + 2.4, t * 8 + 4.8);
-        g.stroke();
-        // 風切り線。進行方向へ 2 本。
-        g.globalAlpha = 0.35;
-        g.strokeStyle = 'rgba(255, 253, 247, .9)';
-        g.lineWidth = 1;
-        for (let i = 0; i < 2; i++) {
-          const s = (i ? 1 : -1) * r * 1.3;
-          g.beginPath();
-          g.moveTo(b.x + Math.cos(ang) * r * 1.2 + Math.cos(perp) * s,
-            b.y + Math.sin(ang) * r * 1.2 + Math.sin(perp) * s);
-          g.lineTo(b.x + Math.cos(ang) * r * 3.4 + Math.cos(perp) * s * 1.4,
-            b.y + Math.sin(ang) * r * 3.4 + Math.sin(perp) * s * 1.4);
-          g.stroke();
-        }
+        g.restore();
         break;
       }
       case 'water': {
-        g.fillStyle = c;
-        g.globalAlpha = 0.45;
+        // 雫の尾 (重力で少し垂れる) + しぶきの輪 + 波紋。
+        this.drawDrop(g, b.x - Math.cos(ang) * r * 1.25, b.y - Math.sin(ang) * r * 1.25 + r * 0.3,
+          r * 1.5, r * 0.8, ang + Math.PI, pal, 0.8);
+        g.save();
+        const ph = (t * 1.6 + (b.uid % 4) * 0.25) % 1;
+        g.globalAlpha = 0.5 * (1 - ph);
+        g.strokeStyle = pal.mid;
+        g.lineWidth = 1;
         g.beginPath();
-        g.arc(b.x - Math.cos(ang) * r * 1.5, b.y - Math.sin(ang) * r * 1.5,
-              r * 0.45, 0, TAU);
-        g.fill();
+        g.arc(b.x - Math.cos(ang) * r * 2.1, b.y - Math.sin(ang) * r * 2.1 + r * 0.4,
+          r * (0.4 + ph * 1.1), 0, TAU);
+        g.stroke();
+        g.fillStyle = pal.core;
+        for (let i = 0; i < this.elCount(2); i++) {
+          g.globalAlpha = 0.65;
+          g.beginPath();
+          g.arc(b.x - Math.cos(ang) * r * (1 + i * 0.8) + (i ? r * 0.5 : -r * 0.4),
+            b.y - Math.sin(ang) * r * (1 + i * 0.8) + r * (0.5 + i * 0.3), r * 0.2, 0, TAU);
+          g.fill();
+        }
+        g.restore();
         break;
       }
       case 'blood': {
-        g.fillStyle = c;
-        g.globalAlpha = 0.5;
-        g.beginPath();
-        g.moveTo(b.x, b.y);
-        g.lineTo(b.x - Math.cos(ang) * r * 2.2 + Math.cos(ang + 1.57) * r,
-                 b.y - Math.sin(ang) * r * 2.2 + Math.sin(ang + 1.57) * r);
-        g.lineTo(b.x - Math.cos(ang) * r * 2.6, b.y - Math.sin(ang) * r * 2.6);
-        g.lineTo(b.x - Math.cos(ang) * r * 2.2 - Math.cos(ang + 1.57) * r,
-                 b.y - Math.sin(ang) * r * 2.2 - Math.sin(ang + 1.57) * r);
-        g.closePath();
-        g.fill();
+        // 重力で落ちる滴と飛沫。尾の滴は時間で下へ伸びる。
+        const dropK = 0.5 + 0.5 * Math.sin(t * 5 + b.uid);
+        this.drawDrop(g, b.x - Math.cos(ang) * r * 1.2, b.y - Math.sin(ang) * r * 1.2 + r * dropK,
+          r * 1.35, r * 0.72, Math.PI / 2, pal, 0.85);
+        g.save();
+        g.fillStyle = pal.mid;
+        for (let i = 0; i < this.elCount(3); i++) {
+          const d = r * (0.9 + i * 0.75);
+          g.globalAlpha = 0.6 - i * 0.15;
+          g.beginPath();
+          g.arc(b.x - Math.cos(ang) * d + Math.sin(i * 2.7 + b.uid) * r * 0.4,
+            b.y - Math.sin(ang) * d + r * (0.3 + i * 0.28), r * (0.3 - i * 0.06), 0, TAU);
+          g.fill();
+        }
+        g.restore();
         break;
       }
       case 'nature': {
-        g.fillStyle = c;
-        g.globalAlpha = 0.55;
+        // 渦巻く葉片 (2 枚が位相をずらして回る) + 蔓の弧。
+        for (let i = 0; i < this.elCount(2); i++) {
+          const d = r * (1.1 + i * 0.9);
+          const x = b.x - Math.cos(ang) * d + Math.sin(t * 5 + i * 2.4) * r * 0.45;
+          const y = b.y - Math.sin(ang) * d + Math.cos(t * 5 + i * 2.4) * r * 0.45;
+          g.save();
+          g.translate(x, y);
+          g.rotate(ang + Math.sin(t * 7 + i * 1.8 + b.uid) * 0.6 + i * 1.2);
+          g.globalAlpha = 0.75 - i * 0.2;
+          g.fillStyle = i === 0 ? pal.mid : pal.outer;
+          g.beginPath();
+          g.ellipse(0, 0, r * 1.05, r * 0.42, 0, 0, TAU);
+          g.fill();
+          if (layers >= 3) {
+            g.strokeStyle = pal.core;
+            g.lineWidth = 0.8;
+            g.beginPath(); g.moveTo(-r * 0.9, 0); g.lineTo(r * 0.9, 0); g.stroke();
+          }
+          g.restore();
+        }
+        break;
+      }
+      case 'earth': {
+        // 岩片の多角形 (角は uid で決定的) + 土煙。
         g.save();
-        g.translate(b.x - Math.cos(ang) * r * 1.6, b.y - Math.sin(ang) * r * 1.6);
-        g.rotate(ang + Math.sin(t * 7) * 0.5);
+        for (let i = 0; i < this.elCount(2); i++) {
+          const d = r * (1 + i * 0.95);
+          const x = b.x - Math.cos(ang) * d, y = b.y - Math.sin(ang) * d + r * 0.3 * i;
+          const rr = r * (0.85 - i * 0.2);
+          g.globalAlpha = 0.85 - i * 0.25;
+          g.fillStyle = i === 0 ? pal.mid : pal.outer;
+          g.beginPath();
+          for (let k = 0; k < 5; k++) {
+            const a = (k / 5) * TAU + b.uid * 0.7 + i;
+            const rad = rr * (0.75 + 0.35 * Math.abs(Math.sin(b.uid * 3.1 + k * 1.7 + i)));
+            const px = x + Math.cos(a) * rad, py = y + Math.sin(a) * rad;
+            if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
+          }
+          g.closePath();
+          g.fill();
+        }
+        g.globalAlpha = 0.3;
+        g.fillStyle = pal.core;
         g.beginPath();
-        g.ellipse(0, 0, r * 1.1, r * 0.45, 0, 0, TAU);
+        g.arc(b.x - Math.cos(ang) * r * 1.6, b.y - Math.sin(ang) * r * 1.6 + r * 0.5, r * 0.55, 0, TAU);
         g.fill();
         g.restore();
         break;
       }
-      case 'earth':
-      case 'gold':
       case 'steel': {
-        // 鉱物系。土埃や粉の軌跡を引く。
-        const wig = (n) => Math.sin(t * 30 + b.uid * 1.3 + n) * 0.5 * r * 0.8;
-        g.lineWidth = 1.2;
-        g.globalAlpha = 0.55;
-        g.beginPath();
-        g.moveTo(b.x - Math.cos(ang) * r * 1.2, b.y - Math.sin(ang) * r * 1.2);
-        g.lineTo(b.x - Math.cos(ang) * r * 2.2 + wig(0), b.y - Math.sin(ang) * r * 2.2 + wig(1));
-        g.stroke();
+        // 銀の閃光 (まっすぐな火花線) + 小さな十字の反射。
+        g.save();
+        g.lineCap = 'round';
+        for (let i = 0; i < this.elCount(3); i++) {
+          const off = (i - 1) * r * 0.55;
+          g.globalAlpha = 0.75 - Math.abs(i - 1) * 0.2;
+          g.strokeStyle = i === 1 ? pal.core : pal.mid;
+          g.lineWidth = i === 1 ? 1.4 : 1;
+          g.beginPath();
+          g.moveTo(b.x - Math.cos(ang) * r * (0.8 + i * 0.3) - Math.sin(ang) * off,
+            b.y - Math.sin(ang) * r * (0.8 + i * 0.3) + Math.cos(ang) * off);
+          g.lineTo(b.x - Math.cos(ang) * r * (2.4 + i * 0.5) - Math.sin(ang) * off,
+            b.y - Math.sin(ang) * r * (2.4 + i * 0.5) + Math.cos(ang) * off);
+          g.stroke();
+        }
+        g.restore();
+        if (layers >= 3) {
+          this.drawCrossSparkle(g, b.x + Math.cos(ang) * r * 0.7, b.y + Math.sin(ang) * r * 0.7,
+            r * 0.6, pal, 0.6, ang);
+        }
+        break;
+      }
+      case 'gold': {
+        // コイン状のきらめき (丸+十字) が尾で瞬く。
+        for (let i = 0; i < this.elCount(3); i++) {
+          const d = r * (0.9 + i * 0.95);
+          const x = b.x - Math.cos(ang) * d + Math.sin(b.uid * 1.9 + i * 2.2) * r * 0.35;
+          const y = b.y - Math.sin(ang) * d + Math.cos(b.uid * 1.9 + i * 2.2) * r * 0.35;
+          const tw = 0.5 + 0.5 * Math.sin(t * 10 + i * 2.1 + b.uid);
+          g.save();
+          g.globalAlpha = 0.35 + 0.45 * tw;
+          g.fillStyle = pal.mid;
+          g.beginPath(); g.arc(x, y, r * 0.34, 0, TAU); g.fill();
+          g.restore();
+          if (layers >= 2) {
+            this.drawCrossSparkle(g, x, y, r * (0.5 + 0.4 * tw), pal, 0.35 + 0.4 * tw, t * 1.4 + i);
+          }
+        }
         break;
       }
       default:
         break;
     }
-    g.restore();
+    // 副属性の縁。主の形の尾に、副属性の小さな象徴を 1 つだけ添える。
+    // (芯の色は palFor のブレンドで既に副属性に寄っている。)
+    if (pal.sub && detail) {
+      this.drawElementAccent(g, b.x - Math.cos(ang) * r * 2.05, b.y - Math.sin(ang) * r * 2.05,
+        r * 0.55, ang, this.palFor(pal.sub), t, b.uid + 3, 0.65);
+    }
   }
 
 
   /** 竜巻の弾。積み重なる回転弧が前方へ進む。 */
   drawGaleBullet(g, b, t) {
-    const c = b.color || '#2f9e8f';
+    const pal = this.palFor(b.element || 'wind', b.elSub || b.st?.elSub || null);
     const r = Math.max(4, b.r);
     g.save();
     g.translate(b.x, b.y);
@@ -2668,7 +3486,7 @@ export class Renderer {
       const rr = r * (1 - i * 0.2);
       const a0 = t * 9 + i * 1.4;
       g.globalAlpha = 0.65 - i * 0.12;
-      g.strokeStyle = i === 0 ? 'rgba(255,253,247,.9)' : c;
+      g.strokeStyle = i === 0 ? pal.core : i === 1 ? pal.mid : pal.outer;
       g.lineWidth = 2.4 - i * 0.4;
       g.beginPath();
       g.ellipse(0, -i * r * 0.35, rr, rr * 0.5, 0, a0, a0 + 4.4);
@@ -2676,7 +3494,7 @@ export class Renderer {
     }
     // 吸い込む埃。
     g.globalAlpha = 0.4;
-    g.fillStyle = c;
+    g.fillStyle = pal.mid;
     for (let i = 0; i < 3; i++) {
       const a = t * 6 + i * 2.1;
       g.beginPath();
@@ -2688,23 +3506,23 @@ export class Renderer {
 
   /** 暗黒球。黒い芯と紫のオーラ、 inward の粒。 */
   drawVoidBullet(g, b, t) {
-    const c = b.color || '#5f3dc4';
+    const pal = this.palFor(b.element || 'dark', b.elSub || b.st?.elSub || null);
     const r = Math.max(3, b.r);
     g.save();
     g.translate(b.x, b.y);
     g.globalAlpha = 0.35;
-    g.fillStyle = c;
+    g.fillStyle = pal.outer;
     g.beginPath(); g.arc(0, 0, r * 2.1, 0, TAU); g.fill();
     g.globalAlpha = 1;
     g.fillStyle = '#160a24';
     g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill();
     g.globalAlpha = 0.8;
-    g.strokeStyle = c;
+    g.strokeStyle = pal.mid;
     g.lineWidth = 1.6;
     g.beginPath(); g.arc(0, 0, r * 1.3, t * 5, t * 5 + 4); g.stroke();
     // 引き込む粒。
     g.globalAlpha = 0.5;
-    g.fillStyle = c;
+    g.fillStyle = pal.core;
     for (let i = 0; i < 3; i++) {
       const a = t * 4 + i * 2.1;
       const d = r * (2.2 - ((t * 2 + i) % 1) * 1.4);
@@ -2724,20 +3542,24 @@ export class Renderer {
     this.drawSoftShadow(g, p.x + moveK * 3, p.y + p.r * 0.92, p.r * 1.05, p.r * 0.4, 0.55);
 
     // 手の属性のオーラ。炎の右手なら、自機のまわりがうっすらその色になる。
+    // 1.67: 単色ではなく 3 層 (芯 core → 体 mid → 縁 outer) のにじみにし、
+    // 属性の象徴も小さく添える。
     const handEl = p.stats?.handElement;
     if (handEl && ELEMENTS[handEl] && handEl !== 'none') {
-      const c = ELEMENTS[handEl].color;
+      const handPal = this.palFor(handEl, p.stats?.handSubElement || null);
       g.save();
-      g.globalAlpha = 0.1 + 0.05 * Math.sin(run.t * 3.2);
-      // グラデーションは色ごとに 1 度だけ作って再利用する (中心は原点に置き translate で合わせる)。
+      g.globalAlpha = 0.13 + 0.05 * Math.sin(run.t * 3.2);
+      // グラデーションは属性ごとに 1 度だけ作って再利用する (中心は原点に置き translate で合わせる)。
       if (!this._auraGrads) this._auraGrads = new Map();
-      let rg = this._auraGrads.get(c);
+      let rg = this._auraGrads.get(handEl);
       if (!rg) {
         rg = g.createRadialGradient(0, 0, 6, 0, 0, 40);
-        rg.addColorStop(0, c);
+        rg.addColorStop(0, handPal.core);
+        rg.addColorStop(0.45, handPal.mid);
+        rg.addColorStop(0.8, handPal.outer);
         rg.addColorStop(1, 'rgba(0,0,0,0)');
         if (this._auraGrads.size > 12) this._auraGrads.clear();
-        this._auraGrads.set(c, rg);
+        this._auraGrads.set(handEl, rg);
       }
       g.translate(p.x, p.y);
       g.scale((p.r + 15) / 40, (p.r + 15) / 40);
@@ -2746,6 +3568,8 @@ export class Renderer {
       g.arc(0, 0, 40, 0, TAU);
       g.fill();
       g.restore();
+      this.drawElementAccent(g, p.x + Math.cos(face) * (p.r + 7), p.y + Math.sin(face) * (p.r + 7),
+        3.6, face, handPal, run.t, 0.7, 0.5 + 0.2 * Math.sin(run.t * 3.2));
     }
 
     // 常時ゆっくり呼吸する護りの紋環。被弾・ダッシュ演出と重ねて自機を際立たせる。
@@ -2906,17 +3730,28 @@ export class Renderer {
     g.globalAlpha = 1;
 
     // 撃った瞬間の光。筒先ではなく、身体のまわりに短い弧を描く。
+    // 属性つきは 3 層パレット: 弧は mid、放射線は outer、中心の照りは core。
     if (p.castFlash > 0) {
       const k = clamp(p.castFlash / 0.18, 0, 1);
       const dir = p.castDir ?? face;
+      const castPal = this.palFor(p.castEl || 'none', p.castElSub || null);
+      const castCol = castPal.el === 'none' ? (p.castColor || '#e8b425') : castPal.mid;
       g.save();
       g.globalAlpha = k * (p.castKind === 'slash' ? 0.5 : 0.36);
-      g.strokeStyle = p.castColor || '#e8b425';
+      g.strokeStyle = castCol;
       g.lineWidth = 2.4 * k + 0.6;
       g.lineCap = 'round';
       g.beginPath();
       g.arc(p.x, p.y, p.r + 6 + (1 - k) * 10, dir - 0.42, dir + 0.42);
       g.stroke();
+      if (castPal.el !== 'none' && this.elLayers() >= 2) {
+        g.globalAlpha = k * 0.3;
+        g.strokeStyle = castPal.outer;
+        g.lineWidth = 4.5 * k + 1;
+        g.beginPath();
+        g.arc(p.x, p.y, p.r + 6 + (1 - k) * 10, dir - 0.42, dir + 0.42);
+        g.stroke();
+      }
       // 放射線。撃った方向へ 3 本、一瞬だけ走る。
       for (let i = 0; i < 3; i++) {
         const aa = dir + (i - 1) * 0.26;
@@ -2929,11 +3764,16 @@ export class Renderer {
         g.stroke();
       }
       g.globalAlpha = k * 0.5;
-      g.fillStyle = '#fffdf7';
+      g.fillStyle = castPal.el === 'none' ? '#fffdf7' : castPal.core;
       g.beginPath();
       g.arc(p.x + Math.cos(dir) * (p.r + 8), p.y + Math.sin(dir) * (p.r + 8), 1.8 * k + 0.5, 0, TAU);
       g.fill();
       g.restore();
+      // 属性の象徴を撃った方向へ 1 つだけ添える。
+      if (castPal.el !== 'none') {
+        this.drawElementAccent(g, p.x + Math.cos(dir) * (p.r + 12), p.y + Math.sin(dir) * (p.r + 12),
+          3.4, dir, castPal, run.t, 2.2, k * 0.8);
+      }
     }
   }
 
@@ -3473,7 +4313,9 @@ export class Renderer {
     if (!pose) return;
     const family = m.family || 'slash';
     const style = m.style || 'arc';
-    const color = s.color || m.color || '#d4a94e';
+    // 軌跡の体色は 3 層パレットの mid。芯の照りは drawElementAccent で足す。
+    const mPal = (m.el && m.el !== 'none') ? this.palFor(m.el, m.elSub || null) : null;
+    const color = mPal ? mPal.mid : (s.color || m.color || '#d4a94e');
     // 描画に使う半径と扇は、当たり判定とまったく同じ値。
     const reach = Math.max(18, m.reach || s.r || 40);
     const arc = Number(m.arc) > 0.02 ? m.arc : (Number(s.arc) > 0.02 ? s.arc : Math.PI / 1.5);
@@ -3658,18 +4500,30 @@ export class Renderer {
       }
     }
 
-    // 属性の名残。軌跡の縁に小さな粒を散らす (扇の内側)。
+    // 属性の名残。軌跡の縁に、属性固有の形 (炎の舌・結晶・稲妻・十字…) を散らす。
+    // 副属性がある場合、刃先の 1 つは副属性の形になる。
     if (pose.phase === 'strike') {
       const el = m.el || 'none';
-      const n = el === 'none' ? 2 : 5;
-      for (let i = 0; i < n; i++) {
-        const aa = head - dir * (i + 1) * 0.08;
-        const rr = reach * (0.8 + (i % 3) * 0.06);
-        g.globalAlpha = (0.45 - i * 0.06) * fade;
-        g.fillStyle = i === 0 ? '#fffdf7' : color;
-        g.beginPath();
-        g.arc(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 1.1 + (i % 2), 0, TAU);
-        g.fill();
+      if (el !== 'none' && mPal) {
+        const n = this.elCount(4);
+        for (let i = 0; i < n; i++) {
+          const aa = head - dir * (i + 1) * 0.1;
+          const rr = reach * (0.82 + (i % 3) * 0.06);
+          const useSub = mPal.sub && i === n - 1;
+          this.drawElementAccent(g, s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr,
+            reach * 0.035, aa, useSub ? this.palFor(mPal.sub) : mPal,
+            run.t, i * 1.7 + s.x * 0.01, (0.55 - i * 0.08) * fade);
+        }
+      } else {
+        for (let i = 0; i < 2; i++) {
+          const aa = head - dir * (i + 1) * 0.08;
+          const rr = reach * (0.8 + (i % 3) * 0.06);
+          g.globalAlpha = (0.45 - i * 0.06) * fade;
+          g.fillStyle = i === 0 ? '#fffdf7' : color;
+          g.beginPath();
+          g.arc(s.x + Math.cos(aa) * rr, s.y + Math.sin(aa) * rr, 1.1 + (i % 2), 0, TAU);
+          g.fill();
+        }
       }
     }
     g.restore();
@@ -4035,7 +4889,10 @@ export class Renderer {
     const fade = p < 0.85 ? 1 : 1 - (p - 0.85) / 0.15;
     const turns = s.turns || 2.2;
     const reach = s.reach || 100;
-    const color = s.color || '#d4a94e';
+    // 軌跡の体色も 3 層パレットの mid に統一する (単色 color は後方互換)。
+    const color = (s.el && s.el !== 'none')
+      ? this.palFor(s.el, s.elSub || s.st?.elSub || null).mid
+      : (s.color || '#d4a94e');
     // 渦の先端から、少し後ろまでを描く。尻尾ほど細く薄い。
     const head = p;
     const tail = Math.max(0, head - 0.5);
@@ -4099,7 +4956,8 @@ export class Renderer {
     const pose = motionPose(m);
     if (!pose) return;
     const fade = pose.phase === 'recover' ? 1 - pose.phaseT * 0.7 : 1;
-    const color = s.color || m.color || '#d4a94e';
+    const whipPal = (m.el && m.el !== 'none') ? this.palFor(m.el, m.elSub || null) : null;
+    const color = whipPal ? whipPal.mid : (s.color || m.color || '#d4a94e');
     const dir = Math.sign(m.to - m.from) || 1;
     // 振り始めから現在までの角度。鞭は腕より先に走る。
     const sweep = pose.phase === 'windup'
@@ -4212,7 +5070,9 @@ export class Renderer {
       if (!m || (m.family !== 'ranged' && m.family !== 'cast')) continue;
       const pose = motionPose(m);
       if (!pose) continue;
-      const color = m.color || '#d4a94e';
+      // 詠唱・射撃の色も 3 層パレットの mid に統一 (副属性は芯に混ざる)。
+      const cPal = (m.el && m.el !== 'none') ? this.palFor(m.el, m.elSub || null) : null;
+      const color = cPal ? cPal.mid : (m.color || '#d4a94e');
       const aim = m.baseAim;
       const reach = Math.max(24, m.reach || 60);
       const fade = pose.phase === 'recover' ? 1 - pose.phaseT * 0.6 : 1;
@@ -4329,6 +5189,15 @@ export class Renderer {
         const cy = m.key === 'orb' ? p.y + Math.sin(aim) * reach * 0.3 : p.y;
         const baseR = m.key === 'orb' ? 6 + pose.circleK * 10 : (p.r + 5) + pose.circleK * Math.min(26, reach * 0.3);
         const rot = (m.seq || 1) * 0.7 + pose.t * 2.4;
+        // 外周の滲み (outer)。
+        if (cPal && this.elLayers() >= 2) {
+          g.globalAlpha = (0.14 + 0.3 * pose.circleK) * fade;
+          g.strokeStyle = cPal.outer;
+          g.lineWidth = 4.2;
+          g.beginPath();
+          g.arc(cx, cy, Math.max(3, baseR), 0, TAU);
+          g.stroke();
+        }
         g.globalAlpha = (0.25 + 0.55 * pose.circleK) * fade;
         g.strokeStyle = color;
         g.lineWidth = 1.6;
@@ -4337,19 +5206,24 @@ export class Renderer {
           g.arc(cx, cy, Math.max(3, rr), a0, a1);
           g.stroke();
         }
-        // サークルの刻み (文字の代わりの小さな印)。
-        g.fillStyle = color;
+        // サークルの刻み。属性つきは丸ではなく属性の象徴が周回する。
         for (let i = 0; i < 4; i++) {
           const aa = rot + i * (TAU / 4);
-          g.globalAlpha = (0.3 + 0.5 * pose.circleK) * fade;
-          g.beginPath();
-          g.arc(cx + Math.cos(aa) * baseR, cy + Math.sin(aa) * baseR, 1.6, 0, TAU);
-          g.fill();
+          if (cPal) {
+            this.drawElementAccent(g, cx + Math.cos(aa) * baseR, cy + Math.sin(aa) * baseR,
+              2.6, aa, cPal, run.t, i * 1.3 + (m.seq || 1), (0.3 + 0.5 * pose.circleK) * fade);
+          } else {
+            g.globalAlpha = (0.3 + 0.5 * pose.circleK) * fade;
+            g.fillStyle = color;
+            g.beginPath();
+            g.arc(cx + Math.cos(aa) * baseR, cy + Math.sin(aa) * baseR, 1.6, 0, TAU);
+            g.fill();
+          }
         }
         if (m.key === 'orb' && pose.phase === 'windup') {
-          // 集気: 玉が吸い込むように膨らむ芯。
+          // 集気: 玉が吸い込むように膨らむ芯 (色はパレットの芯)。
           g.globalAlpha = 0.8 * fade;
-          g.fillStyle = 'rgba(255, 253, 247, .95)';
+          g.fillStyle = cPal ? cPal.core : 'rgba(255, 253, 247, .95)';
           g.beginPath();
           g.arc(cx, cy, 1.5 + pose.circleK * 3, 0, TAU);
           g.fill();
@@ -4385,6 +5259,9 @@ export class Renderer {
 
       const glyph = KIND_GLYPH[res.kind] || res.tail || wi.def.glyph || wi.def.name || '刃';
       const color = res.elementInfo?.color || '#d4a94e';
+      // 精霊のグローは outer、グリフは mid (3 層パレット)。
+      const wPal = this.palFor(res.element || 'none', res.subElement || null);
+      const glyphColor = (res.element && res.element !== 'none') ? wPal.mid : color;
 
       // ── 鉄球。鎖についた鉄の塊が、体のまわりを旋回する。 ──
       if (res.kind === 'flail') {
@@ -4410,10 +5287,10 @@ export class Renderer {
           // 球。回転に合わせてくるりと向きが変わる。
           g.save();
           g.translate(ball.x, ball.y);
-          const gs1 = this.glowSprite(color);
+          const gs1 = this.glowSprite(wPal.outer);
           if (gs1) { g.globalAlpha = 0.55; g.drawImage(gs1, -17, -17, 34, 34); g.globalAlpha = 1; }
           g.rotate((ball.a || 0) + run.t * 4);
-          this.drawWeaponGlyph(g, glyph, 1.2, color, 0.95);
+          this.drawWeaponGlyph(g, glyph, 1.2, glyphColor, 0.95);
           g.restore();
         }
         continue;
@@ -4430,11 +5307,11 @@ export class Renderer {
           const orbitScale = Math.sin(run.t * 7 + k) * 0.08;
           g.save();
           g.translate(p.x + Math.cos(a) * radius, p.y + Math.sin(a) * radius);
-          const gs2 = this.glowSprite(color);
+          const gs2 = this.glowSprite(wPal.outer);
           if (gs2) { g.globalAlpha = 0.5; g.drawImage(gs2, -15, -15, 30, 30); g.globalAlpha = 1; }
           g.rotate(a + run.t * 5.5);
           g.scale(0.95 + orbitScale, 0.95 + orbitScale);
-          this.drawWeaponGlyph(g, glyph, 0.9 + reachK * 0.5, color, 0.9);
+          this.drawWeaponGlyph(g, glyph, 0.9 + reachK * 0.5, glyphColor, 0.9);
           g.restore();
         }
         continue;
@@ -4447,7 +5324,7 @@ export class Renderer {
         const radius = (p.stats.size || 1) * (p.r + 15);
         g.save();
         g.globalAlpha = 0.3 + 0.1 * Math.sin(run.t * 2.8 + i);
-        g.strokeStyle = color;
+        g.strokeStyle = glyphColor;
         g.lineWidth = 1.2;
         g.setLineDash([2, 7]);
         g.lineDashOffset = -run.t * 18;
@@ -4459,7 +5336,7 @@ export class Renderer {
         const a = aim + Math.PI * 0.5 + Math.sin(run.t * 1.3 + i) * 0.3;
         g.translate(p.x + Math.cos(a) * radius, p.y + Math.sin(a) * radius);
         g.rotate(a + Math.sin(run.t * 2) * 0.25);
-        this.drawWeaponGlyph(g, glyph, 0.72 + reachK * 0.3, color, 0.9);
+        this.drawWeaponGlyph(g, glyph, 0.72 + reachK * 0.3, glyphColor, 0.9);
         g.restore();
         continue;
       }
@@ -4736,6 +5613,9 @@ export class Renderer {
     for (const l of run.lightnings) {
       const t = l.life / l.maxLife;
       const c = l.color || '#1b6ca8';
+      // 3 層パレット (外=outer / 体=mid / 芯=core)。点滅は flashK で抑制。
+      const pal = this.palFor(l.el || 'thunder', l.elSub || null);
+      const fk = 0.75 + 0.25 * Math.sin(l.life * 55) * this.flashK;
       const seg = 6;
       const dx = (l.x2 - l.x1) / seg, dy = (l.y2 - l.y1) / seg;
       const nx = -dy, ny = dx;
@@ -4751,22 +5631,26 @@ export class Renderer {
         g.lineTo(l.x2, l.y2);
       };
 
-      // 外側の滲み、色の芯、紙を抜く白い芯の 3 層。
+      // 外側の滲み (outer)、体の色 (mid)、芯 (core) の 3 層。
       trace();
-      g.globalAlpha = t * 0.26;
-      g.strokeStyle = c;
+      g.globalAlpha = t * 0.26 * fk;
+      g.strokeStyle = pal.outer;
       g.lineWidth = 9 * t + 2;
       g.stroke();
-      trace();
-      g.globalAlpha = t * 0.95;
-      g.strokeStyle = c;
-      g.lineWidth = 3.2 * t + 1;
-      g.stroke();
-      trace();
-      g.globalAlpha = t * 0.8;
-      g.strokeStyle = 'rgba(255, 253, 247, .92)';
-      g.lineWidth = 1.1;
-      g.stroke();
+      if (this.elLayers() >= 2) {
+        trace();
+        g.globalAlpha = t * 0.95 * fk;
+        g.strokeStyle = pal.mid;
+        g.lineWidth = 3.2 * t + 1;
+        g.stroke();
+      }
+      if (this.elLayers() >= 3) {
+        trace();
+        g.globalAlpha = t * 0.85 * fk;
+        g.strokeStyle = pal.core;
+        g.lineWidth = 1.1;
+        g.stroke();
+      }
 
       // 途中から分かれる枝。毎フレーム同じ形になるよう乱数は使わない。
       if (t > 0.3 && hash01(seed + 2.3) > 0.42) {
@@ -4775,8 +5659,8 @@ export class Renderer {
         const by = l.y1 + (l.y2 - l.y1) * at;
         const side = hash01(seed + 8.7) > 0.5 ? 1 : -1;
         const len = 34 + hash01(seed + 1.9) * 46;
-        g.globalAlpha = t * 0.55;
-        g.strokeStyle = c;
+        g.globalAlpha = t * 0.55 * fk;
+        g.strokeStyle = pal.mid;
         g.lineWidth = 1.4;
         g.beginPath();
         g.moveTo(bx, by);
@@ -4799,39 +5683,46 @@ export class Renderer {
       const ex = b.x + Math.cos(b.a) * b.len;
       const ey = b.y + Math.sin(b.a) * b.len;
       const c = b.color || '#e8a30a';
-      // 紙の上では光ではなく「走った墨」と「その内側の色」。
-      g.globalAlpha = t * 0.5;
-      g.strokeStyle = 'rgba(28, 35, 49, .4)';
-      g.lineWidth = b.w * t * 1.45;
+      // 3 層パレット: 外の滲み (outer) → 体 (mid) → 芯 (core)。
+      const bPal = this.palFor(b.el || 'none', b.elSub || null);
+      const bLayers = this.elLayers();
+      g.globalAlpha = t * 0.4;
+      g.strokeStyle = bPal.outer;
+      g.lineWidth = b.w * t * 2.1;
       g.beginPath();
       g.moveTo(b.x, b.y);
       g.lineTo(ex, ey);
       g.stroke();
 
-      g.globalAlpha = t * 0.9;
-      g.strokeStyle = c;
-      g.lineWidth = b.w * t * 0.76;
-      g.beginPath();
-      g.moveTo(b.x, b.y);
-      g.lineTo(ex, ey);
-      g.stroke();
+      if (bLayers >= 2) {
+        g.globalAlpha = t * 0.9;
+        g.strokeStyle = bPal.mid;
+        g.lineWidth = b.w * t * 0.9;
+        g.beginPath();
+        g.moveTo(b.x, b.y);
+        g.lineTo(ex, ey);
+        g.stroke();
+      }
 
-      // 芯は淡く。色の帯の真ん中を白っぽく抜く。
-      g.globalAlpha = t * 0.55;
-      g.strokeStyle = 'rgba(255, 251, 235, .95)';
-      g.lineWidth = Math.max(1, b.w * t * 0.22);
-      g.beginPath();
-      g.moveTo(b.x, b.y);
-      g.lineTo(ex, ey);
-      g.stroke();
+      if (bLayers >= 3) {
+        g.globalAlpha = t * 0.8;
+        g.strokeStyle = bPal.core;
+        g.lineWidth = Math.max(1, b.w * t * 0.3);
+        g.beginPath();
+        g.moveTo(b.x, b.y);
+        g.lineTo(ex, ey);
+        g.stroke();
+      }
 
       // 発射口の輪。撃った位置が分かる。
       g.globalAlpha = t * t * 0.65;
-      g.strokeStyle = c;
+      g.strokeStyle = bPal.mid;
       g.lineWidth = 1.8;
       g.beginPath();
       g.arc(b.x, b.y, 5 + (1 - t) * 10, 0, TAU);
       g.stroke();
+      // 先端に属性の象徴。
+      this.drawElementAccent(g, ex, ey, Math.max(3, b.w * 0.7), b.a, bPal, run.t, b.x * 0.01, t * 0.9);
 
       // 属性の細部。風は線がしなり、光は光条が走る。
       const el = b.el || 'none';
@@ -4852,7 +5743,15 @@ export class Renderer {
           g.stroke();
         }
       } else if (el === 'fire') {
-        g.fillStyle = c;
+        // ビームに沿って層状の炎の舌が立つ。
+        for (let i = 0; i < this.elCount(5); i++) {
+          const f = (i + 0.5) / 5;
+          const bx = b.x + Math.cos(b.a) * b.len * f;
+          const by = b.y + Math.sin(b.a) * b.len * f;
+          this.drawFlame(g, bx, by, b.w * 1.5, b.w * 0.55, b.a - Math.PI / 2, bPal, t * 0.55,
+            Math.sin(run.t * 15 + i * 2.3) * b.w * 0.3);
+        }
+        g.fillStyle = bPal.core;
         for (let i = 0; i < 5; i++) {
           const f = (i + 0.5) / 5;
           const wob = Math.sin(run.t * 14 + i * 2.7) * b.w * 0.45;
@@ -4866,7 +5765,7 @@ export class Renderer {
           g.fill();
         }
       } else if (el === 'light') {
-        g.strokeStyle = 'rgba(255, 253, 247, .9)';
+        g.strokeStyle = bPal.core;
         g.lineWidth = 1;
         for (let i = 0; i < 4; i++) {
           const f = (i + 0.5) / 4;
@@ -4877,7 +5776,20 @@ export class Renderer {
           g.moveTo(x - Math.sin(b.a) * b.w, y + Math.cos(b.a) * b.w);
           g.lineTo(x + Math.sin(b.a) * b.w, y - Math.cos(b.a) * b.w);
           g.stroke();
+          if (i % 2 === 0) {
+            this.drawCrossSparkle(g, x, y, b.w * 0.85, bPal, t * 0.75, run.t + i);
+          }
         }
+      } else if (el === 'ice') {
+        for (let i = 0; i < this.elCount(4); i++) {
+          const f = (i + 0.5) / 4;
+          const x = b.x + Math.cos(b.a) * b.len * f;
+          const y = b.y + Math.sin(b.a) * b.len * f;
+          this.drawCrystal(g, x, y, b.w * 0.9, b.w * 0.34, b.a, bPal, t * 0.7);
+        }
+      } else if (el === 'thunder') {
+        const fk = 0.65 + 0.35 * Math.sin(run.t * 34 + b.x) * this.flashK;
+        this.strokeBolt(g, b.x, b.y, ex, ey, bPal, t * 0.5 * fk, b.x * 0.017 + Math.floor(run.t * 8), 1.2);
       }
     }
     g.restore();

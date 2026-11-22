@@ -9,7 +9,7 @@
 import './seed.mjs';
 import { Run } from '../js/game/run.js';
 import { WeaponInst } from '../js/game/weapon.js';
-import { makeWord } from '../js/data/words.js';
+import { makeWord, ELEMENTS, blendElementPalette, evaluate } from '../js/data/words.js';
 import { makeRng } from '../js/core/util.js';
 import { Renderer } from '../js/ui/render.js';
 import { motionPose } from '../js/game/motions.js';
@@ -233,6 +233,108 @@ sec('適応品質と静的レイヤー (1.66)');
   ok(renderer._static && renderer._static.canvas === null, '静的レイヤーはフォールバック状態');
   ok(renderer.drawErrorCount === 0, `描画の例外 ${renderer.drawErrorCount} 件`);
   console.log(`  品質段階 0→3 / 装飾ゲート / 静的レイヤーのフォールバックを確認`);
+}
+
+sec('属性パレットと複合属性 (1.67)');
+{
+  const hex = /^#[0-9a-f]{6}$/i;
+  // 全属性に 3 層 (core/mid/outer) があり、color は互換で残る。
+  for (const [key, el] of Object.entries(ELEMENTS)) {
+    ok(hex.test(el.core || '') && hex.test(el.mid || '') && hex.test(el.outer || ''),
+      `${key} に 3 層パレットが無い`);
+    ok(hex.test(el.color || ''), `${key} の color (互換) が無い`);
+  }
+  // 判別性: 似ていた色同士が別色になっている。
+  ok(ELEMENTS.ice.mid !== ELEMENTS.water.mid, '氷と水の mid が同じ');
+  const warm = [ELEMENTS.light.mid, ELEMENTS.gold.mid, ELEMENTS.thunder.mid];
+  ok(new Set(warm).size === 3, '光・金・雷の mid が区別できない');
+  ok(ELEMENTS.ice.mid !== ELEMENTS.water.mid && ELEMENTS.light.color !== ELEMENTS.gold.color,
+    '判別しにくい色の組が残っている');
+
+  // 複合: 火+光は「白金の芯を持つ炎」。芯は光の core、体は炎の mid、縁は光の mid。
+  const blend = blendElementPalette('fire', 'light');
+  ok(blend.core === ELEMENTS.light.core, `複合の芯が副属性になっていない: ${blend.core}`);
+  ok(blend.mid === ELEMENTS.fire.mid, '複合の体が主属性になっていない');
+  ok(blend.edge === ELEMENTS.light.mid && blend.sub === 'light', '複合の縁/副が記録されていない');
+  const plain = blendElementPalette('fire', null);
+  ok(plain.core === ELEMENTS.fire.core && plain.sub === null, '副なしは主パレットそのもの');
+
+  // 文の評価が副属性を返す (描画専用)。
+  const W = (s) => [...s].map((ch) => makeWord(ch));
+  const e1 = evaluate(W('炎聖刃'));
+  ok(e1.valid && e1.element === 'fire' && e1.subElement === 'light',
+    `炎聖刃: ${e1.element}/${e1.subElement}`);
+  const e2 = evaluate(W('炎刃'));
+  ok(e2.valid && e2.element === 'fire' && e2.subElement === null, '単属性では副は null');
+
+  // 武器の解決結果とモーションまで副属性が渡る。
+  const run = makeRun();
+  const wi = run.weapons[0];
+  wi.sentence.entries.length = 0;
+  wi.sentence.push(makeWord('炎'));
+  wi.sentence.push(makeWord('聖'));
+  const rep = run.weaponReport()[0];
+  ok(rep.res.element === 'fire' && rep.res.subElement === 'light',
+    `武器の副属性: ${rep.res.element}/${rep.res.subElement}`);
+  run.spawnEnemy('slime', { x: run.player.x + 70, y: run.player.y });
+  run.enemies.forEach((e) => { e.spawned = 1; e.hp = 1e9; });
+  for (let i = 0; i < 90; i++) run.update(1 / 60, { ax: 0, ay: 0, moving: false, angle: 0 });
+  ok(wi.lastMotion && wi.lastMotion.el === 'fire' && wi.lastMotion.elSub === 'light',
+    `モーションの副属性: ${wi.lastMotion && wi.lastMotion.el}/${wi.lastMotion && wi.lastMotion.elSub}`);
+
+  // レンダラ側: palFor はブレンドを返し、同じ組はキャッシュ (同一オブジェクト)。
+  const renderer = new Renderer(canvas);
+  const p1 = renderer.palFor('fire', 'light');
+  ok(p1.core === '#ffffff' && p1.mid === ELEMENTS.fire.mid, 'palFor の複合が違う');
+  ok(renderer.palFor('fire', 'light') === p1, 'palFor がキャッシュされていない');
+
+  // 全属性の弾・斬撃・輪・フィールド・落雷・ビーム・粒を描いても例外が出ない。
+  const els = Object.keys(ELEMENTS);
+  for (const el of els) {
+    run.bullets.push({
+      uid: 7, x: 40, y: 40, vx: 120, vy: 30, r: 5, element: el, elSub: 'light',
+      shape: 'shot', size: 1, pierce: 0, kindName: 'shot', color: ELEMENTS[el].color,
+    });
+    run.slashes.push({
+      x: 60, y: 60, a: 0.4, r: 70, arc: 1.6, life: 0.2, maxLife: 0.3, el, elSub: 'gold',
+      color: ELEMENTS[el].color, flame: el === 'fire',
+    });
+    run.rings.push({
+      x: 80, y: 80, r: 40, life: 0.2, maxLife: 0.3, el, elSub: 'ice', color: ELEMENTS[el].color,
+    });
+    run.fields.push({
+      x: 90, y: 90, r: 46, life: 2, maxLife: 4, el, elSub: 'fire', color: ELEMENTS[el].color,
+    });
+    run.beams.push({
+      x: 20, y: 100, a: 0.3, len: 120, w: 6, life: 0.2, maxLife: 0.3, el, elSub: 'light',
+      color: ELEMENTS[el].color,
+    });
+    run.particles.push({
+      x: 50, y: 90, vx: 30, vy: -20, r: 3, life: 0.4, maxLife: 0.6,
+      shape: ['ember', 'crystal', 'spark', 'bubble', 'smoke', 'leaf', 'ink', 'gust', 'dot'][els.indexOf(el) % 9],
+      el, elSub: 'dark', color: ELEMENTS[el].color,
+    });
+  }
+  run.lightnings.push({
+    x1: 10, y1: 10, x2: 90, y2: 90, life: 0.2, maxLife: 0.3, el: 'thunder', elSub: 'light', color: '#f5b301',
+  });
+  // 状態異常オーラ (燃焼・毒・冷気・凍結・気絶) も通す。
+  const foe = run.enemies[0];
+  if (foe) { foe.burn = 1; foe.poison = 1; foe.chill = 1; foe.freeze = 1; foe.stun = 1; }
+  renderer.qualityLevel = 0;
+  renderer.draw(run, null);
+  ok(renderer.drawErrorCount === 0, `全属性の描画で例外 ${renderer.drawErrorCount} 件 (${[...(renderer._drawErrors || new Map()).keys()].join(' ')})`);
+  ok(badArg === 0, `非有限の座標 ${badArg} 件`);
+
+  // 品質低下で属性の層と個数が間引かれる。
+  ok(renderer.elLayers() === 3 && renderer.elCount(5) === 5, 'full では間引かない');
+  renderer.qualityLevel = 3;
+  ok(renderer.decor === 'off' && renderer.elLayers() === 1, 'off では 1 層になる');
+  ok(renderer.elCount(5) < 5 && renderer.elCount(5) >= 1, 'off では個数が減る (最低 1)');
+  renderer.draw(run, null);
+  ok(renderer.drawErrorCount === 0, `低品質の描画で例外 ${renderer.drawErrorCount} 件`);
+  renderer.qualityLevel = 0;
+  console.log('  パレット完全性 / 複合 (火+光) / 全属性の描画 / 品質での間引きを確認');
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

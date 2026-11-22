@@ -6,7 +6,7 @@
 
 import { TAU, clamp, dist2, angleDiff } from '../core/util.js';
 import { ENEMIES, enemyWords, enemySentence } from '../data/enemies.js';
-import { ELEMENTS } from '../data/words.js?v=1.66';
+import { ELEMENTS } from '../data/words.js?v=1.67';
 
 let eUid = 0;
 
@@ -150,6 +150,7 @@ export function makeField(x, y, r, dmg, opts = {}) {
     life: opts.life ?? 0.3,
     maxLife: opts.life ?? 0.3,
     element: opts.element || 'none',
+    elSub: opts.elSub || null,
     burn: opts.burn || 0,
     poison: opts.poison || 0,
     chill: opts.chill || 0,

@@ -17,18 +17,18 @@
 import {
   RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
   SHAPE_WORDS, isShapeWord,
-} from './words.core.js?v=1.66';
-import { CATEGORIES, ELEMENTS } from './words.core.js?v=1.66';
+} from './words.core.js?v=1.67';
+import { CATEGORIES, ELEMENTS, elementPalette, blendElementPalette } from './words.core.js?v=1.67';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
   PREDICATE_CONNECTORS, isAdnominal, isConnector, formAfter,
 } from './words.connect.js';
 import { poolOfText, posOfText } from './words.pool.js';
-import { rankMul } from './ranks.js?v=1.66';
+import { rankMul } from './ranks.js?v=1.67';
 
 export {
-  CATEGORIES, ELEMENTS, PHRASE_BONUS, CONNECTORS, CONNECT_ORDER, POS,
+  CATEGORIES, ELEMENTS, elementPalette, blendElementPalette, PHRASE_BONUS, CONNECTORS, CONNECT_ORDER, POS,
   TAIL_UNMODIFIABLE, SHAPE_WORDS, isShapeWord,
   PREDICATE_CONNECTORS, isAdnominal, isConnector,
   // 武器語 (基本武器) の一覧と判定。UI もここを通る。
@@ -447,6 +447,7 @@ export function evaluate(words, opt = {}) {
     verbs: 0,
     predicated: false,
     element: 'none',
+    subElement: null,
     fx: {},
     idiom: null,
     phraseBonus: 0,
@@ -637,10 +638,22 @@ export function evaluate(words, opt = {}) {
   }
 
   // 属性は重みの最大のものを採用。すべて重み 1 なので立ち上がり数で決まる。
+  // 同点は最初に現れた属性を主にする (従来どおり)。次点の属性は副属性
+  // (subElement) として返す。副属性は描画専用で、威力・状態異常・主属性の
+  // 決定には一切使わない (「聖なる炎」の見た目を複合にするためだけの情報)。
   let element = 'none';
-  let best = 0;
-  for (const [k, v] of Object.entries(elWeight)) {
-    if (v > best) { best = v; element = k; }
+  let subElement = null;
+  {
+    const order = new Map();
+    let oi = 0;
+    for (let i = 0; i < segs.length; i++) {
+      const w = WORDS[segs[i]];
+      if (w && w.el && !order.has(w.el)) order.set(w.el, oi++);
+    }
+    const ranked = Object.entries(elWeight)
+      .sort((a, b) => (b[1] - a[1]) || ((order.get(a[0]) ?? 99) - (order.get(b[0]) ?? 99)));
+    if (ranked.length) element = ranked[0][0];
+    if (ranked.length > 1) subElement = ranked[1][0];
   }
 
   // 熟語 (合成語) ボーナス。文面中の重ならない熟語 **すべて** に乗る。
@@ -980,6 +993,7 @@ export function evaluate(words, opt = {}) {
     grade,
     gradeInfo: GRADES[grade],
     element,
+    subElement,
     fx,
     idiom,
     idioms,

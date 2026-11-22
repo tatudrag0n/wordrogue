@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.66';
+} from '../data/words.js?v=1.67';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.66';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.67';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.66';
-import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.66';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.66';
+import { WeaponInst } from './weapon.js?v=1.67';
+import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.67';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.67';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -993,6 +993,7 @@ export class Run {
         r: r + this._fxRand() * (rMax - r),
         life: l, maxLife: l,
         color, grav: o.grav || 0, drag: o.drag ?? 3.2,
+        el: o.el || null, elSub: o.elSub || null,
         shape: o.shape || 'dot',
         char: o.chars ? o.chars[i % o.chars.length] : (o.char || null),
         rot: (this._fxRand() - 0.5) * 0.6,
@@ -1981,7 +1982,7 @@ export class Run {
       // 鉄球が掃く瞬間。球のいまの場所に、短い当たりと掃きの弧。
       this.fields.push(makeField(ball.x, ball.y, 15 * (st.size || 1) * (p.stats.size || 1), st.dmg, {
         life: 0.12,
-        element: st.el,
+        element: st.el, elSub: st.elSub || null,
         knock: st.knock || 90,
       }));
       // 掃きの弧。球の進行方向 (接線) に短く走る一閃。
@@ -1989,7 +1990,7 @@ export class Run {
         x: ball.x, y: ball.y,
         a: a + Math.PI / 2, r: 26 * (st.size || 1), arc: 1.9,
         life: 0.15, maxLife: 0.15,
-        color: (ELEMENTS[st.el] || ELEMENTS.none).color, el: st.el,
+        color: (ELEMENTS[st.el] || ELEMENTS.none).color, el: st.el, elSub: st.elSub || null,
         hit: new Set(),
       });
       this.burst(ball.x, ball.y, 4, (ELEMENTS[st.el] || ELEMENTS.none).color, {
@@ -2164,7 +2165,7 @@ export class Run {
           this.slashes.push({
             x: h.x, y: h.y, a: h.face, r: reach, arc: 1.7,
             life: 0.2, maxLife: 0.2,
-            color: h.color, el: h.el, hit: new Set(),
+            color: h.color, el: h.el, elSub: h.st.elSub || null, hit: new Set(),
           });
           // 式神の一閃。小さな輪がはじける。
           this.rings.push({
@@ -2380,7 +2381,7 @@ export class Run {
                   : el === 'earth' || el === 'steel' ? 'shard'
                     : 'ink';
     this.burst(b.x, b.y, 14, c, {
-      spd: 280, life: 0.55, r: 2.6, shape: fxShape, drag: 3,
+      spd: 280, life: 0.55, r: 2.6, shape: fxShape, drag: 3, el, elSub: b.st?.elSub || null,
     });
     this.burst(b.x, b.y, 8, '#f0c25a', {
       spd: 320, spdMin: 100, life: 0.3, r: 1.6, shape: 'spark', drag: 5,

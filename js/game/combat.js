@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS } from '../data/words.js?v=1.66';
-import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.66';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.66';
+import { ELEMENTS, elementPalette } from '../data/words.js?v=1.67';
+import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.67';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.67';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -55,15 +55,24 @@ const ELEM_FX = {
   none:    { shape: 'spark',   n: 5, spd: 180, life: 0.28, r: 1.8 },
 };
 
-/** 命中の粒を属性の形で散らす。会心は輪も足す。 */
+/** 命中の粒を属性の形で散らす。会心は輪も足す。粒は el を持ち、描画側が
+ *  3 層パレット (芯/体/縁) で層にして描く。 */
 function elementHitFx(run, e, el, crit) {
   if (!run || !run.burst) return;
   const fx = ELEM_FX[el] || ELEM_FX.none;
   const info = ELEMENTS[el] || ELEMENTS.none;
+  const pal = elementPalette(el);
   run.burst(e.x, e.y, crit ? fx.n + 3 : fx.n, info.color, {
     spd: fx.spd, spdMin: fx.spd * 0.25, life: fx.life, r: fx.r,
-    shape: fx.shape, drag: 4.2, grav: fx.grav || 0,
+    shape: fx.shape, drag: 4.2, grav: fx.grav || 0, el,
   });
+  // 芯の色の小さな粒を重ねる。単色の散らしに「熱い中心」を作る。
+  if (el !== 'none') {
+    run.burst(e.x, e.y, crit ? 4 : 3, pal.core, {
+      spd: fx.spd * 0.55, spdMin: fx.spd * 0.15, life: fx.life * 0.7, r: fx.r * 0.62,
+      shape: fx.shape === 'smoke' ? 'smoke' : 'dot', drag: 4.6, grav: fx.grav || 0, el,
+    });
+  }
   // 白い芯。紙の上でも「当たった」瞬間が読める。
   run.burst(e.x, e.y, crit ? 3 : 2, '#fffdf7', {
     spd: 110, spdMin: 30, life: 0.16, r: 1.3, shape: 'dot', drag: 7,
@@ -114,6 +123,8 @@ export function fireWeapon(run, wi, res) {
   p.castFlash = 0.18;
   p.castDir = aim;
   p.castColor = elInfo.color;
+  p.castEl = el;
+  p.castElSub = res.subElement || null;
   p.castKind = kind;
   run.audio.cast?.(el, kind, wi.def.id);
 
@@ -187,7 +198,7 @@ function doFlame(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = st.range * 1.35 * st.size;
   const arc = Math.min(2.0, 1.15 + (st.area || 0) / 100);
-  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.38, maxLife: 0.38, color: elInfo.color, el, flame: true, hit: new Set() });
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.38, maxLife: 0.38, color: elInfo.color, el, elSub: st.elSub || null, flame: true, hit: new Set() });
   run.burst(p.x + Math.cos(aim) * reach * 0.55, p.y + Math.sin(aim) * reach * 0.55, 20, elInfo.color, {
     a: aim, spread: arc, spd: 180, spdMin: 40, life: 0.5, r: 3, shape: 'ember', drag: 2, grav: -35,
   });
@@ -252,7 +263,7 @@ function doBolt(run, wi, st, aim, el, elInfo) {
     run.lightnings.push({
       x1: x, y1: y - 320, x2: x, y2: y,
       life: 0.22, maxLife: 0.22,
-      color: elInfo.color, el,
+      color: elInfo.color, el, elSub: st.elSub || null,
     });
     run.burst(x, y, 6, elInfo.color, {
       spd: 160, spdMin: 40, life: 0.24, r: 2, shape: 'spark', drag: 5,
@@ -274,7 +285,7 @@ function doGust(run, wi, st, aim, el, elInfo) {
   run.slashes.push({
     x: p.x, y: p.y, a: aim, r: reach, arc,
     life: 0.3, maxLife: 0.3,
-    color: elInfo.color, el, hit: new Set(),
+    color: elInfo.color, el, elSub: st.elSub || null, hit: new Set(),
   });
   run.burst(p.x + Math.cos(aim) * reach * 0.5, p.y + Math.sin(aim) * reach * 0.5, 8, elInfo.color, {
     a: aim, spread: arc, spd: 240, life: 0.34, r: 2.6, shape: 'gust', drag: 4,
@@ -345,7 +356,7 @@ function doWave(run, wi, st, aim, el, elInfo) {
     baseAim: aim,
     reach,
     life: 0.45, maxLife: 0.45,
-    color: elInfo.color, el,
+    color: elInfo.color, el, elSub: st.elSub || null,
     st: { ...st },
     hit: new Set(),
   });
@@ -377,7 +388,7 @@ function doThrust(run, wi, st, aim, el, elInfo) {
   // 踏み込みの細い弧。突いた軌道を読ませる (モーションがあればその軌跡)。
   const motion = wi.motion || null;
   if (motion) syncMotionShape(motion, reach * 0.6, 0.5);
-  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach * 0.6, arc: 0.5, life: 0.2, maxLife: 0.2, color: elInfo.color, el, thrust: true, motion, hit: new Set() });
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach * 0.6, arc: 0.5, life: 0.2, maxLife: 0.2, color: elInfo.color, el, elSub: st.elSub || null, thrust: true, motion, hit: new Set() });
   hitSector(run, p.x, p.y, aim, reach * 0.6, 0.5, st, el, run.slashes.at(-1).hit);
   p.vx += Math.cos(aim) * 60; p.vy += Math.sin(aim) * 60;
   run.burst(p.x + Math.cos(aim) * reach * 0.5, p.y + Math.sin(aim) * reach * 0.5, 5, elInfo.color, { a: aim, spread: 0.3, spd: 300, spdMin: 100, life: 0.2, r: 1.6, shape: 'spark', drag: 6 });
@@ -390,7 +401,7 @@ function doSmash(run, wi, st, aim, el, elInfo) {
   const reach = st.range * 0.8 * st.size;
   const cx = p.x + Math.cos(aim) * reach, cy = p.y + Math.sin(aim) * reach;
   const rad = (st.range * 0.55 + (st.area || 0)) * st.size;
-  run.rings.push({ x: cx, y: cy, r: rad, life: 0.3, maxLife: 0.3, color: elInfo.color, el, star: true, hit: new Set() });
+  run.rings.push({ x: cx, y: cy, r: rad, life: 0.3, maxLife: 0.3, color: elInfo.color, el, elSub: st.elSub || null, star: true, hit: new Set() });
   run.decals.push({ x: cx, y: cy, r: rad * 0.6, color: elInfo.color, life: 2, maxLife: 2, seed: (cx * 0.013 + cy * 0.017) % 1 });
   const fx = ELEM_FX[el] || ELEM_FX.none;
   run.burst(cx, cy, 12, elInfo.color, { spd: fx.spd * 1.3, spdMin: 60, life: 0.4, r: fx.r, shape: 'shard', drag: 4 });
@@ -409,7 +420,7 @@ function doSweep(run, wi, st, aim, el, elInfo) {
   const arc = clamp((st.arc || 1.8) * 1.9, 2.6, 3.6);
   const motion = wi.motion || null;
   if (motion) syncMotionShape(motion, reach, arc);
-  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, wide: true, motion, hit: new Set() });
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, elSub: st.elSub || null, wide: true, motion, hit: new Set() });
   const fx = ELEM_FX[el] || ELEM_FX.none;
   run.burst(p.x + Math.cos(aim) * reach * 0.8, p.y + Math.sin(aim) * reach * 0.8, 8, elInfo.color, { a: aim, spread: arc, spd: fx.spd * 1.3, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5 });
   hitSector(run, p.x, p.y, aim, reach, arc, st, el, run.slashes.at(-1).hit);
@@ -420,7 +431,7 @@ function doSweep(run, wi, st, aim, el, elInfo) {
 function doVortex(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = st.range * 1.6 * st.size;
-  run.rings.push({ x: p.x, y: p.y, spiral: true, inward: true, turns: 2.4, baseAim: aim, reach, life: 0.6, maxLife: 0.6, color: elInfo.color, el, st: { ...st }, hit: new Set() });
+  run.rings.push({ x: p.x, y: p.y, spiral: true, inward: true, turns: 2.4, baseAim: aim, reach, life: 0.6, maxLife: 0.6, color: elInfo.color, el, elSub: st.elSub || null, st: { ...st }, hit: new Set() });
   run.audio.tone({ freq: 240, type: 'sine', dur: 0.3, vol: 0.06, slide: -0.8 });
 }
 
@@ -428,7 +439,7 @@ function doVortex(run, wi, st, aim, el, elInfo) {
 function doNova(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = st.range * 1.5 * st.size;
-  run.rings.push({ x: p.x, y: p.y, nova: true, reach, life: 0.5, maxLife: 0.5, color: elInfo.color, el, st: { ...st, freeze: Math.max(st.freeze || 0, 0.5), chill: Math.max(st.chill || 0, 0.3) }, hit: new Set() });
+  run.rings.push({ x: p.x, y: p.y, nova: true, reach, life: 0.5, maxLife: 0.5, color: elInfo.color, el, elSub: st.elSub || null, st: { ...st, freeze: Math.max(st.freeze || 0, 0.5), chill: Math.max(st.chill || 0, 0.3) }, hit: new Set() });
   run.burst(p.x, p.y, 12, elInfo.color, { spd: 220, spdMin: 60, life: 0.4, r: 2.2, shape: 'crystal', drag: 4 });
   run.audio.tone({ freq: 900, type: 'sine', dur: 0.2, vol: 0.06, slide: -1.2 });
 }
@@ -438,9 +449,9 @@ function doBlaze(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = st.range * 1.35 * st.size;
   const arc = Math.min(2.0, 1.15 + (st.area || 0) / 100);
-  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.38, maxLife: 0.38, color: elInfo.color, el, flame: true, hit: new Set() });
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.38, maxLife: 0.38, color: elInfo.color, el, elSub: st.elSub || null, flame: true, hit: new Set() });
   const cx = p.x + Math.cos(aim) * reach * 0.6, cy = p.y + Math.sin(aim) * reach * 0.6;
-  run.fields.push(makeField(cx, cy, reach * 0.5, st.dmg * 0.5, { life: 2.2, element: el, burn: Math.max(st.burn || 0, 2) }));
+  run.fields.push(makeField(cx, cy, reach * 0.5, st.dmg * 0.5, { life: 2.2, element: el, elSub: st.elSub || null, burn: Math.max(st.burn || 0, 2) }));
   run.decals.push({ x: cx, y: cy, r: reach * 0.4, color: elInfo.color, life: 2.4, maxLife: 2.4, seed: (cx * 0.011 + cy * 0.013) % 1 });
   run.burst(cx, cy, 16, elInfo.color, { a: aim, spread: arc, spd: 160, spdMin: 40, life: 0.5, r: 2.6, shape: 'ember', drag: 2, grav: -30 });
   for (const e of run.enemies) {
@@ -460,7 +471,7 @@ function doVenom(run, wi, st, aim, el, elInfo) {
   const cx = tgt ? tgt.x : p.x + Math.cos(aim) * st.range;
   const cy = tgt ? tgt.y : p.y + Math.sin(aim) * st.range;
   const rad = (st.range * 0.5 + (st.area || 0)) * st.size;
-  run.fields.push(makeField(cx, cy, rad, st.dmg * 0.5, { life: 2.6, element: el, poison: Math.max(st.poison || 0, 2) }));
+  run.fields.push(makeField(cx, cy, rad, st.dmg * 0.5, { life: 2.6, element: el, elSub: st.elSub || null, poison: Math.max(st.poison || 0, 2) }));
   run.burst(cx, cy, 10, elInfo.color, { spd: 90, spdMin: 20, life: 0.7, r: 2.6, shape: 'bubble', drag: 3, grav: -20 });
   run.audio.tone({ freq: 320, type: 'sine', dur: 0.2, vol: 0.05, slide: -0.6 });
 }
@@ -551,8 +562,8 @@ function doReap(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = st.range * 1.2 * st.size;
   const arc = st.arc || 1.9;
-  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, reap: true, hit: new Set() });
-  run.rings.push({ x: p.x, y: p.y, reap: true, reach, life: 0.5, maxLife: 0.5, color: elInfo.color, el, st: { ...st, lifesteal: Math.max(st.lifesteal || 0, 0.05) }, hit: new Set() });
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, elSub: st.elSub || null, reap: true, hit: new Set() });
+  run.rings.push({ x: p.x, y: p.y, reap: true, reach, life: 0.5, maxLife: 0.5, color: elInfo.color, el, elSub: st.elSub || null, st: { ...st, lifesteal: Math.max(st.lifesteal || 0, 0.05) }, hit: new Set() });
   const fx = ELEM_FX[el] || ELEM_FX.none;
   run.burst(p.x + Math.cos(aim) * reach * 0.7, p.y + Math.sin(aim) * reach * 0.7, 7, elInfo.color, { a: aim, spread: arc, spd: fx.spd, spdMin: 60, life: fx.life, r: fx.r, shape: 'ink', drag: 5 });
   hitSector(run, p.x, p.y, aim, reach, arc, st, el, run.slashes.at(-1).hit);
@@ -569,7 +580,7 @@ function doFlurry(run, wi, st, aim, el, elInfo) {
   for (let i = 0; i < 3; i++) {
     const a = aim + (i - 1) * 0.22;
     const r = reach * (0.8 + i * 0.12);
-    run.slashes.push({ x: p.x, y: p.y, a, r, arc, life: 0.22, maxLife: 0.22, color: elInfo.color, el, motion, hit: new Set() });
+    run.slashes.push({ x: p.x, y: p.y, a, r, arc, life: 0.22, maxLife: 0.22, color: elInfo.color, el, elSub: st.elSub || null, motion, hit: new Set() });
     hitSector(run, p.x, p.y, a, r, arc, { ...st, dmg: st.dmg * 0.45 }, el, run.slashes.at(-1).hit);
   }
   run.burst(p.x + Math.cos(aim) * reach * 0.7, p.y + Math.sin(aim) * reach * 0.7, 6, elInfo.color, { a: aim, spread: arc, spd: fx.spd * 1.2, spdMin: 60, life: fx.life, r: fx.r, shape: fx.shape, drag: 5 });
@@ -585,7 +596,7 @@ function doSnip(run, wi, st, aim, el, elInfo) {
   const st2 = { ...st, crit: Math.min(1, (st.crit || 0) + 0.25) };
   for (const side of [-1, 1]) {
     const a = aim + side * 0.5;
-    run.slashes.push({ x: p.x, y: p.y, a, r: reach, arc, life: 0.24, maxLife: 0.24, color: elInfo.color, el, motion, hit: new Set() });
+    run.slashes.push({ x: p.x, y: p.y, a, r: reach, arc, life: 0.24, maxLife: 0.24, color: elInfo.color, el, elSub: st.elSub || null, motion, hit: new Set() });
     hitSector(run, p.x, p.y, a, reach, arc, st2, el, run.slashes.at(-1).hit);
   }
   run.burst(p.x + Math.cos(aim) * reach * 0.8, p.y + Math.sin(aim) * reach * 0.8, 6, elInfo.color, { a: aim, spread: 0.6, spd: 260, spdMin: 80, life: 0.2, r: 1.6, shape: 'spark', drag: 6 });
@@ -599,9 +610,9 @@ function doGrind(run, wi, st, aim, el, elInfo) {
   const arc = clamp((st.arc || 1.8) * 1.4, 2.0, 3.0);
   const motion = wi.motion || null;
   if (motion) syncMotionShape(motion, reach, arc);
-  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.4, maxLife: 0.4, color: elInfo.color, el, wide: true, motion, hit: new Set() });
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.4, maxLife: 0.4, color: elInfo.color, el, elSub: st.elSub || null, wide: true, motion, hit: new Set() });
   const cx = p.x + Math.cos(aim) * reach * 0.6, cy = p.y + Math.sin(aim) * reach * 0.6;
-  run.fields.push(makeField(cx, cy, reach * 0.55, st.dmg * 0.4, { life: 1.2, element: el, knock: st.knock }));
+  run.fields.push(makeField(cx, cy, reach * 0.55, st.dmg * 0.4, { life: 1.2, element: el, elSub: st.elSub || null, knock: st.knock }));
   hitSector(run, p.x, p.y, aim, reach, arc, st, el, run.slashes.at(-1).hit);
   run.audio.tone({ freq: 140, type: 'sawtooth', dur: 0.2, vol: 0.06, slide: 0.6 });
 }
@@ -687,7 +698,7 @@ function doSlash(run, wi, st, aim, el, elInfo) {
       arc,
       life, maxLife: life,
       color: elInfo.color,
-      el,
+      el, elSub: st.elSub || null,
       motion: m,
       vstyle,
       hit: hitOwn ? new Set() : null,
@@ -740,7 +751,7 @@ function doWhip(run, wi, st, aim, el, elInfo) {
       baseAim: aim + (n === 1 ? 0 : (i / (n - 1) - 0.5) * fan),
       reach,
       life, maxLife: life,
-      color: elInfo.color, el,
+      color: elInfo.color, el, elSub: st.elSub || null,
       st: { ...st },
       hit: new Set(),
     });
@@ -776,7 +787,7 @@ function doDual(run, wi, st, aim, el, elInfo) {
     run.slashes.push({
       x: p.x, y: p.y, a: aim, r: reach, arc,
       life, maxLife: life,
-      color: elInfo.color, el, motion,
+      color: elInfo.color, el, elSub: st.elSub || null, motion,
       hit: new Set(),
       spin: true,
     });
@@ -807,7 +818,7 @@ function doDual(run, wi, st, aim, el, elInfo) {
   run.slashes.push({
     x: p.x, y: p.y, a: a0, r: reach, arc,
     life, maxLife: life,
-    color: elInfo.color, el, motion,
+    color: elInfo.color, el, elSub: st.elSub || null, motion,
     hit: new Set(),
   });
   run.audio.slash();
@@ -935,7 +946,7 @@ function chainOnce(run, st, el) {
       x1: ex, y1: ey, x2: tgt.x, y2: tgt.y,
       life: 0.24, maxLife: 0.24,
       color: (ELEMENTS[el] || {}).color || '#1b6ca8',
-      el,
+      el, elSub: st.elSub || null,
     });
     run.damage(tgt, st, {
       crit: rollCrit(st),
@@ -966,7 +977,7 @@ function doBeam(run, wi, st, aim, el, elInfo) {
       x: ox, y: oy, a: aim, len, w: wdt,
       life: 0.3, maxLife: 0.3,
       color: elInfo?.color || '#e8a30a',
-      el,
+      el, elSub: st.elSub || null,
     });
     beams.push({ ox, oy });
   }

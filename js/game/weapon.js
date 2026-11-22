@@ -14,8 +14,8 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, VERB_SLASH_STYLE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.66';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.66';
+import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, VERB_SLASH_STYLE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.67';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.67';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
@@ -345,6 +345,10 @@ export class WeaponInst {
     // 「炎の右手」で炎の斬撃になる、という意味の対応。
     const handEl = ps.handElement && ps.handElement !== 'none' ? ps.handElement : null;
     const effEl = e.element !== 'none' ? e.element : (handEl || 'none');
+    // 副属性は描画専用。主属性が文から決まったときだけ、文の次点属性を副にする。
+    // 威力・状態異常・主属性の決定には使わない (blendElementPalette 参照)。
+    const subEl = (e.element !== 'none' && e.subElement && e.subElement !== effEl)
+      ? e.subElement : null;
     // 属性語を頭にした文は、動詞が無くても不成文ではない。ただ撃てない。
     const pending = e.valid && this.pendingSpecialVerb(e);
     const active = e.valid && !pending;
@@ -362,6 +366,8 @@ export class WeaponInst {
       gradeInfo: e.gradeInfo,
       element: effEl,
       elementInfo: ELEMENTS[effEl] || ELEMENTS.none,
+      subElement: subEl,
+      subElementInfo: subEl ? (ELEMENTS[subEl] || ELEMENTS.none) : null,
       kind,
       shape,
       tail,
@@ -450,6 +456,8 @@ export class WeaponInst {
     st.reflect = st.reflect || 0;
     // 弾・分裂・フィールドが参照する属性。
     st.el = effEl;
+    // 副属性も描画用に stats へ載せる (弾・斬撃・輪が b.st / s.st から拾う)。
+    st.elSub = subEl;
     // 描画用の形。
     st.shape = shape;
     st.kind = kind;

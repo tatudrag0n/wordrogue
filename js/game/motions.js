@@ -360,6 +360,7 @@ export function startWeaponMotion(wi, res, aim, opt = {}) {
     draw: !!base.draw,
     color: res?.elementInfo?.color || '#d4a94e',
     el: res?.element || 'none',
+    elSub: res?.subElement || null,
     shape: res?.shape || 'blade',
     glyph: res?.tail || wi?.def?.glyph || wi?.def?.name || '刃',
   };

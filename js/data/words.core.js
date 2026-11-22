@@ -17,23 +17,59 @@
 //   静 + かな = 静かな / 滑 + らかな = 滑らかな / 凍 + える = 凍える
 // ============================================================================
 
-/** 属性定義。色と纏わる状態異常の紐付け。 */
+/**
+ * 属性定義。色と纏わる状態異常の紐付け。
+ *
+ * 色は 3 層パレットで持つ (1.67〜)。
+ *   core  … 芯。いちばん明るい色 (炎の芯・稲妻の芯・氷の照り)。
+ *   mid   … 体の色。`color` と同じ値で、従来の単色参照はこちらを見る。
+ *   outer … 縁・外側。いちばん濃い色 (炎の外周・闇の底)。
+ * 描画は「芯が明るく、外が濃い」層構造で描く。単色ベタには戻さない。
+ * `color` は互換のために残す (UI 表示・バースト等の既存参照)。
+ *
+ * 判別性のための色分け (1.67 で見直し):
+ *   ice は淡いシアン、water は深い青。thunder は白芯+黄、light は白金、
+ *   gold は飴色の金。黄土系どうし・青どうしが潰れないようにしてある。
+ */
 export const ELEMENTS = {
-  none:     { name: '無属性', color: '#6b7383', glow: 'rgba(107,115,131,.34)', status: null },
-  fire:     { name: '火', color: '#d9480f', glow: 'rgba(217,72,15,.34)', status: 'burn' },
-  ice:      { name: '氷', color: '#1971c2', glow: 'rgba(25,113,194,.34)', status: 'chill' },
-  thunder:  { name: '雷', color: '#c2870a', glow: 'rgba(194,135,10,.38)', status: 'shock' },
-  poison:   { name: '毒', color: '#4f9b13', glow: 'rgba(79,155,19,.34)', status: 'poison' },
-  light:    { name: '光', color: '#d9a406', glow: 'rgba(217,164,6,.42)', status: 'none' },
-  dark:     { name: '闇', color: '#5f3dc4', glow: 'rgba(95,61,196,.34)', status: 'none' },
-  earth:    { name: '土', color: '#a3703f', glow: 'rgba(163,112,63,.34)', status: 'none' },
-  wind:     { name: '風', color: '#2f9e8f', glow: 'rgba(47,158,143,.34)', status: 'none' },
-  nature:   { name: '草', color: '#2f9e44', glow: 'rgba(47,158,68,.34)', status: 'poison' },
-  steel:    { name: '鉄', color: '#64748b', glow: 'rgba(100,116,139,.34)', status: 'none' },
-  blood:    { name: '血', color: '#c92a46', glow: 'rgba(201,42,70,.34)', status: 'none' },
-  water:    { name: '水', color: '#1c7ed6', glow: 'rgba(28,126,214,.34)', status: 'chill' },
-  gold:     { name: '金', color: '#e8a30a', glow: 'rgba(232,163,10,.42)', status: 'none' },
+  none:     { name: '無属性', color: '#6b7383', core: '#eef1f4', mid: '#6b7383', outer: '#3d434e', glow: 'rgba(107,115,131,.34)', status: null },
+  fire:     { name: '火', color: '#d9480f', core: '#fff1a8', mid: '#f76707', outer: '#c22500', glow: 'rgba(217,72,15,.34)', status: 'burn' },
+  ice:      { name: '氷', color: '#1595b8', core: '#e8fbff', mid: '#4dd8e6', outer: '#0e7fa8', glow: 'rgba(21,149,184,.34)', status: 'chill' },
+  thunder:  { name: '雷', color: '#f5b301', core: '#ffffff', mid: '#ffd43b', outer: '#e8930c', glow: 'rgba(245,179,1,.38)', status: 'shock' },
+  poison:   { name: '毒', color: '#4f9b13', core: '#e9fac8', mid: '#82c91e', outer: '#3f7d24', glow: 'rgba(79,155,19,.34)', status: 'poison' },
+  light:    { name: '光', color: '#deb02a', core: '#ffffff', mid: '#ffecb3', outer: '#d9a406', glow: 'rgba(222,176,42,.42)', status: 'none' },
+  dark:     { name: '闇', color: '#5f3dc4', core: '#b197fc', mid: '#7048c9', outer: '#2a1458', glow: 'rgba(95,61,196,.34)', status: 'none' },
+  earth:    { name: '土', color: '#a3703f', core: '#e6c9a8', mid: '#b07d4f', outer: '#6e4a22', glow: 'rgba(163,112,63,.34)', status: 'none' },
+  wind:     { name: '風', color: '#2f9e8f', core: '#e6fffb', mid: '#38d9c0', outer: '#177a6a', glow: 'rgba(47,158,143,.34)', status: 'none' },
+  nature:   { name: '草', color: '#2f9e44', core: '#e7fbd0', mid: '#51cf66', outer: '#1f7a33', glow: 'rgba(47,158,68,.34)', status: 'poison' },
+  steel:    { name: '鉄', color: '#64748b', core: '#ffffff', mid: '#c3ccd6', outer: '#4a5a6d', glow: 'rgba(100,116,139,.34)', status: 'none' },
+  blood:    { name: '血', color: '#c92a46', core: '#ffa8b5', mid: '#e0314f', outer: '#8f1d33', glow: 'rgba(201,42,70,.34)', status: 'none' },
+  water:    { name: '水', color: '#1864ab', core: '#a5d8ff', mid: '#2273c4', outer: '#0b4f8a', glow: 'rgba(24,100,171,.34)', status: 'chill' },
+  gold:     { name: '金', color: '#e8890a', core: '#ffe066', mid: '#f59f00', outer: '#a86e00', glow: 'rgba(232,137,10,.42)', status: 'none' },
 };
+
+/**
+ * 属性の 3 層パレットを返す。未知の属性は none に落とす。
+ * @returns {{el:string, core:string, mid:string, outer:string, color:string}}
+ */
+export function elementPalette(el) {
+  const e = ELEMENTS[el] || ELEMENTS.none;
+  return { el: ELEMENTS[el] ? el : 'none', core: e.core, mid: e.mid, outer: e.outer, color: e.color };
+}
+
+/**
+ * 複合属性のパレット。形は主属性 (primary) で作り、副属性 (sub) の色を
+ * 芯 (core) と縁 (edge) に混ぜる。「聖なる炎」= 火が主・光が副なら、
+ * 白金の芯を持つ炎になる。副が無い/主と同じなら主のパレットそのまま。
+ * ゲームバランスには一切触れない、描画専用の合成。
+ * @returns {{el:string, sub:string|null, core:string, mid:string, outer:string, color:string, edge:string}}
+ */
+export function blendElementPalette(primary, sub) {
+  const base = elementPalette(primary);
+  if (!sub || sub === 'none' || sub === base.el) return { ...base, sub: null, edge: base.outer };
+  const sp = elementPalette(sub);
+  return { ...base, sub: sp.el, core: sp.core, edge: sp.mid };
+}
 
 /** 語の種類。UI 表示と抽選重みに使う。色は明るい紙地 (和紙) を前提にする。 */
 export const CATEGORIES = {

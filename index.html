@@ -8,7 +8,7 @@
 <meta name="robots" content="index,follow">
 <title>ワードローグ — 言葉を組んで、武器にする。</title>
 <link rel="canonical" href="https://tatudrag0n.github.io/wordrogue/">
-<link rel="stylesheet" href="css/style.css?v=1.63">
+<link rel="stylesheet" href="css/style.css?v=1.64">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>刀</text></svg>">
 <link rel="apple-touch-icon" href="assets/logo-180.png">
 
@@ -260,17 +260,32 @@
       <p class="title-tag">言葉を組んで、武器にする。</p>
 
       <div class="title-menu">
-        <button class="btn btn-primary btn-lg" id="btnStart">はじめる</button>
-        <button class="btn" id="btnStages">ステージ選択</button>
-        <button class="btn" id="btnHowto">遊び方</button>
-        <button class="btn" id="btnTutorial">チュートリアル</button>
-        <button class="btn" id="btnGrow">強化</button>
-        <button class="btn" id="btnWords">書庫</button>
-        <button class="btn" id="btnDict">辞書</button>
-        <button class="btn" id="btnRank">ランキング</button>
-        <button class="btn" id="btnSettings">設定</button>
-        <a class="btn" href="feedback.html" style="text-decoration:none;display:inline-block">フィードバック</a>
-        <a class="btn btn-donate" href="donate.html" style="text-decoration:none;display:inline-block">支援する</a>
+        <button class="btn btn-primary btn-lg title-start" id="btnStart">はじめる</button>
+        <div class="title-group">
+          <p class="title-group-label">冒険</p>
+          <div class="title-group-btns">
+            <button class="btn" id="btnStages">ステージ選択</button>
+            <button class="btn" id="btnGrow">強化</button>
+            <button class="btn" id="btnWords">書庫</button>
+          </div>
+        </div>
+        <div class="title-group">
+          <p class="title-group-label">情報</p>
+          <div class="title-group-btns">
+            <button class="btn" id="btnHowto">遊び方</button>
+            <button class="btn" id="btnTutorial">チュートリアル</button>
+            <button class="btn" id="btnDict">辞書</button>
+            <button class="btn" id="btnRank">ランキング</button>
+          </div>
+        </div>
+        <div class="title-group">
+          <p class="title-group-label">その他</p>
+          <div class="title-group-btns">
+            <button class="btn" id="btnSettings">設定</button>
+            <a class="btn" href="feedback.html" style="text-decoration:none;display:inline-block">フィードバック</a>
+            <a class="btn btn-donate" href="donate.html" style="text-decoration:none;display:inline-block">支援する</a>
+          </div>
+        </div>
       </div>
 
       <div class="title-record">
@@ -281,7 +296,7 @@
         <div><b id="recBroken">0</b><span>文を崩した数</span></div>
       </div>
 
-      <div class="title-version">Ver. 1.63</div>
+      <div class="title-version">Ver. 1.64</div>
     </div>
   </div>
 
@@ -293,6 +308,22 @@
         <button class="btn btn-close" data-close="stages">✕</button>
       </header>
       <div class="stage-list" id="stageList"></div>
+    </div>
+  </div>
+
+  <!-- ═══ 物語 (ステージ開始前 / ステージ選択から再読) ═══════════════════ -->
+  <div id="story" class="layer screen" hidden>
+    <div class="panel panel-story" role="dialog" aria-modal="true" aria-labelledby="storyTitle">
+      <header class="panel-head">
+        <h2 id="storyTitle">物語</h2>
+        <p class="panel-sub" id="storyChapter"></p>
+        <button class="btn btn-close" id="storyClose" type="button" title="閉じる">✕</button>
+      </header>
+      <div class="story-body" id="storyBody"></div>
+      <footer class="panel-foot">
+        <button class="btn btn-ghost" id="storySkip" type="button">スキップ</button>
+        <button class="btn btn-primary" id="storyGo" type="button">出発する</button>
+      </footer>
     </div>
   </div>
 
@@ -318,6 +349,7 @@
         <h2 id="resultTitle">ステージクリア</h2>
         <p class="panel-sub" id="resultSub"></p>
       </header>
+      <div class="result-story" id="resultStory" hidden></div>
       <div class="result-stats" id="resultStats"></div>
       <div class="result-weapons" id="resultWeapons"></div>
       <div class="result-rank" id="resultRank"></div>
@@ -1082,6 +1114,6 @@ document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }
 document.documentElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', (e) => { if (e.target?.closest?.('.sen-word, .pword, .sen-conn')) e.preventDefault(); }, false);
 </script>
-<script type="module" src="js/main.js?v=1.63"></script>
+<script type="module" src="js/main.js?v=1.64"></script>
 </body>
 </html>

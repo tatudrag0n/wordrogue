@@ -4,13 +4,14 @@
 
 import { $, el, clear, fmtNum } from '../core/util.js';
 import { STAGES } from '../data/stages.js';
+import { storyFor, chapterFor, EPILOGUE } from '../data/story.js';
 import { ENEMIES } from '../data/enemies.js';
-import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.63';
-import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.63';
+import { WEAPONS, BASIC_WEAPONS, startingWeaponsFor, KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.64';
+import { WORDS, CATEGORIES, CONNECTOR_SET, PHRASE_BONUS } from '../data/words.js?v=1.64';
 import { evaluatePart, partConnChoices } from '../game/parts.js';
 import { partEffectRows, partTotalRows } from '../game/stats.js';
 import { GrowPad } from './growpad.js';
-import { Tips } from './tips.js?v=1.63';
+import { Tips } from './tips.js?v=1.64';
 import { fetchLeaderboard } from '../core/net.js';
 import { FX_LABEL, PS_LABEL } from './labels.js';
 import {
@@ -111,6 +112,16 @@ export class Menus {
     this.tips = new Tips({ save: this.save, audio: this.audio });
     // チュートリアル。初回の 1 回だけ自動で出す (save.d.seenIntro)。
     // #tutorial が無い環境 (テストの最小 DOM) でも死なないように取っておく。
+    this.story = $('#story');
+    this.storyTitle = $('#storyTitle');
+    this.storyChapter = $('#storyChapter');
+    this.storyBody = $('#storyBody');
+    this.storyGo = $('#storyGo');
+    this.storySkip = $('#storySkip');
+    this.resultStory = $('#resultStory');
+    this._storyDone = null;
+    this._storyStage = 1;
+    this._storyReadonly = false;
     this.tutorial = $('#tutorial');
     this.tutStepEl = this.tutorial ? $('#tutStep') : null;
     this.tutSteps = this.tutorial ? [...this.tutorial.querySelectorAll('.tut-step')] : [];
@@ -236,7 +247,10 @@ export class Menus {
     });
     this.rankStage?.addEventListener('change', () => this.renderRank());
 
-    this.loadoutGo.addEventListener('click', () => { tap(); this.cb.onStart?.(this.picked.slice()); });
+    this.loadoutGo.addEventListener('click', () => { tap(); this.showStory(this.stageId, () => this.cb.onStart?.(this.picked.slice())); });
+    $('#storyGo')?.addEventListener('click', () => { tap(); this.closeStory(true); });
+    $('#storySkip')?.addEventListener('click', () => { tap(); this.closeStory(true); });
+    $('#storyClose')?.addEventListener('click', () => { tap(); this.closeStory(false); });
 
     // ── チュートリアル ──
     $('#btnTutorial')?.addEventListener('click', () => { tap(); this.show('tutorial'); });
@@ -265,6 +279,7 @@ export class Menus {
     }
     // #tutorial は DOM ごと無い環境があるので、存在するときだけ伏せる。
     if (this.tutorial) this.tutorial.hidden = true;
+    if (this.story) this.story.hidden = true;
   }
 
   /** 辞書を閉じる。ゲーム中は main.js 側で時間を戻す。 */
@@ -316,6 +331,7 @@ export class Menus {
   }
 
   back() {
+    if (this.story && !this.story.hidden) { this.closeStory(this._storyReadonly); return true; }
     if (this.tips?.isOpen()) { this.tips.close(); return true; }
     if (this.gachaVeil && !this.gachaVeil.hidden) { this.closeGacha(); return true; }
     if (this.tutorial && !this.tutorial.hidden) { this.closeTutorial(); return true; }
@@ -931,6 +947,48 @@ export class Menus {
     }
   }
 
+  // ── 物語 ──────────────────────────────────────────────────────────────
+  showStory(stageId, onDone = null, opts = {}) {
+    const data = storyFor(stageId);
+    this._storyDone = onDone;
+    this._storyStage = stageId;
+    this._storyReadonly = !!opts.readonly;
+    if (!this.story || !data) {
+      const f = this._storyDone; this._storyDone = null; f?.();
+      return false;
+    }
+    this.hideAll();
+    this.story.hidden = false;
+    const st = STAGES.find((s) => s.id === stageId);
+    if (this.storyTitle) this.storyTitle.textContent = data.title;
+    if (this.storyChapter) {
+      this.storyChapter.textContent = `${data.chapter ? data.chapter.name + ' ・ ' : ''}第 ${stageId} 戦${st ? ' ・ ' + st.name : ''}`;
+    }
+    if (this.storyBody) {
+      clear(this.storyBody);
+      data.lines.forEach((line, i) => {
+        this.storyBody.append(el('p', { class: 'story-line', style: { animationDelay: (i * 0.12) + 's' } }, line));
+      });
+    }
+    if (this.storyGo) this.storyGo.textContent = this._storyReadonly ? 'とじる' : '出発する';
+    if (this.storySkip) this.storySkip.hidden = this._storyReadonly;
+    this.audio?.uiOpen?.();
+    return true;
+  }
+
+  closeStory(proceed) {
+    if (!this.story) return;
+    this.story.hidden = true;
+    const done = this._storyDone;
+    const readonly = this._storyReadonly;
+    const stageId = this._storyStage;
+    this._storyDone = null;
+    this._storyReadonly = false;
+    if (readonly) { this.showStages(); return; }
+    if (proceed) { done?.(); return; }
+    this.showLoadout(stageId);
+  }
+
   // ── タイトル ────────────────────────────────────────────────────────────
   renderTitle() {
     const d = this.save.d;
@@ -961,6 +1019,11 @@ export class Menus {
       const locked = st.id > maxStage;
       const cleared = this.save.isCleared(st.id);
       const boss = st.boss ? ENEMIES[st.boss] : null;
+      const ch = chapterFor(st.id);
+      if (ch && st.id === ch.from) {
+        list.append(el('div', { class: 'stage-chapter' }, `${ch.name}（${ch.from}〜${ch.to}戦）`));
+      }
+      const story = storyFor(st.id);
 
       const card = el('button', {
         class: 'stage-card', type: 'button', disabled: locked,
@@ -968,15 +1031,22 @@ export class Menus {
         el('span', { class: 'stage-num' }, String(st.id)),
         el('span', { class: 'stage-meta' },
           el('div', { class: 'stage-name' }, st.name),
+          (!locked && story) ? el('div', { class: 'stage-story-title' }, story.title) : null,
           el('div', { class: 'stage-intro' }, locked ? 'まだ開いてない。' : st.intro),
           el('div', { class: 'stage-tags' },
             el('span', { class: 'tag' }, `${Math.floor(st.time / 60)}分${st.time % 60}秒`),
             boss ? el('span', { class: 'tag boss' }, boss.name) : null,
+            ch ? el('span', { class: 'tag chapter' }, ch.name) : null,
             cleared ? el('span', { class: 'tag done' }, 'クリア済み') : null,
           ),
         ),
         el('span', { class: 'stage-stars' }, cleared ? '★' : ''),
       );
+      if (!locked && story) {
+        const read = el('span', { class: 'stage-read', role: 'button', title: '物語を読む' }, '物語を読む');
+        read.addEventListener('click', (e) => { e.stopPropagation?.(); this.audio?.tap?.(); this.showStory(st.id, null, { readonly: true }); });
+        card.append(read);
+      }
       if (!locked) card.addEventListener('click', () => { this.audio?.tap?.(); this.showLoadout(st.id); });
       list.append(card);
     }
@@ -1074,6 +1144,17 @@ export class Menus {
         el('span', {}, k), el('b', {}, v)));
     }
 
+    if (this.resultStory) {
+      clear(this.resultStory);
+      const isFinal = st.id >= STAGES.length;
+      if (cleared && isFinal && EPILOGUE) {
+        this.resultStory.hidden = false;
+        this.resultStory.append(el('div', { class: 'result-story-title' }, EPILOGUE.title));
+        for (const line of EPILOGUE.lines) this.resultStory.append(el('p', { class: 'result-story-line' }, line));
+      } else {
+        this.resultStory.hidden = true;
+      }
+    }
     this.renderResultWeapons(run);
     this.setResultRank(null, localRank);
     // 共有ボタン。Web Share が使える端末だけ「共有」も出す。

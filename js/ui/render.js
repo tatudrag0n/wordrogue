@@ -5,9 +5,9 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS } from '../data/words.js?v=1.63';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.63';
-import { motionPose } from '../game/motions.js?v=1.63';
+import { ELEMENTS } from '../data/words.js?v=1.64';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.64';
+import { motionPose } from '../game/motions.js?v=1.64';
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -109,6 +109,7 @@ export class Renderer {
     this.step('screen-flash', () => this.drawScreenFlash(run));
     this.step('grain', () => this.drawGrain(run));
     this.step('vignette', () => this.drawVignette(run));
+    this.step('banner', () => this.drawBanner(run));
     this.step('motes', () => this.drawMotes(run));
     this.step('stick', () => this.drawStickUI(stick));
   }
@@ -138,6 +139,43 @@ export class Renderer {
     g.globalAlpha = 0.22 * t * k;
     g.fillStyle = rg;
     g.fillRect(0, 0, this.w, this.h);
+    g.restore();
+  }
+
+  /**
+   * 大きな告知の帯。ボス出現は暗い帯のカットインとして画面中央に出す。
+   * 点滅抑制・視差低減のときは透明度と表示を穏やかにする。
+   */
+  drawBanner(run) {
+    const b = run.banner;
+    if (!b || b.life <= 0) return;
+    const g = this.ctx;
+    const t = Math.max(0, b.life / (b.maxLife || 1));
+    const aIn = t > 0.85 ? (1 - t) / 0.15 : 1;
+    const aOut = t < 0.3 ? t / 0.3 : 1;
+    const a = Math.min(aIn, aOut) * (run.reduceFlash ? 0.88 : 1);
+    if (a <= 0.01) return;
+    const boss = b.kind === 'boss';
+    const hgt = boss ? 96 : 74;
+    const y = this.h * (boss ? 0.34 : 0.28);
+    g.save();
+    g.globalAlpha = 0.88 * a;
+    g.fillStyle = boss ? '#2a1210' : '#1c2331';
+    g.fillRect(0, y - hgt / 2, this.w, hgt);
+    g.globalAlpha = a;
+    g.fillStyle = boss ? '#e0482d' : '#c9971f';
+    g.fillRect(0, y - hgt / 2, this.w, 3);
+    g.fillRect(0, y + hgt / 2 - 3, this.w, 3);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = '#fffdf7';
+    g.font = `900 ${boss ? 36 : 28}px sans-serif`;
+    g.fillText(b.text || '', this.w / 2, b.sub ? y - 13 : y);
+    if (b.sub) {
+      g.font = '700 16px sans-serif';
+      g.fillStyle = boss ? '#f3c1b6' : '#f6d878';
+      g.fillText(b.sub, this.w / 2, y + 20);
+    }
     g.restore();
   }
 
@@ -1376,6 +1414,18 @@ export class Renderer {
         g.moveTo(p.x, p.y);
         g.lineTo(p.x - p.vx * 0.02, p.y - p.vy * 0.02);
         g.stroke();
+      } else if (shape === 'glyph') {
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate(p.rot || 0);
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = t * 0.96;
+        g.font = `900 ${Math.max(11, r * 2.1)}px sans-serif`;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillStyle = p.color;
+        g.fillText(p.char || '', 0, 0);
+        g.restore();
       } else if (shape === 'smoke') {
         g.globalAlpha = t * 0.32;
         g.beginPath();

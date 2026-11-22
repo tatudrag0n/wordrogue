@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.63';
+} from '../data/words.js?v=1.64';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.63';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.64';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.63';
-import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.63';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.63';
+import { WeaponInst } from './weapon.js?v=1.64';
+import { startWeaponMotion, motionLead, advanceWeaponMotion } from './motions.js?v=1.64';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.64';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -218,6 +218,7 @@ export class Run {
     this.bestCombo = 0;
     /** 画面全体の一瞬の色。レベルアップ・ボス出現に使う。 */
     this.screenFlash = null;
+    this.banner = null;
     this._stepT = 0;
     this.hint = '';
     this.hintT = 0;
@@ -912,6 +913,57 @@ export class Run {
     this.screenFlash = { color, life, maxLife: life };
   }
 
+  /** 画面中央の帯に出る大きな告知。ボス出現・討伐・中ボス用。 */
+  setBanner(text, sub = '', kind = 'info') {
+    const base = kind === 'boss' ? 2.4 : 1.8;
+    const life = this.reducedMotion ? Math.min(base, 1.4) : base;
+    this.banner = { text, sub, kind, life, maxLife: life };
+  }
+
+  /** 文の成立・熟語完成の祝祭。文字そのものが光って飛ぶ。 */
+  sentenceFx(wi, res, idiom) {
+    const text = res.fullText || wi.title || '';
+    if (idiom && res.evalResult?.idiom) this.pushHint(`熟語「${res.evalResult.idiom.name}」が成立した`);
+    else if (text) this.pushHint(`文が成立した「${text}」`);
+    if (this.reducedMotion) return;
+    const p = this.player;
+    const chars = [...text].filter((c) => c.trim()).slice(0, 10);
+    chars.forEach((ch, i) => {
+      const off = (i - (chars.length - 1) / 2);
+      this.particles.push({
+        x: p.x + off * 17, y: p.y - 30,
+        vx: off * 24, vy: -78 - Math.abs(off) * -6,
+        r: idiom ? 9.5 : 8, life: 0.9, maxLife: 0.9,
+        color: idiom ? '#c9971f' : '#e0482d', grav: -36, drag: 1.7,
+        shape: 'glyph', char: ch, rot: off * 0.06,
+      });
+    });
+    if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
+    this.burst(p.x, p.y, idiom ? 26 : 16, idiom ? '#e8b425' : '#f0c25a', {
+      spd: idiom ? 300 : 220, spdMin: 40, life: 0.6, r: 2, shape: 'spark', drag: 4,
+    });
+    this.rings.push({
+      x: p.x, y: p.y, r: idiom ? 66 : 46, life: 0.45, maxLife: 0.45,
+      color: idiom ? '#c9971f' : '#e0482d', hit: new Set(), thin: true,
+    });
+    if (!this.reduceFlash) this.flash(idiom ? '#e8b425' : '#f6d878', 0.26);
+    if (idiom) this.audio.phrase?.(); else this.audio.conn?.();
+  }
+
+  /** 武器の解決結果の変化を見て、成立した瞬間だけ演出する。 */
+  sentenceFxTick(wi, res) {
+    const phrase = res?.evalResult?.idiom?.phrase || null;
+    if (!wi._fxPrimed) {
+      wi._fxPrimed = true; wi._fxActive = !!res.active; wi._fxPhrase = phrase;
+      return;
+    }
+    const was = wi._fxActive;
+    wi._fxActive = !!res.active;
+    if (res.active && !was) this.sentenceFx(wi, res, !!phrase);
+    else if (res.active && phrase && phrase !== wi._fxPhrase) this.sentenceFx(wi, res, true);
+    wi._fxPhrase = phrase;
+  }
+
   burst(x, y, n, color, o = {}) {
     n = Math.round(n * (this.fxScale ?? 1));
     if (!(n > 0)) return;
@@ -931,6 +983,8 @@ export class Run {
         life: l, maxLife: l,
         color, grav: o.grav || 0, drag: o.drag ?? 3.2,
         shape: o.shape || 'dot',
+        char: o.chars ? o.chars[i % o.chars.length] : (o.char || null),
+        rot: (this._fxRand() - 0.5) * 0.6,
       });
     }
     if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
@@ -1227,6 +1281,7 @@ export class Run {
     this.midBoss = e;
     this.audio.bossWarn?.();
     this.flash('#c9971f', 0.32);
+    this.setBanner('中ボス接近', e.def.name, 'mid');
     this.pushHint(`中ボス ${e.def.name} が来る — 倒すと宝箱`);
     this.shake(8);
     return e;
@@ -1241,6 +1296,7 @@ export class Run {
     this.audio.boss();
     this.audio.bossWarn?.();
     this.flash('#b8332b', 0.55);
+    this.setBanner('警告', `${e.def.name} が現れた`, 'boss');
     this.pushHint(`${e.def.name} が来る`);
     this.shake(16);
   }
@@ -1267,6 +1323,12 @@ export class Run {
       spd: 120, spdMin: 40, life: 0.9, r: 2.0, shape: 'dot', drag: 2.5, grav: -140,
     });
     this.flash('#f1d488', 0.34);
+    if (!this.reducedMotion) {
+      this.burst(p.x, p.y - 18, 6, '#c9971f', {
+        spd: 95, spdMin: 30, life: 0.85, r: 8.5, shape: 'glyph',
+        chars: ['昇', '級'], grav: -70, drag: 2,
+      });
+    }
   }
 
   killEnemy(e, st) {
@@ -1341,6 +1403,8 @@ export class Run {
       });
       this.shake(14);
       this.audio.explode();
+      this.setBanner('中ボス討伐', e.def.name, 'mid');
+      this.flash('#e8b425', 0.32);
       this.pushHint(`中ボス ${e.def.name} を討伐 — 宝箱が落ちた`);
     }
 
@@ -1348,6 +1412,9 @@ export class Run {
       this.bossBursts.push({ x: e.x, y: e.y, life: 2.2, maxLife: 2.2, color: e.def.color || '#d39a35' });
       this.shake(26);
       this.audio.explode();
+      this.setBanner('討伐', `${e.def.name} を討ち取った`, 'boss');
+      this.flash('#e8b425', 0.4);
+      if (!this.reducedMotion) this.slowmo = Math.max(this.slowmo, 0.14);
       this.pushHint(`${e.def.name} を討伐した!`);
       this.bossVictoryPending = true;
       for (let i = 0; i < 30; i++) this.pickups.push(makePickup(e.x, e.y, 'xp', Math.ceil(e.xp / 30)));
@@ -1718,6 +1785,7 @@ export class Run {
     for (const wi of this.weapons) {
       const res = wi.resolve(this.player.stats);
       wi._res = res;
+      this.sentenceFxTick(wi, res);
       if (wi.flash > 0) wi.flash = Math.max(0, wi.flash - dt * 4);
 
       if (!res.active) {
@@ -2473,6 +2541,10 @@ export class Run {
   }
 
   fxTick(dt = 0) {
+    if (this.banner) {
+      this.banner.life -= dt;
+      if (this.banner.life <= 0) this.banner = null;
+    }
     for (const fx of this.bossBursts || []) fx.life = Math.max(0, fx.life - dt);
     this.bossBursts = (this.bossBursts || []).filter((fx) => fx.life > 0);
     if (this.bossVictoryPending && !this.bossBursts.length) {
@@ -2554,7 +2626,15 @@ export class Run {
     this.state = cleared ? 'clear' : 'dead';
     this.pendingChoices = [];
     this.onWordChoice?.([]);
-    if (cleared) { this.audio.win(); this.onClear?.(); }
+    if (cleared) {
+      const p = this.player;
+      this.burst(p.x, p.y, 30, '#e8b425', { spd: 280, spdMin: 40, life: 0.8, r: 2.4, shape: 'spark', drag: 3.5 });
+      if (!this.reducedMotion) {
+        this.burst(p.x, p.y - 16, 6, '#c9971f', { spd: 90, spdMin: 30, life: 0.9, r: 9, shape: 'glyph', chars: ['制', '覇'], grav: -60, drag: 2 });
+      }
+      this.flash('#f1d488', 0.35);
+      this.audio.win(); this.onClear?.();
+    }
   }
 
   get score() {

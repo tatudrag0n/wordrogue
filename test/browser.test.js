@@ -286,6 +286,10 @@ ok(loCards >= 4, `武器カード数: ${loCards}`);
 
 sec('ゲーム開始');
 await evalJs('document.getElementById("loadoutGo").click()');
+await sleep(300);
+ok(await evalJs('!document.getElementById("story").hidden'), '開始前に物語が表示される');
+ok(await evalJs('document.querySelectorAll("#storyBody .story-line").length >= 2'), '物語の本文が出る');
+await evalJs('document.getElementById("storyGo").click()');
 await sleep(1200);
 ok(await evalJs('!document.getElementById("hud").hidden'), 'HUD が表示された');
 const state = await evalJs('window.__wordrogue.mode');

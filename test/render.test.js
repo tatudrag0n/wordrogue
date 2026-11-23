@@ -4,7 +4,7 @@
 // 実際の draw() を最後まで通す。ブラウザが無い環境でも
 //  ・描画で例外が出ないこと
 //  ・座標に NaN / Infinity が混ざらないこと
-//  ・刃・刀・剣の軌跡 (wave / sweep / forward) がそれぞれ描かれること
+//  ・刃・刀・剣の三日月 (wave) が描かれること
 // を確かめられる。Chrome が要る browser.test.js の手前の網。
 import './seed.mjs';
 import { Run } from '../js/game/run.js';
@@ -79,7 +79,7 @@ sec('描画が最後まで通り、座標が壊れない');
   const renderer = new Renderer(canvas);
   // 軌跡の style ごとの関数が呼ばれたかを見る。
   const trails = new Set();
-  for (const name of ['drawWaveTrail', 'drawSweepTrail', 'drawArcTrail', 'drawWhipMotion']) {
+  for (const name of ['drawWaveTrail', 'drawCrescent', 'drawArcTrail', 'drawWhipMotion']) {
     const orig = Renderer.prototype[name];
     Renderer.prototype[name] = function patched(...args) {
       trails.add(name);
@@ -104,8 +104,8 @@ sec('描画が最後まで通り、座標が壊れない');
   ok(renderer.drawErrorCount === 0, `描画の例外 ${renderer.drawErrorCount} 件 (${[...(renderer._drawErrors || new Map()).keys()].join(' ')})`);
   ok(badArg === 0, `非有限の座標 ${badArg} 件`);
   ok(trails.has('drawWaveTrail'), '刃の斬撃波が描かれていない');
-  ok(trails.has('drawSweepTrail'), '刀の薙ぎが描かれていない');
-  ok(trails.has('drawArcTrail'), '剣・槌・爪の軌跡が描かれていない');
+  ok(trails.has('drawCrescent'), '三日月が描かれていない');
+  ok(trails.has('drawArcTrail'), '槌・爪の軌跡が描かれていない');
   ok(phases.has('strike') && phases.has('follow') && phases.has('recover'),
     `モーションの局面が描かれていない: ${[...phases].join(' ')}`);
   console.log(`  ${frames} フレーム / 描画 ${[...used.values()].reduce((a, b) => a + b, 0)} 回 / 軌跡 ${[...trails].join(' ')}`);
@@ -174,11 +174,11 @@ sec('武器の絵は真上から見た形 (銃は銃身の軸で上下対称)');
 }
 
 
-sec('武器固有の描画 (居合・鋸・鋏・射撃/詠唱モーション) が呼ばれる');
+sec('武器固有の描画 (鋸・鋏・射撃/詠唱/投擲モーション) が呼ばれる');
 {
   const renderer = new Renderer(canvas);
   const called = new Set();
-  for (const name of ['drawIaiTrail', 'drawSawTrail', 'drawSnipTrail', 'drawMotionCasters']) {
+  for (const name of ['drawSawTrail', 'drawSnipTrail', 'drawMotionCasters', 'drawCrescent']) {
     const orig = Renderer.prototype[name];
     Renderer.prototype[name] = function patched(...args) { called.add(name); return orig.apply(this, args); };
   }
@@ -187,7 +187,8 @@ sec('武器固有の描画 (居合・鋸・鋏・射撃/詠唱モーション) �
     weaponIds: ['tachi'],
   });
   run.weapons.length = 0;
-  for (const id of ['tachi', 'saw', 'scissors', 'gun', 'staff']) {
+  // 弾 (throw)・光 (beam)・雷 (bolt) の手元モーションもここで通す。
+  for (const id of ['tachi', 'saw', 'scissors', 'gun', 'staff', 'bomb', 'beam', 'thunder']) {
     const wi = new WeaponInst(id, 2);
     if (wi.def.tail) wi.sentence.push(makeWord(wi.def.tail));
     run.weapons.push(wi);
@@ -199,7 +200,7 @@ sec('武器固有の描画 (居合・鋸・鋏・射撃/詠唱モーション) �
     renderer.draw(run, null);
   }
   ok(renderer.drawErrorCount === 0, `描画の例外 ${renderer.drawErrorCount} 件`);
-  ok(called.has('drawIaiTrail'), '刀の居合が描かれていない');
+  ok(called.has('drawCrescent'), '刀の三日月が描かれていない');
   ok(called.has('drawSawTrail'), '鋸の押し引きが描かれていない');
   ok(called.has('drawSnipTrail'), '鋏の二段挟みが描かれていない');
   ok(called.has('drawMotionCasters'), '射撃/詠唱モーションが描かれていない');

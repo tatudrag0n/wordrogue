@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.68';
+} from '../data/words.js?v=1.69';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.68';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.69';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.68';
-import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.68';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.68';
+import { WeaponInst } from './weapon.js?v=1.69';
+import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.69';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.69';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -1904,6 +1904,10 @@ export class Run {
       n = 4; color = '#d8d8d8'; o = { spd: 70, spdMin: 20, life: 0.4, r: 2.4, shape: 'smoke', drag: 2.5 };
     } else if (m.sig === 'cast-circle' || m.sig === 'orb-charge') {
       n = 8; o = { ...o, shape: 'dot', spd: 150 };
+    } else if (m.sig === 'beam-charge') {
+      n = 7; color = '#fff3c9'; o = { ...o, shape: 'spark', spd: 230, life: 0.24 };
+    } else if (m.sig === 'bolt-call') {
+      n = 8; color = '#ffe066'; o = { ...o, shape: 'spark', spd: 280, life: 0.2 };
     } else if (m.sig === 'whip-crack' || m.sig === 'chain-link-wave') {
       n = 6; color = '#fff3c9';
     } else if (m.sig === 'iai-flash') {

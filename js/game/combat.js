@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS, elementPalette } from '../data/words.js?v=1.68';
-import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.68';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.68';
+import { ELEMENTS, elementPalette } from '../data/words.js?v=1.69';
+import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.69';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.69';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -562,7 +562,11 @@ function doReap(run, wi, st, aim, el, elInfo) {
   const p = run.player;
   const reach = st.range * 1.2 * st.size;
   const arc = st.arc || 1.9;
-  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, elSub: st.elSub || null, reap: true, hit: new Set() });
+  // 牙の所作 (顎の開閉と小さな二連の三日月) を描くため、モーションを載せる。
+  // 当たり判定・威力・間隔は従来どおり (見た目だけ)。
+  const motion = wi.motion || null;
+  if (motion) syncMotionShape(motion, reach, arc);
+  run.slashes.push({ x: p.x, y: p.y, a: aim, r: reach, arc, life: 0.3, maxLife: 0.3, color: elInfo.color, el, elSub: st.elSub || null, reap: true, motion, hit: new Set() });
   run.rings.push({ x: p.x, y: p.y, reap: true, reach, life: 0.5, maxLife: 0.5, color: elInfo.color, el, elSub: st.elSub || null, st: { ...st, lifesteal: Math.max(st.lifesteal || 0, 0.05) }, hit: new Set() });
   const fx = ELEM_FX[el] || ELEM_FX.none;
   run.burst(p.x + Math.cos(aim) * reach * 0.7, p.y + Math.sin(aim) * reach * 0.7, 7, elInfo.color, { a: aim, spread: arc, spd: fx.spd, spdMin: 60, life: fx.life, r: fx.r, shape: 'ink', drag: 5 });

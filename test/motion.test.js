@@ -15,8 +15,8 @@ import { Run } from '../js/game/run.js';
 import { makeRng } from '../js/core/util.js';
 import { BASE_PLAYER } from '../js/game/stats.js';
 import {
-  WEAPON_MOTIONS, GLYPH_MOTION, motionKey, motionWindup, motionLead, motionDuration,
-  startWeaponMotion, motionPose, weaponStyle, syncMotionShape, swingCurve,
+  WEAPON_MOTIONS, GLYPH_MOTION, SHAPE_MOTION, motionKey, motionWindup, motionLead, motionDuration,
+  startWeaponMotion, motionPose, weaponStyle, syncMotionShape, swingCurve, crescentGeom,
 } from '../js/game/motions.js';
 import { attackShape } from '../js/game/combat.js';
 
@@ -158,7 +158,7 @@ sec('戦闘中にモーションが実際に進む');
   console.log(`  6 秒 / 攻撃 ${wi.motionSeq} 回 / モーション ${sawMotion} フレーム / 局面 ${[...phases].join(' ')}`);
 }
 
-sec('武器種ごとにモーションの作り方が変わる (刃は飛ぶ / 刀は左右 / 剣は前方)');
+sec('武器種ごとにモーションの作り方が変わる (刃・刀・剣は三日月を飛ばす)');
 {
   const styles = {};
   for (const d of Object.values(WEAPONS)) {
@@ -167,8 +167,8 @@ sec('武器種ごとにモーションの作り方が変わる (刃は飛ぶ / �
     styles[d.id] = startWeaponMotion(wi, res, 0.6, { interval: 1 / Math.max(0.05, res.stats.rate) }).style;
   }
   ok(styles.sword === 'wave', `刃が斬撃を飛ばす動きになっていない: ${styles.sword}`);
-  ok(styles.tachi === 'sweep', `刀が左右の薙ぎになっていない: ${styles.tachi}`);
-  ok(styles.longsword === 'forward', `剣が前方の斬りになっていない: ${styles.longsword}`);
+  ok(styles.tachi === 'wave', `刀が三日月を飛ばす動きになっていない: ${styles.tachi}`);
+  ok(styles.longsword === 'wave', `剣が三日月を飛ばす動きになっていない: ${styles.longsword}`);
   ok(styles.greatblade === 'smash' && styles.hammer === 'smash', '斧・槌が打撃になっていない');
   ok(styles.claw === 'claw' && styles.fang === 'bite' && styles.fist === 'punch', '爪・牙・拳の型が違う');
   const unknown = Object.entries(WS_KEYS()).filter(([, st]) => !st);
@@ -236,12 +236,17 @@ sec('当たり判定とモーションが同じ値を使う (実際の戦闘)');
   r.enemies.forEach((e) => { e.spawned = 1; e.hp = 1e9; });
   let bad = 0, seen = 0;
   const styles = new Set();
+  const cresKeys = new Map();
   for (let i = 0; i < 60 * 4; i++) {
     r.update(1 / 60, { ax: 0, ay: 0, moving: false, angle: 0 });
     for (const s of r.slashes) {
       if (!s.motion) continue;
       seen++;
       styles.add(s.motion.style);
+      // 1.69: 刃・刀・剣はどれも三日月 (wave)。違いは key と三日月の形 (cres)。
+      if (s.motion.cres) {
+        cresKeys.set(s.motion.key, `${s.motion.cres.len}/${s.motion.cres.thick}/${s.motion.cres.spin}`);
+      }
       // 描く半径・扇 == 当てる半径・扇。
       if (Math.abs(s.r - s.motion.reach) > 1e-9) bad++;
       if (Math.abs(s.arc - s.motion.arc) > 1e-9) bad++;
@@ -249,9 +254,11 @@ sec('当たり判定とモーションが同じ値を使う (実際の戦闘)');
   }
   ok(seen > 0, '斬撃のエフェクトが 1 度も出ていない');
   ok(bad === 0, `見た目と当たり判定がずれた斬撃 ${bad}`);
-  ok(styles.has('wave') && styles.has('sweep') && styles.has('forward'),
-    `3 種のモーションが同時に出ていない: ${[...styles].join(' ')}`);
-  console.log(`  斬撃 ${seen} 回 / 出た style ${[...styles].join(' ')}`);
+  ok(cresKeys.has('sword') && cresKeys.has('tachi') && cresKeys.has('longsword'),
+    `刃・刀・剣の三日月が同時に出ていない: ${[...cresKeys.keys()].join(' ')}`);
+  ok(new Set(cresKeys.values()).size === cresKeys.size,
+    `三日月の形が武器ごとに違わない: ${[...cresKeys.entries()].map(([k, v]) => `${k}=${v}`).join(' ')}`);
+  console.log(`  斬撃 ${seen} 回 / 出た style ${[...styles].join(' ')} / 三日月 ${[...cresKeys.keys()].join(' ')}`);
 }
 
 sec('扇が変われば、モーションも同じ扇に合わせ直す');
@@ -276,15 +283,15 @@ sec('武器ごとに signature と軌跡が違う (1.65 の差別化)');
   ok(new Set(sigs.map(([, sg]) => sg)).size === sigs.length, 'sig が重複している');
   // 軌跡ベクトル (角度・伸び・固有量) が武器ごとに一致しないこと。
   // 持ち方 (key) ごとに、実際にその key へ届く語と kind で作る。
-  // axe プロファイルは語からは greatblade に寄せられる予備形なので軌跡照合からは除く。
   const SPEC = {
     sword: ['刃', 'slash'], tachi: ['刀', 'sweep'], longsword: ['剣', 'thrust'],
-    greatblade: ['斧', 'smash'], hammer: ['槌', 'quake'], claw: ['爪', 'flurry'],
+    axe: ['斧', 'smash'], hammer: ['槌', 'quake'], claw: ['爪', 'flurry'],
     fang: ['牙', 'reap'], fist: ['拳', 'dual'], spear: ['槍', 'shard'],
     gun: ['銃', 'shot'], needle: ['針', 'shot'], bow: ['弓', 'pierce'],
     staff: ['杖', 'shadow'], chain: ['鎖', 'whip'], whip: ['鞭', 'whip'],
     throw: ['還', 'boomerang'], orb: ['玉', 'shot'], shears: ['鋏', 'snip'],
     saw: ['鋸', 'grind'], blade: [null, 'slash'], dualblades: [null, 'dual'],
+    orbit: ['環', 'orbit'], beam: ['光', 'beam'], bolt: ['雷', 'chain'],
   };
   const vecs = new Map();
   const dup = [];
@@ -352,6 +359,90 @@ sec('anticipation・ヒットストップ保持・武器固有の時間変化');
   // 加速曲線: 重い武器は序盤が遅く、軽い武器は序盤が速い。
   ok(swingCurve({ curve: 'heavy' }, 0.3) < swingCurve({ curve: 'snap' }, 0.3), '重さで加速曲線が変わっていない');
   console.log('  anticipation / held / 鋸の往復 / 鋏の二段 / 針の時間差 / 加速曲線を確認');
+}
+
+sec('名前↔モーション監査 (1.69: 実際の攻撃の型にモーションを合わせる)');
+{
+  // 語 → 持ち方。名前ではなく「その語が実際に何をする攻撃か」で決まる。
+  ok(weaponStyle('斧').key === 'axe', `斧が axe でない: ${weaponStyle('斧').key}`);
+  ok(weaponStyle('環').key === 'orbit' && weaponStyle('輪').key === 'orbit'
+    && weaponStyle('渦').key === 'orbit', '環・輪・渦が周回 (orbit) でない');
+  ok(weaponStyle('光').key === 'beam', `光が beam でない: ${weaponStyle('光').key}`);
+  ok(weaponStyle('雷').key === 'bolt', `雷が bolt でない: ${weaponStyle('雷').key}`);
+  ok(weaponStyle('弾').key === 'throw' && weaponStyle('爆').key === 'throw',
+    '弾・爆が投擲 (throw) でない');
+  // 武器定義 (末尾語が無い初期状態) からでも、定義のグリフで正しい持ち方に届く。
+  const keyOf = (id) => {
+    const wi = new WeaponInst(id);
+    return motionKey(wi, wi.resolve({ ...BASE_PLAYER }));
+  };
+  ok(keyOf('greatblade') === 'axe', `斧 (武器定義) の持ち方: ${keyOf('greatblade')}`);
+  ok(keyOf('bomb') === 'throw', `弾 (武器定義) の持ち方: ${keyOf('bomb')}`);
+  ok(keyOf('orbit') === 'orbit', `環 (武器定義) の持ち方: ${keyOf('orbit')}`);
+  ok(keyOf('beam') === 'beam', `光 (武器定義) の持ち方: ${keyOf('beam')}`);
+  ok(keyOf('thunder') === 'bolt', `雷 (武器定義) の持ち方: ${keyOf('thunder')}`);
+  // GLYPH_MOTION の全エントリが実在プロファイルを指す。
+  const dead = Object.entries(GLYPH_MOTION).filter(([, k]) => !WEAPON_MOTIONS[k]);
+  ok(dead.length === 0, `実在しないプロファイルを指す語: ${dead.map(([g]) => g).join(' ')}`);
+  // 到達不能なプロファイルが無い (どの key にも、語・形・特殊経路のどれかで届く)。
+  const reachable = new Set([
+    ...Object.values(GLYPH_MOTION), ...Object.values(SHAPE_MOTION), 'dualblades', 'blade',
+  ]);
+  const unreach = Object.keys(WEAPON_MOTIONS).filter((k) => !reachable.has(k));
+  ok(unreach.length === 0, `到達不能なプロファイル: ${unreach.join(' ')}`);
+  // 剣は突き主体: 先頭バリアントが細い突き (扇の振り幅が小さい)。
+  const lv = WEAPON_MOTIONS.longsword.variants;
+  ok(Math.abs(lv[0].to - lv[0].from) < 0.2, `剣の先頭バリアントが突きでない: ${lv[0].label}`);
+  ok(lv.some((v) => Math.abs(v.to - v.from) >= 1.9), '剣に斬撃バリアントが無い');
+  console.log('  斧=axe / 環・輪・渦=orbit / 光=beam / 雷=bolt / 弾・爆=throw / 到達不能なし');
+}
+
+sec('飛ぶ三日月 (1.69): 幾何が扇と間合いの内側に収まる');
+{
+  const WAVE_KEYS = ['sword', 'tachi', 'longsword', 'blade', 'dualblades'];
+  for (const key of WAVE_KEYS) {
+    ok(WEAPON_MOTIONS[key].style === 'wave' && !!WEAPON_MOTIONS[key].cres,
+      `${key} が三日月 (wave + cres) でない`);
+  }
+  ok(!!WEAPON_MOTIONS.fang.cres, '牙に小さな三日月の形が無い');
+  let checked = 0, out = 0, thin = 0;
+  const SPEC2 = {
+    sword: ['刃', 'slash'], tachi: ['刀', 'sweep'], longsword: ['剣', 'slash'],
+    blade: [null, 'slash'], dualblades: [null, 'dual'], fang: ['牙', 'reap'],
+  };
+  for (const [key, [glyph, kind]] of Object.entries(SPEC2)) {
+    const wi = { motionSeq: 0 };
+    const res = { kind, compound: key === 'dualblades', shape: 'blade', stats: { range: 100, arc: 1.8, size: 1, rate: 1.5 }, tail: glyph, elementInfo: { color: '#d4a94e' } };
+    const m = startWeaponMotion(wi, res, 0.3, { interval: 10 });
+    if (m.key !== key) { out++; console.log(`    ${key} を作ったつもりが ${m.key}`); continue; }
+    let prevR = -1, grew = true;
+    for (let i = 0; i <= 30; i++) {
+      m.elapsed = (i / 30) * m.duration;
+      const pose = motionPose(m);
+      const geo = crescentGeom(m, pose);
+      checked++;
+      // 中心 + 半径が間合いを超えない (見えた三日月 = 当たる範囲の内側)。
+      if (geo.d + geo.R > m.reach + 1e-6) out++;
+      // 先端の角度 (回転込み) が扇の外へ出ない。
+      const tip = Math.abs(geo.rot)
+        + Math.atan2(geo.R * Math.sin(geo.span / 2), geo.d + geo.R * Math.cos(geo.span / 2));
+      if (tip > m.arc / 2 + 1e-6) out++;
+      if (![geo.d, geo.R, geo.span, geo.thick, geo.rot].every(finite)) out++;
+      if (pose.fly > 0.3 && geo.thick <= 0) thin++;
+      if (key === 'sword') { if (geo.R < prevR - 1e-9) grew = false; prevR = geo.R; }
+    }
+    if (key === 'sword') ok(grew, '刃の三日月が飛ぶほど大きくならない');
+  }
+  ok(out === 0, `三日月が扇・間合いの外へ出た/壊れた ${out}`);
+  ok(thin === 0, `三日月の厚みが消える ${thin}`);
+  // 武器ごとの個性: 刀は幅広で扁平、剣は細く、牙は小さい。
+  ok(WEAPON_MOTIONS.tachi.cres.len > WEAPON_MOTIONS.sword.cres.len
+    && WEAPON_MOTIONS.tachi.cres.thick < WEAPON_MOTIONS.sword.cres.thick,
+    '刀の三日月が幅広・扁平でない');
+  ok(WEAPON_MOTIONS.longsword.cres.thick < WEAPON_MOTIONS.sword.cres.thick,
+    '剣の三日月が細くない');
+  ok(WEAPON_MOTIONS.fang.cres.len < WEAPON_MOTIONS.sword.cres.len, '牙の三日月が小さくない');
+  console.log(`  ${checked} 時点で三日月は扇と間合いの内側 / 刀=幅広扁平 剣=細 牙=小`);
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

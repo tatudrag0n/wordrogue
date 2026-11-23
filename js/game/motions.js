@@ -48,10 +48,9 @@ const wrapAngle = (a) => {
  * 武器語が違えば持ち方と振り方を変える。
  *   family … slash / thrust / smash / punch / ranged / cast / whip / throw
  *   style  … 軌跡の作り方。同じ斬撃でも武器種で見え方を変える。
- *     wave    … 刃そのものが刃から離れて飛ぶ斬撃波 (刃)
- *     sweep   … 体の左右へ大きく薙ぐ (刀)
- *     forward … 正面へ短く斬り込む (剣)
- *     arc     … 標準の弧 (汎用の刃)
+ *     wave    … 刃から離れて前方へ飛ぶ三日月型の斬撃波 (刃・刀・剣・汎用の刃・双剣)
+ *     sweep   … 体の左右へ大きく薙ぐ (鋸の押し引き)
+ *     arc     … 標準の弧 (鋏など、style を持たない斬撃の受け皿)
  *     smash / punch / bite / claw / thrust / ranged / cast / whip / throw
  *               … family ごとの描き方
  *
@@ -61,9 +60,12 @@ const wrapAngle = (a) => {
  */
 export const WEAPON_MOTIONS = {
   // ── 刃: 斬撃が飛ぶ。刃から離れた三日月が、扇の外周 (間合い) まで走る。──
+  //    cres … 三日月の形。len=長さ (間合い比) / thick=厚み / spin=飛翔中の回転 /
+  //    trail=後ろに残す残像三日月の数。幾何は crescentGeom が扇の内側に収める。
   sword: {
     style: 'wave', family: 'slash', duration: 0.50, windup: 0.34, impact: 0.54, follow: 0.80,
     sig: 'wave-crescent', curve: 'expo', antic: 0.18, hold: 0.04, ghosts: 2,
+    cres: { len: 1.0, thick: 0.13, spin: 0.35, trail: 3 },
     rest: -0.55, lunge: 5, weight: 0.7,
     variants: [
       { id: 'kesa', from: -1.00, to: 1.00, curve: 0.07, label: '袈裟の斬撃波' },
@@ -71,36 +73,29 @@ export const WEAPON_MOTIONS = {
       { id: 'yoko', from: -1.00, to: 1.00, curve: 0.02, label: '横一文字の斬撃波' },
     ],
   },
-  // ── 刀: 左右に斬る。扇の端から端まで振り抜く。──
+  // ── 刀: 居合の構えから、幅広で扁平な三日月を飛ばす。納刀の所作は pose 側に残る。──
   tachi: {
-    style: 'sweep', family: 'slash', duration: 0.74, windup: 0.40, impact: 0.58, follow: 0.84,
+    style: 'wave', family: 'slash', duration: 0.74, windup: 0.40, impact: 0.58, follow: 0.84,
     sig: 'iai-flash', curve: 'expo', antic: 0.30, hold: 0.09, ghosts: 1,
+    cres: { len: 1.18, thick: 0.09, spin: 0.22, trail: 2 },
     rest: -1.00, lunge: 10, weight: 1.25,
     variants: [
-      { id: 'migi', from: -1.00, to: 1.00, curve: 0.10, label: '右薙ぎ' },
-      { id: 'hidari', from: 1.00, to: -1.00, curve: -0.10, label: '左薙ぎ' },
-      { id: 'kaeshi', from: -1.00, to: 1.00, curve: 0.05, label: '返し薙ぎ' },
+      { id: 'migi', from: -1.00, to: 1.00, curve: 0.10, label: '右薙ぎの三日月' },
+      { id: 'hidari', from: 1.00, to: -1.00, curve: -0.10, label: '左薙ぎの三日月' },
+      { id: 'kaeshi', from: -1.00, to: 1.00, curve: 0.05, label: '返し薙ぎの三日月' },
     ],
   },
-  // ── 剣: 前方に斬る。正面から大きく外れない、短い斬り込み。──
+  // ── 剣: 本体は突き (kind: thrust)。バリアントも突き主体にし、
+  //    斬撃として振る (動詞で slash になった) ときは細く速い三日月が飛ぶ。──
   longsword: {
-    style: 'forward', family: 'slash', duration: 0.58, windup: 0.36, impact: 0.57, follow: 0.82,
-    sig: 'forward-thrust-mix', curve: 'snap', antic: 0.22, hold: 0.05, ghosts: 2,
+    style: 'wave', family: 'slash', duration: 0.58, windup: 0.36, impact: 0.57, follow: 0.82,
+    sig: 'crescent-thrust-mix', curve: 'snap', antic: 0.22, hold: 0.05, ghosts: 2,
+    cres: { len: 0.8, thick: 0.08, spin: 0.5, trail: 2 },
     rest: -0.40, lunge: 8, weight: 0.9,
     variants: [
+      { id: 'tsuki', from: 0.05, to: -0.05, curve: 0, label: '突き込み' },
       { id: 'shomen', from: -1.00, to: 1.00, curve: 0.04, label: '正面斬り' },
       { id: 'kiriage', from: 1.00, to: -1.00, curve: -0.04, label: '斬り上げ' },
-      { id: 'sashi', from: -1.00, to: 1.00, curve: 0.02, label: '突き込み' },
-    ],
-  },
-  greatblade: {
-    style: 'smash', family: 'smash', duration: 0.92, windup: 0.54, impact: 0.68, follow: 0.88,
-    sig: 'smash-crack', curve: 'heavy', antic: 0.34, hold: 0.10, ghosts: 1,
-    rest: -1.1, lunge: 17, weight: 1.8,
-    variants: [
-      { id: 'onigiri', from: -1.00, to: 1.00, curve: 0.12, label: '鬼斬り' },
-      { id: 'kabuto', from: 1.00, to: -1.00, curve: -0.14, label: '兜割り' },
-      { id: 'tsubame', from: -1.00, to: 1.00, curve: 0.09, label: '燕返し' },
     ],
   },
   hammer: {
@@ -120,6 +115,7 @@ export const WEAPON_MOTIONS = {
     variants: [
       { id: 'hagane', from: -1.00, to: 1.00, curve: 0.10, label: '鋼断ち' },
       { id: 'maki', from: 1.00, to: -1.00, curve: -0.07, label: '巻き割り' },
+      { id: 'jiwari', from: -1.00, to: 1.00, curve: 0.13, label: '地割り' },
     ],
   },
   claw: {
@@ -135,6 +131,8 @@ export const WEAPON_MOTIONS = {
   fang: {
     style: 'bite', family: 'bite', duration: 0.42, windup: 0.48, impact: 0.56, follow: 0.76,
     sig: 'bite-snap', curve: 'snap', antic: 0.26, hold: 0.08, ghosts: 1,
+    // 噛みつきが本体。斬撃波は小さめの二連だけを短く飛ばす (drawBiteTrail)。
+    cres: { len: 0.55, thick: 0.09, spin: 0.3, trail: 0 },
     rest: -0.35, lunge: 15, weight: 0.8,
     variants: [
       { id: 'kamitsuki', from: -1.00, to: 1.00, curve: 0.05, label: '噛みつき' },
@@ -259,8 +257,9 @@ export const WEAPON_MOTIONS = {
     ],
   },
   blade: {
-    style: 'arc', family: 'slash', duration: 0.52, windup: 0.36, impact: 0.55, follow: 0.82,
+    style: 'wave', family: 'slash', duration: 0.52, windup: 0.36, impact: 0.55, follow: 0.82,
     sig: 'arc-basic', curve: 'expo', antic: 0.18, hold: 0.04, ghosts: 2,
+    cres: { len: 0.95, thick: 0.12, spin: 0.3, trail: 2 },
     rest: -0.6, lunge: 7, weight: 0.8,
     variants: [
       { id: 'basic', from: -1.00, to: 1.00, curve: 0.06, label: '斬り下ろし' },
@@ -272,6 +271,7 @@ export const WEAPON_MOTIONS = {
   dualblades: {
     style: 'wave', family: 'slash', duration: 0.40, windup: 0.30, impact: 0.50, follow: 0.78,
     sig: 'dual-alternate', curve: 'expo', antic: 0.14, hold: 0.03, ghosts: 2,
+    cres: { len: 0.9, thick: 0.11, spin: 0.4, trail: 3 },
     rest: -0.5, lunge: 6, weight: 0.6,
     variants: [
       { id: 'migi', from: -1.00, to: 1.00, curve: 0.05, label: '右の一刀' },
@@ -279,21 +279,58 @@ export const WEAPON_MOTIONS = {
       { id: 'ren', from: -1.00, to: 1.00, curve: 0.02, label: '連刃' },
     ],
   },
+  // ── 環・輪・渦: 周回そのものが攻撃の動き。戦闘中は軌道刃として回り続けるので
+  //    (run.orbitTick / render.drawWeaponSpirits)、このプロファイルは
+  //    「刃を振る」のではなく周回の所作を表す。斬撃化したときだけ弧になる。──
+  orbit: {
+    style: 'orbit', family: 'slash', duration: 0.60, windup: 0.36, impact: 0.55, follow: 0.82,
+    sig: 'orbit-spin', curve: 'expo', antic: 0.16, hold: 0.03, ghosts: 2, spin: true,
+    rest: -0.7, lunge: 0, weight: 0.7,
+    variants: [
+      { id: 'kaiten', from: -1.00, to: 1.00, curve: 0.30, label: '旋回' },
+      { id: 'shuukai', from: 1.00, to: -1.00, curve: -0.30, label: '周回' },
+      { id: 'senpuu', from: -1.00, to: 1.00, curve: 0.18, label: '旋風' },
+    ],
+  },
+  // ── 光: 光線 (beam) を撃つ手元。詠唱サークルではなく、一点に集光して放つ。──
+  beam: {
+    style: 'cast', family: 'cast', duration: 0.52, windup: 0.50, impact: 0.56, follow: 0.80,
+    sig: 'beam-charge', curve: 'expo', antic: 0.14, hold: 0.05, ghosts: 1, glow: true,
+    rest: -0.3, lunge: 0, weight: 0.3,
+    variants: [
+      { id: 'shuukou', from: -0.20, to: 0.08, curve: 0.03, label: '集光' },
+      { id: 'houkou', from: 0.14, to: -0.06, curve: -0.02, label: '放光' },
+    ],
+  },
+  // ── 雷: 連鎖稲光 (chain) / 落雷 (bolt) を呼ぶ手元。杖の詠唱ではなく、
+  //    天へ掲げて指し示す所作で雷を落とす。──
+  bolt: {
+    style: 'cast', family: 'cast', duration: 0.48, windup: 0.46, impact: 0.54, follow: 0.78,
+    sig: 'bolt-call', curve: 'snap', antic: 0.20, hold: 0.04, ghosts: 1, glow: true,
+    rest: -0.9, lunge: 0, weight: 0.4,
+    variants: [
+      { id: 'kakage', from: -0.50, to: -0.10, curve: 0.05, label: '天へ掲げる' },
+      { id: 'sashishimesu', from: -0.15, to: 0.15, curve: 0, label: '指し示す' },
+    ],
+  },
 };
 
 
-/** 武器語 -> 持ち方。未知の武器語は形 (res.shape) から寄せる。 */
+/** 武器語 -> 持ち方。未知の武器語は形 (res.shape) から寄せる。
+ *  対応は「その語の実際の攻撃の型」に合わせる (名前↔モーション監査, 1.69):
+ *    斧は打撃 (smash) の axe、環・輪・渦は周回 (orbit)、光は光線 (beam)、
+ *    雷は連鎖/落雷 (bolt)、弾・爆は投擲 (throw)。 */
 export const GLYPH_MOTION = {
-  刃: 'sword', 剣: 'longsword', 刀: 'tachi', 斧: 'greatblade', 槌: 'hammer',
+  刃: 'sword', 剣: 'longsword', 刀: 'tachi', 斧: 'axe', 槌: 'hammer',
   牙: 'fang', 爪: 'claw', 拳: 'fist', 銃: 'gun', 杖: 'staff',
   鋏: 'shears', 鋸: 'saw',
   弓: 'bow', 槍: 'spear', 矛: 'spear', 針: 'needle', 鞭: 'whip', 鎖: 'chain',
-  環: 'blade', 輪: 'blade', 光: 'staff', 雷: 'staff', 渦: 'orb', 弾: 'orb',
-  玉: 'orb', 球: 'orb', 矢: 'bow', 爆: 'orb', 還: 'throw',
+  環: 'orbit', 輪: 'orbit', 光: 'beam', 雷: 'bolt', 渦: 'orbit', 弾: 'throw',
+  玉: 'orb', 球: 'orb', 爆: 'throw', 還: 'throw',
 };
 
 /** 形 (shape) だけ分かっているときの持ち方。 */
-const SHAPE_MOTION = {
+export const SHAPE_MOTION = {
   blade: 'blade', arrow: 'spear', shot: 'gun', orb: 'orb', bomb: 'orb',
 };
 
@@ -346,6 +383,7 @@ export function startWeaponMotion(wi, res, aim, opt = {}) {
     coil: base.coil || 0,
     recoil: base.recoil || 0,
     sig: base.sig || base.style || 'arc-basic',
+    cres: base.cres || null,
     curve: base.curve || 'expo',
     antic: base.antic || 0,
     holdF: base.hold || 0,
@@ -668,6 +706,39 @@ export function motionPose(m, dt = 0) {
     held, ghosts, speed, pulses, open, jaw, circleK, recoilK, crack, sawQ,
     sig: m.sig || '',
   };
+}
+
+/** 三日月の既定の形 (cres を持たないプロファイル用)。 */
+export const DEFAULT_CRES = { len: 0.95, thick: 0.12, spin: 0.3, trail: 2 };
+
+/**
+ * 飛ぶ三日月の幾何。pose.fly (0=手元 → 1=間合いの外周) から、
+ * 三日月の中心距離 d・半径 R・広がり span・厚み thick・回転 rot を決める。
+ * **不変条件**: 中心距離 + 半径は間合い (m.reach) を超えず、先端の角度は
+ * 扇 (m.arc) の内側に収まる。描画 (render.js) とテストが同じ値を共有する
+ * 純粋関数で、当たり判定には一切触らない (判定は従来の扇のまま)。
+ * @param {object} m startWeaponMotion の戻り値
+ * @param {object} pose motionPose の戻り値 (fly を持つもの)
+ * @returns {{d:number, R:number, span:number, thick:number, rot:number, fly:number}}
+ */
+export function crescentGeom(m, pose) {
+  const cres = (m && m.cres) || DEFAULT_CRES;
+  const reach = Math.max(1, (m && m.reach) || 1);
+  const arc = (m && m.arc > 0.02) ? m.arc : 1.8;
+  const half = arc / 2;
+  const fly = clamp(pose && Number.isFinite(pose.fly) ? pose.fly : 1, 0, 1);
+  // 飛ぶほど大きくなる。届いた瞬間、中心 + 半径 = 間合い ちょうどに重なる。
+  const R = reach * 0.30 * cres.len * (0.45 + 0.55 * fly);
+  const d = Math.max(0, (reach - R) * fly);
+  // 回転ぶんを差し引いて、先端が扇の外へ出ない広がりに丸める。
+  const dir = Math.sign(((m && m.to) || 0) - ((m && m.from) || 0)) || 1;
+  const rot = dir * cres.spin * (fly - 0.45) * 0.7;
+  const maxTip = Math.max(0.05, half * 0.94 - Math.abs(rot));
+  let span = Math.min(2.5, Math.max(0.4, arc * 0.85 * cres.len));
+  const tip = Math.atan2(R * Math.sin(span / 2), d + R * Math.cos(span / 2));
+  if (tip > maxTip && tip > 0) span *= maxTip / tip;
+  const thick = reach * cres.thick * (0.5 + 0.5 * fly);
+  return { d, R, span, thick, rot, fly };
 }
 
 /** 経過を 1 フレーム進める。寿命が切れたら false。 */

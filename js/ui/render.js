@@ -5,10 +5,10 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.68';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.68';
-import { motionPose } from '../game/motions.js?v=1.68';
-import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.68';
+import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.69';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.69';
+import { motionPose, crescentGeom } from '../game/motions.js?v=1.69';
+import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.69';
 
 const NO_GHOSTS = [];
 
@@ -4299,9 +4299,8 @@ export class Renderer {
   /**
    * 打撃の軌跡。**当たり判定の扇 (m.arc) と間合い (m.reach) の内側だけ**を描く。
    * 武器種 (style) ごとに軌跡の作り方を変える。
-   *   wave    … 刃を離れた三日月が、扇の外周まで飛ぶ (刃)
-   *   sweep   … 扇の端から端へ、左右に振り抜く (刀)
-   *   forward … 正面へ短く斬り込み、前へ線が走る (剣)
+   *   wave    … 刃を離れた三日月が、扇の外周まで飛ぶ (刃・刀・剣・汎用の刃・双剣)
+   *   sweep   … 扇の端から端へ、左右に振り抜く (鋸)
    *   arc / claw / smash / punch / bite     … それぞれの弧
    *   thrust  … 突きは弧ではなく、前へ伸びる線 (槍・矛)
    * 予備動作では軌跡を出さず、打撃の瞬間から墨と色が走る。
@@ -4550,56 +4549,127 @@ export class Renderer {
   }
 
   /**
-   * 刃 (style: wave) の斬撃波。刃を離れた三日月が、手元から扇の外周 = 間合いまで
-   * 飛びながら広がる。飛び切ったとき、弧の角度は扇 (arc)、半径は間合い (reach) に
-   * ちょうど重なるので、見えた範囲がそのまま当たる範囲になる。
+   * 三日月の形そのもの (パスだけ作る)。外周の弧と内側の弧で挟んだ細い月形で、
+   * 両端は厚みが 0 になって尖る。中心 (cx, cy) から aMid 方向へ膨らむ。
+   *   R … 外周の半径 / span … 広がり (弧の角度) / thick … 中央の厚み
+   */
+  crescentPath(g, cx, cy, R, span, thick, aMid) {
+    const N = 14;
+    g.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const th = -span / 2 + span * (i / N);
+      const a = aMid + th;
+      const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    for (let i = N; i >= 0; i--) {
+      const th = -span / 2 + span * (i / N);
+      const w = thick * Math.pow(Math.max(0, Math.cos(Math.PI * th / Math.max(span, 1e-6))), 0.75);
+      const a = aMid + th;
+      const rr = Math.max(0, R - w);
+      g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    g.closePath();
+  }
+
+  /**
+   * 三日月を属性の 3 層パレットで描く。外 (outer の滲み) → 体 (mid) → 芯 (core)。
+   * 層数は適応品質 (elLayers) と連動する。pal が無ければ mid 色から作る。
+   */
+  drawCrescent(g, cx, cy, geom, aMid, pal, color, alpha) {
+    const p = pal || { core: '#fffdf7', mid: color, outer: color };
+    const layers = this.elLayers();
+    // 外の滲み。少しだけ大きく、厚く。
+    this.crescentPath(g, cx, cy, geom.R * 1.05, geom.span, geom.thick * 1.3, aMid);
+    g.globalAlpha = alpha * 0.45;
+    g.fillStyle = p.outer;
+    g.fill();
+    if (layers >= 2) {
+      this.crescentPath(g, cx, cy, geom.R, geom.span, geom.thick, aMid);
+      g.globalAlpha = alpha * 0.92;
+      g.fillStyle = p.mid;
+      g.fill();
+    }
+    if (layers >= 3) {
+      this.crescentPath(g, cx, cy, geom.R * 0.97, geom.span, geom.thick * 0.45, aMid);
+      g.globalAlpha = alpha * 0.95;
+      g.fillStyle = p.core;
+      g.fill();
+    }
+    // 墨の縁。外周だけを細く締めて、紙の上で形を立てる。
+    g.globalAlpha = alpha * 0.5;
+    g.strokeStyle = 'rgba(28, 35, 49, .55)';
+    g.lineWidth = 1.1;
+    g.beginPath();
+    const N = 12;
+    for (let i = 0; i <= N; i++) {
+      const a = aMid - geom.span / 2 + geom.span * (i / N);
+      const x = cx + Math.cos(a) * geom.R * 1.01, y = cy + Math.sin(a) * geom.R * 1.01;
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+
+  /**
+   * 斬撃系 (style: wave) の三日月。刃から離れた三日月が、手元から扇の
+   * 外周 = 間合いまで飛びながら広がり、わずかに回転する。幾何は
+   * crescentGeom が決める (中心 + 半径 = 間合い、先端は扇の内側)。
+   * 後ろには薄い残像三日月と尾を引き、数は適応品質で間引く。
    */
   drawWaveTrail(g, s, m, pose, reach, arc, color, fade) {
-    const fly = clamp(pose.fly || 0, 0, 1);
-    const grow = clamp(fly * 1.5, 0, 1);
-    const r = reach * (0.18 + 0.82 * fly);
-    const span = arc * (1 - (1 - grow) ** 3);
-    const from = m.baseAim - span / 2;
-    const to = m.baseAim + span / 2;
+    const geom = crescentGeom(m, pose);
+    const pal = (m.el && m.el !== 'none') ? this.palFor(m.el, m.elSub || null) : null;
+    const aMid = m.baseAim + geom.rot;
+    const cx = s.x + Math.cos(m.baseAim) * geom.d;
+    const cy = s.y + Math.sin(m.baseAim) * geom.d;
     // 飛んだ跡を薄く残す。切った範囲がそのまま読める。
-    g.globalAlpha = 0.09 * fade * fly;
-    g.fillStyle = color;
-    g.beginPath();
-    g.moveTo(s.x, s.y);
-    g.arc(s.x, s.y, r, from, to);
-    g.closePath();
-    g.fill();
-    // 三日月。頭ほど濃く、後ろの波ほど薄く小さく。
-    for (let i = 2; i >= 0; i--) {
-      const rr = r * (1 - i * 0.11);
-      const w = span * (1 - i * 0.1);
-      const al = (i === 0 ? 0.95 : 0.4 / i) * fade * (0.3 + 0.7 * fly);
-      this.bandArc(s.x, s.y, rr, m.baseAim - w / 2, m.baseAim + w / 2,
-        0.95 - i * 0.18, color, al);
-    }
-    // 波の先端だけ、紙から浮かせる白。
-    if (span > 0.01) {
-      g.globalAlpha = 0.7 * fade * fly;
-      g.strokeStyle = 'rgba(255, 253, 247, .95)';
-      g.lineWidth = 1.4;
+    if (geom.fly > 0.04) {
+      g.globalAlpha = 0.07 * fade * geom.fly;
+      g.fillStyle = color;
       g.beginPath();
-      g.arc(s.x, s.y, r * 1.005, from, to);
+      g.moveTo(s.x, s.y);
+      g.arc(s.x, s.y, geom.d + geom.R, m.baseAim - arc / 2, m.baseAim + arc / 2);
+      g.closePath();
+      g.fill();
+    }
+    // 尾。手元から三日月の背へ、細い筋を 1 本 (装飾 off では出さない)。
+    if (this.decor !== 'off' && geom.fly > 0.1 && geom.d > 6) {
+      g.globalAlpha = 0.3 * fade * (1 - geom.fly * 0.4);
+      g.strokeStyle = pal ? pal.mid : color;
+      g.lineWidth = 1.3;
+      g.beginPath();
+      g.moveTo(s.x + Math.cos(m.baseAim) * geom.d * 0.25, s.y + Math.sin(m.baseAim) * geom.d * 0.25);
+      g.lineTo(cx - Math.cos(aMid) * geom.R * 0.7, cy - Math.sin(aMid) * geom.R * 0.7);
       g.stroke();
     }
+    // 残像三日月。少し遅れた fly で同じ幾何を薄く重ねる。
+    const trailN = this.decor === 'off' ? 0
+      : Math.min((m.cres && m.cres.trail) || 0, this.decor === 'reduced' ? 1 : 3);
+    for (let k = trailN; k >= 1; k--) {
+      const f2 = geom.fly - k * 0.15;
+      if (f2 <= 0.03) continue;
+      const g2 = crescentGeom(m, { ...pose, fly: f2 });
+      this.drawCrescent(g,
+        s.x + Math.cos(m.baseAim) * g2.d, s.y + Math.sin(m.baseAim) * g2.d,
+        g2, m.baseAim + g2.rot, pal, color, fade * 0.30 / k);
+    }
+    // 本体。飛ぶほど濃く、大きく。
+    this.drawCrescent(g, cx, cy, geom, aMid, pal, color,
+      fade * (0.35 + 0.65 * geom.fly));
     // 飛び出す瞬間、手元に残る残光。
-    g.globalAlpha = (1 - fly) * 0.5 * fade;
+    g.globalAlpha = (1 - geom.fly) * 0.5 * fade;
     g.fillStyle = '#fffdf7';
     g.beginPath();
-    g.arc(s.x, s.y, 2 + (1 - fly) * 5, 0, TAU);
+    g.arc(s.x, s.y, 2 + (1 - geom.fly) * 5, 0, TAU);
     g.fill();
   }
 
   /**
-   * 刀 (style: sweep) の薙ぎ。扇の端から端まで、左右へ振り抜く。
+   * 薙ぎ (style: sweep)。扇の端から端まで、左右へ振り抜く。
    * 尾は薄く、刃先ほど濃い帯で、通り過ぎた範囲をそのまま見せる。
+   * (刀は 1.69 で三日月 (wave) へ移ったので、ここへ来るのは鋸が主。)
    */
   drawSweepTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade) {
-    if (m.key === 'tachi') { this.drawIaiTrail(g, s, m, pose, reach, color, fade); return; }
     if (m.key === 'saw') { this.drawSawTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade); return; }
     const wK = 1.3;
     // 薙いだ面。刃が通った角度のあいだだけ、薄く色を敷く。
@@ -4631,50 +4701,6 @@ export class Renderer {
         g.beginPath();
         g.arc(s.x + Math.cos(a) * reach * 0.94, s.y + Math.sin(a) * reach * 0.94,
           1.2 + i * 0.7, 0, TAU);
-        g.fill();
-      }
-    }
-  }
-
-  /**
-   * 刀 (居合)。構えでは鞘元が光るだけ。抜いた瞬間は一本の細い閃光と
-   * 遅れて届く残像だけが残り、振り抜けでは刃が鞘へ戻る (pose 側で角度が戻る)。
-   */
-  drawIaiTrail(g, s, m, pose, reach, color, fade) {
-    const head = pose.angle;
-    if (pose.phase === 'strike') {
-      // 閃光: 扇の端から端までを、白の芯 1 本で貫く。
-      g.globalAlpha = 0.95 * fade;
-      g.strokeStyle = 'rgba(255, 253, 247, .97)';
-      g.lineWidth = 2.6;
-      g.beginPath();
-      g.arc(s.x, s.y, reach * 0.99, m.baseAim + m.from, head, head < m.baseAim + m.from);
-      g.stroke();
-      g.globalAlpha = 0.5 * fade;
-      g.strokeStyle = color;
-      g.lineWidth = 5.2;
-      g.beginPath();
-      g.arc(s.x, s.y, reach * 0.99, m.baseAim + m.from, head, head < m.baseAim + m.from);
-      g.stroke();
-      // 遅れて届く残像。閃光より少し内側を、細く追う。
-      for (const gh of this.ghostList(pose)) {
-        const ga = m.baseAim + gh.rel;
-        g.globalAlpha = gh.alpha * fade;
-        g.strokeStyle = 'rgba(255, 253, 247, .8)';
-        g.lineWidth = 1.2;
-        g.beginPath();
-        g.arc(s.x, s.y, reach * 0.9, m.baseAim + m.from, ga, ga < m.baseAim + m.from);
-        g.stroke();
-      }
-    } else if (pose.phase === 'follow' || pose.phase === 'recover') {
-      // 納刀: 戻る刃の細い跡と、鞘元で小さく光る「カチッ」。
-      this.bandArc(s.x, s.y, reach * 0.92, head, m.baseAim + m.from * 0.88, 0.4, color, 0.4 * fade);
-      if (pose.phase === 'recover' && pose.phaseT > 0.55) {
-        g.globalAlpha = (pose.phaseT - 0.55) * 1.4 * fade;
-        g.fillStyle = '#fffdf7';
-        g.beginPath();
-        g.arc(s.x + Math.cos(m.baseAim + m.rest) * reach * 0.18,
-          s.y + Math.sin(m.baseAim + m.rest) * reach * 0.18, 2, 0, TAU);
         g.fill();
       }
     }
@@ -4752,8 +4778,23 @@ export class Renderer {
 
   /**
    * 牙 (噛みつき)。上下の顎の弧が、開いてから一気に閉じる (pose.jaw)。
+   * 噛みつきが本体なので斬撃波は小さめの二連だけを短く飛ばす (1.69)。
+   * 幾何は crescentGeom を縮小して使い、扇と間合いの内側に収める。
    */
   drawBiteTrail(g, s, m, pose, reach, color, aFrom, head, dir, fade) {
+    if (pose.phase === 'strike' || pose.phase === 'follow') {
+      const pal = (m.el && m.el !== 'none') ? this.palFor(m.el, m.elSub || null) : null;
+      const cg = crescentGeom(m, pose);
+      for (const sgn of [-1, 1]) {
+        const aOff = sgn * (m.arc || 1.9) * 0.16;
+        const dMini = cg.d * 0.55, rMini = cg.R * 0.55;
+        this.drawCrescent(g,
+          s.x + Math.cos(m.baseAim + aOff) * dMini,
+          s.y + Math.sin(m.baseAim + aOff) * dMini,
+          { R: rMini, span: cg.span * 0.7, thick: cg.thick * 0.8 },
+          m.baseAim + aOff + cg.rot * 0.5, pal, color, 0.75 * fade);
+      }
+    }
     const jaw = pose.jaw || 0;
     const gap = 0.1 + jaw * (m.arc / 2) * 0.6;
     for (const sgn of [-1, 1]) {
@@ -5057,9 +5098,10 @@ export class Renderer {
   }
 
   /**
-   * 射撃・詠唱のモーション (wi.motion)。弾そのものは drawBullets が描くので、
+   * 射撃・詠唱・投擲のモーション (wi.motion)。弾そのものは drawBullets が描くので、
    * ここは「撃つ側」の動きだけ: 銃のマズルフラッシュ・反動・薬莢、弓の引きと
-   * 弦の震え、針の連続突き、杖の詠唱サークル、玉の集気と放出。
+   * 弦の震え、針の連続突き、杖の詠唱サークル、玉の集気と放出、光の集光、
+   * 雷を呼ぶ掲げ手、投擲の引きと放り、槍の投げ。
    * すべてプレイヤー中心・間合い (m.reach) の内側で完結する。
    */
   drawMotionCasters(run) {
@@ -5067,7 +5109,7 @@ export class Renderer {
     const p = run.player;
     for (const wi of run.weapons) {
       const m = wi.motion;
-      if (!m || (m.family !== 'ranged' && m.family !== 'cast')) continue;
+      if (!m || (m.family !== 'ranged' && m.family !== 'cast' && m.family !== 'throw')) continue;
       const pose = motionPose(m);
       if (!pose) continue;
       // 詠唱・射撃の色も 3 層パレットの mid に統一 (副属性は芯に混ざる)。
@@ -5183,6 +5225,101 @@ export class Renderer {
           g.arc(p.x + Math.cos(aa) * r1, p.y + Math.sin(aa) * r1, 1.5, 0, TAU);
           g.fill();
         }
+      } else if (m.key === 'beam') {
+        // 光: 詠唱ではなく、手元へ光を集めて一点から放つ。光線本体は drawBeams。
+        const hx = p.x + Math.cos(aim) * (p.r + 9), hy = p.y + Math.sin(aim) * (p.r + 9);
+        const charge = pose.phase === 'windup' ? pose.phaseT : 1;
+        const bPal = cPal || { core: '#fffdf7', mid: color, outer: color };
+        // 集まる光の粒。周りから手元へ寄る (seq で決定的)。
+        if (this.decor !== 'off') {
+          for (let i = 0; i < 3; i++) {
+            const aa = aim + (i - 1) * 0.8 + (m.seq || 1) * 0.9;
+            const rr = (1 - charge) * 17 + 4;
+            g.globalAlpha = 0.5 * fade * charge;
+            g.fillStyle = bPal.core;
+            g.beginPath();
+            g.arc(hx + Math.cos(aa) * rr, hy + Math.sin(aa) * rr, 1.4, 0, TAU);
+            g.fill();
+          }
+        }
+        // 芯。集光するほど明るい。
+        g.globalAlpha = (0.45 + 0.55 * charge) * fade;
+        g.fillStyle = bPal.core;
+        g.beginPath();
+        g.arc(hx, hy, 1.6 + charge * 2.4, 0, TAU);
+        g.fill();
+        if (this.elLayers() >= 2) {
+          this.drawCrossSparkle(g, hx, hy, 3 + charge * 4.5, bPal, 0.65 * fade, (m.seq || 1) * 1.3);
+        }
+        // 放出: 打撃の瞬間、手元から前方へ短い閃光 (光線本体は別描画)。
+        if (pose.impact > 0.08) {
+          g.globalAlpha = pose.impact * 0.85 * fade;
+          g.strokeStyle = 'rgba(255, 253, 247, .95)';
+          g.lineWidth = 2;
+          const len = 24 + pose.impact * Math.min(reach * 0.35, 70);
+          g.beginPath();
+          g.moveTo(hx, hy);
+          g.lineTo(hx + Math.cos(aim) * len, hy + Math.sin(aim) * len);
+          g.stroke();
+        }
+      } else if (m.key === 'bolt') {
+        // 雷: 掲げた手の上に小さな稲妻が走る。連鎖・落雷そのものは別描画。
+        // 点滅の振れ幅は flashK (reduceFlash) で抑える。
+        const bx = p.x + Math.cos(aim) * 5, by = p.y - p.r - 4;
+        const amp = (pose.phase === 'windup' ? 0.45 + pose.phaseT * 0.55 : 1)
+          * (0.55 + 0.45 * this.flashK);
+        const seed = (m.seq || 1) * 7.31;
+        const boltPts = [];
+        for (let i = 0; i <= 4; i++) {
+          const f = i / 4;
+          boltPts.push([bx + Math.sin(seed + i * 2.13) * 2.6 * (i === 0 || i === 4 ? 0 : 1),
+            by - 14 * (1 - f)]);
+        }
+        for (const [lw, col, al] of [
+          [3.2, cPal ? cPal.mid : color, 0.4],
+          [1.4, 'rgba(255, 253, 247, .95)', 0.9],
+        ]) {
+          g.globalAlpha = al * amp * fade;
+          g.strokeStyle = col;
+          g.lineWidth = lw;
+          g.beginPath();
+          boltPts.forEach(([x, y], i) => { if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+          g.stroke();
+        }
+        // 手元の火花。打撃で弾ける。
+        if (pose.impact > 0.1) {
+          g.globalAlpha = pose.impact * 0.8 * fade;
+          g.fillStyle = '#fffdf7';
+          g.beginPath();
+          g.arc(bx, by, 1.8 + pose.impact * 2, 0, TAU);
+          g.fill();
+        }
+      } else if (m.key === 'throw') {
+        // 投擲 (弾・爆・還): 予備動作で後ろへ引き、打撃で回転しながら短く飛ぶ。
+        // 飛翔体の本体 (爆弾・還り刃) は drawBullets が描くので、ここは手元の所作だけ。
+        const pull = pose.phase === 'windup' ? -7 * pose.phaseT : 0;
+        const flyD = pose.phase === 'windup' ? 0 : pose.fly * Math.min(reach * 0.25, 36);
+        const gx = p.x + Math.cos(aim) * (p.r + 8 + pull + flyD);
+        const gy = p.y + Math.sin(aim) * (p.r + 8 + pull + flyD);
+        const tAlpha = (pose.phase === 'follow' || pose.phase === 'recover')
+          ? 1 - pose.phaseT * 0.55 : 1;
+        g.save();
+        g.translate(gx, gy);
+        g.rotate(aim + (pose.spin || 0));
+        this.drawWeaponGlyph(g, m.glyph, 0.9, color, 0.9 * fade * tAlpha);
+        g.restore();
+      } else if (m.key === 'spear') {
+        // 槍 (穂先を扇状に投げる shard のとき): 引き絞って放つ所作。
+        // 穂先そのものは弾 (drawBullets) が描く。突き (thrust) の槍は斬撃側で描く。
+        const pull = pose.phase === 'windup' ? -8 * pose.phaseT
+          : pose.fly * Math.min(reach * 0.2, 26);
+        const gx = p.x + Math.cos(aim) * (p.r + 10 + pull);
+        const gy = p.y + Math.sin(aim) * (p.r + 10 + pull);
+        g.save();
+        g.translate(gx, gy);
+        g.rotate(aim);
+        this.drawWeaponGlyph(g, m.glyph, 0.95, color, 0.9 * fade);
+        g.restore();
       } else if (m.key === 'staff' || m.key === 'orb') {
         // 詠唱: 足元 (玉は手元) にサークルが広がり、打撃で放出の輪になる。
         const cx = m.key === 'orb' ? p.x + Math.cos(aim) * reach * 0.3 : p.x;

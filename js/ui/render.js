@@ -5,10 +5,11 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.73';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.73';
-import { motionPose, crescentGeom } from '../game/motions.js?v=1.73';
-import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.73';
+import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.74';
+import { FUSION_PALETTES } from '../data/fusion.js?v=1.74';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.74';
+import { motionPose, crescentGeom } from '../game/motions.js?v=1.74';
+import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.74';
 
 const NO_GHOSTS = [];
 
@@ -147,8 +148,13 @@ export class Renderer {
   // 副属性がある文では、芯と縁に副属性の色が混ざる (blendElementPalette)。
   // パレットは (主|副) の組でキャッシュし、毎フレーム生成しない。
 
-  /** 属性パレット (主+副の複合込み)。結果はキャッシュする。 */
+  /** 属性パレット (主+副の複合込み)。結果はキャッシュする。
+   *  融合 ID (蒸気・吹雪…) は融合専用パレットをそのまま返す。 */
   palFor(el, sub) {
+    if (el && FUSION_PALETTES[el]) {
+      const p = FUSION_PALETTES[el];
+      return { el, sub: null, core: p.core, mid: p.mid, outer: p.outer, color: p.color, edge: p.outer };
+    }
     if (!this._palCache) this._palCache = new Map();
     const key = `${el || 'none'}|${sub || ''}`;
     let pal = this._palCache.get(key);
@@ -1605,6 +1611,82 @@ export class Renderer {
           this.strokeWindStream(g, pts, pal, t * 0.55, 1.3);
         }
         this.drawWindVortex(g, f.x, f.y, rr * 0.3, pal, T, f.x * 0.01, t * 0.7, 1.2);
+      } else if (el === 'steam') {
+        // 蒸気の雲。白い湯気がゆっくり立ちのぼり、膨らんで消える。
+        const n = this.elCount(5);
+        for (let i = 0; i < n; i++) {
+          const ph = (T * 0.45 + i / Math.max(1, n) + (f.x % 3) * 0.11) % 1;
+          const px = f.x + Math.sin(f.x * 0.1 + i * 2.4 + T * 0.8) * rr * 0.55;
+          const py = f.y + rr * 0.55 - ph * rr * 1.25;
+          g.globalAlpha = t * 0.5 * (1 - ph * 0.6);
+          g.fillStyle = pal.core;
+          g.beginPath();
+          g.arc(px, py, 3 + ph * Math.min(15, f.r * 0.24), 0, TAU);
+          g.fill();
+        }
+      } else if (el === 'firestorm') {
+        // 炎嵐。炎の舌が風に煽られて横へ流れ、流線が炎を運ぶ。
+        const n = this.elCount(6);
+        for (let i = 0; i < n; i++) {
+          const aa = (i / Math.max(1, n)) * TAU + T * 1.1;
+          const x = f.x + Math.cos(aa) * rr * 0.85, y = f.y + Math.sin(aa) * rr * 0.85;
+          this.drawFlame(g, x, y, Math.min(19, f.r * 0.26), Math.min(6, f.r * 0.08),
+            aa + Math.PI / 2 + Math.sin(T * 3 + i) * 0.5, pal, t * 0.85,
+            Math.sin(T * 12 + i * 2.2) * 4);
+        }
+        if (this.elLayers() >= 2) {
+          const sx = f.x - rr * 0.6, sy = f.y + Math.sin(T * 1.3) * rr * 0.2;
+          const pts = this.windStreamPoints(sx, sy, 0, rr * 1.2,
+            f.x * 0.01, T, { amp: rr * 0.12, bend: -0.2 });
+          this.strokeWindStream(g, pts, pal, t * 0.4, 1.2);
+        }
+      } else if (el === 'blizzard') {
+        // 吹雪。雪片が横へ流され、合間に小さな氷の結晶が立つ。
+        const n = this.elCount(7);
+        for (let i = 0; i < n; i++) {
+          const ph = (T * 0.9 + i / Math.max(1, n) + (f.y % 3) * 0.07) % 1;
+          const px = f.x - rr + ph * rr * 2;
+          const py = f.y + Math.sin(f.y * 0.1 + i * 2.1 + T * 2.2) * rr * 0.6;
+          g.globalAlpha = t * 0.75;
+          g.fillStyle = pal.core;
+          g.beginPath();
+          g.arc(px, py, 1.6, 0, TAU);
+          g.fill();
+        }
+        if (this.elLayers() >= 3) {
+          const aa = T * 0.3;
+          this.drawCrystal(g, f.x + Math.cos(aa) * rr * 0.6, f.y + Math.sin(aa) * rr * 0.6,
+            Math.min(8, f.r * 0.12), Math.min(3, f.r * 0.045), aa + 0.6, pal, t * 0.7);
+        }
+      } else if (el === 'mud') {
+        // 泥。茶色の塊が底でゆっくり膨らんでは沈む。
+        const n = this.elCount(5);
+        for (let i = 0; i < n; i++) {
+          const aa = (i / Math.max(1, n)) * TAU + (f.x % 5) * 0.3;
+          const px = f.x + Math.cos(aa) * rr * 0.55;
+          const py = f.y + Math.sin(aa) * rr * 0.4 + rr * 0.25;
+          const pr = (2.4 + Math.sin(T * 1.6 + i * 1.7) * 1.1) * Math.max(1, f.r / 40);
+          g.globalAlpha = t * 0.6;
+          g.fillStyle = pal.mid;
+          g.beginPath();
+          g.arc(px, py, pr, 0, TAU);
+          g.fill();
+        }
+      } else if (el === 'pollution') {
+        // 汚染。毒の泡が水に溶けてゆっくり昇る (毒の場より数が多く、色は融合色)。
+        const n = this.elCount(6);
+        for (let i = 0; i < n; i++) {
+          const ph = (T * 0.6 + i / Math.max(1, n) + (f.x % 3) * 0.09) % 1;
+          const bx = f.x + Math.sin(f.x * 0.1 + i * 2.3) * rr * 0.7;
+          const by = f.y + rr * 0.6 - ph * rr * 1.2;
+          g.globalAlpha = t * 0.55 * (1 - ph * 0.5);
+          g.strokeStyle = pal.mid;
+          g.lineWidth = 1;
+          g.beginPath(); g.arc(bx, by, 2 + ph * 2.4, 0, TAU); g.stroke();
+          g.globalAlpha = t * 0.4 * (1 - ph * 0.5);
+          g.fillStyle = pal.core;
+          g.beginPath(); g.arc(bx - 0.8, by - 0.8, 0.8, 0, TAU); g.fill();
+        }
       }
     }
     g.globalAlpha = 1;

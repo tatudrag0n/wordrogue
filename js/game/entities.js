@@ -6,7 +6,7 @@
 
 import { TAU, clamp, dist2, angleDiff } from '../core/util.js';
 import { ENEMIES, enemyWords, enemySentence } from '../data/enemies.js';
-import { ELEMENTS } from '../data/words.js?v=1.73';
+import { ELEMENTS } from '../data/words.js?v=1.74';
 
 let eUid = 0;
 
@@ -158,6 +158,15 @@ export function makeField(x, y, r, dmg, opts = {}) {
     freeze: opts.freeze || 0,
     knock: opts.knock || 0,
     hitIds: new Set(),
+    // tick > 0 の場は「中にいる敵へ継続的に効く」場。敵ごとに最終ヒット
+    // 時刻を持ち、tick 秒ごとに当て直す (蒸気・吹雪・泥・汚染など融合の場)。
+    // tick = 0 の場は従来どおり、入った敵に 1 回だけ当たる。
+    tick: opts.tick || 0,
+    hitAt: null,
+    // 描画用の属性ラベル。通常は element と同じ。融合の場は融合 ID が入り、
+    // render 側が融合パレットで描く。
+    el: opts.element || 'none',
+    fusion: opts.fusion || null,
     color: (ELEMENTS[opts.element] || ELEMENTS.none).color,
     dead: false,
   };

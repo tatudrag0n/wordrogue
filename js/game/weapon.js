@@ -14,8 +14,9 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, VERB_SLASH_STYLE, COMPOUND_WEAPON_KINDS } from '../data/weapons.js?v=1.73';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.73';
+import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, VERB_SLASH_STYLE, COMPOUND_WEAPON_KINDS, COMPOSE_KINDS, COMPOSE_PAIRS, SUB_ACTION_MUL } from '../data/weapons.js?v=1.74';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.74';
+import { fusionOf } from '../data/fusion.js?v=1.74';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
@@ -76,6 +77,69 @@ function verbKindOf(text) {
   if (VERB_SHAPE[text]) return VERB_SHAPE[text];
   for (const ch of text) if (VERB_SHAPE[ch]) return VERB_SHAPE[ch];
   return null;
+}
+
+const COMPOSE_KIND_SET = new Set(COMPOSE_KINDS);
+
+/**
+ * 文の中の「動作」動詞を、出現順に型つきで並べる (動作合成用)。
+ * 数えるのは接続詞で文に結ばれた動詞だけ。熟語の一部 (爆裂 の 爆) や
+ * 受身 (斬られた = 武器が受ける動作) は、その武器の動作ではないので除く。
+ * 同じ型が続いたら 1 つにまとめる (斬り裂く = 斬撃 1 つ)。
+ * @param {object} e evaluate の結果
+ * @returns {Array<{kind:string, source:string}>}
+ */
+export function verbActions(e) {
+  const out = [];
+  for (const c of (e?.compounds || [])) {
+    if (c.phrase || c.passive) continue;
+    if (!isVerbText(c.source)) continue;
+    const k = verbKindOf(c.source);
+    if (!k || !COMPOSE_KIND_SET.has(k)) continue;
+    if (out.length && out[out.length - 1].kind === k) continue;
+    out.push({ kind: k, source: c.source });
+  }
+  return out;
+}
+
+/**
+ * 動作合成が成立するか。異なる型の動作が 2 つあり、ペアが定義済みのときだけ。
+ * 順序は文中の出現順 (先 = 主動作、後 = 副動作)。3 つ目以降は見ない。
+ * @param {object} e evaluate の結果
+ * @returns {{main:string, sub:string, mainVerb:string, subVerb:string}|null}
+ */
+export function composeOf(e) {
+  const acts = verbActions(e);
+  if (acts.length < 2) return null;
+  const [a, b] = acts;
+  if (a.kind === b.kind) return null;
+  if (!COMPOSE_PAIRS.has(`${a.kind}>${b.kind}`)) return null;
+  return { main: a.kind, sub: b.kind, mainVerb: a.source, subVerb: b.source };
+}
+
+/**
+ * 融合がステータスへ行う再配分。融合効果 (場・爆発・連鎖) のぶんを
+ * 主攻撃から少し差し引く。総威力が一方的に跳ねないための原資。
+ * combat 側の振る舞い (applyFusion) と対になる。
+ */
+function applyFusionStats(st, fusionId, kind) {
+  switch (fusionId) {
+    case 'steam': st.dmg *= 0.9; break;
+    case 'steamblast': st.dmg *= 0.9; break;
+    case 'conduct':
+      // 連鎖する攻撃は、跳躍と感電そのものが伸びる (combat 側の追加連鎖は無い)。
+      if (kind === 'chain') {
+        st.chain = (st.chain || 0) + 2;
+        st.shock = (st.shock || 0) + 0.08;
+        st.dmg *= 0.97;
+      }
+      break;
+    case 'firestorm': st.area = (st.area || 0) + 24; st.dmg *= 0.92; break;
+    case 'blizzard': st.dmg *= 0.96; st.chill = Math.max(st.chill || 0, 0.2); break;
+    case 'mud': st.dmg *= 0.95; st.knock = (st.knock || 0) * 0.4; break;
+    case 'pollution': st.dmg *= 0.92; break;
+    default: break;
+  }
 }
 
 /**
@@ -336,6 +400,11 @@ export class WeaponInst {
       const head = (e.segments || []).find((t) => WORDS[t]?.cat !== 'connect') || null;
       if (head && isVerbText(head)) kind = verbKindOf(head) || kind;
     }
+    // 動作合成。異なる型の動作動詞が 2 つあれば、先の動詞が主動作になる
+    // (「斬り貫く」= 斬撃 → 貫通)。合成が無い文は従来どおり、
+    // 最後の述語の動詞が攻撃の型を決める。
+    const compose = composeOf(e);
+    if (compose) kind = compose.main;
     const shape = verb
       ? (KIND_SHAPE[kind] || (info && info[0]) || this.def.shape || 'blade')
       : (compHit
@@ -349,6 +418,9 @@ export class WeaponInst {
     // 威力・状態異常・主属性の決定には使わない (blendElementPalette 参照)。
     const subEl = (e.element !== 'none' && e.subElement && e.subElement !== effEl)
       ? e.subElement : null;
+    // 属性融合。主・副の両属性が文の中に実在し、定義済みのペアのときだけ
+    // 発動する。定義の無いペアは従来どおり色ブレンドだけに落ちる。
+    const fusionDef = subEl ? fusionOf(effEl, subEl) : null;
     // 属性語を頭にした文は、動詞が無くても不成文ではない。ただ撃てない。
     const pending = e.valid && this.pendingSpecialVerb(e);
     const active = e.valid && !pending;
@@ -368,6 +440,8 @@ export class WeaponInst {
       elementInfo: ELEMENTS[effEl] || ELEMENTS.none,
       subElement: subEl,
       subElementInfo: subEl ? (ELEMENTS[subEl] || ELEMENTS.none) : null,
+      fusion: fusionDef ? { id: fusionDef.id, name: fusionDef.name, a: effEl, b: subEl } : null,
+      compose,
       kind,
       shape,
       tail,
@@ -466,6 +540,18 @@ export class WeaponInst {
     const multi = Math.max(1, st.count) * (1 + st.split * 0.4) * (1 + st.pierce * 0.25)
       * (1 + (st.orbit ? st.orbit * 0.9 : 0)) * (1 + st.area / 500)
       * (st.explode ? 1.4 : 1) * (1 + st.chain * 0.5);
+    // 属性融合の再配分と、動作合成の副動作を stats に刻む。
+    // combat はこの 2 つだけを見て融合効果と副動作を発動させる。
+    if (fusionDef) {
+      st.fusion = fusionDef.id;
+      st.fusionName = fusionDef.name;
+      applyFusionStats(st, fusionDef.id, kind);
+    }
+    if (compose) {
+      st.subKind = compose.sub;
+      st.subMul = SUB_ACTION_MUL;
+    }
+
     out.stats = st;
     out.dps = st.dmg * st.rate * multi * (1 + st.crit * (st.critDmg - 1));
 

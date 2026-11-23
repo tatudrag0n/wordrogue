@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.73';
+} from '../data/words.js?v=1.74';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.73';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.74';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.73';
-import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.73';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.73';
+import { WeaponInst } from './weapon.js?v=1.74';
+import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.74';
+import { fireWeapon, fireSubAction, damage as damageEnemy, attackShape } from './combat.js?v=1.74';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -173,6 +173,8 @@ export class Run {
     this.enemies = [];
     this.bullets = [];
     this.fields = [];
+    /** 動作合成の副動作。主動作から少し遅れて発動する予約。 */
+    this.pendingActions = [];
     /** 自律する分身 (式神)。武器語「分身」の武器が維持する。 */
     this.helpers = [];
     /** 庭の仕掛け。岩が障害物、湧き泉・墨の沼・突風がギミック。 */
@@ -1585,6 +1587,7 @@ export class Run {
     this.gimmickTick(d);
     this.waveTick();
     this.weaponTick(d);
+    this.pendingTick(d);
     this.helperTick(d);
     this.spiralTick(d);
     this.ringTick(d);
@@ -1856,6 +1859,21 @@ export class Run {
         wi.cd = interval;
         fireWeapon(this, wi, res);
       }
+    }
+  }
+
+  /**
+   * 動作合成の副動作の予約を進める。遅延が尽きたら、その時点の文で
+   * 再解決してから発動する (途中で文が変わっていたら発動しない)。
+   */
+  pendingTick(dt) {
+    if (!this.pendingActions.length) return;
+    for (let i = this.pendingActions.length - 1; i >= 0; i--) {
+      const pa = this.pendingActions[i];
+      pa.delay -= dt;
+      if (pa.delay > 0) continue;
+      this.pendingActions.splice(i, 1);
+      fireSubAction(this, pa.wi, pa.aim, pa.subKind);
     }
   }
 
@@ -2407,6 +2425,21 @@ export class Run {
     });
   }
 
+  /** フィールドが敵 1 体に当たる処理 (1 回きり / tick 共通)。 */
+  fieldHit(e, f) {
+    this.damage(e, {
+      dmg: f.dmg, crit: 0, critDmg: 1.5, lifesteal: 0, pierce: 99, knock: f.knock, el: f.element,
+    }, {
+      crit: false, knock: f.knock, element: f.element,
+      burn: f.burn, poison: f.poison, chill: f.chill, shock: f.shock, freeze: f.freeze,
+    });
+    if (f.knock) {
+      const a = Math.atan2(e.y - f.y, e.x - f.x);
+      e.x += Math.cos(a) * f.knock * 0.1;
+      e.y += Math.sin(a) * f.knock * 0.1;
+    }
+  }
+
   fieldTick(dt) {
     for (let i = this.fields.length - 1; i >= 0; i--) {
       const f = this.fields[i];
@@ -2414,21 +2447,26 @@ export class Run {
       if (f.attached) { f.x = this.player.x; f.y = this.player.y; }
       if (f.life <= 0) { this.fields.splice(i, 1); continue; }
 
+      if (f.tick > 0) {
+        // 継続型の場 (融合の蒸気・吹雪・泥・汚染)。中にいる敵へ
+        // tick 秒ごとに当て直すので、通り過ぎた敵にも、残った敵にも効く。
+        if (!f.hitAt) f.hitAt = new Map();
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          if (dist2(e.x, e.y, f.x, f.y) > (f.r + e.r) ** 2) continue;
+          const last = f.hitAt.get(e.uid);
+          if (last !== undefined && this.t - last < f.tick) continue;
+          f.hitAt.set(e.uid, this.t);
+          this.fieldHit(e, f);
+        }
+        continue;
+      }
+
       for (const e of this.enemies) {
         if (e.dead || f.hitIds.has(e.uid)) continue;
         if (dist2(e.x, e.y, f.x, f.y) > (f.r + e.r) ** 2) continue;
         f.hitIds.add(e.uid);
-        this.damage(e, {
-          dmg: f.dmg, crit: 0, critDmg: 1.5, lifesteal: 0, pierce: 99, knock: f.knock, el: f.element,
-        }, {
-          crit: false, knock: f.knock, element: f.element,
-          burn: f.burn, poison: f.poison, chill: f.chill, shock: f.shock, freeze: f.freeze,
-        });
-        if (f.knock) {
-          const a = Math.atan2(e.y - f.y, e.x - f.x);
-          e.x += Math.cos(a) * f.knock * 0.1;
-          e.y += Math.sin(a) * f.knock * 0.1;
-        }
+        this.fieldHit(e, f);
       }
     }
   }

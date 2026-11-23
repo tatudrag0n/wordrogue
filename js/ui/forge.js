@@ -18,12 +18,12 @@
 import { $, el, clear } from '../core/util.js';
 import {
   WORDS, CATEGORIES, CONNECTOR_LIST, possibleCompounds, evaluate, makeWord,
-} from '../data/words.js?v=1.73';
+} from '../data/words.js?v=1.74';
 import { rankIndex } from '../data/ranks.js';
 import { CONNECTORS, CONNECT_ORDER } from '../data/words.connect.js';
-import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.73';
+import { KIND_LABEL, WEAPON_MAX } from '../data/weapons.js?v=1.74';
 import { FX_LABEL, PS_LABEL } from './labels.js';
-import { keyStats } from '../game/weapon.js?v=1.73';
+import { keyStats } from '../game/weapon.js?v=1.74';
 import { SenPad } from './senpad.js';
 
 const round = (v) => (Number.isInteger(v) ? v : Math.round(v * 100) / 100);
@@ -536,6 +536,13 @@ export class Forge extends SenPad {
     for (const s of keyStats(res.stats)) {
       const cls = s.key === 'dmg' ? 'stat up' : 'stat';
       wrap.append(el('span', { class: cls }, `${s.label} ${s.value}`));
+    }
+    if (res.fusion) {
+      wrap.append(el('span', { class: 'stat fusion' }, `融合 ${res.fusion.name}`));
+    }
+    if (res.compose) {
+      wrap.append(el('span', { class: 'stat compose' },
+        `合成 ${KIND_LABEL[res.compose.main] || res.compose.main}→${KIND_LABEL[res.compose.sub] || res.compose.sub}`));
     }
     if (res.evalResult?.idiom) {
       wrap.append(el('span', { class: 'stat idom' }, `熟語 ${res.evalResult.idiom.name}`));

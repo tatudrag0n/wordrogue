@@ -3,8 +3,8 @@
 // ============================================================================
 
 import { $, el, clear, clamp, fmtNum, fmtTime } from '../core/util.js';
-import { KIND_LABEL } from '../data/weapons.js?v=1.73';
-import { WORDS, CATEGORIES } from '../data/words.js?v=1.73';
+import { KIND_LABEL } from '../data/weapons.js?v=1.74';
+import { WORDS, CATEGORIES } from '../data/words.js?v=1.74';
 import { statRows } from '../game/stats.js';
 import { FX_LABEL, fxLine as makeFxLine } from './labels.js';
 
@@ -291,6 +291,8 @@ export class Hud {
       node.title = res.active
         ? `${res.fullText} — ${res.gradeInfo.name} / `
           + `${KIND_LABEL[res.kind] || res.kind} / 威力 ${res.stats.dmg.toFixed(0)}`
+          + (res.fusion ? ` / 融合 ${res.fusion.name}` : '')
+          + (res.compose ? ` / 合成 →${KIND_LABEL[res.compose.sub] || res.compose.sub}` : '')
         : `不成文: ${res.reasonText}`;
     }
   }

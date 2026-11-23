@@ -679,6 +679,7 @@ failed += await run('test/quality.test.js');
 failed += await run('test/motion.test.js');
 failed += await run('test/render.test.js');
 failed += await run('test/meaning.test.js');
+failed += await run('test/fusion.test.js');
 failed += await run('test/forge.drag.test.js');
 failed += await run('test/grow.menu.test.js');
 failed += await run('test/worker.email.test.mjs');

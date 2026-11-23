@@ -13,8 +13,8 @@
 // level を上げるほど基礎値が伸びる。文の長さは武器レベルとは無関係で 10 文字まで。
 // ============================================================================
 
-import { WEAPON_WORD_SET } from './words.core.js?v=1.73';
-import { WORDS, weaponHeadKind } from './words.js?v=1.73';
+import { WEAPON_WORD_SET } from './words.core.js?v=1.74';
+import { WORDS, weaponHeadKind } from './words.js?v=1.74';
 
 /**
  * kind の種類と挙動:
@@ -298,6 +298,34 @@ export const VERB_SLASH_STYLE = {
   裂: 'cross', 刻: 'flurry', 葬: 'heavy', 屠: 'heavy', 戮: 'heavy',
   絶: 'exec', 終: 'exec', 祓: 'wide', 討: 'wave', 潰: 'heavy',
 };
+
+/**
+ * 動作合成 (アクションコンポジション)。
+ *
+ * 文に異なる型の動作動詞が 2 つあるとき (「斬り貫く」など)、攻撃は
+ * 「主動作 → 副動作」の連続になる。主動作は文中の出現順で先の動詞、
+ * 副動作は後の動詞。副動作は同じ攻撃サイクルの中で少し遅れて、
+ * 威力を落として実行される (間隔 = rate は変えない)。
+ * 合成できるのは COMPOSE_KINDS の型どうしで、COMPOSE_PAIRS にある
+ * 組み合わせだけ。3 つ以上の動作は合成しない (主 + 副の 2 つまで)。
+ */
+export const COMPOSE_KINDS = ['slash', 'pierce', 'thrust', 'sweep', 'smash', 'shot'];
+
+/** 合成できるペア。'主動作>副動作'。 */
+export const COMPOSE_PAIRS = new Set([
+  'slash>pierce', 'slash>thrust', 'slash>sweep', 'slash>smash', 'slash>shot',
+  'pierce>slash', 'pierce>thrust', 'pierce>sweep',
+  'thrust>slash', 'thrust>pierce', 'thrust>sweep', 'thrust>smash',
+  'sweep>slash', 'sweep>pierce', 'sweep>thrust', 'sweep>smash',
+  'smash>slash', 'smash>sweep', 'smash>thrust',
+  'shot>slash', 'shot>pierce', 'shot>thrust',
+]);
+
+/** 副動作の威力倍率。動詞を 2 つ使うコストに見合う増加 (+30% 以内) に収める。 */
+export const SUB_ACTION_MUL = 0.26;
+
+/** 副動作が主動作から遅れる秒数 (上限。実際は攻撃間隔の 45% で頭打ち)。 */
+export const SUB_ACTION_DELAY = 0.24;
 
 /**
  * 2 文字以上の武器語。**最初から選べる武器ではない** — 戦闘中に文の中で

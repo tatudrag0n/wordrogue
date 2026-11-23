@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS, elementPalette } from '../data/words.js?v=1.73';
-import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.73';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.73';
+import { ELEMENTS, elementPalette } from '../data/words.js?v=1.74';
+import { VERB_SLASH_STYLE, KIND_SHAPE, SUB_ACTION_MUL, SUB_ACTION_DELAY } from '../data/weapons.js?v=1.74';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.74';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -151,6 +151,33 @@ export function fireWeapon(run, wi, res) {
     wi.motion.elapsed = Math.max(wi.motion.elapsed, wi.motion.impactAt);
   }
 
+  dispatchKind(run, wi, st, aim, kind, el, elInfo);
+
+  // 属性融合。主攻撃のあと、融合した振る舞いが続く (蒸気の雲・爆発・
+  // 広がる感電・炎や冷気の場)。融合の定義は data/fusion.js、主攻撃側の
+  // 再配分は weapon.js の applyFusionStats。
+  if (st.fusion) applyFusion(run, wi, st, aim, kind, el, elInfo);
+
+  // 動作合成。副動作は同じ攻撃サイクルの中で少し遅れて実行する。
+  // 間隔 (rate) は変えない。実行は run.pendingTick が担う。
+  if (st.subKind && Array.isArray(run.pendingActions)) {
+    run.pendingActions.push({
+      delay: Math.min(SUB_ACTION_DELAY, interval * 0.45),
+      wi, aim, subKind: st.subKind,
+    });
+  }
+
+  // 反動。プレイヤー自身が押し戻される。
+  if (st.recoil) {
+    p.vx -= Math.cos(aim) * st.recoil * 2.6;
+    p.vy -= Math.sin(aim) * st.recoil * 2.6;
+  }
+}
+
+/**
+ * 攻撃の型ごとに実行関数へ振り分ける。主動作・副動作で共有する。
+ */
+function dispatchKind(run, wi, st, aim, kind, el, elInfo) {
   switch (kind) {
     case 'slash': doSlash(run, wi, st, aim, el, elInfo); break;
     case 'dual': doDual(run, wi, st, aim, el, elInfo); break;
@@ -188,11 +215,176 @@ export function fireWeapon(run, wi, res) {
     case 'grind': doGrind(run, wi, st, aim, el, elInfo); break;
     default: break;
   }
+}
 
-  // 反動。プレイヤー自身が押し戻される。
-  if (st.recoil) {
-    p.vx -= Math.cos(aim) * st.recoil * 2.6;
-    p.vy -= Math.sin(aim) * st.recoil * 2.6;
+/**
+ * 動作合成の副動作を実行する (run.pendingTick から呼ばれる)。
+ * その時点の文で再解決し、合成が続いているときだけ、威力を落とした
+ * ステータスで副動作の型を実行する。モーションも副動作の型で起こす
+ * (突きなら突きの所作が、斬撃の振りのあとに続いて描かれる)。
+ * @param {object} run
+ * @param {object} wi WeaponInst
+ * @param {number} aim 主動作の照準
+ * @param {string} subKind 予約された副動作の型
+ */
+export function fireSubAction(run, wi, aim, subKind) {
+  const res = wi.resolve(run.player.stats);
+  if (!res.active || res.stats.subKind !== subKind) return;
+  const st = res.stats;
+  const st2 = {
+    ...st,
+    dmg: st.dmg * (st.subMul || SUB_ACTION_MUL),
+    subKind: null,
+    fusion: null,
+    shape: KIND_SHAPE[subKind] || st.shape,
+  };
+  const el = res.element || 'none';
+  const elInfo = ELEMENTS[el] || ELEMENTS.none;
+  const interval = 1 / Math.max(0.05, st.rate || 1);
+  const shape = attackShape(st2, run.player.stats);
+  const m = startWeaponMotion(wi, { ...res, kind: subKind }, aim, {
+    interval, elapsed: 0, reach: shape.reach, arc: shape.arc,
+  });
+  // 予備動作を待たず、打撃の瞬間から見せる (主動作の直後なので間を置かない)。
+  if (m) m.elapsed = m.impactAt;
+  wi.flash = 1;
+  dispatchKind(run, wi, st2, aim, subKind, el, elInfo);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 属性融合の振る舞い
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 融合効果の焦点。最も近い敵の位置。いなければ照準の先。 */
+function fusionFocus(run, st, aim) {
+  const p = run.player;
+  const tgt = run.nearestEnemy(p.x, p.y);
+  if (tgt) return { x: tgt.x, y: tgt.y };
+  const reach = attackShape(st, p.stats).reach;
+  return {
+    x: p.x + Math.cos(aim) * reach * 0.6,
+    y: p.y + Math.sin(aim) * reach * 0.6,
+  };
+}
+
+/**
+ * 融合の「場」を置く。中にいる敵へ tick 秒ごとに当て直す継続型。
+ * 描画ラベル (f.el) は融合 ID にし、render が融合パレットで描く。
+ * ダメージと状態異常の判定は element (実属性) で行う。
+ */
+function fusionField(run, st, x, y, r, tickDmg, life, element, status, fusionId) {
+  const f = makeField(x, y, r, tickDmg, {
+    life, tick: 0.5, element, elSub: st.elSub || null, fusion: fusionId, ...status,
+  });
+  f.el = fusionId;
+  run.fields.push(f);
+  return f;
+}
+
+/**
+ * 融合した攻撃の追加の振る舞い。主攻撃 (dispatchKind) のあとに続く。
+ * どの融合も「範囲・継続・伝播」の形で効き、単体火力は weapon.js 側の
+ * 再配分 (主攻撃の微減) で相殺する。
+ */
+function applyFusion(run, wi, st, aim, kind, el, elInfo) {
+  const p = run.player;
+  const size = st.size || 1;
+  const area = st.area || 0;
+  const focus = fusionFocus(run, st, aim);
+
+  switch (st.fusion) {
+    case 'steam': {
+      // 蒸気。攻撃の届く場所に白い雲が残り、中の敵を蒸し続ける。
+      const r = (56 + area * 0.5) * size;
+      fusionField(run, st, focus.x, focus.y, r, st.dmg * 0.10, 2.4, 'fire',
+        { burn: Math.max(1, (st.burn || 0) * 0.5) }, 'steam');
+      run.burst(focus.x, focus.y, 10, '#eaf4fb', {
+        spd: 60, spdMin: 15, life: 0.7, r: 3.4, shape: 'smoke', drag: 2.5, grav: -26,
+        el: 'steam', elSub: null,
+      });
+      run.audio.tone({ freq: 480, type: 'sine', dur: 0.16, vol: 0.04, slide: -0.7 });
+      break;
+    }
+    case 'steamblast': {
+      // 蒸気爆発。熱衝撃で焦点が爆裂し、周囲を吹き飛ばす。
+      const r = (58 + area * 0.5) * size;
+      const st2 = { ...st, dmg: st.dmg * 0.45, fusion: null };
+      run.rings.push({
+        x: focus.x, y: focus.y, r, life: 0.3, maxLife: 0.3,
+        color: '#ffd8a8', el: 'steamblast', hit: new Set(), star: true,
+      });
+      run.burst(focus.x, focus.y, 14, '#ffe9c9', {
+        spd: 300, spdMin: 90, life: 0.4, r: 2.6, shape: 'smoke', drag: 3.2,
+        el: 'steamblast', elSub: null,
+      });
+      run.burst(focus.x, focus.y, 8, '#f76707', {
+        spd: 340, spdMin: 120, life: 0.3, r: 1.8, shape: 'spark', drag: 5,
+        el: 'fire', elSub: null,
+      });
+      for (const e of run.enemies) {
+        if (e.dead || dist2(e.x, e.y, focus.x, focus.y) > (r + e.r) ** 2) continue;
+        run.damage(e, st2, { crit: rollCrit(st2), knock: (st.knock || 0) + 150, element: 'fire', burn: 1 });
+      }
+      run.audio.tone({ freq: 140, type: 'square', dur: 0.18, vol: 0.08, slide: 0.5 });
+      run.shake(3);
+      break;
+    }
+    case 'conduct': {
+      // 感電。連鎖する攻撃は resolve 側で跳躍と感電が伸びている。
+      // それ以外の攻撃では、濡れた敵から小さな稲妻が跳ねる。
+      if (kind === 'chain') break;
+      const st2 = {
+        ...st, dmg: st.dmg * 0.45, fusion: null,
+        shock: Math.max(st.shock || 0, 0.25), chain: 3,
+      };
+      chainOnce(run, st2, 'thunder', focus.x, focus.y);
+      break;
+    }
+    case 'firestorm': {
+      // 炎嵐。炎が風に運ばれて広がり、焦点に燃える場が残る。
+      const r = (58 + area * 0.5) * size;
+      fusionField(run, st, focus.x, focus.y, r, st.dmg * 0.13, 2.0, 'fire',
+        { burn: Math.max(2, st.burn || 0) }, 'firestorm');
+      run.burst(focus.x, focus.y, 10, elInfo.color, {
+        spd: 190, spdMin: 50, life: 0.45, r: 2.6, shape: 'ember', drag: 2.4, grav: -30,
+        el: 'fire', elSub: 'wind',
+      });
+      break;
+    }
+    case 'blizzard': {
+      // 吹雪。冷気の場が残り、中の敵を減速させる。
+      const r = (60 + area * 0.5) * size;
+      fusionField(run, st, focus.x, focus.y, r, st.dmg * 0.085, 2.2, 'ice',
+        { chill: Math.max(0.35, st.chill || 0) }, 'blizzard');
+      run.burst(focus.x, focus.y, 10, '#e8fbff', {
+        spd: 170, spdMin: 50, life: 0.4, r: 2.0, shape: 'crystal', drag: 3.4,
+        el: 'ice', elSub: 'wind',
+      });
+      break;
+    }
+    case 'mud': {
+      // 泥。足を取る場が残る (撃退の弱体化は resolve 側)。
+      const r = (56 + area * 0.5) * size;
+      fusionField(run, st, focus.x, focus.y, r, st.dmg * 0.09, 3.0, 'earth',
+        { chill: 0.3 }, 'mud');
+      run.burst(focus.x, focus.y, 8, '#8a6f42', {
+        spd: 150, spdMin: 40, life: 0.4, r: 2.6, shape: 'shard', drag: 4,
+        el: 'earth', elSub: 'water',
+      });
+      break;
+    }
+    case 'pollution': {
+      // 汚染。毒が水に溶けて広がり、場の中の敵を毒し続ける。
+      const r = (56 + area * 0.5) * size;
+      fusionField(run, st, focus.x, focus.y, r, st.dmg * 0.11, 3.0, 'poison',
+        { poison: Math.max(2.5, st.poison || 0) }, 'pollution');
+      run.burst(focus.x, focus.y, 8, '#57ab5a', {
+        spd: 90, spdMin: 20, life: 0.6, r: 2.6, shape: 'bubble', drag: 3, grav: -18,
+        el: 'poison', elSub: 'water',
+      });
+      break;
+    }
+    default: break;
   }
 }
 
@@ -951,10 +1143,11 @@ function doChain(run, wi, st, aim, el) {
   run.shake(2);
 }
 
-function chainOnce(run, st, el) {
+function chainOnce(run, st, el, sx, sy) {
   const n = Math.max(1, Math.round(st.chain));
   const hit = [];
-  let ex = run.player.x, ey = run.player.y;
+  let ex = sx !== undefined ? sx : run.player.x;
+  let ey = sy !== undefined ? sy : run.player.y;
 
   for (let i = 0; i < n; i++) {
     const tgt = run.nearestEnemy(ex, ey, hit, 340);

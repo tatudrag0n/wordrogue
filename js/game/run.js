@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.71';
+} from '../data/words.js?v=1.72';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.71';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.72';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.71';
-import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.71';
-import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.71';
+import { WeaponInst } from './weapon.js?v=1.72';
+import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.72';
+import { fireWeapon, damage as damageEnemy, attackShape } from './combat.js?v=1.72';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -993,6 +993,7 @@ export class Run {
         r: r + this._fxRand() * (rMax - r),
         life: l, maxLife: l,
         color, grav: o.grav || 0, drag: o.drag ?? 3.2,
+        curl: o.curl || 0,
         el: o.el || null, elSub: o.elSub || null,
         shape: o.shape || 'dot',
         char: o.chars ? o.chars[i % o.chars.length] : (o.char || null),
@@ -2261,7 +2262,21 @@ export class Run {
         if (b.trailCd <= 0) {
           b.trailCd = 0.06;
           const tf = ELEMENT_TRAIL[b.element];
-          if (tf) this.burst(b.x, b.y, 1, b.color, { spd: 20, spdMin: 5, life: tf.life, r: tf.r, shape: tf.shape, drag: 3, grav: tf.grav || 0 });
+          if (tf) {
+            if (b.element === 'wind') {
+              // 風の尾は、粒が流れに乗る。弾の後ろへ放ち、渦巻きながら
+              // 流れる (curl)。副属性があれば粒に色と象徴が渡る (聖なる風)。
+              const back = Math.atan2(b.vy, b.vx) + Math.PI;
+              this.burst(b.x, b.y, 1, b.color, {
+                a: back, spread: 0.7, spd: 90, spdMin: 40, life: tf.life * 1.5, r: tf.r,
+                shape: tf.shape, drag: 1.6, grav: 0,
+                el: 'wind', elSub: b.elSub || b.st?.elSub || null,
+                curl: ((b.uid || 0) % 2 ? 1 : -1) * 2.6,
+              });
+            } else {
+              this.burst(b.x, b.y, 1, b.color, { spd: 20, spdMin: 5, life: tf.life, r: tf.r, shape: tf.shape, drag: 3, grav: tf.grav || 0 });
+            }
+          }
         }
       }
 
@@ -2589,6 +2604,13 @@ export class Run {
         q.x += q.vx * this._lastDt;
         q.y += q.vy * this._lastDt;
         q.vy += (q.grav || 0) * this._lastDt;
+        // curl: 速度の向きが回る (風の粒が流れに乗って渦巻く)。演出専用。
+        if (q.curl) {
+          const ca = Math.cos(q.curl * this._lastDt), sa = Math.sin(q.curl * this._lastDt);
+          const nvx = q.vx * ca - q.vy * sa;
+          q.vy = q.vx * sa + q.vy * ca;
+          q.vx = nvx;
+        }
         const drag = Math.pow(0.06, (q.drag ?? 3.2) * this._lastDt);
         q.vx *= drag;
         q.vy *= drag;

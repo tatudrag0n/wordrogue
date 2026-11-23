@@ -5,10 +5,10 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.71';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.71';
-import { motionPose, crescentGeom } from '../game/motions.js?v=1.71';
-import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.71';
+import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.72';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.72';
+import { motionPose, crescentGeom } from '../game/motions.js?v=1.72';
+import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.72';
 
 const NO_GHOSTS = [];
 
@@ -359,10 +359,154 @@ export class Renderer {
     g.restore();
   }
 
+  // ── 風の言語 (1.72)。風は「記号の弧」ではなく「動く空気」で描く。
+  //    流線 (下流へ波が旅する線の束) + 先端の渦 + 流れに運ばれる粒。
+  //    強さは突風でうねり、形はすべて T と seed で決定的に決まる。
+
+  /** 突風のうねり (0.2..1)。風の強さは一定でなく周期的に強弱する。 */
+  windGust(T, seed = 0) {
+    const rm = this._rmK == null ? 1 : this._rmK;
+    const s = Math.sin(T * (1.6 + rm * 0.7) + seed * 2.39) * 0.62
+      + Math.sin(T * 0.53 + seed * 1.17) * 0.38;
+    return clamp(0.62 + 0.38 * s * (0.3 + 0.7 * rm), 0.2, 1);
+  }
+
+  /**
+   * 流線の点列。基点 (x,y) から ang 方向へ len 伸びる。
+   * 横波の位相は時刻で下流へ旅し (流れが見える)、振幅は両端で 0 に
+   * なるので先端がほどけて消える。bend は全体の曲がり (内側への巻き)。
+   */
+  windStreamPoints(x, y, ang, len, seed, T, o = {}) {
+    const seg = o.seg || 7;
+    const amp = o.amp == null ? len * 0.15 : o.amp;
+    const bend = o.bend || 0;
+    const rm = this._rmK == null ? 1 : this._rmK;
+    const travel = (o.travel == null ? 7 : o.travel) * (0.35 + 0.65 * rm);
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const px = -sa, py = ca;
+    const pts = [];
+    for (let i = 0; i <= seg; i++) {
+      const f = i / seg;
+      const env = Math.pow(Math.sin(f * Math.PI), 0.75);
+      const w = Math.sin(f * 5.4 - T * travel + seed * 6.13) * amp * env;
+      const b = bend * len * f * f;
+      pts.push([x + ca * len * f + px * (w + b), y + sa * len * f + py * (w + b)]);
+    }
+    return pts;
+  }
+
+  /** 流線を 3 層 (outer の太い滲み → mid → core の細い芯) でなぞる。 */
+  strokeWindStream(g, pts, pal, alpha, width = 1.6) {
+    if (!pts || pts.length < 2) return;
+    const layers = this.elLayers();
+    const trace = () => {
+      g.beginPath();
+      g.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+    };
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    trace();
+    g.globalAlpha = alpha * 0.3;
+    g.strokeStyle = pal.outer;
+    g.lineWidth = width * 2.6;
+    g.stroke();
+    if (layers >= 2) {
+      trace();
+      g.globalAlpha = alpha * 0.8;
+      g.strokeStyle = pal.mid;
+      g.lineWidth = width * 1.35;
+      g.stroke();
+    }
+    if (layers >= 3) {
+      trace();
+      g.globalAlpha = alpha;
+      g.strokeStyle = pal.core;
+      g.lineWidth = Math.max(0.7, width * 0.62);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  /** 渦の芯。内へ巻き込む らせんを、流線と同じ 3 層で描く。 */
+  drawWindVortex(g, x, y, r, pal, T, seed, alpha, width = 1.3) {
+    if (!(r > 0.5)) return;
+    const rm = this._rmK == null ? 1 : this._rmK;
+    const rot = T * 2.4 * (0.3 + 0.7 * rm) + seed * 4.71;
+    const pts = [];
+    const N = 14;
+    for (let i = 0; i <= N; i++) {
+      const f = i / N;
+      const a = rot + f * Math.PI * 3.1;
+      const rad = r * (1 - f * 0.8);
+      pts.push([x + Math.cos(a) * rad, y + Math.sin(a) * rad]);
+    }
+    this.strokeWindStream(g, pts, pal, alpha, width);
+  }
+
+  /**
+   * 風の流れ一式。基点から ang 方向へ、流線の束 + 先端の渦 +
+   * 流れに運ばれる粒 (モート) を描く。風の描画の共通部品。
+   * モートは副属性 (pal.sub) があれば副の象徴 (光なら十字) を運び、
+   * 無ければ塵の粒を運ぶ — 「聖なる風」は白金の流線に十字が流れる。
+   * 個数と層は適応品質で間引かれ、off では流線 1 本だけが残る。
+   */
+  drawWindFlow(g, x, y, ang, len, pal, T, seed, alpha, o = {}) {
+    if (!(len > 2)) return;
+    const gust = this.windGust(T, seed);
+    const n = this.elCount(o.n || 3);
+    const px = -Math.sin(ang), py = Math.cos(ang);
+    let headPts = null;
+    for (let i = 0; i < n; i++) {
+      const off = (i - (n - 1) / 2) * len * 0.13;
+      const li = len * (1 - i * 0.15) * (0.82 + 0.28 * gust);
+      const pts = this.windStreamPoints(x + px * off, y + py * off, ang, li, seed + i * 1.71, T,
+        { amp: len * 0.12, bend: (o.bend || 0) * (i % 2 ? -0.7 : 1) });
+      if (i === 0) headPts = pts;
+      this.strokeWindStream(g, pts, pal,
+        alpha * (0.5 + 0.5 * gust) * (1 - i * 0.16), (o.width || 1.6) * (1 - i * 0.18));
+    }
+    // 先端の渦。流れの行き先で空気が巻く。
+    if (o.vortex !== false && this.decor !== 'off') {
+      const vx = x + Math.cos(ang) * len * (0.86 + 0.1 * gust);
+      const vy = y + Math.sin(ang) * len * (0.86 + 0.1 * gust);
+      this.drawWindVortex(g, vx, vy, (o.vortexR || len * 0.15) * (0.7 + 0.5 * gust),
+        pal, T, seed + 0.53, alpha * 0.75);
+    }
+    // 流れに運ばれる粒。流線の途中を位相で進み、ほどける端で消える。
+    const motes = o.motes == null ? 2 : o.motes;
+    if (motes > 0 && this.decor !== 'off' && headPts) {
+      const nm = this.elCount(motes);
+      for (let i = 0; i < nm; i++) {
+        const ph = (T * 0.45 + i / Math.max(1, nm) + seed * 0.317) % 1;
+        const fi = ph * (headPts.length - 1);
+        const i0 = Math.min(headPts.length - 2, Math.floor(fi));
+        const fr = fi - i0;
+        const mx = headPts[i0][0] + (headPts[i0 + 1][0] - headPts[i0][0]) * fr;
+        const my = headPts[i0][1] + (headPts[i0 + 1][1] - headPts[i0][1]) * fr;
+        const ma = alpha * Math.sin(ph * Math.PI) * (0.45 + 0.55 * gust);
+        if (ma <= 0.02) continue;
+        if (pal.sub) {
+          this.drawElementAccent(g, mx, my, Math.max(1.7, len * 0.055), ang,
+            this.palFor(pal.sub), T, seed + i * 2.31, ma);
+        } else {
+          g.save();
+          g.globalAlpha = ma * 0.85;
+          g.fillStyle = pal.core;
+          g.beginPath();
+          g.arc(mx, my, Math.max(0.8, len * 0.022), 0, TAU);
+          g.fill();
+          g.restore();
+        }
+      }
+    }
+  }
+
   /**
    * 属性の小さな象徴を 1 つ描く (斬撃の刃先・詠唱の手元などの共通部品)。
    * el ごとに形が違う: 炎=舌、氷=結晶、雷=稲妻、光=十字、毒=泡、闇=渦、
-   * 土=岩片、風=弧、草=葉、鉄=閃光、水=雫、血=雫、金=十字。
+   * 土=岩片、風=流線、草=葉、鉄=閃光、水=雫、血=雫、金=十字。
    */
   drawElementAccent(g, x, y, r, ang, pal, T, seed, alpha) {
     const el = pal.el;
@@ -422,12 +566,12 @@ export class Renderer {
         break;
       }
       case 'wind': {
-        g.globalAlpha = alpha * 0.8;
-        g.strokeStyle = pal.mid;
-        g.lineWidth = Math.max(1, r * 0.34);
-        g.beginPath(); g.arc(x, y, r * 1.15, ang - 2.3, ang - 0.7); g.stroke();
-        g.strokeStyle = pal.core;
-        g.beginPath(); g.arc(x, y, r * 0.8, ang - 2.1, ang - 0.9); g.stroke();
+        // 風の象徴は「流れる線」。短い流線 + 先端の小さな渦で空気の動きにする。
+        const pts = this.windStreamPoints(x - Math.cos(ang) * r * 1.1, y - Math.sin(ang) * r * 1.1,
+          ang, r * 2.2, seed, T, { amp: r * 0.3 });
+        this.strokeWindStream(g, pts, pal, alpha * 0.9, Math.max(0.9, r * 0.3));
+        this.drawWindVortex(g, x + Math.cos(ang) * r * 1.15, y + Math.sin(ang) * r * 1.15,
+          r * 0.62, pal, T, seed + 0.31, alpha * 0.8, Math.max(0.8, r * 0.24));
         break;
       }
       case 'nature': {
@@ -534,6 +678,8 @@ export class Renderer {
     run.particleCap = particleCapFor(this.qualityLevel);
     // 属性の点滅 (雷など) の振れ幅。光過敏配慮を描画ヘルパー全体で共有する。
     this._flashK = run.reduceFlash ? 0.3 : 1;
+    // 動きの配慮 (reducedMotion)。風のうねり・回転の振れ幅を弱める係数。
+    this._rmK = run.reducedMotion ? 0.35 : 1;
 
     // カメラ (画面シェイク込み)。
     // 基準のカメラは少しだけ遅れて追う。動いた瞬間の「重さ」が出て、
@@ -1448,6 +1594,17 @@ export class Renderer {
         g.beginPath();
         g.arc(f.x, f.y, rr * (0.45 + 0.1 * Math.sin(T * 2)), 0, TAU);
         g.stroke();
+      } else if (el === 'wind') {
+        // 旋風の場。接線の流線が中心へ巻き込み、真ん中に渦の芯が立つ。
+        const n = this.elCount(4);
+        for (let i = 0; i < n; i++) {
+          const aa = T * 0.9 + (i / Math.max(1, n)) * TAU + (f.x % 5) * 0.4;
+          const sx = f.x + Math.cos(aa) * rr * 0.3, sy = f.y + Math.sin(aa) * rr * 0.3;
+          const pts = this.windStreamPoints(sx, sy, aa + Math.PI / 2, rr * 0.85,
+            i * 1.93 + f.x * 0.01, T, { amp: rr * 0.1, bend: -0.3 });
+          this.strokeWindStream(g, pts, pal, t * 0.55, 1.3);
+        }
+        this.drawWindVortex(g, f.x, f.y, rr * 0.3, pal, T, f.x * 0.01, t * 0.7, 1.2);
       }
     }
     g.globalAlpha = 1;
@@ -1620,27 +1777,15 @@ export class Renderer {
       const T = run.t;
       const nA = this.elCount(5);
       if (el === 'wind') {
-        for (let i = 0; i < 3; i++) {
-          const rr = rOut * (0.98 - i * 0.17);
-          const off = Math.sin(T * 9 + i * 1.7) * 0.05;
-          g.globalAlpha = t * (0.5 - i * 0.12);
-          g.strokeStyle = i === 0 ? pal.core : pal.mid;
-          g.lineWidth = 2.2 - i * 0.55;
-          g.beginPath();
-          g.arc(s.x, s.y, rr, a0 + off + i * 0.06, a1 + off + i * 0.06);
-          g.stroke();
-        }
-        g.globalAlpha = t * 0.4;
-        g.strokeStyle = pal.outer;
-        for (let i = 0; i < 2; i++) {
-          const aa = a1 - i * 0.12;
-          g.beginPath();
-          g.moveTo(s.x + Math.cos(aa) * rOut * 0.9, s.y + Math.sin(aa) * rOut * 0.9);
-          g.quadraticCurveTo(
-            s.x + Math.cos(aa + 0.18) * rOut * 1.08, s.y + Math.sin(aa + 0.18) * rOut * 1.08,
-            s.x + Math.cos(aa + 0.3) * rOut * 1.02, s.y + Math.sin(aa + 0.3) * rOut * 1.02,
-          );
-          g.stroke();
+        // 斬った風が扇の中を抜ける。内側から外周へ流線を走らせ、
+        // 行き先に渦を置き、粒を流れに運ばせる (弧の記号にはしない)。
+        const nW = this.elCount(3);
+        for (let i = 0; i < nW; i++) {
+          const f = nW === 1 ? 0.5 : i / (nW - 1);
+          const aa = a0 + (a1 - a0) * f;
+          const sx = s.x + Math.cos(aa) * rOut * 0.3, sy = s.y + Math.sin(aa) * rOut * 0.3;
+          this.drawWindFlow(g, sx, sy, aa + 1.15, rOut * 0.62, pal, T,
+            s.x * 0.013 + i * 1.71, t * 0.85, { width: 1.5, vortexR: rOut * 0.07, motes: 1 });
         }
       } else if (el === 'fire') {
         // 刃先に沿って層状の炎の舌が立つ。火炎扇 (flame) は内側を炎の筋が走る。
@@ -1882,23 +2027,18 @@ export class Renderer {
       const T = run.t;
       const ta = Math.max(0, t - 0.1);
       if (el === 'wind') {
-        g.strokeStyle = pal.core;
-        g.lineWidth = 1.4;
-        for (let i = 0; i < 3; i++) {
-          const a0 = T * (1.2 + i * 0.4) + i * 2.3;
-          g.globalAlpha = ta * 0.4;
-          g.beginPath();
-          g.arc(s.x, s.y, rr * (0.9 + i * 0.06), a0, a0 + 0.9 + i * 0.2);
-          g.stroke();
-          g.beginPath();
-          g.arc(s.x, s.y, rr * (0.9 + i * 0.06) + 5, a0 + 0.2, a0 + 0.7);
-          g.stroke();
+        // 輪の上を風が回る。接線方向の流線が輪に沿って流れ、粒が運ばれ、
+        // 中心には小さな渦が立つ。
+        const nW = this.elCount(3);
+        for (let i = 0; i < nW; i++) {
+          const aa = T * 1.7 + (i / Math.max(1, nW)) * TAU + s.x * 0.01;
+          const sx = s.x + Math.cos(aa) * rr, sy = s.y + Math.sin(aa) * rr;
+          this.drawWindFlow(g, sx, sy, aa + Math.PI / 2, rr * 0.55, pal, T,
+            i * 2.13 + s.y * 0.01, ta * 0.8, { width: 1.3, bend: -0.12, vortex: false, motes: 1 });
         }
-        g.globalAlpha = ta * 0.35;
-        g.strokeStyle = pal.outer;
-        g.beginPath();
-        g.arc(s.x, s.y, rr * 1.02, T * 1.6 + 1, T * 1.6 + 4.4);
-        g.stroke();
+        if (this.elLayers() >= 2) {
+          this.drawWindVortex(g, s.x, s.y, rr * 0.2, pal, T, s.x * 0.02, ta * 0.5, 1.1);
+        }
       } else if (el === 'fire') {
         const n = this.elCount(7);
         for (let i = 0; i < n; i++) {
@@ -2229,29 +2369,18 @@ export class Renderer {
         }
         g.restore();
       } else if (shape === 'gust') {
-        // 風の弧。進行方向へしなる短い曲線。属性つきは芯の色で二重に引く。
-        const sway = Math.sin((p.life || 0) * 14 + p.x * 0.03) * r * 1.2;
-        g.globalAlpha = t * 0.65;
-        g.strokeStyle = ppal ? ppal.mid : p.color;
-        g.lineWidth = Math.max(1, r * 0.7);
-        g.beginPath();
-        g.moveTo(p.x - Math.cos(ang) * 6, p.y - Math.sin(ang) * 6);
-        g.quadraticCurveTo(
-          p.x + Math.cos(ang + 1.57) * sway, p.y + Math.sin(ang + 1.57) * sway,
-          p.x + Math.cos(ang) * 7, p.y + Math.sin(ang) * 7,
-        );
-        g.stroke();
-        if (ppal && this.elLayers() >= 3) {
-          g.globalAlpha = t * 0.5;
-          g.strokeStyle = ppal.core;
-          g.lineWidth = Math.max(0.8, r * 0.4);
-          g.beginPath();
-          g.moveTo(p.x - Math.cos(ang) * 4, p.y - Math.sin(ang) * 4);
-          g.quadraticCurveTo(
-            p.x + Math.cos(ang + 1.57) * sway * 0.7, p.y + Math.sin(ang + 1.57) * sway * 0.7,
-            p.x + Math.cos(ang) * 5, p.y + Math.sin(ang) * 5,
-          );
-          g.stroke();
+        // 風の粒は「流れる線」。速度の後ろへ波が旅する短い流線で描く。
+        // 副属性があれば、その象徴 (光の十字など) が粒の先端に乗って
+        // 流れに運ばれる (聖なる風のきらめき)。
+        const sp = Math.hypot(p.vx, p.vy);
+        const len = clamp(sp * 0.085 + 6, 8, 30);
+        const wPal = ppal || { core: p.color, mid: p.color, outer: p.color, sub: null };
+        const pts = this.windStreamPoints(p.x, p.y, ang + Math.PI, len,
+          (p.rot || 0) * 7.3 + (p.maxLife || 0) * 3.1, run.t, { amp: len * 0.18, seg: 5 });
+        this.strokeWindStream(g, pts, wPal, t * 0.8, Math.max(0.9, r * 0.55));
+        if (p.elSub && this.elLayers() >= 3) {
+          this.drawElementAccent(g, p.x, p.y, Math.max(1.6, r * 0.9), ang,
+            this.palFor(p.elSub), run.t, (p.rot || 0) * 3.7, t * 0.85);
         }
       } else if (shape === 'bubble') {
         g.globalAlpha = t * 0.65;
@@ -2989,6 +3118,12 @@ export class Renderer {
           this.drawFlame(g, bx, by, r * (2.6 - i * 0.5), r * (0.85 - i * 0.14),
             ang + Math.PI, pal, 0.75 - i * 0.16, sway);
         }
+      } else if (el === 'wind') {
+        // 風の尾は菱形ではなく流れそのもの。弾の後ろへ流線の束を引き、
+        // 粒 (副属性の象徴を含む) を流れに運ばせる。
+        this.drawWindFlow(g, b.x, b.y, ang + Math.PI, len * 1.2, pal, t,
+          (b.uid || 0) * 0.613, 0.8,
+          { width: Math.max(1.1, r * 0.42), vortex: false, motes: 2 });
       } else {
         g.save();
         g.translate(b.x, b.y);
@@ -3302,32 +3437,19 @@ export class Renderer {
         break;
       }
       case 'wind': {
-        const perp = ang + Math.PI / 2;
-        for (let i = 0; i < this.elCount(3); i++) {
-          const ph = t * 13 + i * 1.9 + b.uid * 0.7;
-          const off = Math.sin(ph) * r * (0.7 + i * 0.5);
-          const back = r * (1.4 + i * 1.5);
-          const x = b.x - Math.cos(ang) * back + Math.cos(perp) * off;
-          const y = b.y - Math.sin(ang) * back + Math.sin(perp) * off;
-          g.save();
-          g.globalAlpha = 0.45 - i * 0.09;
-          g.strokeStyle = i === 0 ? pal.core : pal.mid;
-          g.lineWidth = Math.max(0.8, 2.2 - i * 0.5);
-          g.lineCap = 'round';
-          g.beginPath();
-          g.arc(x, y, r * (0.9 + i * 0.35), ang - 2.2, ang - 1.1);
-          g.stroke();
-          g.restore();
+        // 先端の渦。弾の鼻先で空気が巻き、流れの芯になる。
+        // 大きさは突風でうねる。
+        this.drawWindVortex(g, b.x + Math.cos(ang) * r * 0.7, b.y + Math.sin(ang) * r * 0.7,
+          r * (1.05 + 0.3 * this.windGust(t, (b.uid || 0) * 0.61)), pal, t,
+          (b.uid || 0) * 0.77, 0.85, Math.max(0.9, r * 0.34));
+        // 副属性の象徴が尾の流れに乗って運ばれる (聖なる風の十字など)。
+        if (pal.sub && layers >= 2) {
+          const ph = (t * 0.45 + ((b.uid || 0) % 5) * 0.19) % 1;
+          const mx = b.x - Math.cos(ang) * r * (0.8 + ph * 2.2);
+          const my = b.y - Math.sin(ang) * r * (0.8 + ph * 2.2) + Math.sin(t * 6 + (b.uid || 0)) * r * 0.3;
+          this.drawElementAccent(g, mx, my, r * 0.6, ang, this.palFor(pal.sub), t,
+            (b.uid || 0) + 5, 0.25 + 0.75 * Math.sin(ph * Math.PI));
         }
-        g.save();
-        g.globalAlpha = 0.55;
-        g.strokeStyle = pal.outer;
-        g.lineWidth = 1.1;
-        g.beginPath();
-        g.arc(b.x + Math.cos(ang) * r * 0.6, b.y + Math.sin(ang) * r * 0.6,
-          r * 1.3, t * 8, t * 8 + 3.4);
-        g.stroke();
-        g.restore();
         break;
       }
       case 'water': {
@@ -3479,11 +3601,12 @@ export class Renderer {
   drawGaleBullet(g, b, t) {
     const pal = this.palFor(b.element || 'wind', b.elSub || b.st?.elSub || null);
     const r = Math.max(4, b.r);
+    const gust = this.windGust(t, (b.uid || 0) * 0.61);
     g.save();
     g.translate(b.x, b.y);
     g.lineCap = 'round';
     for (let i = 0; i < 4; i++) {
-      const rr = r * (1 - i * 0.2);
+      const rr = r * (1 - i * 0.2) * (0.92 + 0.14 * gust);
       const a0 = t * 9 + i * 1.4;
       g.globalAlpha = 0.65 - i * 0.12;
       g.strokeStyle = i === 0 ? pal.core : i === 1 ? pal.mid : pal.outer;
@@ -3492,7 +3615,18 @@ export class Renderer {
       g.ellipse(0, -i * r * 0.35, rr, rr * 0.5, 0, a0, a0 + 4.4);
       g.stroke();
     }
-    // 吸い込む埃。
+    // 渦柱に巻きつく流線。らせんが柱を伝って上がり、突風で太る。
+    const nS = this.elCount(3);
+    for (let k = 0; k < nS; k++) {
+      const pts = [];
+      for (let j = 0; j <= 10; j++) {
+        const f = j / 10;
+        const a = t * (6 + gust * 3) + f * 5.2 + k * 2.09 + (b.uid || 0);
+        pts.push([Math.cos(a) * r * (1.05 - f * 0.3), -f * r * 1.5 + Math.sin(a) * r * 0.32]);
+      }
+      this.strokeWindStream(g, pts, pal, 0.35 + 0.3 * gust, 1.2);
+    }
+    // 吸い込む埃。副属性があれば、その象徴も渦に巻き込まれる。
     g.globalAlpha = 0.4;
     g.fillStyle = pal.mid;
     for (let i = 0; i < 3; i++) {
@@ -3500,6 +3634,11 @@ export class Renderer {
       g.beginPath();
       g.arc(Math.cos(a) * r * 1.3, Math.sin(a) * r * 0.7, 1.4, 0, TAU);
       g.fill();
+    }
+    if (pal.sub && this.elLayers() >= 2) {
+      const a2 = t * 6 + 2.4;
+      this.drawElementAccent(g, Math.cos(a2) * r * 1.25, Math.sin(a2) * r * 0.65,
+        r * 0.34, a2, this.palFor(pal.sub), t, (b.uid || 0) + 2, 0.8);
     }
     g.restore();
   }
@@ -3570,6 +3709,15 @@ export class Renderer {
       g.restore();
       this.drawElementAccent(g, p.x + Math.cos(face) * (p.r + 7), p.y + Math.sin(face) * (p.r + 7),
         3.6, face, handPal, run.t, 0.7, 0.5 + 0.2 * Math.sin(run.t * 3.2));
+      // 風の手は、まわりの空気が絶えず流れる (流線が体を回る)。
+      if (handEl === 'wind' && this.decor !== 'off') {
+        for (let i = 0; i < 2; i++) {
+          const aa = run.t * 1.6 + i * Math.PI + face * 0.2;
+          const sx = p.x + Math.cos(aa) * (p.r + 8), sy = p.y + Math.sin(aa) * (p.r + 8);
+          this.drawWindFlow(g, sx, sy, aa + Math.PI / 2, p.r * 1.15, handPal, run.t,
+            i * 1.93, 0.5, { width: 1.1, vortex: false, motes: 0, n: 1 });
+        }
+      }
     }
 
     // 常時ゆっくり呼吸する護りの紋環。被弾・ダッシュ演出と重ねて自機を際立たせる。
@@ -4662,6 +4810,15 @@ export class Renderer {
     g.beginPath();
     g.arc(s.x, s.y, 2 + (1 - geom.fly) * 5, 0, TAU);
     g.fill();
+    // 風の三日月は、背後に流線を引いて「空気を切った」跡を残す。
+    // 副属性の象徴 (聖なる風の十字など) はモートとして流れに乗る。
+    if (m.el === 'wind' && pal && this.decor !== 'off' && geom.fly > 0.15) {
+      const T = (m.seq || 1) * 1.37 + pose.t * 4;
+      this.drawWindFlow(g, s.x + Math.cos(m.baseAim) * geom.d * 0.3,
+        s.y + Math.sin(m.baseAim) * geom.d * 0.3, m.baseAim, geom.d * 0.75,
+        pal, T, (m.seq || 1) * 0.71, fade * 0.55 * geom.fly,
+        { width: 1.3, vortexR: geom.R * 0.3, motes: 1 });
+    }
   }
 
   /**
@@ -4987,6 +5144,23 @@ export class Renderer {
       if (i === 0) g.moveTo(q.x, q.y); else g.lineTo(q.x, q.y);
     }
     g.stroke();
+    // 風の渦は、軌跡に粒が運ばれる (副属性があればその象徴も一緒に流れる)。
+    if (s.el === 'wind') {
+      const wPal = this.palFor('wind', s.elSub || s.st?.elSub || null);
+      const nM = this.elCount(3);
+      for (let i = 0; i < nM; i++) {
+        const f = ((run.t * 0.85 + i / Math.max(1, nM) + (s.x % 7) * 0.021) % 1) * head;
+        const q = pt(f);
+        if (wPal.sub) {
+          this.drawElementAccent(g, q.x, q.y, 2.6, (s.baseAim || 0) + turns * TAU * f,
+            this.palFor(wPal.sub), run.t, i * 2.3 + s.x * 0.01, 0.75 * fade);
+        } else {
+          g.globalAlpha = 0.7 * fade;
+          g.fillStyle = wPal.core;
+          g.beginPath(); g.arc(q.x, q.y, 1.5, 0, TAU); g.fill();
+        }
+      }
+    }
     g.restore();
   }
 
@@ -5058,6 +5232,23 @@ export class Renderer {
         g.beginPath();
         g.arc(tipW.x, tipW.y, 3.2, 0, TAU);
         g.fill();
+      }
+
+      // 風の鞭・鎖は、しなりの曲線に沿って粒が運ばれる。
+      if (m.el === 'wind' && whipPal) {
+        const nM = this.elCount(3);
+        for (let i = 0; i < nM; i++) {
+          const f = (run.t * 0.9 + i / Math.max(1, nM) + (m.seq || 1) * 0.13) % 1;
+          const pt2 = point(f);
+          if (whipPal.sub) {
+            this.drawElementAccent(g, pt2.x, pt2.y, 2.4, pt2.a,
+              this.palFor(whipPal.sub), run.t, i * 2.1, 0.7 * fade);
+          } else {
+            g.globalAlpha = 0.65 * fade;
+            g.fillStyle = whipPal.core;
+            g.beginPath(); g.arc(pt2.x, pt2.y, 1.4, 0, TAU); g.fill();
+          }
+        }
       }
 
       // 鞭先。鞭は届いた瞬間に先端が弾ける (crack) — 小さな衝撃の十字。
@@ -5681,14 +5872,26 @@ export class Renderer {
         // カメラ中心から風向きに沿った直線上に置く。
         const cx = this.camX + (h1 - 0.5) * vw * 1.2 - ca * (h2 - 0.5) * 60 + ca * f * 0.9;
         const cy = this.camY + (h2 - 0.5) * vh * 1.2 - sa * (h1 - 0.5) * 60 + sa * f * 0.9;
-        const len = 22 + h1 * 44;
+        // まっすぐな線ではなく、弓なりにしなって流れる筋にする。
+        // 長さと濃さは突風でうねる。
+        const len = (22 + h1 * 44) * (0.75 + 0.5 * this.windGust(run.t, i * 0.71));
+        const bow = (h2 - 0.5) * len * 0.36;
         g.globalAlpha = (0.14 + h2 * 0.2) * k;
         g.strokeStyle = '#fdfbf4';
         g.lineWidth = 1 + h1 * 1.2;
         g.beginPath();
         g.moveTo(cx - ca * len * 0.4, cy - sa * len * 0.4);
-        g.lineTo(cx + ca * len * 0.6, cy + sa * len * 0.6);
+        g.quadraticCurveTo(cx + ca * len * 0.1 - sa * bow, cy + sa * len * 0.1 + ca * bow,
+          cx + ca * len * 0.6, cy + sa * len * 0.6);
         g.stroke();
+        // ときどき小さな渦巻きを混ぜる (風が巻いている場所)。
+        if (i % 6 === 3) {
+          g.globalAlpha = 0.16 * k;
+          g.lineWidth = 1;
+          g.beginPath();
+          g.arc(cx, cy, 4 + h1 * 3, run.t * 2 + i, run.t * 2 + i + 4.2);
+          g.stroke();
+        }
       }
       g.restore();
     }

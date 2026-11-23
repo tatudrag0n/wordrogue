@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS, elementPalette } from '../data/words.js?v=1.71';
-import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.71';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.71';
+import { ELEMENTS, elementPalette } from '../data/words.js?v=1.72';
+import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.72';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.72';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -56,21 +56,24 @@ const ELEM_FX = {
 };
 
 /** 命中の粒を属性の形で散らす。会心は輪も足す。粒は el を持ち、描画側が
- *  3 層パレット (芯/体/縁) で層にして描く。 */
-function elementHitFx(run, e, el, crit) {
+ *  3 層パレット (芯/体/縁) で層にして描く。elSub は副属性 (複合) で、
+ *  風の粒は渦巻きながら流れ (curl)、副の象徴を運ぶ。 */
+function elementHitFx(run, e, el, crit, elSub = null) {
   if (!run || !run.burst) return;
   const fx = ELEM_FX[el] || ELEM_FX.none;
   const info = ELEMENTS[el] || ELEMENTS.none;
   const pal = elementPalette(el);
+  const curlK = fx.shape === 'gust' ? 2.8 : 0;
   run.burst(e.x, e.y, crit ? fx.n + 3 : fx.n, info.color, {
     spd: fx.spd, spdMin: fx.spd * 0.25, life: fx.life, r: fx.r,
-    shape: fx.shape, drag: 4.2, grav: fx.grav || 0, el,
+    shape: fx.shape, drag: 4.2, grav: fx.grav || 0, el, elSub: elSub || null, curl: curlK,
   });
   // 芯の色の小さな粒を重ねる。単色の散らしに「熱い中心」を作る。
   if (el !== 'none') {
     run.burst(e.x, e.y, crit ? 4 : 3, pal.core, {
       spd: fx.spd * 0.55, spdMin: fx.spd * 0.15, life: fx.life * 0.7, r: fx.r * 0.62,
       shape: fx.shape === 'smoke' ? 'smoke' : 'dot', drag: 4.6, grav: fx.grav || 0, el,
+      elSub: elSub || null, curl: curlK,
     });
   }
   // 白い芯。紙の上でも「当たった」瞬間が読める。
@@ -87,7 +90,7 @@ function elementHitFx(run, e, el, crit) {
   if (el === 'wind' && run.rings) {
     run.rings.push({
       x: e.x, y: e.y, r: e.r * 3.2, life: 0.24, maxLife: 0.24,
-      color: info.color, hit: new Set(), dash: true,
+      color: info.color, el, elSub: elSub || null, hit: new Set(), dash: true,
     });
   }
 }
@@ -1129,9 +1132,9 @@ export function damage(run, e, st, opt = {}) {
   e.hp -= dmg;
   e.flash = 1;
 
-  // ヒットの火花。属性の形で散らす (風は弧、氷は粒、雷は稲妻)。
+  // ヒットの火花。属性の形で散らす (風は流線、氷は粒、雷は稲妻)。
   const hitEl = opt.element || st.el || 'none';
-  elementHitFx(run, e, hitEl, !!crit);
+  elementHitFx(run, e, hitEl, !!crit, hitEl === st.el ? (st.elSub || null) : null);
   run?.audio?.elemHit?.(hitEl);
   // 会心の手応え。白い弾ける輪と火花で「効いた」を出す (点滅ではなく形)。
   if (crit && run) {

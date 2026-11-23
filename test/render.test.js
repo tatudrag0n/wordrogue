@@ -338,5 +338,90 @@ sec('属性パレットと複合属性 (1.67)');
   console.log('  パレット完全性 / 複合 (火+光) / 全属性の描画 / 品質での間引きを確認');
 }
 
+sec('風の流線と複合 (1.72)');
+{
+  const renderer = new Renderer(canvas);
+
+  // 流線の点列: seg+1 点、全て有限で、時刻が進むと形が変わる (流れが旅する)。
+  const pts1 = renderer.windStreamPoints(0, 0, 0.3, 60, 1.7, 0);
+  const pts2 = renderer.windStreamPoints(0, 0, 0.3, 60, 1.7, 0.35);
+  ok(pts1.length === 8, `流線の点数: ${pts1.length}`);
+  ok(pts1.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)), '流線に非有限の点がある');
+  ok(pts1.some(([x, y], i) => Math.abs(x - pts2[i][0]) + Math.abs(y - pts2[i][1]) > 0.01),
+    '流線が時刻で動いていない (流れが見えない)');
+  const tip = pts1[pts1.length - 1];
+  const tipD = Math.hypot(tip[0], tip[1]);
+  ok(tipD > 50 && tipD < 66, `流線の長さが len と合わない: ${tipD}`);
+
+  // 突風のうねり: 0.2..1 に収まり時刻で変動する。reducedMotion で振れ幅が弱まる。
+  let gmin = 1, gmax = 0;
+  for (let t = 0; t < 12; t += 0.1) {
+    const gv = renderer.windGust(t, 0.7);
+    gmin = Math.min(gmin, gv); gmax = Math.max(gmax, gv);
+  }
+  ok(gmin >= 0.2 && gmax <= 1 && gmax - gmin > 0.25, `突風の範囲: ${gmin}..${gmax}`);
+  renderer._rmK = 0.35;
+  let rmin = 1, rmax = 0;
+  for (let t = 0; t < 12; t += 0.1) {
+    const gv = renderer.windGust(t, 0.7);
+    rmin = Math.min(rmin, gv); rmax = Math.max(rmax, gv);
+  }
+  ok(rmax - rmin < gmax - gmin, 'reducedMotion でうねりが弱まっていない');
+  renderer._rmK = 1;
+
+  // 品質で流線の描画量が間引かれる (記録 ctx の lineTo 回数で比べる)。
+  const countFlow = () => {
+    const before = used.get('lineTo') || 0;
+    renderer.drawWindFlow(ctx, 100, 100, 0.4, 60, renderer.palFor('wind', 'light'), 1.3, 0.7, 0.9);
+    return (used.get('lineTo') || 0) - before;
+  };
+  renderer.qualityLevel = 0;
+  const full = countFlow();
+  renderer.qualityLevel = 3;
+  const off = countFlow();
+  ok(full > off && off >= 1, `品質で流線が間引かれない: full=${full} off=${off}`);
+  renderer.qualityLevel = 0;
+
+  // 複合の情報: 風+光の文は主=風・副=光。パレットは芯=光・体=風になる。
+  const W = (s) => [...s].map((ch) => makeWord(ch));
+  const ev = evaluate(W('風聖刃'));
+  ok(ev.valid && ev.element === 'wind' && ev.subElement === 'light',
+    `風聖刃: ${ev.element}/${ev.subElement}`);
+  const wpal = renderer.palFor('wind', 'light');
+  ok(wpal.sub === 'light' && wpal.mid === ELEMENTS.wind.mid && wpal.core === ELEMENTS.light.core,
+    '聖なる風のパレット (芯=光・体=風) が違う');
+
+  // 実戦: 風+光の銃を撃つと、流れに乗る粒 (el=wind / elSub=light / curl) が出る。
+  const run = new Run({
+    stageId: 3, audio, save: { d: {} }, rng: makeRng(9182), lexiconSize: 12,
+    weaponIds: ['gun'],
+  });
+  const wi = run.weapons[0];
+  wi.sentence.entries.length = 0;
+  wi.sentence.push(makeWord('風'));
+  wi.sentence.push(makeWord('聖'));
+  run.spawnEnemy('slime', { x: run.player.x + 90, y: run.player.y });
+  run.enemies.forEach((e) => { e.spawned = 1; e.hp = 1e9; });
+  const input = { ax: 0, ay: 0, moving: false, angle: 0 };
+  let gustP = null;
+  for (let i = 0; i < 120 && !gustP; i++) {
+    run.update(1 / 60, input);
+    gustP = run.particles.find((p) => p.shape === 'gust' && p.el === 'wind');
+  }
+  ok(!!gustP, '風の弾から流れの粒が出ていない');
+  if (gustP) {
+    ok(gustP.elSub === 'light', `粒の副属性: ${gustP.elSub}`);
+    ok(!!gustP.curl, '粒が流れに乗っていない (curl が無い)');
+  }
+  // そのまま描いても例外が出ない (聖なる風の流線 + 十字のモート)。
+  for (let i = 0; i < 30; i++) { run.update(1 / 60, input); renderer.draw(run, null); }
+  ok(renderer.drawErrorCount === 0, `聖なる風の描画で例外 ${renderer.drawErrorCount} 件`);
+  ok(badArg === 0, `非有限の座標 ${badArg} 件`);
+
+  // 他属性は不変: 炎の単属性パレットは副を持たない。
+  ok(renderer.palFor('fire', null).sub === null, '炎の単属性パレットが変わった');
+  console.log('  流線の幾何 / 突風 / 品質の間引き / 聖なる風 (風+光) の粒と描画を確認');
+}
+
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);
 process.exit(fail ? 1 : 0);

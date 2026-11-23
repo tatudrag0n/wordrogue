@@ -16,7 +16,7 @@ import './seed.mjs';
 import { Run } from '../js/game/run.js';
 import { makeWord, WORDS, ELEMENTS, WEAPON_WORDS } from '../js/data/words.js';
 import { WeaponInst } from '../js/game/weapon.js';
-import { VERB_SHAPE, FORM_SHAPE, defForForm } from '../js/data/weapons.js';
+import { VERB_SHAPE, FORM_SHAPE, defForForm, ELEMENT_KIND, ELEMENT_SHAPE } from '../js/data/weapons.js';
 import { connectorsAfter, formAfter } from '../js/data/words.connect.js';
 import { makeRng } from '../js/core/util.js';
 import { PHRASE_BONUS } from '../js/data/words.phrase.js';
@@ -498,6 +498,79 @@ sec('文レベル: 熟語経由でも効果が変わる');
   if (!((zb.stats.chill || 0) > 0 && (zb.stats.slowImmune || 0) === (bare.stats.slowImmune || 0))) bad.push('呪縛の文で減速が付かない/slowImmune が混ざる');
   ok(!bad.length, `熟語経由の効果: ${bad.join(' / ')}`);
   console.log(`  熟語 ${checks.length} 件 + 文 3 件を確認 / 不一致 ${bad.length}`);
+}
+
+sec('文レベル: 1.75 で足した属性語が文と特殊武器に届く');
+{
+  // 語: [属性, 文で素の刃より上がる看板ステータス]
+  const NEW = {
+    '雹': ['ice', 'chill'], '霰': ['ice', 'chill'], '冽': ['ice', 'chill'], '霙': ['ice', 'chill'],
+    '銭': ['gold', 'magnet'], '錦': ['gold', 'magnet'], '璧': ['gold', 'magnet'],
+    '脈': ['blood', 'lifesteal'], '滴': ['blood', 'lifesteal'], '臓': ['blood', 'lifesteal'],
+    '疫': ['poison', 'poison'], '腐': ['poison', 'poison'], '痺': ['poison', 'poison'],
+    '銅': ['steel', 'pierce'], '錫': ['steel', 'armor'], '鉛': ['steel', 'knock'],
+    '霆': ['thunder', 'shock'],
+    // 風の speed は斬撃型の最終ステータスでは固定 (既存の風・颯・雲も同じ)。
+    // 看板は fx 側の speed で見て、最終ステータスでは各語の副効果で確かめる。
+    '凛': ['wind', 'chill'], '爽': ['wind', 'crit'], '薫': ['wind', 'area'],
+  };
+  const bad = [];
+  let cases = 0;
+  for (const [t, [el, key]] of Object.entries(NEW)) {
+    const w = WORDS[t];
+    if (!w) { bad.push(`${t}: 語が無い`); continue; }
+    if (w.cat !== 'element' || w.el !== el) bad.push(`${t}: 分類 ${w.cat}/${w.el} (期待 element/${el})`);
+    // 「Xの刃」: 文の主属性がその語の属性になり、看板効果が最終ステータスに乗る。
+    const r = sentenceWith(t);
+    if (!r || !r.valid) { bad.push(`${t}: 文が成立しない`); continue; }
+    cases++;
+    if (r.element !== el) bad.push(`${t}: 文の主属性 ${r.element} (期待 ${el})`);
+    if (!((r.stats[key] || 0) > (bare.stats[key] || 0))) bad.push(`${t}: ${key} が最終ステータスに届かない`);
+    if (el === 'wind' && !((r.evalResult?.fx?.speed || 0) > 0)) bad.push(`${t}: 風の看板 speed が fx に無い`);
+    // 特殊武器: 定義が引け、形と型が属性の既定 (ELEMENT_SHAPE) に解決できる。
+    // 動詞を述べて解決したときの型は ELEMENT_KIND になる (下の発動確認で見る)。
+    const def = defForForm(t);
+    if (!def.special) bad.push(`${t}: 特殊武器にならない`);
+    if (def.shape !== ELEMENT_SHAPE[el][0] || def.kind !== ELEMENT_SHAPE[el][1]) {
+      bad.push(`${t}: 特殊武器の形/型 ${def.shape}/${def.kind} (期待 ${ELEMENT_SHAPE[el][0]}/${ELEMENT_SHAPE[el][1]})`);
+    }
+    // 動詞を述べた文では特殊武器として発動する (燃やすX)。
+    const sp = resolve([['燃', 'やす'], [t]]);
+    if (!(sp.special === true && sp.tail === t && sp.kind === ELEMENT_KIND[el])) {
+      bad.push(`${t}: 「燃やす${t}」で特殊武器が発動しない (special=${sp.special} tail=${sp.tail} kind=${sp.kind})`);
+    }
+  }
+  // 動詞の形を持つ新語は、その形でも文にできる (腐る刃・痺れる刃)。
+  for (const t of ['腐', '痺']) {
+    const p = predicateOf(t);
+    const r = p && resolve([[t, p], ['刃']]);
+    if (!r || !r.valid || !(r.stats.poison > (bare.stats.poison || 0))) bad.push(`${t}: 「${t}${p}刃」で毒が届かない`);
+    else cases++;
+  }
+  // 属性別の語数 (1.75 の追加後)。
+  const counts = {};
+  for (const w of Object.values(WORDS)) if (w.cat === 'element') counts[w.el] = (counts[w.el] || 0) + 1;
+  const want = { ice: 8, gold: 7, blood: 9, poison: 9, steel: 9, thunder: 10, wind: 12 };
+  for (const [el, n] of Object.entries(want)) {
+    if (counts[el] !== n) bad.push(`${el}: ${counts[el]} 語 (期待 ${n})`);
+  }
+  ok(!bad.length, `1.75 の属性語: ${bad.join(' / ')}`);
+  console.log(`  新語 ${Object.keys(NEW).length} 語 / 文 ${cases} 件を確認 / 不一致 ${bad.length}`);
+}
+
+sec('文レベル: 1.75 の新語でも融合が発動する');
+{
+  const bad = [];
+  // 氷の新語 + 風 → 吹雪。融合は属性ペアで決まるので、新語でも自動で効くはず。
+  const bliz = resolve([['雹', 'no'], ['風', 'no'], ['刃']]);
+  if (!(bliz.element === 'ice' && bliz.subElement === 'wind')) bad.push(`雹+風: 属性 ${bliz.element}/${bliz.subElement}`);
+  if (bliz.fusion?.id !== 'blizzard' || bliz.stats.fusion !== 'blizzard') bad.push(`雹+風: 融合 ${bliz.fusion?.id} (期待 blizzard)`);
+  // 雷の新語 + 水 → 感電。
+  const cond = resolve([['霆', 'no'], ['水', 'no'], ['刃']]);
+  if (!(cond.element === 'thunder' && cond.subElement === 'water')) bad.push(`霆+水: 属性 ${cond.element}/${cond.subElement}`);
+  if (cond.fusion?.id !== 'conduct' || cond.stats.fusion !== 'conduct') bad.push(`霆+水: 融合 ${cond.fusion?.id} (期待 conduct)`);
+  ok(!bad.length, `新語の融合: ${bad.join(' / ')}`);
+  console.log(`  2 文 (吹雪・感電) を確認 / 不一致 ${bad.length}`);
 }
 
 console.log(`\n---- 合格 ${pass} / 不合格 ${fail} ----`);

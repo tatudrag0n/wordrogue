@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.74';
-import { FUSION_PALETTES } from '../data/fusion.js?v=1.74';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.74';
-import { motionPose, crescentGeom } from '../game/motions.js?v=1.74';
-import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.74';
+import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.75';
+import { FUSION_PALETTES } from '../data/fusion.js?v=1.75';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.75';
+import { motionPose, crescentGeom } from '../game/motions.js?v=1.75';
+import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.75';
 
 const NO_GHOSTS = [];
 

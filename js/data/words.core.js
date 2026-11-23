@@ -605,6 +605,28 @@ const RAW_EXT_ELEMENT = `
 檸     element nature  dmg+2  poison+1
 檬     element nature  dmg+2  regen+0.4  poison+1
 汚     element poison  dmg+1  poison+2
+
+# ── Ver.1.75 追加: 薄い属性 (氷・金・血・毒・鋼・雷・風) の補充 ──
+雹     element ice     dmg+3  chill+0.14  knock+30
+霰     element ice     dmg+2  chill+0.12  count+1
+冽     element ice     dmg+3  chill+0.22  pierce+1
+霙     element ice     dmg+2  chill+0.16  area+6
+銭     element gold    dmg+2  magnet+0.40  count+1
+錦     element gold    dmg+3  magnet+0.35  area+4
+璧     element gold    dmg+4  magnet+0.45  atkMul+0.03
+脈     element blood   dmg+3  lifesteal+0.03  rate+0.15
+滴     element blood   dmg+2  lifesteal+0.04  pierce+1
+臓     element blood   dmg+4  lifesteal+0.03  size+0.10
+疫     element poison  dmg+2  poison+4  area+10  count+1
+腐     element poison  dmg+2  poison+4  area+4
+痺     element poison  dmg+2  poison+3  chill+0.12
+銅     element steel   dmg+3  pierce+2  size+0.08
+錫     element steel   dmg+2  armor+1  size+0.10
+鉛     element steel   dmg+4  size+0.15  speed-10  knock+20
+霆     element thunder dmg+5  shock+0.22  area+8
+凛     element wind    dmg+3  chill+0.12  speed+30
+爽     element wind    dmg+2  speed+50  crit+0.03
+薫     element wind    dmg+1  speed+40  area+8  homing+0.08
 `;
 
 const RAW_EXT_PHENOM = `

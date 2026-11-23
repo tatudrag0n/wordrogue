@@ -35,7 +35,7 @@
 // ============================================================================
 
 import { PHRASE_BONUS } from './words.phrase.js';
-import { compoundFormSpec } from './words.compound-forms.js?v=1.74';
+import { compoundFormSpec } from './words.compound-forms.js?v=1.75';
 
 /**
  * 名詞が共通で持つ格の接続詞。
@@ -80,6 +80,10 @@ const RAW_POOL = `
 迅  n   き:adn
 颯  n   +N
 光  n   る:adn*x り:advx +N
+腐  n   る:adn*x った:adn*x って:advx
+痺  n   れる:adn*x れた:adn*x れて:advx
+薫  n   る:adn*x って:advx +N
+爽  na  やかな:adn+ やかに:adv+
 
 # ── 効果語 (い形容) ──
 強  a   い:adn+ く:adv+

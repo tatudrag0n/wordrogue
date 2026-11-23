@@ -682,6 +682,7 @@ failed += await run('test/meaning.test.js');
 failed += await run('test/forge.drag.test.js');
 failed += await run('test/grow.menu.test.js');
 failed += await run('test/worker.email.test.mjs');
+failed += await run('test/audio.test.mjs');
 
 if (startServer) {
   const server = await serve(ROOT, PORT);

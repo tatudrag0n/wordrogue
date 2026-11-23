@@ -13,8 +13,8 @@
 // level を上げるほど基礎値が伸びる。文の長さは武器レベルとは無関係で 10 文字まで。
 // ============================================================================
 
-import { WEAPON_WORD_SET } from './words.core.js?v=1.70';
-import { WORDS, weaponHeadKind } from './words.js?v=1.70';
+import { WEAPON_WORD_SET } from './words.core.js?v=1.71';
+import { WORDS, weaponHeadKind } from './words.js?v=1.71';
 
 /**
  * kind の種類と挙動:

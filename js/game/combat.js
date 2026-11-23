@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS, elementPalette } from '../data/words.js?v=1.67';
-import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.67';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.67';
+import { ELEMENTS, elementPalette } from '../data/words.js?v=1.68';
+import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.68';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.68';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);

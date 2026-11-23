@@ -636,6 +636,43 @@ sec('日本語として読めない文は落ちること');
   r = evaluate(['貫', '通', '剣'].map(makeWord), { minContent: 3, tail: '剣' });
   ok(r.valid, `「貫通剣」が成立しない: ${r.reasonText}`);
 
+  // 末尾語を opt でだけ渡す呼び方でも、直前の語は同じ語を見なければならない。
+  // 以前は配列の後ろから 2 つ目を決め打ちしていたため、この呼び方では
+  // 熟語の頭の語 (昇龍 の 昇・爆風 の 爆) を見て tailverb で落ちていた (1.68 で修正)。
+  r = evaluate(['昇', '龍'].map(makeWord), { minContent: 2, tail: '刃' });
+  ok(r.valid, `「昇龍+刃」(末尾語は opt) が成立しない: ${r.reasonText}`);
+  r = evaluate(['爆', '風'].map(makeWord), { minContent: 2, tail: '刃' });
+  ok(r.valid, `「爆風+刃」(末尾語は opt) が成立しない: ${r.reasonText}`);
+  r = evaluate(['貫', '通'].map(makeWord), { minContent: 2, tail: '刃' });
+  ok(r.valid, `「貫通+刃」(末尾語は opt) が成立しない: ${r.reasonText}`);
+  // 熟語でない素の動詞が末尾語を直接修飾するケースは、どちらの呼び方でも落ちる。
+  r = evaluate(['炎', '斬'].map(makeWord), { minContent: 2, tail: '刃' });
+  ok(!r.valid && r.reason === 'tailverb', `「炎斬+刃」の理由 ${r.reason}`);
+  r = evaluate(['炎', '斬', '刃'].map(makeWord), { minContent: 3, tail: '刃' });
+  ok(!r.valid && r.reason === 'tailverb', `「炎斬刃」の理由 ${r.reason}`);
+
+  // 動詞語幹 + 龍 の熟語 (昇龍・飛龍・潜龍・雲龍・斬龍) は手書き登録 (1.68)。
+  // 辞書生成の熟語に龍が 0 件で、未登録のままだと熟語として扱われなかった。
+  for (const tail of ['刃', '剣', '拳']) {
+    r = evaluate(['昇', '龍', tail].map(makeWord), { minContent: 3, tail });
+    ok(r.valid && r.idioms.some((i) => i.phrase === '昇龍'),
+      `「昇龍${tail}」が成立しない/熟語にならない: ${r.reasonText}`);
+  }
+  for (const head of ['飛', '潜', '雲', '斬']) {
+    r = evaluate([head, '龍', '刃'].map(makeWord), { minContent: 3, tail: '刃' });
+    ok(r.valid && r.idioms.some((i) => i.phrase === `${head}龍`),
+      `「${head}龍刃」が成立しない/熟語にならない: ${r.reasonText}`);
+  }
+  // 属性語どうしの実在語 (霹靂・麒麟・薔薇・檸檬) も熟語として乗る。
+  for (const [a, b, tail] of [['霹', '靂', '刃'], ['麒', '麟', '剣'], ['薔', '薇', '刃'], ['檸', '檬', '刃']]) {
+    r = evaluate([a, b, tail].map(makeWord), { minContent: 3, tail });
+    ok(r.valid && r.idioms.some((i) => i.phrase === a + b),
+      `「${a}${b}${tail}」が成立しない/熟語にならない: ${r.reasonText}`);
+  }
+  // 連体形の正規ルートは従来どおり通る。
+  r = evaluate(['昇', 'る', '龍', '刃'].map(makeWord), { minContent: 3, tail: '刃' });
+  ok(r.valid, `「昇る龍刃」が成立しない: ${r.reasonText}`);
+
   r = evaluate(['刃', '剣'].map(makeWord), { minContent: 2, tail: '剣' });
   ok(!r.valid && r.reason === 'tailform', `「刃剣」の理由 ${r.reason}`);
 

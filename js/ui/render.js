@@ -5,10 +5,10 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.67';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.67';
-import { motionPose } from '../game/motions.js?v=1.67';
-import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.67';
+import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.68';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.68';
+import { motionPose } from '../game/motions.js?v=1.68';
+import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.68';
 
 const NO_GHOSTS = [];
 

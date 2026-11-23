@@ -17,15 +17,15 @@
 import {
   RAW_TABLES, TAIL_UNMODIFIABLE, WEAPON_WORDS, WEAPON_WORD_SET, isWeaponWord,
   SHAPE_WORDS, isShapeWord,
-} from './words.core.js?v=1.67';
-import { CATEGORIES, ELEMENTS, elementPalette, blendElementPalette } from './words.core.js?v=1.67';
+} from './words.core.js?v=1.68';
+import { CATEGORIES, ELEMENTS, elementPalette, blendElementPalette } from './words.core.js?v=1.68';
 import { PHRASE_BONUS } from './words.phrase.js';
 import {
   checkConnectors, checkTailModifier, CONNECTORS, CONNECT_ORDER, POS,
   PREDICATE_CONNECTORS, isAdnominal, isConnector, formAfter,
 } from './words.connect.js';
 import { poolOfText, posOfText } from './words.pool.js';
-import { rankMul } from './ranks.js?v=1.67';
+import { rankMul } from './ranks.js?v=1.68';
 
 export {
   CATEGORIES, ELEMENTS, elementPalette, blendElementPalette, PHRASE_BONUS, CONNECTORS, CONNECT_ORDER, POS,
@@ -564,15 +564,26 @@ export function evaluate(words, opt = {}) {
   // 末尾語を日本語として正しく修飾できているか。
   //   「斬剣」「貫通を剣」… 用言や格助詞が直前にあるものは日本語に無い。
   //   「刃剣」… 形を表す語を 2 つ並べたものは無い。
-  if (opt.tail && segs.length >= 2) {
-    const last = segs[segs.length - 2];
-    const isConn = CONNECTOR_SET.has(last);
+  if (opt.tail && segs.length >= 1) {
+    // 末尾語の位置。末尾語は 2 通りの渡され方をする。
+    //   (a) 語の配列の最後に末尾語そのものが含まれている (tailIdx = 最後の語)
+    //   (b) 末尾語は opt でだけ渡され、配列には含まれていない (tailIdx = 文末の 1 つ先)
+    // どちらの呼び方でも「末尾語の直前の語」は同じ語を指すよう、ここで位置を揃える。
+    // 以前は (a) 前提で segs[segs.length - 2] を決め打ちしていたため、(b) の
+    // 呼び方では熟語の頭の語 (昇龍 の 昇、爆風 の 爆) を直前の語と誤認し、
+    // 熟語マスク (phrase.ends) の照合もずれて、登録済み熟語 + 末尾語が
+    // 軒並み tailverb で落ちていた。
+    const tailIdx = segs[segs.length - 1] === opt.tail ? segs.length - 1 : segs.length;
+    const prevIdx = tailIdx - 1;
+    const last = prevIdx >= 0 ? segs[prevIdx] : null;
+    const isConn = !!last && CONNECTOR_SET.has(last);
     // 接続詞なら、その場の役割 (連体・格「の」) で名詞を修飾できるかを見る。
-    const lastC = isConn ? compounds.find((c) => c.idx === segs.length - 2) : null;
+    const lastC = isConn ? compounds.find((c) => c.idx === prevIdx) : null;
     const adn = !!lastC && (lastC.role === 'adn' || (lastC.role === 'case' && lastC.next === 'noun'));
     // 熟語の末尾 (爆裂 の 裂、貫通 の 通) は、語 1 つの品詞ではなく
     // 熟語 1 語の名詞として扱う。爆は動詞だが「爆裂弾」は日本語として正しい。
-    const compoundEnd = !isConn && phrase.ends.has(segs.length - 2);
+    // 直前の語が熟語の内側・末尾なら、その語単体の品詞では判定しない。
+    const compoundEnd = !isConn && prevIdx >= 0 && phrase.ends.has(prevIdx);
     const tail = checkTailModifier(
       last, isConn ? null : (compoundEnd ? POS.noun : WORDS[last]?.pos), isConn, TAIL_UNMODIFIABLE, adn,
     );
@@ -589,9 +600,9 @@ export function evaluate(words, opt = {}) {
     //   「業火を斬られた刃剣」… された は名詞を修飾できるので通るが、
     //   その名詞句の頭が「刃」なので「刃剣」になる。日本語に無い。
     // 接続詞を挟んでも、末尾語に直続する語は形を表す語にできない。
-    // 末尾語そのものは末尾語配列に含まれないので、探してその 1 つ前を見る。
-    const tailIdx = segs.lastIndexOf(opt.tail);
-    for (let i = tailIdx - 1; i >= 0; i--) {
+    // 上で揃えた tailIdx の 1 つ前 (prevIdx) からたどる。末尾語の渡され方に
+    // かかわらず同じ語から走査が始まる。
+    for (let i = prevIdx; i >= 0; i--) {
       if (CONNECTOR_SET.has(segs[i])) continue;
       // 格「の」で結ばれていれば「光の刃」「雷の刃」のように普通に読める。
       // 形の重複として落とすのは、連体節 (〜された・〜る) で名詞句の頭に

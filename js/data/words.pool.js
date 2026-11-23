@@ -35,7 +35,7 @@
 // ============================================================================
 
 import { PHRASE_BONUS } from './words.phrase.js';
-import { compoundFormSpec } from './words.compound-forms.js?v=1.69';
+import { compoundFormSpec } from './words.compound-forms.js?v=1.70';
 
 /**
  * 名詞が共通で持つ格の接続詞。

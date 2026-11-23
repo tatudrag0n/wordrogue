@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS, elementPalette } from '../data/words.js?v=1.69';
-import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.69';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.69';
+import { ELEMENTS, elementPalette } from '../data/words.js?v=1.70';
+import { VERB_SLASH_STYLE } from '../data/weapons.js?v=1.70';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.70';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -520,16 +520,27 @@ function doVoid(run, wi, st, aim, el, elInfo) {
 }
 
 // 地走り。正面へ岩の棘が順に隆起する。
+// 棘は足元近くから間合いまで、直径以下の間隔で連続させる。以前は棘 5 本を
+// 間隔 57px ほどで置いていたので、棘と棘のあいだに立つ敵にも、最初の棘より
+// 手前にいる敵にも当たらず、「重いだけの武器」になっていた。
+// 起点には槌の叩きつけ (arc の扇) を置き、足元を埋める。叩きつけと棘は
+// hit セットを共有するので、1 振りで同じ敵に二度当たることもない。
 function doQuake(run, wi, st, aim, el, elInfo) {
   const p = run.player;
-  const n = 5;
+  const reach = st.range * st.size;
+  const spikeR = 10 * st.size;
+  const hit = new Set();
+  // 起点の叩きつけ。arc のステータスはここの扇で効く。
+  hitSector(run, p.x, p.y, aim, spikeR * 2.4, st.arc || 2.2, st, el, hit);
+  // 棘の列。間隔は棘の直径 (2 * spikeR) 以下に収める。
+  const n = Math.max(3, Math.ceil(reach / (spikeR * 1.6)));
   for (let i = 0; i < n; i++) {
-    const d = (i + 1) * (st.range * 0.32) * st.size;
+    const d = (reach * (i + 1)) / n;
     const b = makeBullet({
       x: p.x + Math.cos(aim) * d, y: p.y + Math.sin(aim) * d,
-      vx: 0, vy: 0, r: 10 * st.size, size: st.size, dmg: st.dmg * 0.7,
-      life: 0.9, delay: i * 0.07, pierce: 0, element: el, color: elInfo.color,
-      shape: 'spike', kindName: 'spike',
+      vx: 0, vy: 0, r: spikeR, size: st.size, dmg: st.dmg,
+      life: 0.9, delay: i * 0.05, pierce: 0, element: el, color: elInfo.color,
+      shape: 'spike', kindName: 'spike', hitIds: hit,
     });
     b.st = st; b.wi = wi; run.bullets.push(b);
   }

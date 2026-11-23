@@ -12,7 +12,7 @@ import { WEAPONS, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS } from '../js/data/weapo
 import { ENEMIES, ENEMY_IDS, MID_BOSS_IDS, BOSS_IDS } from '../js/data/enemies.js';
 import { WeaponInst } from '../js/game/weapon.js';
 import { makePickup, makeEnemy, updateEnemy } from '../js/game/entities.js';
-import { damage } from '../js/game/combat.js';
+import { damage, fireWeapon } from '../js/game/combat.js';
 import { resolvePlayerStats, PART_LEXICON } from '../js/game/stats.js';
 import { Sentence, MAX_SENTENCE_LEN } from '../js/game/sentence.js';
 import { STAGES } from '../js/data/stages.js';
@@ -2025,4 +2025,82 @@ sec('基本武器もそれぞれ違う攻撃になる');
   }
   ok(mseen.size === melee.length, `近接の型が重複している: ${[...mseen].join(',')}`);
   console.log(`  射撃 ${ranged.length} 種で型 ${kinds.size} / 近接 ${melee.length} 種すべて別の仕組み`);
+}
+
+sec('槌は足元から間合いまで途切れず当たる');
+{
+  // 敵を動かさず、1 振りと弾の更新だけで当たりを測る。
+  const setup = (weaponId) => {
+    const r = newRun(9, [weaponId]);
+    const wi = r.weapons[0];
+    const res = wi.resolve(r.player.stats);
+    res.stats.crit = 0;
+    return { r, wi, res };
+  };
+  const countHits = (r, fn) => {
+    const hits = new Map();
+    const orig = r.damage.bind(r);
+    r.damage = (e, st, opt) => {
+      const before = e.hp;
+      orig(e, st, opt);
+      if (e.hp < before) hits.set(e.uid, (hits.get(e.uid) || 0) + 1);
+    };
+    fn();
+    r.damage = orig;
+    return hits;
+  };
+  const place = (r, id, dx) => {
+    const e = makeEnemy(id, r.player.x + dx, r.player.y);
+    e.hp = 1e9; e.maxHp = 1e9;
+    r.enemies.push(e);
+    return e;
+  };
+  const swing = (r, wi, res) => {
+    fireWeapon(r, wi, res);
+    for (let i = 0; i < 240; i++) r.bulletTick(1 / 60);
+  };
+
+  // (a) 目の前 (b) 旧仕様で棘と棘のあいだに落ちた距離 (c) 間合い寄り。
+  // 旧仕様 (棘 5 本・間隔 57px) では (a) と (b) が 0 ヒットだった。
+  {
+    const { r, wi, res } = setup('hammer');
+    ok(res.kind === 'quake', `槌が quake でない: ${res.kind}`);
+    const targets = [30, 120, 170].map((dx) => place(r, 'bat', dx));
+    const hits = countHits(r, () => swing(r, wi, res));
+    for (const e of targets) {
+      ok((hits.get(e.uid) || 0) >= 1, `槌が当たらない位置がある: 距離 ${Math.round(Math.hypot(e.x - r.player.x, e.y - r.player.y))} で ${hits.get(e.uid) || 0} ヒット`);
+    }
+    console.log(`  槌 1 振り: 30px=${hits.get(targets[0].uid)} / 120px=${hits.get(targets[1].uid)} / 170px=${hits.get(targets[2].uid)} ヒット`);
+  }
+
+  // (d) 大きな敵が棘の列に跨がっても、1 振りでは 1 回だけ当たる。
+  {
+    const { r, wi, res } = setup('hammer');
+    const big = place(r, 'boss_slime', 90);
+    const hits = countHits(r, () => swing(r, wi, res));
+    ok(hits.get(big.uid) === 1, `大きな敵に 1 振りで ${hits.get(big.uid) || 0} 回当たっている (二重ヒット)`);
+  }
+
+  // (e) 実効単体 DPS。旧仕様の死角だった 120px に的を固定し、
+  // 手動で間隔どおりに撃ち続けて 10 秒ぶんの与ダメージを比べる。
+  const deliveredDps = (weaponId) => {
+    const { r, wi, res } = setup(weaponId);
+    res.stats.knock = 0;
+    const e = place(r, 'brute', 120);
+    const interval = 1 / res.stats.rate;
+    let next = 0;
+    for (let f = 0; f < 10 * 60; f++) {
+      const t = f / 60;
+      if (t >= next) { fireWeapon(r, wi, res); next = t + interval; }
+      e.x = r.player.x + 120; e.y = r.player.y;
+      r.bulletTick(1 / 60);
+    }
+    for (let i = 0; i < 120; i++) r.bulletTick(1 / 60);
+    return r.dmgDealt / 10;
+  };
+  const hammerDps = deliveredDps('hammer');
+  const axeDps = deliveredDps('greatblade');
+  console.log(`  実効単体 DPS (120px): 槌=${hammerDps.toFixed(1)} / 斧=${axeDps.toFixed(1)}`);
+  ok(hammerDps > 0, '槌の実効 DPS が 0');
+  ok(hammerDps >= axeDps, `槌の実効単体 DPS (${hammerDps.toFixed(1)}) が斧 (${axeDps.toFixed(1)}) 未満`);
 }

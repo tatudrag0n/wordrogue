@@ -13,8 +13,8 @@
 // level を上げるほど基礎値が伸びる。文の長さは武器レベルとは無関係で 10 文字まで。
 // ============================================================================
 
-import { WEAPON_WORD_SET } from './words.core.js?v=1.69';
-import { WORDS, weaponHeadKind } from './words.js?v=1.69';
+import { WEAPON_WORD_SET } from './words.core.js?v=1.70';
+import { WORDS, weaponHeadKind } from './words.js?v=1.70';
 
 /**
  * kind の種類と挙動:
@@ -147,7 +147,7 @@ export const WEAPONS = {
   hammer: {
     id: 'hammer', name: '槌', kind: 'quake', glyph: '槌', tail: '槌',
     desc: '地面を叩いて岩の棘を正面へ走らせる。重い一撃。',
-    base: { dmg: 20, rate: 0.52, range: 142, arc: 2.2, area: 16, size: 1.25, knock: 130, crit: 0.05 },
+    base: { dmg: 22, rate: 0.58, range: 142, arc: 2.2, area: 16, size: 1.25, knock: 130, crit: 0.05 },
     grow: { dmg: 6.2, rate: 0.045, range: 7, area: 2 },
     startWord: '岩', startWord2: '剛', maxLevel: 8, unlock: { stage: 1 },
   },

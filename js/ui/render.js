@@ -5,11 +5,11 @@
 // ============================================================================
 
 import { TAU, clamp, lerp, dist2 } from '../core/util.js';
-import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.75';
-import { FUSION_PALETTES } from '../data/fusion.js?v=1.75';
-import { KIND_GLYPH } from '../data/weapons.js?v=1.75';
-import { motionPose, crescentGeom } from '../game/motions.js?v=1.75';
-import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.75';
+import { ELEMENTS, blendElementPalette } from '../data/words.js?v=1.76';
+import { FUSION_PALETTES } from '../data/fusion.js?v=1.76';
+import { KIND_GLYPH } from '../data/weapons.js?v=1.76';
+import { motionPose, crescentGeom } from '../game/motions.js?v=1.76';
+import { initialQuality, decideQuality, effectiveDpr, particleCapFor, decorFor } from '../core/quality.js?v=1.76';
 
 const NO_GHOSTS = [];
 
@@ -4527,6 +4527,39 @@ export class Renderer {
   }
 
   /**
+   * 振る武器そのもの (drawWeaponGlyph の絵を、振りの角度に置く)。
+   * 弧の帯だけでは「何で斬ったか」が読めないので、手元の武器を描く。
+   * 予備動作では薄く (構えが見える)、打撃ではスマッジの残像を重ねる。
+   * 武器の絵は握りが原点・刃が +X (約 30 単位) なので、間合いの
+   * 62% まで届く倍率に換算する。扇の外へは出ない。
+   * 突きは線そのものが武器 (thrust 側で描く) なので対象外。
+   */
+  drawSwingWeapon(g, s, m, pose, reach, color, fade) {
+    const fam = m.family || 'slash';
+    if (fam !== 'slash' && fam !== 'smash' && fam !== 'claw' && fam !== 'bite' && fam !== 'punch') return;
+    const scale = Math.max(0.4, (reach * 0.62) / 30);
+    const head = pose.angle;
+    const baseAlpha = pose.phase === 'windup' ? 0.5 : 0.95;
+    // スマッジ: 速い振りの残像を、少し遅れた角度に引き伸ばして重ねる。
+    // 12 の原則の squash & stretch。pose.smear は打撃中の速さから決まる。
+    if (pose.phase === 'strike' && pose.smear > 0.05 && pose.ghosts.length) {
+      const gh = pose.ghosts[0];
+      g.save();
+      g.translate(s.x, s.y);
+      g.rotate(m.baseAim + gh.rel);
+      g.scale(scale * (1 + pose.smear * 0.5), scale);
+      this.drawWeaponGlyph(g, m.glyph, 1, color, 0.32 * pose.smear * fade);
+      g.restore();
+    }
+    g.save();
+    g.translate(s.x, s.y);
+    g.rotate(head);
+    g.scale(scale, scale);
+    this.drawWeaponGlyph(g, m.glyph, 1, color, baseAlpha * fade);
+    g.restore();
+  }
+
+  /**
    * 打撃の軌跡。**当たり判定の扇 (m.arc) と間合い (m.reach) の内側だけ**を描く。
    * 武器種 (style) ごとに軌跡の作り方を変える。
    *   wave    … 刃を離れた三日月が、扇の外周まで飛ぶ (刃・刀・剣・汎用の刃・双剣)
@@ -4560,8 +4593,10 @@ export class Renderer {
     g.lineJoin = 'round';
 
     // 構え。まだ切っていないので、刃先がきらめくだけ。
+    // 武器そのものも薄く見せる。構えが見えると、振りかぶりが読める。
     if (pose.phase === 'windup') {
       const a = aFrom;
+      this.drawSwingWeapon(g, s, m, pose, reach, color, 1);
       g.globalAlpha = 0.38 * pose.phaseT;
       g.fillStyle = '#fffdf7';
       g.beginPath();
@@ -4662,6 +4697,9 @@ export class Renderer {
     } else {
       this.drawArcTrail(g, s, m, pose, reach, color, aFrom, head, dir, style, family, fade);
     }
+
+    // 武器そのもの。弧の帯だけでなく、手に持った武器が振れる姿を描く。
+    this.drawSwingWeapon(g, s, m, pose, reach, color, fade);
 
     // 刃先の光。打撃中ほど強い。
     if (!(style === 'wave' && pose.fly < 0.9) && (pose.phase === 'strike' || pose.impact > 0.03)) {

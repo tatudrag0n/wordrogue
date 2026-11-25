@@ -7,9 +7,9 @@
 
 import { TAU, clamp, dist2, rng } from '../core/util.js';
 import { makeBullet, makeField, ensureHitSet, hitsEnemy, cutEnemyWords } from './entities.js';
-import { ELEMENTS, elementPalette } from '../data/words.js?v=1.75';
-import { VERB_SLASH_STYLE, KIND_SHAPE, SUB_ACTION_MUL, SUB_ACTION_DELAY } from '../data/weapons.js?v=1.75';
-import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.75';
+import { ELEMENTS, elementPalette } from '../data/words.js?v=1.76';
+import { VERB_SLASH_STYLE, KIND_SHAPE, SUB_ACTION_MUL, SUB_ACTION_DELAY } from '../data/weapons.js?v=1.76';
+import { startWeaponMotion, syncMotionShape } from './motions.js?v=1.76';
 
 /** 秒間あたりの攻撃回数からクールダウンを計算。 */
 const cdOf = (rate) => 1 / Math.max(0.05, rate);
@@ -323,7 +323,7 @@ function applyFusion(run, wi, st, aim, kind, el, elInfo) {
       });
       for (const e of run.enemies) {
         if (e.dead || dist2(e.x, e.y, focus.x, focus.y) > (r + e.r) ** 2) continue;
-        run.damage(e, st2, { crit: rollCrit(st2), knock: (st.knock || 0) + 150, element: 'fire', burn: 1 });
+        run.damage(e, st2, { direct: true, crit: rollCrit(st2), knock: (st.knock || 0) + 150, element: 'fire', burn: 1 });
       }
       run.audio.tone({ freq: 140, type: 'square', dur: 0.18, vol: 0.08, slide: 0.5 });
       run.shake(3);
@@ -401,7 +401,7 @@ function doFlame(run, wi, st, aim, el, elInfo) {
     if (e.dead || dist2(e.x, e.y, p.x, p.y) > (reach + e.r) ** 2) continue;
     let d = Math.atan2(e.y - p.y, e.x - p.x) - aim;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    if (Math.abs(d) <= arc / 2) run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el, burn: st.burn });
+    if (Math.abs(d) <= arc / 2) run.damage(e, st, { direct: true, crit: rollCrit(st), knock: st.knock, element: el, burn: st.burn });
   }
   run.audio.tone({ freq: 180, type: 'sawtooth', dur: 0.18, vol: 0.08, slide: 2.5 });
   run.shake(1.8);
@@ -465,7 +465,7 @@ function doBolt(run, wi, st, aim, el, elInfo) {
     });
     for (const t of run.enemies) {
       if (t.dead || dist2(t.x, t.y, x, y) > (26 + t.r) ** 2) continue;
-      run.damage(t, st, { crit: rollCrit(st), element: el });
+      run.damage(t, st, { direct: true, crit: rollCrit(st), element: el });
     }
   }
   run.audio.tone({ freq: 1400, type: 'sawtooth', dur: 0.1, vol: 0.07, slide: 0.4 });
@@ -494,7 +494,7 @@ function doGust(run, wi, st, aim, el, elInfo) {
     const push = 90 + (st.knock || 0);
     e.vx += Math.cos(aim) * push * 2.2;
     e.vy += Math.sin(aim) * push * 2.2;
-    run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el });
+    run.damage(e, st, { direct: true, crit: rollCrit(st), knock: st.knock, element: el });
   }
   run.audio.tone({ freq: 520, type: 'noise', dur: 0.22, vol: 0.06, slide: -0.6 });
   run.shake(1.2);
@@ -602,7 +602,7 @@ function doSmash(run, wi, st, aim, el, elInfo) {
   run.burst(cx, cy, 12, elInfo.color, { spd: fx.spd * 1.3, spdMin: 60, life: 0.4, r: fx.r, shape: 'shard', drag: 4 });
   for (const e of run.enemies) {
     if (e.dead || dist2(e.x, e.y, cx, cy) > (rad + e.r) ** 2) continue;
-    run.damage(e, st, { crit: rollCrit(st), knock: (st.knock || 0) + 90, element: el });
+    run.damage(e, st, { direct: true, crit: rollCrit(st), knock: (st.knock || 0) + 90, element: el });
   }
   run.audio.tone({ freq: 120, type: 'square', dur: 0.16, vol: 0.09, slide: 0.5 });
   run.shake(4);
@@ -653,7 +653,7 @@ function doBlaze(run, wi, st, aim, el, elInfo) {
     if (e.dead || dist2(e.x, e.y, p.x, p.y) > (reach + e.r) ** 2) continue;
     let d = Math.atan2(e.y - p.y, e.x - p.x) - aim;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    if (Math.abs(d) <= arc / 2) run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el, burn: st.burn });
+    if (Math.abs(d) <= arc / 2) run.damage(e, st, { direct: true, crit: rollCrit(st), knock: st.knock, element: el, burn: st.burn });
   }
   run.audio.tone({ freq: 180, type: 'sawtooth', dur: 0.2, vol: 0.08, slide: 2.5 });
   run.shake(1.8);
@@ -851,7 +851,7 @@ function hitSector(run, x, y, aim, reach, arc, st, el, hit) {
       if (Math.abs(diff) > arc / 2) continue;
     }
     if (hit) hit.add(e.uid);
-    run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el });
+    run.damage(e, st, { direct: true, crit: rollCrit(st), knock: st.knock, element: el });
     n++;
   }
   return n;
@@ -1160,6 +1160,7 @@ function chainOnce(run, st, el, sx, sy) {
       el, elSub: st.elSub || null,
     });
     run.damage(tgt, st, {
+      direct: true,
       crit: rollCrit(st),
       knock: st.knock,
       element: el,
@@ -1211,7 +1212,7 @@ function doBeam(run, wi, st, aim, el, elInfo) {
       const cxp = bm.ox + dx * t, cyp = bm.oy + dy * t;
       if (dist2(e.x, e.y, cxp, cyp) > (e.r + wdt / 2) ** 2) continue;
       hit.add(e.uid);
-      run.damage(e, st, { crit: rollCrit(st), knock: st.knock, element: el });
+      run.damage(e, st, { direct: true, crit: rollCrit(st), knock: st.knock, element: el });
       break;
     }
   }

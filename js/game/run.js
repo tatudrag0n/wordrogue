@@ -12,14 +12,14 @@ import { ENEMIES } from '../data/enemies.js';
 import {
   makeWord, drawWord, drawSimple, drawWeaponWord, ELEMENTS, CONNECTOR_SET, CONNECTOR_LIST,
   WORDS, isWeaponWord, weaponHeadKind,
-} from '../data/words.js?v=1.75';
+} from '../data/words.js?v=1.76';
 import { isConnector } from '../data/words.connect.js';
-import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.75';
+import { WEAPONS, startingWeaponsFor, WEAPON_MAX, defForForm, canCraftFrom } from '../data/weapons.js?v=1.76';
 import { resolvePlayerStats, BASE_PLAYER } from './stats.js';
 import { normPartEntries } from './parts.js';
-import { WeaponInst } from './weapon.js?v=1.75';
-import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.75';
-import { fireWeapon, fireSubAction, damage as damageEnemy, attackShape } from './combat.js?v=1.75';
+import { WeaponInst } from './weapon.js?v=1.76';
+import { startWeaponMotion, motionLead, advanceWeaponMotion, motionPose, isImpactFrame } from './motions.js?v=1.76';
+import { fireWeapon, fireSubAction, damage as damageEnemy, attackShape } from './combat.js?v=1.76';
 import {
   makeEnemy, makeBullet, makePickup, makeField,
   updateEnemy, updateBullet, hitsEnemy, ensureHitSet,
@@ -226,6 +226,8 @@ export class Run {
     this.hint = '';
     this.hintT = 0;
     this.slowmo = 0;
+    /** 直撃のヒットストップ (秒)。>0 の間、世界の進行を止める。 */
+    this.hitstop = 0;
     this.magnetPulse = 0;
     this.chains = 0;
     this.crafts = 0;
@@ -1465,6 +1467,12 @@ export class Run {
     const before = Math.max(0, e.hp);
     const d = damageEnemy(this, e, st, opt);
     if (d > 0) this.dmgDealt += Math.min(d, before);
+    // 直撃の手応え。武器の直接ヒットだけ、短く世界を止める (ヒットストップ)。
+    // DoT・オーラ・弾の間接ダメージでは止めない (opt.direct が目印)。
+    // クリティカルは少し長く。reducedMotion では止めない。威力・間隔は不変。
+    if (d > 0 && opt?.direct && !this.reducedMotion) {
+      this.hitstop = Math.max(this.hitstop, 0.045 + (opt.crit ? 0.02 : 0));
+    }
   }
 
   hurtPlayer(amount) {
@@ -1538,6 +1546,16 @@ export class Run {
     }
 
     if (this.slowmo > 0) this.slowmo = Math.max(0, this.slowmo - dt);
+    // ヒットストップ: 直撃の瞬間だけ、世界を一瞬だけ止める。
+    // 12 の原則のタイミング (重さの演出)。モーションの held (姿勢の
+    // 静止) とは別に、敵・弾・時間の進行そのものを凍らせる。描画と
+    // 粒子は進むので、着弾の閃光と破片だけが動いて見える。
+    if (this.hitstop > 0) {
+      this.hitstop = Math.max(0, this.hitstop - dt);
+      this._lastDt = 0;
+      this.fxTick(dt);
+      return;
+    }
     const d = dt * (this.slowmo > 0 ? 0.35 : 1);
     this._lastDt = d;
 

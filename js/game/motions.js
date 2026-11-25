@@ -577,6 +577,12 @@ export function motionPose(m, dt = 0) {
   const anticDip = phase === 'windup'
     ? -dirS * (m.antic || 0) * (m.halfArc || 0) * Math.sin(wu * Math.PI) : 0;
   let angleRel;
+  // 振り抜けのオーバーシュート (行き過ぎて戻る)。
+  // 12 の原則の follow-through: 打撃が終わっても刃は止まらず、
+  // 終端を 16% ほど行き過ぎてから to へ戻る。行きっぱなしにしない。
+  // 振り幅 (to - from) に比例するので、扇の内側に収まる。
+  const overshootAmp = (m.to - m.from) * 0.16;
+  let overshoot = 0;
   if (m.sig === 'iai-flash') {
     // 居合: 抜いたら、振り抜けで鞘へ戻る方向へ引く (行きっぱなしにしない)。
     angleRel = phase === 'windup' ? lerp(m.rest, m.from, wu)
@@ -589,8 +595,9 @@ export function motionPose(m, dt = 0) {
       : phase === 'strike'
         ? lerp(m.from, m.to, swing)
         : phase === 'follow'
-          ? lerp(m.to, m.to + (m.to - m.from) * 0.12, follow)
-          : lerp(m.to + (m.to - m.from) * 0.12, m.rest, phaseT);
+          ? m.to + overshootAmp * Math.sin(phaseT * Math.PI)
+          : lerp(m.to, m.rest, phaseT);
+    if (phase === 'follow') overshoot = overshootAmp * Math.sin(phaseT * Math.PI);
   }
   if (phase === 'windup') angleRel += anticDip;
   // 鋸: 打撃〜振り抜けで押し引きの往復を重ねる。等速の往復が「挽く」動きになる。
@@ -692,6 +699,11 @@ export function motionPose(m, dt = 0) {
   const crack = m.sig === 'whip-crack' && phase !== 'windup'
     ? clamp((swing - 0.82) / 0.18, 0, 1) * (phase === 'strike' ? 1 : 1 - phaseT) : 0;
 
+  // スマッジ (引き伸ばし)。速い振りほど武器が進行方向へ伸びて見える。
+  // 12 の原則の squash & stretch: 打撃中だけ 0〜1 で返し、描画が
+  // 武器の伸びと残像の濃さに使う。振り抜け・戻りでは 0 に戻る。
+  const smear = phase === 'strike' ? clamp(speed / 3, 0, 1) : 0;
+
   return {
     t, u, phase, phaseT, swing, follow,
     angle, angleRel: rel, extension, lunge, half,
@@ -704,6 +716,7 @@ export function motionPose(m, dt = 0) {
     tipX: Math.cos(angle) * m.reach * extension,
     tipY: Math.sin(angle) * m.reach * extension,
     held, ghosts, speed, pulses, open, jaw, circleK, recoilK, crack, sawQ,
+    overshoot, smear,
     sig: m.sig || '',
   };
 }

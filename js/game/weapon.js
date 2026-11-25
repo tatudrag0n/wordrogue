@@ -14,9 +14,9 @@
 // 武器語が文に無いときは、その武器の既定の型を使う。
 // ============================================================================
 
-import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, VERB_SLASH_STYLE, COMPOUND_WEAPON_KINDS, COMPOSE_KINDS, COMPOSE_PAIRS, SUB_ACTION_MUL } from '../data/weapons.js?v=1.75';
-import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.75';
-import { fusionOf } from '../data/fusion.js?v=1.75';
+import { WEAPONS, baseStatsForLevel, lookupDef, ELEMENT_KIND, WORD_KIND, FORM_SHAPE, KIND_SHAPE, BASIC_WEAPONS, SPECIAL_SHAPE, ELEMENT_SHAPE, VERB_SHAPE, VERB_SLASH_STYLE, COMPOUND_WEAPON_KINDS, COMPOSE_KINDS, COMPOSE_PAIRS, SUB_ACTION_MUL } from '../data/weapons.js?v=1.76';
+import { evaluate, makeWord, ELEMENTS, WORDS, GRADES, PHRASE_BONUS, inCompoundSpan, isShapeWord } from '../data/words.js?v=1.76';
+import { fusionOf } from '../data/fusion.js?v=1.76';
 import { clamp } from '../core/util.js';
 import { Sentence, MAX_SENTENCE_LEN } from './sentence.js';
 
